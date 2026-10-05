@@ -169,7 +169,7 @@ export function QuickRollPanel({
           }}
         >
           <AppIcon icon={collapsed ? ExpandSectionIcon : CollapseSectionIcon} />
-          Быстрые броски
+          Статы и скилы
         </button>
         {physicalDiceControl}
       </div>

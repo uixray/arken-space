@@ -289,14 +289,16 @@ export function ResourceCounters({
         {/* Значения в свёрнутом виде: свернувший блок всё равно должен видеть,
             сколько у него осталось. */}
         <span className="resource-counters__summary-values">
-          {rows
-            .map((row) => {
-              const resource = resources[row.key] ?? { current: 0, maximum: 0 };
-              const stateKey = scopedResourceKey(scopeKey, row.key);
-              const shown = drafts[stateKey] ?? resource.current;
-              return `${row.label}: ${shown}`;
-            })
-            .join(" · ")}
+          {rows.map((row) => {
+            const resource = resources[row.key] ?? { current: 0, maximum: 0 };
+            const stateKey = scopedResourceKey(scopeKey, row.key);
+            const shown = drafts[stateKey] ?? resource.current;
+            return (
+              <span key={row.key} className="resource-counters__summary-value">
+                {row.label}: {shown}
+              </span>
+            );
+          })}
         </span>
       </summary>
       <div className="resource-counters__list" aria-label="Очки ресурсов">

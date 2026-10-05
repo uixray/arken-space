@@ -533,6 +533,24 @@ describe("topbar popovers dismiss like every other details popover", () => {
     expect(volume.open).toBe(true);
   });
 
+  it("puts an accessible icon-only mute beside the labelled volume slider", () => {
+    renderBar("PLAYER");
+    const volume = openPopover("details.music-volume-control");
+    expect(
+      volume.querySelector(".music-volume-popover")?.children,
+    ).toHaveLength(2);
+    expect(
+      screen.getByRole("slider", { name: "Личная громкость" }),
+    ).toBeTruthy();
+    const mute = volume.querySelector<HTMLButtonElement>(
+      ".music-volume-popover__mute",
+    );
+    expect(mute).not.toBeNull();
+    expect(mute!.getAttribute("aria-label")).toMatch(/звук/);
+    expect(mute!.querySelector("svg.arken-icon")).not.toBeNull();
+    expect(volume.querySelector(".music-volume-popover label span")).toBeNull();
+  });
+
   it("closes the GM music menu on an outside pointer", () => {
     renderBar("GM");
     const overflow = openPopover("details.music-overflow");

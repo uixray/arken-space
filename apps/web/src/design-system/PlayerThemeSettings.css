@@ -30,7 +30,7 @@
 .player-theme-settings__option {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: var(--space-sm);
   padding: var(--space-sm);
   border-radius: var(--radius-sm, 6px);
@@ -55,7 +55,7 @@
 
 .player-theme-settings__option span {
   flex: 0 1 auto;
-  text-align: right;
+  text-align: left;
 }
 
 .player-theme-settings__error {

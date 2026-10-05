@@ -346,7 +346,9 @@ describe("dice presentation boundary (UIX-289)", () => {
       const document = new DOMParser().parseFromString(markup, "text/html");
       const total = document.querySelector('strong[aria-label="Итог броска"]');
       expect(total?.textContent).toBe("25");
-      expect(document.body.textContent).toContain("Критический успех");
+      expect(document.body.textContent).toContain(
+        skill ? "Критический успех" : "Крит. успех",
+      );
       expect(document.body.textContent).not.toContain("Критический провал");
       expect(markup).not.toContain("/assets/frames/unpublished.png");
     },

@@ -12,7 +12,13 @@ import { volumeSliderToGain } from "./audio-volume";
 import { resolvePlaybackAction } from "./music-playback";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import { AppIcon } from "./ui/AppIcon";
-import { MoreIcon, PauseIcon, PlayIcon, VolumeIcon } from "./ui/icons";
+import {
+  MoreIcon,
+  MutedVolumeIcon,
+  PauseIcon,
+  PlayIcon,
+  VolumeIcon,
+} from "./ui/icons";
 import { createPortal } from "react-dom";
 
 const ENABLED_KEY = "arken.audio.enabled";
@@ -328,7 +334,6 @@ export function MusicBar({
         </summary>
         <div className="music-volume-popover">
           <label>
-            <span>Громкость</span>
             <input
               aria-label="Личная громкость"
               type="range"
@@ -339,15 +344,15 @@ export function MusicBar({
               onChange={(event) => setVolume(Number(event.target.value))}
             />
           </label>
-          {enabled ? (
-            <button type="button" onClick={() => setAudioEnabled(false)}>
-              Выключить звук
-            </button>
-          ) : (
-            <button type="button" onClick={() => setAudioEnabled(true)}>
-              Включить звук
-            </button>
-          )}
+          <button
+            type="button"
+            className="music-volume-popover__mute"
+            aria-label={enabled ? "Выключить звук" : "Включить звук"}
+            title={enabled ? "Выключить звук" : "Включить звук"}
+            onClick={() => setAudioEnabled(!enabled)}
+          >
+            <AppIcon icon={enabled ? VolumeIcon : MutedVolumeIcon} />
+          </button>
         </div>
       </details>
       {role === "GM" ? (

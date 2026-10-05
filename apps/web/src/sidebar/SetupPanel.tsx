@@ -110,7 +110,7 @@ export function SetupPanel(props: Props) {
           onClose={() => setCampaignClockOpen(false)}
         />
         <h3>Игроки</h3>
-        <div className="stack-list">
+        <div className="stack-list player-presence-list">
           {props.snapshot.members
             .filter((member) => member.role === "PLAYER")
             .map((member) => {

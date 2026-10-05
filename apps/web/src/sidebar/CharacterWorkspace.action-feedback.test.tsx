@@ -283,6 +283,72 @@ function selectPortrait(
 }
 
 describe("character action feedback", () => {
+  it("moves initiative and reaction to a keyboard-operable vital tab", async () => {
+    renderComponent(
+      view(snapshot([character({ stats: { initiative: 2, reaction: 3 } })])),
+    );
+    await galleryLoaded();
+    const tabs = screen.getByRole("tablist", {
+      name: "Ключевые показатели персонажа",
+    });
+    const resourcesTab = within(tabs).getByRole("tab", { name: "Ресурсы" });
+    const initiativeTab = within(tabs).getByRole("tab", {
+      name: "Инициатива и реакция",
+    });
+    expect(resourcesTab).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(resourcesTab, { key: "ArrowRight" });
+    expect(initiativeTab).toHaveAttribute("aria-selected", "true");
+    expect(initiativeTab).toHaveFocus();
+    const panel = screen.getByRole("tabpanel", {
+      name: "Инициатива и реакция",
+    });
+    expect(
+      within(panel).getByRole("spinbutton", { name: "Инициатива" }),
+    ).toHaveValue(2);
+    expect(
+      within(panel).getByRole("spinbutton", { name: "Реакция" }),
+    ).toHaveValue(3);
+  });
+  it("keeps regen beside resources, not among rollable combat rows", async () => {
+    const update = vi.fn(async () => undefined);
+    const state = snapshot([
+      character({
+        stats: { enduranceRegen: 3, manaRegen: 2 },
+        resources: {
+          physicalPower: { current: 5, maximum: 10 },
+          magicPower: { current: 4, maximum: 8 },
+        },
+      }),
+    ]);
+    renderComponent(view(state, { onUpdateCounters: update }));
+    await galleryLoaded();
+    const vitals = screen.getByLabelText("Ключевые показатели");
+    expect(
+      within(vitals).getByRole("spinbutton", { name: "Реген Выносливости" }),
+    ).toHaveValue(3);
+    expect(
+      within(vitals).getByRole("spinbutton", { name: "Реген Маны" }),
+    ).toHaveValue(2);
+    expect(
+      screen.queryByRole("button", { name: "Реген Выносливости" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      within(vitals).getByRole("button", { name: "Увеличить Выносливость" }),
+    );
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(
+        state.characters[0]!.id,
+        state.characters[0]!.revision,
+        {
+          resources: {
+            ...state.characters[0]!.resources,
+            physicalPower: { current: 6, maximum: 10 },
+          },
+        },
+        expect.any(Object),
+      ),
+    );
+  });
   it("shows custom resources beside the vital wallet from character data", async () => {
     const save = vi.fn(async () => {});
     renderComponent(
@@ -886,8 +952,13 @@ describe("character action feedback", () => {
     );
     fireEvent.click(railToggle);
     expect(
-      screen.queryAllByRole("button", { name: /^Архивировать персонажа/ }),
-    ).toHaveLength(0);
+      screen.getAllByRole("button", { name: /^Архивировать персонажа/ }),
+    ).toHaveLength(1);
+    expect(
+      screen
+        .getByRole("navigation", { name: "Персонажи кампании" })
+        .querySelector(".character-rail__archive"),
+    ).toBeNull();
     fireEvent.click(
       screen.getByRole("button", { name: "Развернуть список персонажей" }),
     );

@@ -20,8 +20,8 @@ const slashCommands: SlashCommandSuggestion[] = [
   {
     command: "/roll",
     description: "Выполнить публичный бросок по формуле",
-    example: "/roll 1d20 + agility",
-    insertion: "/roll 1d20 + agility",
+    example: "/roll 1d20",
+    insertion: "/roll 1d20",
   },
 ];
 

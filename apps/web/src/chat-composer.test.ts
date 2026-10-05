@@ -89,8 +89,8 @@ describe("getSlashCommandSuggestions", () => {
       }),
       expect.objectContaining({
         command: "/roll",
-        example: "/roll 1d20 + agility",
-        insertion: "/roll 1d20 + agility",
+        example: "/roll 1d20",
+        insertion: "/roll 1d20",
       }),
     ]);
     expect(getSlashCommandSuggestions("/d")).toEqual([

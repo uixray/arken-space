@@ -50,7 +50,7 @@ import { RollCharacterName } from "./RollCharacterName";
 import { createRollAvatarSource } from "../roll-avatar-source";
 import { createRollCharacterNameSource } from "../roll-character-name";
 import { buildChatTimeline } from "../chat-date";
-import { formatDiceBreakdown, normalizeClientDiceResult } from "../dice-result";
+import { normalizeClientDiceResult } from "../dice-result";
 import { getDiceCritical } from "../dice-critical";
 import { OutcomeFrame } from "./OutcomeFrame";
 import { parseSkillCard, SkillChatCard } from "../SkillCards";
@@ -120,6 +120,85 @@ const SEND_TOOLTIP =
  * всплывающей подсказке кнопки отправки — `SEND_TOOLTIP` выше, слово в слово.
  */
 const SEND_HINT = "Enter — всем · Ctrl+Enter — только мастеру";
+
+function compactDiceDetails(
+  dice: NonNullable<ReturnType<typeof normalizeClientDiceResult>>,
+) {
+  const diceLabel =
+    dice.terms.map((term) => term.notation).join(" + ") || dice.formula;
+  const selected = dice.poolTotals
+    ? dice.poolTotals[dice.selectedPool ?? 0]
+    : dice.terms.reduce((sum, term) => sum + term.subtotal, 0);
+  const modifier = dice.modifiers.reduce((sum, item) => sum + item.value, 0);
+  return {
+    diceLabel,
+    calculation:
+      modifier === 0
+        ? String(selected)
+        : `${selected}${modifier > 0 ? "+" : ""}${modifier}`,
+  };
+}
+
+function SystemMessageCard({ body }: { body: string }) {
+  const resourceText = body.match(/(?:^| — )ресурсы: (.+)$/i)?.[1];
+  const resourceChanges = resourceText
+    ?.split(/, (?=[^,]+: )/)
+    .map((part) =>
+      /^(.*?): (-?\d+)(?:\/(-?\d+))? → (-?\d+)(?:\/(-?\d+))?$/.exec(part),
+    );
+  if (resourceChanges?.length && resourceChanges.every(Boolean)) {
+    return (
+      <div className="system-card-list">
+        {resourceChanges.map((change, index) => {
+          const [, name, beforeText, , afterText, maximumText] = change!;
+          const before = Number(beforeText);
+          const after = Number(afterText);
+          const delta = after - before;
+          return (
+            <div
+              className="roll-result roll-result--system"
+              key={`${name}-${index}`}
+            >
+              <div className="roll-details">
+                <div className="roll-details__heading">
+                  <span>{name}</span>
+                </div>
+                <div className="roll-details__math">
+                  <small>
+                    {before}
+                    {delta < 0 ? "−" : "+"}
+                    {Math.abs(delta)}
+                  </small>
+                  {maximumText && <small>Max {maximumText}</small>}
+                </div>
+              </div>
+              <strong
+                className="roll-total"
+                aria-label={`${name}: итоговое значение`}
+              >
+                {after}
+              </strong>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  const [heading, ...details] = body.split(/\.\s+/);
+  return (
+    <div className="roll-result roll-result--system">
+      <div className="roll-details">
+        <div className="roll-details__heading">
+          <span>{(heading ?? body).replace(/\.$/, "")}</span>
+        </div>
+        {details.length > 0 && <small>{details.join(". ")}</small>}
+      </div>
+      <span className="roll-result__system-mark" aria-hidden="true">
+        ✓
+      </span>
+    </div>
+  );
+}
 
 function useHistoryScrollHandler(input: {
   resetKey: unknown;
@@ -248,6 +327,8 @@ function ChatMessageBodyComponent({
       />
     );
   if (message.kind !== "DICE" || !dice) {
+    if (message.kind === "SYSTEM")
+      return <SystemMessageCard body={message.body} />;
     const physicalBonus = physicalRollBonus(message.body);
     /**
      * UIX-454: физический бросок рисуется тем же макетом, что обычный. Раньше
@@ -308,38 +389,17 @@ function ChatMessageBodyComponent({
         <div className="roll-details__heading">
           <span>{message.body}</span>
           {critical && (
-            <span className="roll-critical-label">{critical.label}</span>
-          )}
-        </div>
-        <small>{formatDiceBreakdown(dice)}</small>
-      </div>
-      <div className="roll-result__numbers">
-        {dice.modifiers.reduce((sum, modifier) => sum + modifier.value, 0) !==
-          0 &&
-          dice.terms.length === 1 &&
-          dice.terms[0]?.rolls.length === 1 && (
-            <span
-              className="roll-result__die"
-              aria-label={`Кубик: ${dice.terms[0].rolls[0]}`}
-            >
-              {dice.terms[0].rolls[0]}
+            <span className="roll-critical-label">
+              {critical.kind === "success" ? "Крит. успех" : "Крит. провал"}
             </span>
           )}
-        {dice.modifiers.reduce((sum, modifier) => sum + modifier.value, 0) !==
-          0 && (
-          <span
-            className="roll-result__bonus"
-            aria-label={`Бонус: ${dice.modifiers.reduce((sum, modifier) => sum + modifier.value, 0)}`}
-          >
-            {dice.modifiers.reduce(
-              (sum, modifier) => sum + modifier.value,
-              0,
-            ) >= 0
-              ? "+"
-              : ""}
-            {dice.modifiers.reduce((sum, modifier) => sum + modifier.value, 0)}
-          </span>
-        )}
+        </div>
+        <div className="roll-details__math">
+          <small>{compactDiceDetails(dice).diceLabel}</small>
+          <small>{compactDiceDetails(dice).calculation}</small>
+        </div>
+      </div>
+      <div className="roll-result__numbers">
         <strong className="roll-total" aria-label="Итог броска">
           <OutcomeFrame
             frame={
@@ -950,17 +1010,23 @@ export function ActivityPanel({
               data-activity-stream={stream}
               tabIndex={-1}
             >
-              <header>
+              <header
+                className={
+                  message.kind === "DICE" ? "message__roll-header" : undefined
+                }
+              >
                 {message.kind === "DICE" && (
                   <RollAvatar
                     {...avatarFor(message.characterId)}
                     fallbackName={message.displayName}
                   />
                 )}
-                <strong>{message.displayName}</strong>
-                <RollCharacterName
-                  name={characterNameFor(message.characterId)}
-                />
+                <div className="message__identity">
+                  <strong>{message.displayName}</strong>
+                  <RollCharacterName
+                    name={characterNameFor(message.characterId)}
+                  />
+                </div>
                 <time>
                   {new Date(occurredAt).toLocaleTimeString([], {
                     hour: "2-digit",
@@ -1710,17 +1776,25 @@ export function ChatPanel({
               className={`message ${item.message.kind.toLowerCase()}`}
               tabIndex={-1}
             >
-              <header>
+              <header
+                className={
+                  item.message.kind === "DICE"
+                    ? "message__roll-header"
+                    : undefined
+                }
+              >
                 {item.message.kind === "DICE" && (
                   <RollAvatar
                     {...avatarFor(item.message.characterId)}
                     fallbackName={item.message.displayName}
                   />
                 )}
-                <strong>{item.message.displayName}</strong>
-                <RollCharacterName
-                  name={characterNameFor(item.message.characterId)}
-                />
+                <div className="message__identity">
+                  <strong>{item.message.displayName}</strong>
+                  <RollCharacterName
+                    name={characterNameFor(item.message.characterId)}
+                  />
+                </div>
                 <time>
                   {new Date(item.message.createdAt).toLocaleTimeString([], {
                     hour: "2-digit",

@@ -141,8 +141,10 @@ export function StatLayoutCard({
   onMoveRow,
   onReorderRow,
   layoutOnly = false,
+  showAddRow = true,
 }: {
   layoutOnly?: boolean;
+  showAddRow?: boolean;
   title: string;
   modifier: string;
   rows: readonly { key: string; label: string }[];
@@ -269,7 +271,7 @@ export function StatLayoutCard({
                 </svg>
               </button>
             )}
-            {layoutOnly ? (
+            {layoutOnly || isSystemRegenStatKey(row.key) ? (
               <span className="stat-field__roll-name">{row.label}</span>
             ) : (
               <Button
@@ -369,7 +371,7 @@ export function StatLayoutCard({
             </div>
           </div>
         ))}
-        {canEditLayout && (
+        {canEditLayout && showAddRow && (
           <Button
             view="flat"
             className="stat-field__add"

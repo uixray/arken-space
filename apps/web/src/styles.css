@@ -1454,9 +1454,10 @@ code {
    где они доступны без открытия карточки. Тратятся они каждый ход, поэтому строка
    компактная и целиком помещается в узкую боковую панель. */
 .resource-counters {
-  padding: 0 var(--space-md) var(--space-xs);
+  padding: 12px 14px;
   min-width: 0;
   container-type: inline-size;
+  background: var(--surface);
 }
 /* UIX-468: блок сворачивается — в бою нужен постоянно, вне боя занимает место
    двумя строками, которые не меняются часами. */
@@ -1464,6 +1465,8 @@ code {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
+  min-height: 24px;
+  padding: 0 var(--space-xs);
   cursor: pointer;
   color: var(--muted);
   font-size: 0.75rem;
@@ -1486,11 +1489,19 @@ code {
   color: var(--muted);
 }
 .resource-counters__summary-values {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-md);
+  margin-left: auto;
+  min-width: 0;
   overflow: hidden;
   color: var(--muted);
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.resource-counters__summary-value {
+  flex: 0 0 auto;
 }
 /* Свёрнутый блок уже показывает значения в самой строке заголовка — повторять
    их ещё раз незачем. */
@@ -2005,6 +2016,27 @@ code {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.message header.message__roll-header {
+  align-items: center;
+}
+.message__identity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  line-height: 1.2;
+}
+.message__identity > strong,
+.message__identity > .message-character {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.message header .message__identity > .message-character {
+  padding: 0;
+  border: 0;
+}
 .message p {
   line-height: 1.45;
   white-space: pre-wrap;
@@ -2021,8 +2053,8 @@ code {
   background: var(--surface-2);
 }
 .message header > .roll-avatar {
-  width: 24px;
-  height: 24px;
+  width: 34px;
+  height: 34px;
   margin: 0 4px 0 0;
   flex: 0 0 auto;
 }
@@ -2098,6 +2130,27 @@ code {
   place-items: center;
   position: relative;
   padding: 0;
+}
+.roll-result__system-mark {
+  display: grid;
+  grid-column: 2;
+  place-items: center;
+  color: var(--accent);
+  font-size: 1.4rem;
+}
+.system-card-list {
+  display: grid;
+  gap: 4px;
+}
+.roll-details__math {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+}
+.roll-details__math small:last-child {
+  margin-left: auto;
+  text-align: right;
 }
 .roll-result > .roll-total {
   grid-column: 2;
@@ -2853,6 +2906,34 @@ code {
 /* ==========================================================================
    Vital Stats Summary Bar
    ========================================================================== */
+.character-vitals__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 var(--space-sm);
+}
+.character-vitals__tabs [role="tab"] {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.character-vitals__tabs [role="tab"][aria-selected="true"] {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+}
+.character-vitals__tabs [role="tab"]:hover {
+  background: var(--surface-hover);
+}
+.character-vitals[hidden],
+.character-vitals__initiative[hidden] {
+  display: none;
+}
+.character-vitals__initiative {
+  padding: var(--space-sm);
+  background: var(--surface);
+}
 .character-vitals {
   display: flex;
   flex-wrap: wrap;
@@ -2907,8 +2988,31 @@ code {
 .character-vital-chip--resource {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  min-width: 210px;
-  flex: 1 1 0;
+  min-width: min(220px, 100%);
+  flex: 1 1 260px;
+}
+.character-vital-chip__controls {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 4px;
+}
+.character-vital-chip__controls .g-button {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 2px 6px;
+}
+.character-vital-chip__regen {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+}
+.character-vital-chip__regen .g-text-input {
+  width: 70px;
 }
 .character-vital-chip__resource-values {
   display: flex;
@@ -2945,7 +3049,7 @@ code {
 .character-vital-chip__track > .character-vital-chip__excess {
   position: absolute;
   inset: 0 auto 0 0;
-  background: var(--color-info, #54bac9);
+  background: color-mix(in srgb, var(--accent) 70%, var(--text));
 }
 
 /* ==========================================================================
@@ -4035,6 +4139,15 @@ body:has(.landing-shell) {
   align-items: center;
   gap: var(--space-sm);
 }
+.player-presence-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.player-presence-list > .g-button {
+  flex: 0 0 auto;
+}
 
 .message-character {
   color: var(--color-text-accent);
@@ -4147,7 +4260,7 @@ body:has(.landing-shell) {
   top: 44px;
   right: 8px;
   width: min(340px, calc(100% - 72px));
-  max-height: min(420px, calc(100% - 56px));
+  max-height: min(420px, calc(100% - 116px));
   overflow: auto;
   padding: var(--space-sm);
   border: 1px solid var(--line);
@@ -4164,9 +4277,12 @@ body:has(.landing-shell) {
 }
 .map-object-list li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) repeat(2, auto);
   gap: 4px;
   align-items: center;
+}
+.map-object-list li.map-object-list__token {
+  grid-template-columns: minmax(0, 1fr) repeat(3, auto);
 }
 .map-object-list button {
   min-width: 0;
@@ -4865,8 +4981,13 @@ body:has(.landing-shell) {
 .character-section-nav {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
   background: var(--surface);
+  box-shadow: 0 3px 8px rgb(0 0 0 / 20%);
 }
 .character-section-nav button {
   min-height: 30px;
@@ -4876,16 +4997,33 @@ body:has(.landing-shell) {
   scroll-margin-top: 48px;
 }
 .stat-field__drag-handle {
+  display: grid;
+  place-items: center;
+  padding: 0;
   width: 44px;
   min-width: 44px;
   min-height: 44px;
   cursor: grab;
 }
+.stat-field__drag-handle svg {
+  display: block;
+}
 .stat-field__menu {
   position: relative;
 }
 .stat-field__menu > summary {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: var(--radius-sm);
   list-style: none;
+  cursor: pointer;
+}
+.stat-field__menu > summary:hover,
+.stat-field__menu > summary:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 .stat-field__menu > summary::-webkit-details-marker {
   display: none;
@@ -4957,6 +5095,8 @@ body:has(.landing-shell) {
   grid-column: 4;
   grid-row: 1;
   min-width: 0;
+  align-items: center;
+  justify-content: center;
 }
 .catalog-entry-group + .catalog-entry-group {
   margin-top: var(--space-md);
@@ -4978,7 +5118,12 @@ body:has(.landing-shell) {
   justify-content: center;
 }
 .scene-picker__row > .scene-picker__edit {
-  width: auto;
+  display: inline-flex;
+  flex: 0 0 40px;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
   padding: 0;
 }
 .map-toolbar .toolbar-history .toolbar-detail-trigger,
@@ -4987,6 +5132,8 @@ body:has(.landing-shell) {
 }
 .map-toolbar-tooltip-positioner {
   z-index: var(--arken-layer-workspace-popup, 1999);
+  /* Descriptive tooltips must not steal compact toolbar hit targets. */
+  pointer-events: none;
 }
 .map-toolbar-tooltip {
   box-sizing: border-box;
@@ -5498,10 +5645,14 @@ body:has(.landing-shell) {
 }
 .music-volume-popover {
   min-width: 196px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
 }
 .music-volume-popover label {
-  display: grid;
-  gap: 6px;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--muted);
   font-size: 0.78rem;
 }
@@ -5519,6 +5670,15 @@ body:has(.landing-shell) {
 .music-overflow__menu button {
   width: 100%;
   text-align: left;
+}
+.music-volume-popover .music-volume-popover__mute {
+  display: inline-flex;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
 }
 .music-overflow__menu {
   min-width: 240px;
@@ -6038,14 +6198,18 @@ body:has(.landing-shell) {
   outline-offset: 2px;
 }
 .quick-roll-panel .quick-roll-button--ordinary {
-  background-color: var(--surface-2);
+  background-color: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
 }
 .quick-roll-panel .quick-roll-button--combat {
-  background-color: var(--accent-soft, var(--surface-3));
+  background-color: color-mix(in srgb, var(--accent) 25%, var(--surface-2));
   color: var(--text);
 }
+.quick-roll-panel .quick-roll-button {
+  border: 0 !important;
+  box-shadow: none;
+}
 .quick-roll-panel .quick-roll-button--skill {
-  background-color: var(--surface-3, var(--surface-2));
+  background-color: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
 }
 .quick-roll-panel__entry {
   display: inline-flex;
@@ -6955,8 +7119,8 @@ html[data-player-theme="classic-v1"] .asset-picker__tile:focus-visible {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 54px;
-  height: 54px;
+  width: 58px;
+  height: 58px;
   pointer-events: none;
   z-index: 2;
   display: flex;

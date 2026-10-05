@@ -20,8 +20,8 @@ import {
 import { useCampaignActions } from "../campaign-actions-context";
 import { createPortal } from "react-dom";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
+import { RESOURCE_REGEN_STAT, isSystemRegenStatKey } from "@arken/system";
 import { Button } from "../design-system/Button";
-import { Badge } from "../design-system/Badge";
 import { CatalogEntryForm } from "../CatalogEntryForm";
 import { ApiError, formatApiError } from "../api";
 import { TextPromptDialog } from "../ui/TextPromptDialog";
@@ -337,7 +337,6 @@ export function CharacterWorkspace({
             ) : (
               characters.map((character) => {
                 const isOpen = state.openIds.includes(character.id);
-                const isCollapsed = state.collapsedIds.includes(character.id);
                 const full = !isOpen && sheetLimitReached;
                 return (
                   <div className="character-rail__item" key={character.id}>
@@ -374,7 +373,7 @@ export function CharacterWorkspace({
                       </span>
                       <strong>{character.name}</strong>
                       <span className="character-rail__status">
-                        {isCollapsed ? "свернут" : isOpen ? "открыт" : ""}
+                        {isOpen ? "открыт" : ""}
                       </span>
                     </button>
                     {isOpen && (
@@ -388,17 +387,6 @@ export function CharacterWorkspace({
                         }
                       >
                         <AppIcon icon={CloseIcon} />
-                      </button>
-                    )}
-                    {props.snapshot.me.role === "GM" && !railCollapsed && (
-                      <button
-                        type="button"
-                        className="character-rail__archive danger-link"
-                        aria-label={`Архивировать персонажа ${character.name}`}
-                        title="Архивировать персонажа"
-                        onClick={() => setArchiveTarget(character)}
-                      >
-                        <AppIcon icon={CharacterArchiveIcon} />
                       </button>
                     )}
                   </div>
@@ -419,12 +407,11 @@ export function CharacterWorkspace({
             state.openIds.map((id) => {
               const character = characters.find((item) => item.id === id);
               if (!character) return null;
-              const collapsed = state.collapsedIds.includes(id);
               return (
                 <article
                   className={`character-sheet-card${
                     state.activeId === id ? " is-active" : ""
-                  }${collapsed ? " is-collapsed" : ""}`}
+                  }`}
                   key={id}
                   data-character-sheet-id={id}
                   aria-label={`Лист персонажа ${character.name}`}
@@ -440,18 +427,6 @@ export function CharacterWorkspace({
                     </button>
                     <button
                       type="button"
-                      aria-label={`${collapsed ? "Развернуть" : "Свернуть"} лист ${character.name}`}
-                      onClick={() =>
-                        dispatch({
-                          type: collapsed ? "RESTORE" : "COLLAPSE",
-                          id,
-                        })
-                      }
-                    >
-                      {collapsed ? "Развернуть" : "Свернуть"}
-                    </button>
-                    <button
-                      type="button"
                       aria-label={`Закрыть лист ${character.name}`}
                       onClick={() =>
                         singleCharacter
@@ -462,11 +437,7 @@ export function CharacterWorkspace({
                       Закрыть
                     </button>
                   </header>
-                  <div
-                    className="character-sheet-card__body"
-                    hidden={collapsed}
-                    aria-hidden={collapsed}
-                  >
+                  <div className="character-sheet-card__body">
                     <CharacterPanel
                       snapshot={props.snapshot}
                       character={character}
@@ -479,6 +450,11 @@ export function CharacterWorkspace({
                       onReplaceControllers={props.onReplaceCharacterControllers}
                       onRoll={props.onRoll}
                       onUpdateCounters={props.onUpdateCounters}
+                      onArchive={
+                        props.snapshot.me.role === "GM"
+                          ? () => setArchiveTarget(character)
+                          : undefined
+                      }
                     />
                   </div>
                 </article>
@@ -941,6 +917,7 @@ export function CharacterPanel({
   onReplaceControllers,
   onRoll,
   onUpdateCounters,
+  onArchive,
 }: {
   snapshot: GameSnapshot;
   character: CharacterDto | undefined;
@@ -951,6 +928,7 @@ export function CharacterPanel({
   onReplaceControllers: Props["onReplaceCharacterControllers"];
   onRoll: Props["onRoll"];
   onUpdateCounters: Props["onUpdateCounters"];
+  onArchive?: () => void;
 }) {
   // The catalog handlers are read here rather than passed in: this panel is
   // the only place that uses them, so threading them through the workspace
@@ -966,9 +944,16 @@ export function CharacterPanel({
     "characteristics",
   );
   const combatRows = statRowsOfGroup(snapshot.campaign.statLayout, "combat");
+  const initiativeRows = combatRows.filter(
+    (row) => row.key === "initiative" || row.key === "reaction",
+  );
   const resourceRows = statResourceRowsFromLayout(snapshot.campaign.statLayout);
   const resourceLabels = resourceCostLabels(snapshot.campaign.statLayout);
   const [countersPending, setCountersPending] = useState(0);
+  const [vitalsTab, setVitalsTab] = useState<"resources" | "initiative">(
+    "resources",
+  );
+  const vitalsTabId = useId();
   const [countersError, setCountersError] = useState("");
   // Undefined preserves each catalog action's legacy advantage setting until the player explicitly overrides it.
   const [rollPending, setRollPending] = useState(false);
@@ -1226,19 +1211,6 @@ export function CharacterPanel({
   const inventoryRef = useRemoteFieldValue<HTMLTextAreaElement>(
     character?.inventory.join("\n") ?? "",
   );
-  const roleBadge = useMemo(() => {
-    if (!character) return null;
-    if (snapshot.me.role === "GM") {
-      return <Badge theme="warning">Мастер</Badge>;
-    }
-    if (character.ownerMembershipId === snapshot.me.id) {
-      return <Badge theme="success">Ваш персонаж</Badge>;
-    }
-    if (character.controllerMembershipIds.includes(snapshot.me.id)) {
-      return <Badge theme="info">Контроллер</Badge>;
-    }
-    return <Badge theme="normal">Только чтение</Badge>;
-  }, [snapshot.me.id, snapshot.me.role, character]);
   if (!character)
     return (
       <Empty
@@ -1385,6 +1357,7 @@ export function CharacterPanel({
         },
       );
     } catch (reason) {
+      setResourcesDraft(character.resources);
       setCountersError(
         reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
           ? "Ресурсы изменены. Повторите действие."
@@ -1530,12 +1503,6 @@ export function CharacterPanel({
             )}
           </button>
           <div className="character-hero__info">
-            <div className="character-hero__meta">
-              <span className="eyebrow">Карточка</span>
-              {roleBadge}
-              <span className="revision">rev {character.revision}</span>
-            </div>
-            <h2 className="character-hero__name">{character.name}</h2>
             <div className="inline-fields">
               <Button disabled={!editable} onClick={() => setRenameOpen(true)}>
                 Переименовать
@@ -1558,6 +1525,16 @@ export function CharacterPanel({
           >
             Короткий отдых
           </Button>
+          {onArchive && (
+            <Button
+              className="danger-link"
+              aria-label={`Архивировать персонажа ${character.name}`}
+              title="Архивировать персонажа"
+              onClick={onArchive}
+            >
+              <AppIcon icon={CharacterArchiveIcon} />
+            </Button>
+          )}
         </div>
         <details className="character-hero__backstory">
           <summary>Предыстория</summary>
@@ -1585,7 +1562,47 @@ export function CharacterPanel({
       </header>
 
       {/* Vital Stats Bar: ключевые показатели прямо под шапкой */}
-      <div className="character-vitals" aria-label="Ключевые показатели">
+      <div
+        className="character-vitals__tabs"
+        role="tablist"
+        aria-label="Ключевые показатели персонажа"
+      >
+        {(["resources", "initiative"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            id={`${vitalsTabId}-${tab}-tab`}
+            aria-controls={`${vitalsTabId}-${tab}-panel`}
+            aria-selected={vitalsTab === tab}
+            tabIndex={vitalsTab === tab ? 0 : -1}
+            onClick={() => setVitalsTab(tab)}
+            onKeyDown={(event) => {
+              if (
+                !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)
+              )
+                return;
+              event.preventDefault();
+              const next =
+                event.key === "ArrowLeft" || event.key === "Home"
+                  ? "resources"
+                  : "initiative";
+              setVitalsTab(next);
+              document.getElementById(`${vitalsTabId}-${next}-tab`)?.focus();
+            }}
+          >
+            {tab === "resources" ? "Ресурсы" : "Инициатива и реакция"}
+          </button>
+        ))}
+      </div>
+      <div
+        className="character-vitals"
+        role="tabpanel"
+        id={`${vitalsTabId}-resources-panel`}
+        aria-labelledby={`${vitalsTabId}-resources-tab`}
+        aria-label="Ключевые показатели"
+        hidden={vitalsTab !== "resources"}
+      >
         <div className="character-vital-chip character-vital-chip--wallet">
           <span className="character-vital-chip__label">Кошелёк</span>
           <span className="character-vital-chip__value character-vital-chip__wallet-values">
@@ -1624,6 +1641,16 @@ export function CharacterPanel({
         {resourceRows.map(({ key, label }) => {
           const res = resourcesDraft[key] ?? { current: 0, maximum: 0 };
           const max = res.maximum ?? res.current;
+          const regenKey = RESOURCE_REGEN_STAT[key];
+          const regenRow = combatRows.find((row) => row.key === regenKey);
+          const regen = regenKey ? (character.stats[regenKey] ?? 0) : 0;
+          const changeResource = (delta: number) => {
+            const next = {
+              ...resourcesDraft,
+              [key]: { ...res, current: Math.max(0, res.current + delta) },
+            };
+            void saveResources(next);
+          };
           return (
             <div
               className="character-vital-chip character-vital-chip--resource"
@@ -1668,6 +1695,63 @@ export function CharacterPanel({
                   onBlur={() => void saveResources(resourcesDraft)}
                 />
               </span>
+              <div className="character-vital-chip__controls">
+                <Button
+                  disabled={
+                    !editable || countersPending > 0 || res.current <= 0
+                  }
+                  aria-label={`Уменьшить ${label}`}
+                  onClick={() => changeResource(-1)}
+                >
+                  <AppIcon icon={DecreaseIcon} />
+                </Button>
+                <Button
+                  disabled={!editable || countersPending > 0}
+                  aria-label={`Увеличить ${label}`}
+                  onClick={() => changeResource(1)}
+                >
+                  <AppIcon icon={AddIcon} />
+                </Button>
+                {regen > 0 && (
+                  <Button
+                    disabled={
+                      !editable || countersPending > 0 || res.current >= max
+                    }
+                    aria-label={`Восстановить ${regen}: ${label}`}
+                    title={`Восстановить на величину регена (${regen})`}
+                    onClick={() =>
+                      void saveResources({
+                        ...resourcesDraft,
+                        [key]: {
+                          ...res,
+                          current: Math.min(max, res.current + regen),
+                        },
+                      })
+                    }
+                  >
+                    +{regen}
+                  </Button>
+                )}
+              </div>
+              {regenKey && regenRow && (
+                <label className="character-vital-chip__regen">
+                  <span>{regenRow.label}</span>
+                  <FormInput
+                    type="number"
+                    aria-label={regenRow.label}
+                    min={0}
+                    defaultValue={regen}
+                    disabled={!editable}
+                    onBlur={(event) =>
+                      changeStatValue(
+                        character,
+                        regenKey,
+                        Number(event.target.value),
+                      )
+                    }
+                  />
+                </label>
+              )}
               <span className="character-vital-chip__track" aria-hidden="true">
                 <span
                   style={{
@@ -1721,31 +1805,33 @@ export function CharacterPanel({
               </span>
             </div>
           ))}
-        {combatRows.slice(0, 2).map((row) => {
-          const val = character.stats[row.key];
-          if (val === undefined) return null;
-          return (
-            <button
-              type="button"
-              className="character-vital-chip character-vital-chip--combat"
-              key={row.key}
-              disabled={rollPending || !editable}
-              title={`Бросить ${row.label}`}
-              onClick={(event) =>
-                void submitCharacterRoll(
-                  `1d20 + ${row.key}`,
-                  row.label,
-                  rollModeFromEvent(event.nativeEvent),
-                )
-              }
-            >
-              <span className="character-vital-chip__label">{row.label}</span>
-              <span className="character-vital-chip__value">
-                {val > 0 ? `+${val}` : val}
-              </span>
-            </button>
-          );
-        })}
+      </div>
+      <div
+        className="character-vitals__initiative"
+        role="tabpanel"
+        id={`${vitalsTabId}-initiative-panel`}
+        aria-labelledby={`${vitalsTabId}-initiative-tab`}
+        hidden={vitalsTab !== "initiative"}
+      >
+        <StatLayoutCard
+          title="Инициатива и реакция"
+          modifier="combat"
+          rows={initiativeRows}
+          values={character.stats}
+          editable={Boolean(editable)}
+          rollPending={rollPending}
+          canEditLayout={snapshot.me.role === "GM"}
+          showAddRow={false}
+          onChangeValue={(key, value) => changeStatValue(character, key, value)}
+          onRoll={(formula, label, mode) =>
+            void submitCharacterRoll(formula, label, mode)
+          }
+          onRenameRow={renameStatRow}
+          onAddRow={(label) => addStatRow("combat", label)}
+          onDeleteRow={deleteStatRow}
+          onMoveRow={moveStatRowBy}
+          onReorderRow={reorderStatRow}
+        />
       </div>
 
       <nav
@@ -1754,6 +1840,7 @@ export function CharacterPanel({
       >
         {[
           ["stats", "Характеристики"],
+          ["combat", "Бой"],
           ["resources", "Ресурсы"],
           ["inventory", "Инвентарь"],
           ["bio", "Личность"],
@@ -1798,10 +1885,22 @@ export function CharacterPanel({
             onMoveRow={moveStatRowBy}
             onReorderRow={reorderStatRow}
           />
+        </div>
+      </div>
+      <div
+        className="character-section character-section--combat"
+        data-character-section="combat"
+      >
+        <div className="character-card-row">
           <StatLayoutCard
             title="Боевые характеристики"
             modifier="combat"
-            rows={combatRows}
+            rows={combatRows.filter(
+              (row) =>
+                !isSystemRegenStatKey(row.key) &&
+                row.key !== "initiative" &&
+                row.key !== "reaction",
+            )}
             values={character.stats}
             editable={Boolean(editable)}
             rollPending={rollPending}

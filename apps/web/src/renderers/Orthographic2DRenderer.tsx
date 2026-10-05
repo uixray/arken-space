@@ -30,7 +30,7 @@ import { shouldIgnoreGlobalShortcut } from "../input-diagnostics";
 import { fogHiddenTokenIds, isRectFullyRevealed } from "./fog";
 import { useFogPattern } from "./useFogPattern";
 import { paintFogBrushStroke } from "./fog-brush-stroke";
-import { fitRect } from "./camera-fit";
+import { centerRectAtScale, fitRect } from "./camera-fit";
 import { useLatestRef } from "../use-latest-ref";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { AppIcon } from "../ui/AppIcon";
@@ -40,6 +40,7 @@ import {
   DeleteIcon,
   DuplicateIcon,
   FitMapIcon,
+  RevealFogIcon,
   SelectedOptionIcon,
 } from "../ui/icons";
 import {
@@ -761,13 +762,17 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     const position = () => {
       const viewport = container.getBoundingClientRect();
       const anchor = trigger.getBoundingClientRect();
-      const below = viewport.bottom - anchor.top - 8;
+      const diceTray =
+        container.parentElement?.querySelector<HTMLElement>(".map-dice-tray");
+      const trayTop = diceTray?.getBoundingClientRect().top ?? viewport.bottom;
+      const lowerLimit = Math.min(viewport.bottom, trayTop - 8);
+      const below = lowerLimit - anchor.top - 8;
       const above = anchor.bottom - viewport.top - 8;
       const placeBelow = below >= 180 || below >= above;
       // A scrolled toolbar can leave its anchor outside the map viewport.
       // Clamp the flyout to the visible map instead of using that offscreen
       // anchor to produce an oversized panel on compact screens.
-      list.style.maxHeight = `${Math.max(80, Math.min(placeBelow ? below : above, viewport.height - 16))}px`;
+      list.style.maxHeight = `${Math.max(80, Math.min(placeBelow ? below : above, lowerLimit - viewport.top - 16))}px`;
       const popover = list.getBoundingClientRect();
       const left = Math.min(
         Math.max(8, anchor.right - viewport.left + 8),
@@ -780,7 +785,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
             ? anchor.top - viewport.top
             : anchor.bottom - viewport.top - popover.height,
         ),
-        Math.max(8, viewport.height - popover.height - 8),
+        Math.max(8, lowerLimit - viewport.top - popover.height),
       );
       list.style.left = `${left}px`;
       list.style.top = `${top}px`;
@@ -796,6 +801,9 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     const observer = new ResizeObserver(position);
     observer.observe(container);
     observer.observe(list);
+    const tray =
+      container.parentElement?.querySelector<HTMLElement>(".map-dice-tray");
+    if (tray) observer.observe(tray);
     window.addEventListener("resize", position);
     return () => {
       observer.disconnect();
@@ -1055,6 +1063,14 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       x: center.x - world.x * bounded,
       y: center.y - world.y * bounded,
     });
+  };
+  const focusToken = (token: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => {
+    setPosition(centerRectAtScale(token, viewport, scale));
   };
   const fitMap = () => {
     const fitted = fitRect(
@@ -2097,6 +2113,11 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
         {orderedFogReveals.map((fog) => {
           const compositeOperation =
             fog.operation === "COVER" ? "source-over" : "destination-out";
+          const reveal = fog.operation !== "COVER";
+          // Paint the hairline before the reveal erases its interior. Later
+          // cover/reveal operations therefore also update the visible edge.
+          const edgeColor = "#ced9dc";
+          const edgeOpacity = 0.22;
           const geometry = fog.geometry;
           // Rows created before UIX-313 (or any legacy RECT-only insert)
           // have no `geometry`; fall back to the bbox fields, same as the
@@ -2107,74 +2128,132 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                 ? geometry
                 : { x: fog.x, y: fog.y, width: fog.width, height: fog.height };
             return (
-              <Rect
-                key={fog.id}
-                x={rect.x}
-                y={rect.y}
-                width={rect.width}
-                height={rect.height}
-                fill={fogPatternImage ? undefined : visual.color.fogCover}
-                fillPatternImage={fogPatternImage || undefined}
-                fillPatternRepeat="repeat"
-                globalCompositeOperation={compositeOperation}
-              />
+              <Group key={fog.id}>
+                {reveal && (
+                  <Rect
+                    {...rect}
+                    stroke={edgeColor}
+                    strokeWidth={2}
+                    opacity={edgeOpacity}
+                  />
+                )}
+                <Rect
+                  {...rect}
+                  fill={fogPatternImage ? undefined : visual.color.fogCover}
+                  fillPatternImage={fogPatternImage || undefined}
+                  fillPatternRepeat="repeat"
+                  globalCompositeOperation={compositeOperation}
+                />
+              </Group>
             );
           }
           if (geometry.type === "CIRCLE")
             return (
-              <Circle
-                key={fog.id}
-                x={geometry.center.x}
-                y={geometry.center.y}
-                radius={geometry.radius}
-                fill={fogPatternImage ? undefined : visual.color.fogCover}
-                fillPatternImage={fogPatternImage || undefined}
-                fillPatternRepeat="repeat"
-                globalCompositeOperation={compositeOperation}
-              />
+              <Group key={fog.id}>
+                {reveal && (
+                  <Circle
+                    x={geometry.center.x}
+                    y={geometry.center.y}
+                    radius={geometry.radius}
+                    stroke={edgeColor}
+                    strokeWidth={2}
+                    opacity={edgeOpacity}
+                  />
+                )}
+                <Circle
+                  x={geometry.center.x}
+                  y={geometry.center.y}
+                  radius={geometry.radius}
+                  fill={fogPatternImage ? undefined : visual.color.fogCover}
+                  fillPatternImage={fogPatternImage || undefined}
+                  fillPatternRepeat="repeat"
+                  globalCompositeOperation={compositeOperation}
+                />
+              </Group>
             );
           if (geometry.type === "POLYGON")
             return (
-              <Line
-                key={fog.id}
-                points={geometry.points.flatMap((point) => [point.x, point.y])}
-                closed
-                fill={fogPatternImage ? undefined : visual.color.fogCover}
-                fillPatternImage={fogPatternImage || undefined}
-                fillPatternRepeat="repeat"
-                globalCompositeOperation={compositeOperation}
-              />
+              <Group key={fog.id}>
+                {reveal && (
+                  <Line
+                    points={geometry.points.flatMap((point) => [
+                      point.x,
+                      point.y,
+                    ])}
+                    closed
+                    stroke={edgeColor}
+                    strokeWidth={2}
+                    opacity={edgeOpacity}
+                  />
+                )}
+                <Line
+                  points={geometry.points.flatMap((point) => [
+                    point.x,
+                    point.y,
+                  ])}
+                  closed
+                  fill={fogPatternImage ? undefined : visual.color.fogCover}
+                  fillPatternImage={fogPatternImage || undefined}
+                  fillPatternRepeat="repeat"
+                  globalCompositeOperation={compositeOperation}
+                />
+              </Group>
             );
           // BRUSH: a single-point stroke has no length for Konva's Line to
           // render, so draw the equivalent circle; otherwise draw a
           // round-capped/joined stroke following the sampled points.
           if (geometry.points.length === 1)
             return (
-              <Circle
-                key={fog.id}
-                x={geometry.points[0]!.x}
-                y={geometry.points[0]!.y}
-                radius={geometry.radius}
-                fill={fogPatternImage ? undefined : visual.color.fogCover}
-                fillPatternImage={fogPatternImage || undefined}
-                fillPatternRepeat="repeat"
-                globalCompositeOperation={compositeOperation}
-              />
+              <Group key={fog.id}>
+                {reveal && (
+                  <Circle
+                    x={geometry.points[0]!.x}
+                    y={geometry.points[0]!.y}
+                    radius={geometry.radius + 1}
+                    fill={edgeColor}
+                    opacity={edgeOpacity}
+                  />
+                )}
+                <Circle
+                  x={geometry.points[0]!.x}
+                  y={geometry.points[0]!.y}
+                  radius={geometry.radius}
+                  fill={fogPatternImage ? undefined : visual.color.fogCover}
+                  fillPatternImage={fogPatternImage || undefined}
+                  fillPatternRepeat="repeat"
+                  globalCompositeOperation={compositeOperation}
+                />
+              </Group>
             );
           return (
-            <Shape
-              key={fog.id}
-              sceneFunc={(context) =>
-                paintFogBrushStroke(
-                  context,
-                  geometry.points,
-                  geometry.radius,
-                  fogPatternImage,
-                  visual.color.fogCover,
-                )
-              }
-              globalCompositeOperation={compositeOperation}
-            />
+            <Group key={fog.id}>
+              {reveal && (
+                <Shape
+                  sceneFunc={(context) =>
+                    paintFogBrushStroke(
+                      context,
+                      geometry.points,
+                      geometry.radius + 1,
+                      null,
+                      edgeColor,
+                    )
+                  }
+                  opacity={edgeOpacity}
+                />
+              )}
+              <Shape
+                sceneFunc={(context) =>
+                  paintFogBrushStroke(
+                    context,
+                    geometry.points,
+                    geometry.radius,
+                    fogPatternImage,
+                    visual.color.fogCover,
+                  )
+                }
+                globalCompositeOperation={compositeOperation}
+              />
+            </Group>
           );
         })}
       </Group>
@@ -2859,7 +2938,10 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                   ? `${token.name} · стопка ${stack.count}`
                   : token.name;
               return (
-                <li key={`token:${token.id}:${token.revision}`}>
+                <li
+                  key={`token:${token.id}:${token.revision}`}
+                  className="map-object-list__token"
+                >
                   <button
                     type="button"
                     aria-pressed={
@@ -2875,6 +2957,27 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                     }
                   >
                     {label}
+                  </button>
+                  <button
+                    className="map-object-list__action map-object-list__focus"
+                    type="button"
+                    aria-label={`Показать на карте: ${token.name}`}
+                    title="Показать на карте"
+                    onClick={() => {
+                      focusToken({
+                        x: dragPosition?.x ?? token.x,
+                        y: dragPosition?.y ?? token.y,
+                        width: token.width,
+                        height: token.height,
+                      });
+                      selectObject({
+                        kind: "token",
+                        objectId: token.id,
+                        revision: token.revision,
+                      });
+                    }}
+                  >
+                    <AppIcon icon={RevealFogIcon} />
                   </button>
                   <button
                     className="map-object-list__action"

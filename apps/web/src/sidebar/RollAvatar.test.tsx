@@ -155,6 +155,55 @@ describe("строка броска", () => {
     renderComponent(<ChatMessageBody message={diceMessage} />);
     expect(order()).toEqual(["roll-details", "roll-result__numbers"]);
     expect(screen.getByLabelText("Итог броска").textContent).toBe("17");
+    expect(document.querySelector(".roll-details__math")?.textContent).toBe(
+      "1d2013+4",
+    );
+    expect(document.querySelector(".roll-result__die")).toBeNull();
+    expect(document.querySelector(".roll-result__bonus")).toBeNull();
+  });
+
+  it("показывает изменения ресурса карточкой с итогом и максимумом", () => {
+    renderComponent(
+      <ChatMessageBody
+        message={{
+          ...diceMessage,
+          kind: "SYSTEM",
+          dice: null,
+          body: "Путник — ресурсы: Выносливость: 13/20 → 9/20",
+        }}
+      />,
+    );
+    expect(document.querySelector(".roll-details__heading")?.textContent).toBe(
+      "Выносливость",
+    );
+    expect(document.querySelector(".roll-details__math")?.textContent).toBe(
+      "13−4Max 20",
+    );
+    expect(
+      screen.getByLabelText("Выносливость: итоговое значение"),
+    ).toHaveTextContent("9");
+    expect(document.querySelector(".roll-result")?.textContent).not.toContain(
+      "Путник",
+    );
+  });
+
+  it("показывает общее системное событие в той же карточке", () => {
+    renderComponent(
+      <ChatMessageBody
+        message={{
+          ...diceMessage,
+          kind: "SYSTEM",
+          dice: null,
+          body: "Длинный отдых завершён. Перезаряжено: 5.",
+        }}
+      />,
+    );
+    expect(
+      document.querySelector(".roll-result--system")?.textContent,
+    ).toContain("Длинный отдых завершён");
+    expect(
+      document.querySelector(".roll-result--system")?.textContent,
+    ).toContain("Перезаряжено: 5");
   });
 
   it("рисует физический бросок тем же макетом, но с бонусом вместо итога", () => {

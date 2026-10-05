@@ -58,6 +58,7 @@ export {
   Undo2 as UndoIcon,
   UsersRound as PartyLocationIcon,
   Volume2 as VolumeIcon,
+  VolumeX as MutedVolumeIcon,
   Coins as CoinsIcon,
   Search as SearchIcon,
   BookOpen as JournalSurfaceIcon,

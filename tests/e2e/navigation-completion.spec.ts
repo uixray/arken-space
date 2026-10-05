@@ -190,13 +190,23 @@ for (const role of ["GM", "PLAYER"] as const) {
     } else {
       await expect(directActive).toBeVisible();
       await expect(directActive).toHaveAttribute("aria-pressed", "true");
-      await more.focus();
-      await page.keyboard.press("Enter");
-      await expect(
-        nav.locator(".workspace-nav__menu button").first(),
-      ).toBeVisible();
-      await page.keyboard.press("Escape");
-      await expect(more).toBeFocused();
+      if ((await more.count()) === 0) {
+        // splitWorkspaceNav intentionally omits More when every item fits.
+        // Verify the complete PLAYER set remains present and keyboard-operable.
+        await expect(nav.locator(":scope > button")).toHaveCount(3);
+        await directActive.focus();
+        await page.keyboard.press("Enter");
+        await expect(directActive).toBeFocused();
+        await expect(directActive).toHaveAttribute("aria-pressed", "true");
+      } else {
+        await more.focus();
+        await page.keyboard.press("Enter");
+        await expect(
+          nav.locator(".workspace-nav__menu button").first(),
+        ).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(more).toBeFocused();
+      }
     }
     await page.setViewportSize({ width: 2000, height: 900 });
     await expect(

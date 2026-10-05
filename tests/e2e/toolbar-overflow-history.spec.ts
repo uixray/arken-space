@@ -179,9 +179,12 @@ test("отмена и повтор называют действие, котор
     "aria-label",
     "Отменить: размер токена изменён",
   );
-  // UIX-674 uses a keyboard-accessible Base UI tooltip rather than a native
-  // title; the visible tooltip must repeat the action-specific accessible name.
+  // Enter via actual keyboard navigation: Firefox does not show focus tooltips
+  // for a pointer-modality programmatic .focus().
   await undo.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(undo).toBeFocused();
   await expect(page.getByRole("tooltip")).toHaveText(
     "Отменить: размер токена изменён",
   );
