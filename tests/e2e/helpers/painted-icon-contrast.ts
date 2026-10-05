@@ -64,7 +64,9 @@ export async function paintedIconContrast(icon: Locator) {
         style.mixBlendMode !== "normal" ||
         style.maskImage !== "none"
       )
-        throw new Error("Unmodelled compositing effect");
+        throw new Error(
+          `Unmodelled compositing effect: ${JSON.stringify({ tag: node.tagName, className: node.getAttribute("class"), filter: style.filter, backdropFilter: style.backdropFilter, mixBlendMode: style.mixBlendMode, maskImage: style.maskImage })}`,
+        );
       if (!opaque) {
         for (const pseudo of ["::before", "::after"]) {
           const ps = getComputedStyle(node, pseudo);

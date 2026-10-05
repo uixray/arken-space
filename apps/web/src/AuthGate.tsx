@@ -187,6 +187,9 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
                 border: "1px solid var(--palette-ink-600, #34322c)",
                 borderRadius: "4px",
                 background: "var(--palette-ink-800, #20201d)",
+                minHeight: 44,
+                display: "inline-flex",
+                alignItems: "center",
               }}
             >
               Витрина Storybook ↗
@@ -562,6 +565,9 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
               style={{
                 color: "var(--palette-clay-400, #d57d55)",
                 textDecoration: "none",
+                minHeight: 44,
+                display: "inline-flex",
+                alignItems: "center",
               }}
             >
               Витрина Storybook ↗

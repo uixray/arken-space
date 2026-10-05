@@ -730,10 +730,25 @@ for (const role of ["GM", "PLAYER"] as const) {
         if (size.width < 500) {
           // A compact toolbar may keep its owner visible (and its popup open)
           // or scroll it out and dismiss the popup. Reject only a detached
-          // popup whose trigger cannot be reached.
-          if (await panel.isVisible()) {
-            await expect(trigger).toBeInViewport();
-          } else {
+          // popup whose trigger cannot be reached. Resize/IntersectionObserver
+          // dismissal is asynchronous, so wait for either valid outcome.
+          await expect
+            .poll(async () => {
+              if (!(await panel.isVisible())) return true;
+              return trigger.evaluate((el) => {
+                const box = el.getBoundingClientRect();
+                return (
+                  box.width > 0 &&
+                  box.height > 0 &&
+                  box.right > 0 &&
+                  box.bottom > 0 &&
+                  box.left < innerWidth &&
+                  box.top < innerHeight
+                );
+              });
+            })
+            .toBe(true);
+          if (!(await panel.isVisible())) {
             await trigger.scrollIntoViewIfNeeded();
             await trigger.click();
             await expect(panel).toBeVisible();

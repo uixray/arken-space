@@ -12,10 +12,10 @@ for (const themeId of ["system", ...PLAYER_THEMES.map(({ id }) => id)])
       test(`UIX-645 shell SVG contract ${role} ${width}${themeId === "system" ? "" : ` theme:${themeId}`}`, async ({
         page,
       }, testInfo) => {
-        // The GM desktop surface has many more icons to probe in normal,
-        // hover, disabled and keyboard states. Firefox completes the full
-        // audit in ~33s, beyond Playwright's generic 30s limit.
-        if (role === "GM" && width === 1280) test.setTimeout(60_000);
+        // The GM surface has many more icons to probe in normal, hover,
+        // disabled and keyboard states. Firefox can exceed Playwright's
+        // generic 30s limit at either width on a loaded runner.
+        if (role === "GM") test.setTimeout(60_000);
         await page.setViewportSize({ width, height: 850 });
         const errors: string[] = [];
         const writes: string[] = [];
