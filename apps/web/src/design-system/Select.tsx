@@ -538,7 +538,20 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
               .filter(Boolean)
               .join(" ")}
           >
-            <BaseSelect.Popup ref={popupRef} className="arken-select__popup">
+            <BaseSelect.Popup
+              ref={popupRef}
+              className="arken-select__popup"
+              onKeyDownCapture={(event) => {
+                if (event.key !== "Home") return;
+                const first = popupRef.current?.querySelector<HTMLElement>(
+                  '[role="option"]:not([aria-disabled="true"])',
+                );
+                if (!first) return;
+                event.preventDefault();
+                event.stopPropagation();
+                first.focus();
+              }}
+            >
               {renderPopup ? (
                 renderPopup({
                   renderFilter: () => null,

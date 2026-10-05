@@ -25,3 +25,10 @@
 - `checks` and `multiplayer` passed. E2E passed on Chromium shard 2/2 and Firefox shard 2/2; both shard 1/2 jobs failed on the same outdated fixed-width assertion in `GM compact chrome keeps actions discoverable at release width`. No other E2E failures were reported.
 - The map-toolbar overflow control is intentionally full width, matching adjacent map tools per browser comment 1. Updated the E2E contract to compare those widths rather than treating it as a 30px topbar icon. Targeted Chromium and Firefox cases pass locally.
 - Next: push the focused assertion repair, require complete green CI on that exact new revision, then complete final browser/release gates. Production untouched.
+
+## Candidate 443eafd CI result and select-keyboard repair
+
+- `checks`, `multiplayer`, Chromium 2/2, Firefox 1/2 and Firefox 2/2 passed. Chromium 1/2 had one failure: gallery Category dropdown did not change after Home→Enter in the PLAYER 360px case. The E2E aggregate therefore failed; do not call CI green.
+- CI trace frames show the popup closing around Home and reopening around Enter, leaving the old value selected. Eight repeated local runs on the old revision passed, so this is timing-sensitive; the trace, not the local pass, governs the repair.
+- Added popup-level Home capture to focus the first enabled option before BaseSelect's item handling, and explicit unit/E2E focus assertions. Select unit suite 9/9 and the gallery/world dropdown E2E matrix 12/12 (Chromium + Firefox, narrow + desktop) pass locally.
+- Next: format/typecheck, commit/push, require full CI on exact new SHA. Final browser and host release gates remain open; production untouched.

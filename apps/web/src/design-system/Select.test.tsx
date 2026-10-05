@@ -165,6 +165,26 @@ describe("Select Component", () => {
     });
   });
 
+  it("moves Home to the first option before Enter commits it", async () => {
+    const user = userEvent.setup();
+    render(
+      <Select
+        aria-label="Категория"
+        defaultValue="artifact"
+        options={[
+          { value: "other", label: "Другое" },
+          { value: "artifact", label: "Артефакт" },
+        ]}
+      />,
+    );
+    const trigger = screen.getByRole("combobox", { name: "Категория" });
+    await user.click(trigger);
+    await user.keyboard("{Home}");
+    expect(screen.getByRole("option", { name: "Другое" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(trigger).toHaveTextContent("Другое");
+  });
+
   it("forwards ref to the trigger button", () => {
     const ref = createRef<HTMLButtonElement>();
     render(

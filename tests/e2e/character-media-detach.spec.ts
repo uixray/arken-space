@@ -375,6 +375,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         // keyboard regardless of the popup's component-defined highlight or
         // whether ArrowDown would stop at the last option.
         await page.keyboard.press("Home");
+        await expect(list.getByRole("option").first()).toBeFocused();
         await page.keyboard.press("Enter");
         await expect(list).toBeHidden();
         await expect(trigger).not.toContainText(selectedText);
