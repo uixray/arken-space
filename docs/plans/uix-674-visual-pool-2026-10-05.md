@@ -19,3 +19,9 @@
 - Six non-icon failures were classified: five stale music-label assertions and one scene-editor focus restoration regression. Updated E2E labels from `Меню музыки` to `Плейлист`; implemented focus return to the exact scene's Configure button after dismissing its nested editor.
 - Verified: three representative music Chromium E2E tests, scene-editor Chromium E2E, and the previously failing narrow world-dropdown Chromium E2E pass locally. The world-dropdown failure did not reproduce on current local code, so no speculative change was made.
 - Typecheck passed across workspace and E2E configs; diff check passed. Production remains untouched. Next: finish remaining targeted review and one candidate push/CI gate.
+
+## Candidate 6fd33bc CI result
+
+- `checks` and `multiplayer` passed. E2E passed on Chromium shard 2/2 and Firefox shard 2/2; both shard 1/2 jobs failed on the same outdated fixed-width assertion in `GM compact chrome keeps actions discoverable at release width`. No other E2E failures were reported.
+- The map-toolbar overflow control is intentionally full width, matching adjacent map tools per browser comment 1. Updated the E2E contract to compare those widths rather than treating it as a 30px topbar icon. Targeted Chromium and Firefox cases pass locally.
+- Next: push the focused assertion repair, require complete green CI on that exact new revision, then complete final browser/release gates. Production untouched.

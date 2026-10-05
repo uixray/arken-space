@@ -389,7 +389,6 @@ test("GM compact chrome keeps actions discoverable at release width", async ({
       ".music-icon-button",
       ".music-volume-control summary",
       ".music-overflow summary",
-      ".toolbar-overflow summary",
     ]
       .map((selector) => `${selector}:visible`)
       .join(", "),
@@ -399,6 +398,12 @@ test("GM compact chrome keeps actions discoverable at release width", async ({
     await expect(control).toHaveCSS("width", "30px");
     await expect(control).toHaveCSS("height", "30px");
   }
+  const mapOverflow = page.locator(".toolbar-overflow summary");
+  await expect(mapOverflow).toBeVisible();
+  expect((await mapOverflow.boundingBox())!.width).toBeCloseTo(
+    (await pan.boundingBox())!.width,
+    0,
+  );
 
   await page.locator(".music-overflow summary").click();
   await expect(page.locator(".music-overflow__menu")).toBeVisible();
