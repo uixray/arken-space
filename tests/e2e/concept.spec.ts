@@ -290,7 +290,7 @@ test("concept shell keeps the map primary and exposes core tools", async ({
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Закрыть персонажей" }).click();
-  await expect(page.getByText("Сцена готова.")).toBeVisible();
+  await expect(page.locator(".map-viewport")).toBeVisible();
   await page.screenshot({
     path: "test-results/concept-shell.png",
     fullPage: true,
@@ -1668,7 +1668,7 @@ test("UIX-226 chat composer and canvas quick rolls submit explicit, server-safe 
   await expect(quickRolls).toBeVisible();
   await quickRolls
     .locator(".roll-mode-control")
-    .getByRole("radio", {
+    .getByRole("button", {
       name: "\u041f\u0440\u0435\u0438\u043c\u0443\u0449\u0435\u0441\u0442\u0432\u043e",
     })
     .click();
@@ -3383,8 +3383,7 @@ test("UIX-621 activity actions follow snapshot character B and keep failures at 
     exact: true,
   });
   const quickRoll = quickRolls.getByRole("button", {
-    name: "Ловкость",
-    exact: true,
+    name: /^Ловкость(?:\s|$)/,
   });
   const counters = activityPanel.locator("details.resource-counters");
   const physicalInput = counters.getByRole("spinbutton", {

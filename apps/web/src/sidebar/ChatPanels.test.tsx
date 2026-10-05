@@ -266,6 +266,7 @@ describe("подпись персонажа в ленте (UIX-501)", () => {
       "Мастер",
     );
     expect(markup).toContain("<strong>Мастер</strong>");
+    expect(markup).toContain('class="roll-avatar"');
     expect(markup).toContain('class="message-character"');
     expect(markup).toContain("Тейн");
   });

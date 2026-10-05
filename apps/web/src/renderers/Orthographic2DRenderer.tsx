@@ -30,6 +30,7 @@ import { shouldIgnoreGlobalShortcut } from "../input-diagnostics";
 import { fogHiddenTokenIds, isRectFullyRevealed } from "./fog";
 import { useFogPattern } from "./useFogPattern";
 import { paintFogBrushStroke } from "./fog-brush-stroke";
+import { fogBoundaryPixelRatio, fogBoundaryPixels } from "./fog-boundary";
 import { centerRectAtScale, fitRect } from "./camera-fit";
 import { useLatestRef } from "../use-latest-ref";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -934,6 +935,9 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       ),
     [props.fogReveals],
   );
+  const [fogBoundary, setFogBoundary] = useState<HTMLCanvasElement | null>(
+    null,
+  );
 
   /*
    * UIX-395: fog visibility is the single most expensive thing this renderer
@@ -995,6 +999,37 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       height: worldDraft.height,
       pixelRatio: 1,
     });
+    // Derive the decorative hairline from the composited mask. Outlining each
+    // operation leaves seams wherever brush strokes/areas overlap; the final
+    // alpha respects reveal/cover order and contains only the exposed edge.
+    try {
+      const composite = mask.toCanvas({
+        x: 0,
+        y: 0,
+        width: worldDraft.width,
+        height: worldDraft.height,
+        pixelRatio: fogBoundaryPixelRatio(worldDraft.width, worldDraft.height),
+      });
+      const context = composite.getContext("2d", { willReadFrequently: true });
+      if (context) {
+        const width = composite.width;
+        const height = composite.height;
+        const edge = document.createElement("canvas");
+        edge.width = width;
+        edge.height = height;
+        const edgeContext = edge.getContext("2d");
+        if (edgeContext) {
+          const pixels = context.getImageData(0, 0, width, height);
+          pixels.data.set(fogBoundaryPixels(pixels.data, width, height));
+          edgeContext.putImageData(pixels, 0, 0);
+          setFogBoundary(edge);
+        }
+      }
+    } catch {
+      // A cross-origin fog texture must never break the fog itself. In that
+      // case omit only the cosmetic boundary rather than exposing map data.
+      setFogBoundary(null);
+    }
     mask.getLayer()?.batchDraw();
   }, [fogPatternImage, orderedFogReveals, worldDraft.width, worldDraft.height]);
 
@@ -2113,11 +2148,6 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
         {orderedFogReveals.map((fog) => {
           const compositeOperation =
             fog.operation === "COVER" ? "source-over" : "destination-out";
-          const reveal = fog.operation !== "COVER";
-          // Paint the hairline before the reveal erases its interior. Later
-          // cover/reveal operations therefore also update the visible edge.
-          const edgeColor = "#ced9dc";
-          const edgeOpacity = 0.22;
           const geometry = fog.geometry;
           // Rows created before UIX-313 (or any legacy RECT-only insert)
           // have no `geometry`; fall back to the bbox fields, same as the
@@ -2129,14 +2159,6 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                 : { x: fog.x, y: fog.y, width: fog.width, height: fog.height };
             return (
               <Group key={fog.id}>
-                {reveal && (
-                  <Rect
-                    {...rect}
-                    stroke={edgeColor}
-                    strokeWidth={2}
-                    opacity={edgeOpacity}
-                  />
-                )}
                 <Rect
                   {...rect}
                   fill={fogPatternImage ? undefined : visual.color.fogCover}
@@ -2150,16 +2172,6 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           if (geometry.type === "CIRCLE")
             return (
               <Group key={fog.id}>
-                {reveal && (
-                  <Circle
-                    x={geometry.center.x}
-                    y={geometry.center.y}
-                    radius={geometry.radius}
-                    stroke={edgeColor}
-                    strokeWidth={2}
-                    opacity={edgeOpacity}
-                  />
-                )}
                 <Circle
                   x={geometry.center.x}
                   y={geometry.center.y}
@@ -2174,18 +2186,6 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           if (geometry.type === "POLYGON")
             return (
               <Group key={fog.id}>
-                {reveal && (
-                  <Line
-                    points={geometry.points.flatMap((point) => [
-                      point.x,
-                      point.y,
-                    ])}
-                    closed
-                    stroke={edgeColor}
-                    strokeWidth={2}
-                    opacity={edgeOpacity}
-                  />
-                )}
                 <Line
                   points={geometry.points.flatMap((point) => [
                     point.x,
@@ -2205,15 +2205,6 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           if (geometry.points.length === 1)
             return (
               <Group key={fog.id}>
-                {reveal && (
-                  <Circle
-                    x={geometry.points[0]!.x}
-                    y={geometry.points[0]!.y}
-                    radius={geometry.radius + 1}
-                    fill={edgeColor}
-                    opacity={edgeOpacity}
-                  />
-                )}
                 <Circle
                   x={geometry.points[0]!.x}
                   y={geometry.points[0]!.y}
@@ -2227,20 +2218,6 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
             );
           return (
             <Group key={fog.id}>
-              {reveal && (
-                <Shape
-                  sceneFunc={(context) =>
-                    paintFogBrushStroke(
-                      context,
-                      geometry.points,
-                      geometry.radius + 1,
-                      null,
-                      edgeColor,
-                    )
-                  }
-                  opacity={edgeOpacity}
-                />
-              )}
               <Shape
                 sceneFunc={(context) =>
                   paintFogBrushStroke(
@@ -2257,6 +2234,14 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           );
         })}
       </Group>
+      {fogBoundary && orderedFogReveals.length > 0 && (
+        <Image
+          image={fogBoundary}
+          width={worldDraft.width}
+          height={worldDraft.height}
+          listening={false}
+        />
+      )}
       {fogDraft && (
         <Rect
           {...fogDraft}

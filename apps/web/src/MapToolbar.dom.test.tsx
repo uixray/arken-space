@@ -224,6 +224,24 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     expect(revealPolygon?.innerHTML).not.toBe(coverPolygon?.innerHTML);
   });
 
+  it("снимает фокус с инструмента по Escape, не отменяя клавишу", async () => {
+    const props = createDefaultProps();
+    renderComponent(<MapToolbar {...props} />);
+    const fog = screen.getByRole("button", { name: "Открыть туман" });
+    fog.focus();
+    expect(fog).toHaveFocus();
+
+    const escape = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    fog.dispatchEvent(escape);
+
+    expect(fog).not.toHaveFocus();
+    expect(escape.defaultPrevented).toBe(false);
+  });
+
   it("не возвращает боевые кнопки при сохранённом активном столкновении", () => {
     const props = createDefaultProps();
     props.snapshot.campaign.battleActive = true;

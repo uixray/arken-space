@@ -565,7 +565,7 @@ describe("topbar popovers dismiss like every other details popover", () => {
   it("UIX645_MUSIC_TOPBAR_LUCIDE keeps named controls and decorative SVG", () => {
     const view = renderBar("GM");
     const { container } = view;
-    for (const name of ["Пауза", "Громкость", "Меню музыки"]) {
+    for (const name of ["Пауза", "Громкость", "Плейлист"]) {
       const control = screen.getByLabelText(name, {
         exact: true,
         selector: name === "Пауза" ? "button" : "summary",

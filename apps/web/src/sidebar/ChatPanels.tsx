@@ -1025,12 +1025,10 @@ export function ActivityPanel({
                   message.kind === "DICE" ? "message__roll-header" : undefined
                 }
               >
-                {message.kind === "DICE" && (
-                  <RollAvatar
-                    {...avatarFor(message.characterId)}
-                    fallbackName={message.displayName}
-                  />
-                )}
+                <RollAvatar
+                  {...avatarFor(message.characterId)}
+                  fallbackName={message.displayName}
+                />
                 <div className="message__identity">
                   <strong>{message.displayName}</strong>
                   <RollCharacterName
@@ -1793,12 +1791,10 @@ export function ChatPanel({
                     : undefined
                 }
               >
-                {item.message.kind === "DICE" && (
-                  <RollAvatar
-                    {...avatarFor(item.message.characterId)}
-                    fallbackName={item.message.displayName}
-                  />
-                )}
+                <RollAvatar
+                  {...avatarFor(item.message.characterId)}
+                  fallbackName={item.message.displayName}
+                />
                 <div className="message__identity">
                   <strong>{item.message.displayName}</strong>
                   <RollCharacterName

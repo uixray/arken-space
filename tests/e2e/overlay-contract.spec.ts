@@ -346,7 +346,7 @@ for (const role of ["GM", "PLAYER"] as const)
       });
       await page.goto("/");
       const music = page.getByRole("region", { name: "Музыка", exact: true });
-      const menu = music.getByLabel("Меню музыки", { exact: true });
+      const menu = music.getByLabel("Плейлист", { exact: true });
       if (role === "GM")
         for (let round = 0; round < 2; round++) {
           await menu.click();

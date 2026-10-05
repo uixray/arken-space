@@ -106,9 +106,12 @@ for (const role of ["GM", "PLAYER"] as const)
       });
       await toggle.press("Enter");
       await expect(rail).toBeVisible();
+      await expect(
+        rail.getByRole("button", { name: "Создать персонажа" }),
+      ).toBeVisible();
       if (role === "PLAYER")
         await expect(
-          rail.getByRole("button", { name: /Архив|Создать/ }),
+          rail.getByRole("button", { name: "Архив персонажей" }),
         ).toHaveCount(0);
       expect(writes).toEqual([]);
       expect(errors).toEqual([]);

@@ -88,6 +88,10 @@ for (const role of ["GM", "PLAYER"] as const)
             label: node.getAttribute("aria-label") || node.textContent?.trim(),
             width: b.width,
             height: b.height,
+            center: { x: b.x + b.width / 2, y: b.y + b.height / 2 },
+            blocker: document
+              .elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)
+              ?.outerHTML.slice(0, 240),
             hit: node.contains(
               document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2),
             ),

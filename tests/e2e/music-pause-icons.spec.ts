@@ -224,7 +224,7 @@ for (const role of ["GM", "PLAYER"] as const)
         await playback.press("Enter");
         await expect(playback).toHaveAccessibleName("Играть");
         expect(commands.map((c) => c.command)).toEqual(["PLAY", "PAUSE"]);
-        await icon(menu, "Меню музыки", 24);
+        await icon(menu, "Плейлист", 24);
         await menu.focus();
         await menu.press("Enter");
         await expect(

@@ -265,7 +265,6 @@ export function StickerPicker({
                 }}
               >
                 <img src={sticker.url} alt="" loading="lazy" />
-                <span>{sticker.name}</span>
               </button>
             ))}
           </div>

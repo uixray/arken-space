@@ -201,10 +201,10 @@ code {
   width: 28px;
   height: 30px;
   flex: 0 0 28px;
-  background-image: url("/assets/brand/arkpath-logo.webp");
+  background-image: url("/assets/brand/arkpath-hat-white.png");
   background-repeat: no-repeat;
-  background-size: 90px 49px;
-  background-position: -42px -8px;
+  background-size: contain;
+  background-position: center;
   overflow: hidden;
 }
 .scene-switcher,
@@ -1689,7 +1689,7 @@ code {
   inset: 0 auto 0 0;
   z-index: 1;
   border-radius: inherit;
-  background: var(--resource-overflow, #69c6d5);
+  background: var(--accent);
   transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .resource-bar__fill {
@@ -1708,13 +1708,13 @@ code {
 .resource-bar__fill--mana {
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, #9bb5c4 78%, var(--surface)),
-    color-mix(in srgb, #9bb5c4 88%, var(--accent))
+    color-mix(in srgb, var(--accent) 42%, var(--surface)),
+    color-mix(in srgb, var(--accent) 72%, var(--surface))
   );
 }
 .resource-bar__fill--default {
-  background: linear-gradient(90deg, #f59e0b, #fbbf24);
-  box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+  background: var(--accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .stat-field__add {
   width: 100%;
@@ -2151,6 +2151,9 @@ html[data-player-theme="light"] .character-card--stats {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-xs);
+}
+.roll-details__math > small:first-child {
+  padding-left: 0;
 }
 .roll-details__math-right {
   display: inline-flex;
@@ -5773,6 +5776,49 @@ body:has(.landing-shell) {
   padding: 4px;
   font-size: 0;
 }
+.map-toolbar .toolbar-overflow > summary.toolbar-detail-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-xs);
+  width: 100%;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.78rem;
+}
+.map-toolbar .toolbar-overflow > summary.toolbar-detail-trigger:hover,
+.map-toolbar .toolbar-overflow[open] > summary.toolbar-detail-trigger {
+  background: var(--surface-3);
+}
+.map-toolbar
+  .toolbar-overflow
+  > summary.toolbar-detail-trigger
+  .map-tool__label {
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+.map-toolbar .toolbar-shortcuts > :is(button, details) {
+  width: 100%;
+}
+.map-toolbar .toolbar-shortcuts .token-tray > summary.map-tool {
+  box-sizing: border-box;
+  width: 100%;
+}
+.map-toolbar .toolbar-shortcuts .map-object-list-trigger[aria-expanded="true"],
+.map-toolbar .toolbar-shortcuts .token-tray[open] > summary.map-tool {
+  border-color: transparent;
+  background: var(--color-surface-active);
+  color: var(--text);
+}
+.map-toolbar.is-collapsed .toolbar-overflow > summary.toolbar-detail-trigger {
+  justify-content: center;
+  width: 30px;
+  padding: 4px;
+}
 .map-toolbar.is-collapsed .toolbar-group__title {
   display: none;
 }
@@ -7107,6 +7153,8 @@ html[data-player-theme="classic-v1"] .asset-picker__tile:focus-visible {
   min-width: 24px;
   min-height: 32px;
   padding: 3px 4px;
+  /* Keep icon contrast independent of the map canvas below the tray. */
+  background: var(--surface-2);
 }
 .dice-tray-panel__toolbar .roll-mode-segments {
   grid-template-columns: repeat(2, minmax(0, 1fr));

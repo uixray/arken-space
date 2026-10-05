@@ -176,8 +176,11 @@ describe("строка броска", () => {
     expect(document.querySelector(".roll-details__heading")?.textContent).toBe(
       "Выносливость",
     );
-    expect(document.querySelector(".roll-details__math")?.textContent).toBe(
-      "13−4Max 20",
+    const resourceMath = document.querySelector(".roll-details__math");
+    expect(resourceMath?.textContent).toBe("134Max 20");
+    expect(resourceMath?.querySelector("svg.arken-icon")).toHaveAttribute(
+      "aria-hidden",
+      "true",
     );
     expect(
       screen.getByLabelText("Выносливость: итоговое значение"),

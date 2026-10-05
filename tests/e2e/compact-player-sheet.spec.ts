@@ -103,6 +103,10 @@ test("UIX-624 PLAYER sheet targets and pending backstory survive journal and rot
             label: node.getAttribute("aria-label") || node.textContent?.trim(),
             width: r.width,
             height: r.height,
+            center: { x: r.x + r.width / 2, y: r.y + r.height / 2 },
+            blocker: document
+              .elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
+              ?.outerHTML.slice(0, 120),
             hit: node.contains(
               document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
             ),

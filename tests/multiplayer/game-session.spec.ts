@@ -586,8 +586,9 @@ test("GM and six isolated players recover authoritative state without security l
       )
       .toBe(placementsBefore + 1);
     await openWorkspaceSection(pages[0]!, "Персонажи");
-    // A single accessible character opens directly; its redundant rail is hidden.
-    await expect(pages[0]!.locator(".character-rail__item")).toHaveCount(0);
+    // The rail remains available for character actions even with one sheet.
+    // It must expose only this player's accessible character.
+    await expect(pages[0]!.locator(".character-rail__item")).toHaveCount(1);
     await expect(pages[0]!.locator(".character-sheet-card")).toHaveCount(1);
     await expect(
       pages[0]!.getByTitle("Управление временем кампании"),

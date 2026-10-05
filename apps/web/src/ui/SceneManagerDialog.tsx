@@ -1,4 +1,11 @@
-import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import type { AssetDto, GameSnapshot, SceneDto } from "@arken/contracts";
 import { Label } from "../design-system/Badge";
 import { Button } from "../design-system/Button";
@@ -112,6 +119,21 @@ export function SceneManagerDialog({
   variant?: "modal" | "workspace";
 }) {
   const [editing, setEditing] = useState<SceneDto | "NEW" | null>(null);
+  const restoreConfigureFocus = useRef<string | null>(null);
+  useEffect(() => {
+    const sceneId = restoreConfigureFocus.current;
+    if (editing || !sceneId) return;
+    restoreConfigureFocus.current = null;
+    const frame = requestAnimationFrame(() => {
+      const button = Array.from(
+        document.querySelectorAll<HTMLButtonElement>(
+          "button[data-scene-configure]",
+        ),
+      ).find((candidate) => candidate.dataset.sceneConfigure === sceneId);
+      button?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [editing]);
   useEffect(() => {
     if (!open || !initialEditSceneId) return;
     const scene = snapshot.scenes.find(
@@ -177,7 +199,12 @@ export function SceneManagerDialog({
                       Показать игрокам
                     </Button>
                   )}
-                  <Button onClick={() => setEditing(scene)}>Настроить</Button>
+                  <Button
+                    data-scene-configure={scene.id}
+                    onClick={() => setEditing(scene)}
+                  >
+                    Настроить
+                  </Button>
                 </div>
               </article>
             );
@@ -190,7 +217,11 @@ export function SceneManagerDialog({
           scene={editing === "NEW" ? null : editing}
           maps={snapshot.assets.filter((asset) => asset.kind === "MAP")}
           onUpload={onUpload}
-          onCancel={() => setEditing(null)}
+          onCancel={() => {
+            restoreConfigureFocus.current =
+              editing === "NEW" ? null : editing.id;
+            setEditing(null);
+          }}
           onSave={async (draft) => {
             await onSave(editing === "NEW" ? null : editing, draft);
             setEditing(null);

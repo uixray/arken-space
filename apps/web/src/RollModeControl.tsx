@@ -68,7 +68,7 @@ export function RollModeControl({
             role={iconOnly ? undefined : "radio"}
             aria-checked={iconOnly ? undefined : value === option.value}
             aria-pressed={iconOnly ? value === option.value : undefined}
-            tabIndex={index === tabStopIndex ? 0 : -1}
+            tabIndex={iconOnly || index === tabStopIndex ? 0 : -1}
             className={value === option.value ? "is-active" : undefined}
             aria-label={option.label}
             title={option.label}

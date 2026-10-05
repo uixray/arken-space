@@ -184,6 +184,15 @@ export function MapToolbar({
       className={`map-toolbar${toolbarCollapsed ? " is-collapsed" : ""}`}
       role="toolbar"
       aria-label="Инструменты карты"
+      onKeyDownCapture={(event) => {
+        if (event.key !== "Escape") return;
+        const focusedTool = (event.target as HTMLElement).closest<HTMLElement>(
+          ".map-tool",
+        );
+        if (focusedTool && toolbarRef.current?.contains(focusedTool)) {
+          focusedTool.blur();
+        }
+      }}
     >
       <ToolbarButton
         type="button"
