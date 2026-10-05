@@ -14,3 +14,12 @@
 - **Verification:** focused ESLint, web typecheck, Prettier, diff check, production-mode local web build, and browser geometry passed: wallet increment buttons remain 8.7 px inside all four row bounds; online-status icon/text gap is 6 px; volume slider has zero margin and exactly matches its parent width. Local QA health remains 200. The PR `multiplayer` job passed on `1c121f0`; other checks were still running at observation time.
 - **Blockers:** PR remains draft and unreviewed; current release SHA is not on `origin/main`; fresh host backup/restore, human GM/player acceptance, and explicit production approval are outstanding.
 - **Next action:** inspect the first CI result, resolve any failures in the same candidate, push the local follow-up once, then perform one final exact-revision review gate.
+
+## CI repair pool — 2026-10-05
+
+- **Decision:** repair the completed first CI run as one pool, preserving product behavior and accessibility contracts rather than relaxing assertions. Keep the wallet/presence/volume follow-up and these repairs unpublished until one consolidated push; no per-edit CI and no production action.
+- **Revision:** `1c121f0` is the draft PR #86 head; local `ab72ea0` contains the three visual follow-ups. The CI repair pool is still uncommitted at this checkpoint.
+- **Changed files:** `App.tsx`, `WorkspaceNav.tsx`, `ScenePicker.tsx`, `styles.css`, the light-theme source token and generated CSS, related DOM/Vitest/E2E tests, and overlay inventory/coverage records. CI failures represented stale navigation and menu expectations plus real focus-return, scene-picker keyboard, stat drag-target, and light-theme critical-text contrast issues.
+- **Verification:** first-run multiplayer passed; first-run checks and all four E2E shards failed. Local targeted repairs passed the six failed Vitest files (42/42), architecture/navigation (9/9), stat-controls Chromium (4/4), scene-picker DOM (3/3), Firefox picker/focus/nav/dialog/skill targets (10/10), and Firefox light-theme critical contrast GM 1280 (1/1). Repository typecheck and lint completed successfully (lint has 24 warnings, zero errors). These are targeted local results, not a green full gate.
+- **Blockers:** no user review is required to finish fixes. Exact candidate remains unpublished and unverified by final CI; draft PR, origin/main SHA, host rehearsal, and human acceptance remain release gates.
+- **Next action:** run one consolidated focused local gate, commit and push one updated candidate, then inspect the single ensuing CI run before review handoff.

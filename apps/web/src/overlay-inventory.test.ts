@@ -110,10 +110,22 @@ function requireReviewedSiteIndex(
   actual: readonly OverlaySiteCount[],
   reviewed: readonly OverlaySiteCount[],
 ) {
-  if (JSON.stringify(actual) !== JSON.stringify(reviewed))
-    throw new Error(
-      "Overlay inventory drift: review added/removed/count-changed sites, then update docs/plans/uix-644-overlay-sites.json and the human inventory. This is not a runtime acceptance gate.",
+  if (JSON.stringify(actual) !== JSON.stringify(reviewed)) {
+    const reviewedKeys = new Set(reviewed.map((site) => JSON.stringify(site)));
+    const actualKeys = new Set(actual.map((site) => JSON.stringify(site)));
+    const added = actual.filter(
+      (site) => !reviewedKeys.has(JSON.stringify(site)),
     );
+    const removed = reviewed.filter(
+      (site) => !actualKeys.has(JSON.stringify(site)),
+    );
+    const firstOrderMismatch = actual.findIndex(
+      (site, index) => JSON.stringify(site) !== JSON.stringify(reviewed[index]),
+    );
+    throw new Error(
+      `Overlay inventory drift: review added/removed/count-changed sites, then update docs/plans/uix-644-overlay-sites.json and the human inventory. This is not a runtime acceptance gate. Added: ${JSON.stringify(added)} Removed: ${JSON.stringify(removed)} First order mismatch: ${firstOrderMismatch} actual=${JSON.stringify(actual[firstOrderMismatch])} reviewed=${JSON.stringify(reviewed[firstOrderMismatch])}`,
+    );
+  }
 }
 
 describe("UIX-644 static overlay inventory", () => {

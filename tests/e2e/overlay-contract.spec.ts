@@ -73,7 +73,7 @@ for (const width of [1024, 1440]) {
     await install(page);
     await page.goto("/");
     const trigger = page.getByLabel("Выбрать просматриваемую сцену");
-    const list = page.getByRole("listbox", { name: "Сцены", exact: true });
+    const list = page.getByRole("menu", { name: "Сцены", exact: true });
     const switcher = page.locator(".scene-switcher");
     await expect
       .poll(() =>
@@ -90,7 +90,7 @@ for (const width of [1024, 1440]) {
       )
       .toBe(true);
     await trigger.click();
-    const second = list.getByRole("option", { name: /Вторая сцена/ });
+    const second = list.getByRole("menuitemradio", { name: /Вторая сцена/ });
     await assertHitTarget(second);
     await second.click();
     await expect(list).toBeHidden();
@@ -99,11 +99,11 @@ for (const width of [1024, 1440]) {
 
     await trigger.press("ArrowDown");
     await expect(
-      list.getByRole("option", { name: /Вторая сцена/ }),
+      list.getByRole("menuitemradio", { name: /Вторая сцена/ }),
     ).toBeFocused();
     await page.keyboard.press("End");
     await expect(
-      list.getByRole("option", { name: /Третья сцена/ }),
+      list.getByRole("menuitemradio", { name: /Третья сцена/ }),
     ).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(trigger).toContainText("Третья сцена");
@@ -111,7 +111,7 @@ for (const width of [1024, 1440]) {
     await trigger.press("ArrowUp");
     await page.keyboard.press("Home");
     await expect(
-      list.getByRole("option", { name: /Начальная сцена/ }),
+      list.getByRole("menuitemradio", { name: /Начальная сцена/ }),
     ).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(list).toBeHidden();
@@ -137,12 +137,14 @@ test("UIX-644 hidden desktop picker closes across compact resize and PLAYER stay
   await page.goto("/");
   const trigger = page.getByLabel("Выбрать просматриваемую сцену");
   await trigger.click();
-  await assertHitTarget(page.getByRole("option", { name: /Вторая сцена/ }));
+  await assertHitTarget(
+    page.getByRole("menuitemradio", { name: /Вторая сцена/ }),
+  );
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(trigger).toBeHidden();
   await page.setViewportSize({ width: 1024, height: 800 });
   await expect(
-    page.getByRole("listbox", { name: "Сцены", exact: true }),
+    page.getByRole("menu", { name: "Сцены", exact: true }),
   ).toBeHidden();
   await page.unroute("**/api/**");
   await install(page, "PLAYER");
@@ -168,10 +170,10 @@ test("UIX-644 short viewport scrolls options without dismissing and keeps focus 
   const trigger = page.getByLabel("Выбрать просматриваемую сцену");
   await trigger.focus();
   await trigger.press("End");
-  const list = page.getByRole("listbox", { name: "Сцены", exact: true });
-  const last = list.getByRole("option", { name: /^Сцена 20 / });
+  const list = page.getByRole("menu", { name: "Сцены", exact: true });
+  const last = list.getByRole("menuitemradio", { name: /^Сцена 20 / });
   await expect(last).toBeFocused();
-  await expect(last).toHaveAttribute("tabindex", "0");
+  await expect(last).toHaveAttribute("aria-checked", "false");
   await assertHitTarget(last);
   const box = await list.boundingBox();
   expect(box).not.toBeNull();

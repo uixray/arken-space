@@ -368,13 +368,13 @@
     },
     {
       "file": "apps/web/src/ScenePicker.tsx",
-      "kind": "role:listbox",
+      "kind": "role:menu",
       "count": 1,
-      "status": "PASS",
+      "status": "BLOCKED",
       "classification": "reachable",
-      "scope": "Scene picker in shell; GM interaction, PLAYER read-only, compact hidden path.",
+      "scope": "UIX-674 changed the inner scene list from listbox/options to menu/menuitemradio with a separate menuitem edit action. Earlier listbox evidence is historical and does not prove the new role contract.",
       "evidence": ["scenePicker"],
-      "next": "Real multiplayer persistence and physical devices remain separate gates."
+      "next": "Run scoped current-revision keyboard, focus-return, dismissal and edit-action browser checks before claiming this role bucket PASS."
     },
     {
       "file": "apps/web/src/ScenePicker.tsx",
@@ -751,6 +751,16 @@
       }
     },
     {
+      "file": "apps/web/src/sidebar/StatLayoutCard.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "UIX-674 row-actions disclosure in editable stat layout, used from character sheet and campaign setup. This is a new static site, not covered by the historical UIX-644 runtime ledger.",
+      "evidence": [],
+      "next": "Check Escape/outside dismissal, focus return and edge placement at desktop and compact widths with both reachable owners."
+    },
+    {
       "file": "apps/web/src/sidebar/TokenPalette.tsx",
       "kind": "tag:AssetPicker",
       "count": 1,
@@ -879,6 +889,16 @@
       "scope": "Scene editor map selector under workspace→modal, keyboard/pointer and draft ownership through compact short-height resize.",
       "evidence": ["sceneEditorMap"],
       "next": "Save/upload/rejection and actual scene persistence/publication remain separate; this does not clear the original shared Select RO defect."
+    },
+    {
+      "file": "apps/web/src/ui/ToolbarTooltip.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "UIX-674 shared Base UI tooltip popup for map-toolbar buttons and summaries. Prior UIX-644 popup evidence does not cover this new portal.",
+      "evidence": [],
+      "next": "Check hover/focus opening, Escape/blur closure, viewport collision and coexisting toolbar menus at short and narrow sizes."
     }
   ],
   "supplementalSites": [

@@ -462,17 +462,17 @@ for (const width of [960, 360]) {
       ),
     ).toBe(true);
 
-    const details = card.locator("button");
-    await details.scrollIntoViewIfNeeded();
-    const box = await details.boundingBox();
-    expect(box!.width).toBeGreaterThanOrEqual(44);
-    expect(box!.height).toBeGreaterThanOrEqual(44);
-    await details.focus();
-    await page.keyboard.press("Enter");
-    await expect(details).toHaveAttribute("aria-expanded", "true");
+    // UIX-674: details are immediately readable; there is no disclosure
+    // button to discover with pointer or keyboard.
+    await card.scrollIntoViewIfNeeded();
+    await expect(card.locator("button")).toHaveCount(0);
+    await expect(card.locator(".skill-chat-card__details")).toBeVisible();
     await expect(
       card.locator(".skill-chat-card__details .muted"),
     ).toBeVisible();
+    await expect(card).toContainText(
+      "Исходная запись удалена; показан сохранённый снимок.",
+    );
   });
 }
 

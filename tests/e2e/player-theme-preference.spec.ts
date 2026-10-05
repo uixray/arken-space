@@ -178,8 +178,11 @@ for (const width of [1280, 390]) {
       "forest",
     );
     await trigger.click();
+    // On narrow screens the popup covers the lower heading; click the
+    // preparation header, which remains an actual outside-pointer target.
     await page
-      .getByRole("heading", { name: "Проверка видимости", exact: true })
+      .getByRole("heading", { name: "Подготовка", exact: true })
+      .first()
       .click();
     await expect(popup).toBeHidden();
     await info.attach("member-default-menu", {

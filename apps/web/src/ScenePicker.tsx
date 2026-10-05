@@ -45,12 +45,77 @@ export const ScenePicker = memo(function ScenePicker({
     ? assets.find((asset) => asset.id === activeScene.mapAssetId)
     : undefined;
 
+  const syncPopupBounds = (details: HTMLDetailsElement) => {
+    const summary = details.querySelector<HTMLElement>("summary");
+    if (summary) {
+      const rect = summary.getBoundingClientRect();
+      details.style.setProperty(
+        "--details-popup-max-height",
+        `${Math.max(0, window.innerHeight - rect.bottom - 12)}px`,
+      );
+      details.style.setProperty(
+        "--details-popup-max-width",
+        `${Math.max(0, window.innerWidth - rect.left - 8)}px`,
+      );
+    }
+  };
+
+  const moveChoiceFocus = (key: string, fromSummary: boolean) => {
+    const details = scenePickerRef.current;
+    if (!details) return;
+    syncPopupBounds(details);
+    const choices = Array.from(
+      details.querySelectorAll<HTMLButtonElement>(
+        '.scene-picker__menu button[role="menuitemradio"]',
+      ),
+    );
+    if (choices.length === 0) return;
+    const index = choices.indexOf(document.activeElement as HTMLButtonElement);
+    const selected = choices.findIndex(
+      (choice) => choice.getAttribute("aria-checked") === "true",
+    );
+    const next =
+      key === "Home"
+        ? 0
+        : key === "End"
+          ? choices.length - 1
+          : fromSummary
+            ? Math.max(0, selected)
+            : (index + (key === "ArrowDown" ? 1 : -1) + choices.length) %
+              choices.length;
+    details.open = true;
+    const target = choices[next];
+    target?.focus({ preventScroll: true });
+    const menu = details.querySelector<HTMLElement>(".scene-picker__menu");
+    if (target && menu) {
+      // Scroll only the popup. Scrolling its ancestor closes the anchored
+      // details through useDismissibleDetails.
+      const item = target.getBoundingClientRect();
+      const popup = menu.getBoundingClientRect();
+      if (item.bottom > popup.bottom)
+        menu.scrollTop += item.bottom - popup.bottom;
+      else if (item.top < popup.top) menu.scrollTop += item.top - popup.top;
+    }
+  };
+
   return (
-    <details ref={scenePickerRef} className="scene-picker">
+    <details
+      ref={scenePickerRef}
+      className="scene-picker"
+      onToggle={(event) => {
+        if (event.currentTarget.open) syncPopupBounds(event.currentTarget);
+      }}
+    >
       <summary
         aria-label="Выбрать просматриваемую сцену"
         aria-haspopup="menu"
         aria-controls="scene-picker-options"
+        onKeyDown={(event) => {
+          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key))
+            return;
+          event.preventDefault();
+          moveChoiceFocus(event.key, true);
+        }}
       >
         {activeAsset ? (
           <img src={activeAsset.url} alt="" />
@@ -68,23 +133,8 @@ export const ScenePicker = memo(function ScenePicker({
         onKeyDown={(event) => {
           if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key))
             return;
-          const controls = Array.from(
-            event.currentTarget.querySelectorAll<HTMLButtonElement>("button"),
-          );
-          const index = controls.indexOf(
-            document.activeElement as HTMLButtonElement,
-          );
-          const next =
-            event.key === "Home"
-              ? 0
-              : event.key === "End"
-                ? controls.length - 1
-                : (index +
-                    (event.key === "ArrowDown" ? 1 : -1) +
-                    controls.length) %
-                  controls.length;
-          controls[next]?.focus();
           event.preventDefault();
+          moveChoiceFocus(event.key, false);
         }}
       >
         {scenes.map((scene) => {

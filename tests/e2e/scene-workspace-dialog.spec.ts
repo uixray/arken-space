@@ -355,7 +355,7 @@ test("UIX-621 desktop overflow navigation has clickable visible menu items", asy
   // Characters is a root workspace, not a floating window. Exercise a named
   // overflow item with a stable dialog contract instead of whichever is first.
   const item = page.locator(
-    '.workspace-nav__menu button[data-workspace="tokens"]',
+    '.workspace-nav__menu button[data-workspace="scenes"]',
   );
   await expect(item).toBeVisible();
   await expect
@@ -373,7 +373,7 @@ test("UIX-621 desktop overflow navigation has clickable visible menu items", asy
     .toBe(true);
   await item.click();
   await expect(
-    page.getByRole("dialog", { name: "Токены", exact: true }),
+    page.getByRole("dialog", { name: "Сцены", exact: true }),
   ).toBeVisible();
 });
 

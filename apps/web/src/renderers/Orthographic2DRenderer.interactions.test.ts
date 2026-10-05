@@ -20,13 +20,13 @@ describe("Orthographic2DRenderer persisted drawing interactions", () => {
     expect(nameBlock).not.toMatch(/\|\| canMove|\|\| isStackRepresentative/);
   });
 
-  it("retains hidden GM layer as an accessible pressed icon control", () => {
+  it("keeps the GM layer available without a redundant map-scale control", () => {
     const scaleBlock = rendererSource.slice(
       rendererSource.indexOf('<div className="map-scale">'),
     );
-    expect(scaleBlock).toContain("aria-pressed={showGmLayer}");
-    expect(scaleBlock).toContain("setShowGmLayer((visible) => !visible)");
-    expect(scaleBlock).toContain("<AppIcon icon={MapObjectsIcon} />");
+    expect(rendererSource).toContain("const showGmLayer = true;");
+    expect(scaleBlock).not.toContain("setShowGmLayer((visible) => !visible)");
+    expect(scaleBlock).not.toContain("Показывать скрытый слой мастера");
     expect(scaleBlock).not.toContain("checked={showGmLayer}");
   });
 

@@ -35,7 +35,7 @@ it("edits the exact scene without selecting it or nesting buttons", () => {
   expect(container.querySelector("button button")).toBeNull();
   expect(container.querySelector("summary")).toHaveFocus();
 });
-it("supports keyboard movement between selection and its independent edit action", () => {
+it("moves arrow focus between scene choices while keeping edit actions separate", () => {
   renderComponent(
     <ScenePicker
       activeScene={scenes[0]}
@@ -52,13 +52,26 @@ it("supports keyboard movement between selection and its independent edit action
     .getByLabelText("Выбрать просматриваемую сцену")
     .closest("details")!.open = true;
   const option = screen.getByRole("menuitemradio", { name: /Первая сцена/ });
+  const summary = screen.getByLabelText("Выбрать просматриваемую сцену");
+  summary.focus();
+  fireEvent.keyDown(summary, { key: "End" });
+  expect(
+    screen.getByRole("menuitemradio", { name: /Вторая сцена/ }),
+  ).toHaveFocus();
   option.focus();
   fireEvent.keyDown(option, { key: "ArrowDown" });
   expect(
-    screen.getByRole("menuitem", {
-      name: "Редактировать сцену «Первая сцена»",
-    }),
+    screen.getByRole("menuitemradio", { name: /Вторая сцена/ }),
   ).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!, { key: "End" });
+  expect(
+    screen.getByRole("menuitemradio", { name: /Вторая сцена/ }),
+  ).toHaveFocus();
+  expect(
+    screen.getByRole("menuitem", {
+      name: "Редактировать сцену «Вторая сцена»",
+    }),
+  ).not.toHaveFocus();
 });
 it("keeps players and player previews read-only", () => {
   const { container } = renderComponent(

@@ -26,6 +26,10 @@ import { AuthGate } from "./AuthGate";
 import { useGameSocketSubscriptions } from "./use-game-socket-subscriptions";
 import { Sidebar } from "./Sidebar";
 import { AppHeader } from "./AppHeader";
+import {
+  focusWorkspaceReturnTarget,
+  workspaceReturnTarget,
+} from "./WorkspaceNav";
 import { MusicBar } from "./MusicBar";
 import { AppModals } from "./AppModals";
 import { TokenTray } from "./TokenTray";
@@ -104,7 +108,6 @@ import {
 import { usePlayerThemeRuntime } from "./design-system/player-theme-runtime-context";
 import { usePlayerThemePreference } from "./design-system/usePlayerThemePreference";
 import { patchPersonalThemePreference } from "./design-system/personal-theme-api";
-
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
     default: module.Orthographic2DRenderer,
@@ -373,6 +376,8 @@ export function App() {
 
   const handleWorkspaceChange = useCallback(
     (nextWorkspace: WorkspaceDestination | null) => {
+      const returnTarget =
+        nextWorkspace === null ? workspaceReturnTarget() : null;
       const { compact, selectSurface, previousSurface } =
         compactNavigationRef.current;
       if (compact) {
@@ -382,17 +387,12 @@ export function App() {
             : nextWorkspace
               ? "journal"
               : previousSurface,
-          // Utility workspaces own their initial focus and Escape handling.
           !nextWorkspace || nextWorkspace === "characters",
         );
       }
       setWorkspace(nextWorkspace);
-      // UIX-472: закрывая раздел, возвращаем фокус на его кнопку в строке —
-      // раньше он возвращался на выпадающий список, которого больше нет.
       if (nextWorkspace === null && !compact)
-        requestAnimationFrame(() =>
-          document.querySelector<HTMLElement>(".workspace-nav__item")?.focus(),
-        );
+        requestAnimationFrame(() => focusWorkspaceReturnTarget(returnTarget));
     },
     [compactNavigationRef],
   );
@@ -1719,11 +1719,8 @@ export function App() {
   );
 
   const handlePublishActiveScene = useCallback(() => {
-    if (
-      !activeScene ||
-      activeScene.id === broadcastScene?.id ||
-      activeScene.id === recentlyPublishedSceneId
-    )
+    if (!activeScene) return;
+    if ([broadcastScene?.id, recentlyPublishedSceneId].includes(activeScene.id))
       return;
     void run(async () => {
       await api("/api/scenes/activate", {

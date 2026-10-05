@@ -239,10 +239,26 @@ for (const role of ["GM", "PLAYER"] as const) {
             .locator(".roll-result :is(.roll-critical-label, .roll-total)")
             .evaluateAll((nodes) => {
               const rgb = (value: string) => {
-                const match = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(value);
-                if (!match) throw new Error(`Expected opaque sRGB: ${value}`);
-                return match.slice(1).map(Number);
+                const legacy = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(value);
+                if (legacy) return legacy.slice(1).map(Number);
+                // Firefox serializes CSS Color 4 values in the color(srgb)
+                // form. Keep the same opaque-sRGB contrast check rather than
+                // treating a serialization difference as a visual failure.
+                const modern =
+                  /^color\(srgb (\d*\.?\d+) (\d*\.?\d+) (\d*\.?\d+)\)$/.exec(
+                    value,
+                  );
+                if (modern)
+                  return modern
+                    .slice(1)
+                    .map((channel) => Number(channel) * 255);
+                throw new Error(`Expected opaque sRGB: ${value}`);
               };
+              const transparent = (value: string) =>
+                value === "rgba(0, 0, 0, 0)" ||
+                /^color\(srgb \d*\.?\d+ \d*\.?\d+ \d*\.?\d+ \/ 0\)$/.test(
+                  value,
+                );
               const luminance = (color: number[]) =>
                 color.reduce((sum, channel, index) => {
                   const s = channel / 255;
@@ -252,8 +268,8 @@ for (const role of ["GM", "PLAYER"] as const) {
                 }, 0);
               return nodes.map((node) => {
                 const card = node.closest(".roll-result")!;
-                const background = getComputedStyle(card).backgroundColor;
                 const foreground = getComputedStyle(node).color;
+                let background = "";
                 for (
                   let current: Element | null = node;
                   current;
@@ -268,14 +284,16 @@ for (const role of ["GM", "PLAYER"] as const) {
                     style.maskImage !== "none"
                   )
                     throw new Error("Unsupported text compositing");
-                  if (
-                    (current === card || card.contains(current)) &&
-                    (style.backgroundImage !== "none" ||
-                      (current !== card &&
-                        style.backgroundColor !== "rgba(0, 0, 0, 0)"))
-                  )
+                  if (style.backgroundImage !== "none")
                     throw new Error("Unsupported critical text backing");
+                  // The number tile intentionally has its own critical-state
+                  // background. Measure against the nearest opaque backing,
+                  // not the outer card behind it.
+                  if (!background && !transparent(style.backgroundColor))
+                    background = style.backgroundColor;
+                  if (current === card) break;
                 }
+                if (!background) throw new Error("No opaque critical backing");
                 const a = luminance(rgb(foreground));
                 const b = luminance(rgb(background));
                 return {

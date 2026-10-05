@@ -47,15 +47,18 @@ it("показывает скрытый активный раздел, не ме
     <WorkspaceNav items={items} active="media" onSelect={vi.fn()} />,
   );
   const summary = screen.getByLabelText("Ещё разделы");
-  expect(summary).toHaveTextContent("Файлы");
+  expect(summary).toHaveTextContent("Ещё2");
   expect(summary).toHaveAttribute("title", "Открыт раздел: Файлы");
+  expect(summary).toHaveAttribute("data-active-workspace", "media");
   const before = Array.from(
     container.querySelectorAll(".workspace-nav__item"),
     (node) => node.textContent,
   );
   const width = summary.style.width;
   rerender(<WorkspaceNav items={items} active="tokens" onSelect={vi.fn()} />);
-  expect(summary).toHaveTextContent("Токены");
+  expect(summary).toHaveTextContent("Ещё2");
+  expect(summary).toHaveAttribute("title", "Открыт раздел: Токены");
+  expect(summary).toHaveAttribute("data-active-workspace", "tokens");
   expect(summary.style.width).toBe(width);
   expect(
     Array.from(

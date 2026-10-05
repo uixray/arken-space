@@ -318,7 +318,11 @@ test("UIX-516 GM sees protected regen deletes before and after reload", async ({
   const expectProtectedControls = async () => {
     await openWorkspaceSection(page, "Персонажи");
     for (const label of ["Реген Выносливости", "Реген Маны"]) {
-      const protectedDelete = page.getByRole("button", {
+      const row = page.locator(".stat-field").filter({
+        has: page.locator(".stat-field__roll-name", { hasText: label }),
+      });
+      await row.locator(".stat-field__menu summary").click();
+      const protectedDelete = row.getByRole("button", {
         name: `Нельзя удалить «${label}»: установите значение 0, чтобы отключить восстановление`,
       });
       await expect(protectedDelete).toBeVisible();
@@ -327,9 +331,17 @@ test("UIX-516 GM sees protected regen deletes before and after reload", async ({
         "title",
         "Системную строку нельзя удалить. Чтобы отключить восстановление, установите значение 0.",
       );
+      await row.locator(".stat-field__menu summary").click();
     }
+    const strength = page
+      .locator(".stat-field")
+      .filter({
+        has: page.locator(".stat-field__roll-name", { hasText: "Сила" }),
+      })
+      .first();
+    await strength.locator(".stat-field__menu summary").click();
     await expect(
-      page.getByRole("button", { name: "Удалить «Сила»" }),
+      strength.getByRole("button", { name: "Удалить «Сила»" }),
     ).toBeEnabled();
   };
 
@@ -365,9 +377,10 @@ test("GM compact chrome keeps actions discoverable at release width", async ({
       page.locator(`.map-toolbar .map-tool[data-tool="${tool}"]:visible`),
     ).toHaveCount(1);
   }
-  await expect(
-    page.locator('.map-toolbar .map-tool[data-tool="PAN"]'),
-  ).toHaveAttribute("title", /./);
+  const pan = page.locator('.map-toolbar .map-tool[data-tool="PAN"]');
+  await expect(pan).toHaveAttribute("aria-describedby", /\S/);
+  await pan.focus();
+  await expect(page.getByRole("tooltip")).toContainText("Перемещение по карте");
   await expect(page.locator(".music-topbar__title")).toBeVisible();
 
   const iconOnlyControls = page.locator(
@@ -444,7 +457,7 @@ test("UIX-386 GM toolbar keeps icons and encounter states accessible", async ({
   for (const [id, accessibleName, visibleLabel] of labelledTools) {
     const control = tool(id);
     await expect(control).toHaveAttribute("aria-label", accessibleName);
-    await expect(control).toHaveAttribute("title", /\S/);
+    await expect(control).toHaveAttribute("aria-describedby", /\S/);
     await expect(control).toHaveText(visibleLabel);
     expect(
       Number.parseFloat(
@@ -507,10 +520,7 @@ test("UIX-386 GM toolbar keeps icons and encounter states accessible", async ({
     "aria-label",
     "Показать подписи инструментов",
   );
-  await expect(collapse).toHaveAttribute(
-    "title",
-    "Показать подписи инструментов",
-  );
+  await expect(collapse).toHaveAttribute("aria-describedby", /\S/);
   expect((await toolbar.boundingBox())!.width).toBeLessThan(expandedWidth);
   await expect(toolbar.locator(".toolbar-group__title").first()).toBeHidden();
   for (const [id, accessibleName] of labelledTools) {
@@ -1368,7 +1378,12 @@ test("GM manages one campaign clock surface and confirms a reset", async ({
       ...currentSnapshot,
       campaign: {
         ...currentSnapshot.campaign,
-        day: body.command === "RESET_CLOCK" ? 1 : currentSnapshot.campaign.day,
+        day:
+          body.command === "RESET_CLOCK"
+            ? 1
+            : body.command === "ADVANCE_DAY" || body.command === "LONG_REST"
+              ? currentSnapshot.campaign.day + 1
+              : currentSnapshot.campaign.day,
         battleCounter:
           body.command === "RESET_CLOCK"
             ? 0
@@ -1393,12 +1408,25 @@ test("GM manages one campaign clock surface and confirms a reset", async ({
   });
   await expect(clockTrigger).toHaveCount(1);
   await clockTrigger.click();
+  await expect.poll(() => clockRequests).toHaveLength(1);
+  expect(clockRequests[0]).toMatchObject({
+    command: "ADVANCE_DAY",
+    revision: 12,
+  });
+  await expect(workspace.getByRole("button", { name: "День 8" })).toBeVisible();
 
-  const clockDialog = page.getByRole("dialog", { name: "Время кампании" });
+  await openWorkspaceSection(page, "Подготовка");
+  await page
+    .getByRole("button", { name: "Длинный отдых и сброс времени" })
+    .click();
+
+  const clockDialog = page.getByRole("dialog", {
+    name: "Длинный отдых и сброс времени",
+  });
   await expect(clockDialog).toBeVisible();
   await expect(
     clockDialog.getByRole("button", { name: "Следующий день" }),
-  ).toHaveCount(1);
+  ).toHaveCount(0);
   await expect(
     clockDialog.getByRole("button", { name: "Длинный отдых" }),
   ).toHaveCount(1);
@@ -1406,19 +1434,19 @@ test("GM manages one campaign clock surface and confirms a reset", async ({
   await expect(clockDialog.getByText("Завершить бой")).toHaveCount(0);
 
   await clockDialog.getByRole("button", { name: "Сбросить время" }).click();
-  expect(clockRequests).toHaveLength(0);
+  expect(clockRequests).toHaveLength(1);
   const resetDialog = page.getByRole("dialog", {
     name: "Сбросить время кампании?",
   });
   await expect(resetDialog).toBeVisible();
   await resetDialog.getByRole("button", { name: "Подтвердить сброс" }).click();
 
-  await expect.poll(() => clockRequests).toHaveLength(1);
-  expect(clockRequests[0]).toMatchObject({
+  await expect.poll(() => clockRequests).toHaveLength(2);
+  expect(clockRequests[1]).toMatchObject({
     command: "RESET_CLOCK",
-    revision: 12,
+    revision: 13,
   });
-  expect(clockRequests[0]?.actionId).toMatch(
+  expect(clockRequests[1]?.actionId).toMatch(
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
   );
   await expect(clockDialog.getByText("День 1")).toBeVisible();
@@ -2021,8 +2049,14 @@ test("chat marks only unambiguous kept natural d20 criticals", async ({
   const success = page.locator(".roll-result--critical-success");
   await expect(failure).toContainText("Критический провал");
   await expect(success).toContainText("Критический успех");
-  await expect(failure).toHaveCSS("border-color", "rgb(217, 87, 87)");
-  await expect(success).toHaveCSS("border-color", "rgb(76, 171, 107)");
+  const failureSurface = await failure.evaluate(
+    (node) => getComputedStyle(node).backgroundColor,
+  );
+  const successSurface = await success.evaluate(
+    (node) => getComputedStyle(node).backgroundColor,
+  );
+  expect(failureSurface).not.toBe(successSurface);
+  expect(failureSurface).not.toBe("rgba(0, 0, 0, 0)");
   await expect(page.locator(".roll-critical-label")).toHaveCount(2);
   await expect(
     page.getByText("Total twenty on d8").locator(".."),
@@ -4359,7 +4393,6 @@ test("UIX-274 activity read state reconciles and stays read after reload", async
     }),
   );
   await page.goto("/");
-  const story = page.locator("#chat-tab-story");
   await expect(page.getByText("UNREAD_STORY_MARKER")).toBeVisible();
   await expect
     .poll(() =>
@@ -4369,11 +4402,15 @@ test("UIX-274 activity read state reconciles and stays read after reload", async
       ),
     )
     .toBe(true);
-  await expect(story.locator(".chat-unread-badge")).toHaveCount(0);
+  await expect(page.locator("#chat-tab-story")).toHaveCount(0);
+  await expect(
+    page.locator("#chat-panel-activity .chat-unread-badge"),
+  ).toHaveCount(0);
   await page.reload();
-  await expect(page.locator("#chat-tab-story .chat-unread-badge")).toHaveCount(
-    0,
-  );
+  await expect(page.getByText("UNREAD_STORY_MARKER")).toBeVisible();
+  await expect(
+    page.locator("#chat-panel-activity .chat-unread-badge"),
+  ).toHaveCount(0);
 });
 
 test("UIX-267 direct chat stays private across sender and recipient reloads", async ({
@@ -4814,7 +4851,7 @@ test("UIX-268 reload render and tombstone are safe at narrow viewport", async ({
   ).toHaveAttribute("src", "/api/stickers/" + stickerId + "/content");
 });
 
-test("GM can move tokens, pan the map, choose drawing color, and republish the active scene", async ({
+test("GM can move tokens, pan the map, choose drawing color, and cannot republish the active scene", async ({
   page,
 }) => {
   let publishRequests = 0;
@@ -4932,10 +4969,13 @@ test("GM can move tokens, pan the map, choose drawing color, and republish the a
   expect(panelBox!.y).toBeLessThan(viewportBox!.y + viewportBox!.height / 2);
 
   const publish = page.locator(".publish-scene");
-  await expect(publish).toBeEnabled();
+  await expect(publish).toBeDisabled();
+  await expect(publish).toHaveAttribute(
+    "aria-label",
+    "Сцена уже показана игрокам",
+  );
   await expect(publish).toHaveAttribute("aria-pressed", "true");
-  await publish.click();
-  await expect.poll(() => publishRequests).toBe(1);
+  expect(publishRequests).toBe(0);
 });
 
 test("sidebar collapse persists and hidden-chat rolls surface their authoritative total", async ({

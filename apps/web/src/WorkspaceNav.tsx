@@ -6,6 +6,18 @@ import {
   type WorkspaceNavItem,
 } from "./workspace-nav";
 
+export function workspaceReturnTarget(): HTMLElement | null {
+  return (
+    document.querySelector<HTMLElement>(
+      '.workspace-nav__more > summary[data-active-workspace], .workspace-nav__item[aria-pressed="true"]',
+    ) ?? document.querySelector<HTMLElement>(".workspace-nav__item")
+  );
+}
+
+export function focusWorkspaceReturnTarget(previous: HTMLElement | null): void {
+  (previous?.isConnected ? previous : workspaceReturnTarget())?.focus();
+}
+
 /**
  * UIX-472 — разделы строкой, а не выпадающим списком.
  *

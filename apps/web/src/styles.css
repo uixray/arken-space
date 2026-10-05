@@ -4876,8 +4876,9 @@ body:has(.landing-shell) {
   scroll-margin-top: 48px;
 }
 .stat-field__drag-handle {
-  width: 20px;
-  min-width: 20px;
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
   cursor: grab;
 }
 .stat-field__menu {
@@ -4909,7 +4910,7 @@ body:has(.landing-shell) {
 }
 .character-card--layout .stat-field,
 .campaign-stat-layout-editor .stat-field {
-  grid-template-columns: 20px minmax(0, 1fr) auto;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   min-width: 0;
 }
 .character-card--layout .stat-field__roll-name,
@@ -4931,7 +4932,7 @@ body:has(.landing-shell) {
 }
 .character-card--stats .stat-field,
 .character-card--combat .stat-field {
-  grid-template-columns: 20px minmax(0, 1fr) minmax(72px, auto) 24px;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(72px, auto) 24px;
   column-gap: 4px;
   min-width: 0;
 }

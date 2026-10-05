@@ -866,7 +866,7 @@
         },
         "state-error-ink": {
           "$type": "color",
-          "$value": "#a53d45"
+          "$value": "#9d2732"
         },
         "focus-color": {
           "$type": "color",

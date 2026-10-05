@@ -179,10 +179,10 @@ test("отмена и повтор называют действие, котор
     "aria-label",
     "Отменить: размер токена изменён",
   );
-  // Подсказка и доступное имя — один текст: всплывающая подсказка недоступна
-  // ни клавиатуре, ни программе чтения с экрана.
-  await expect(undo).toHaveAttribute(
-    "title",
+  // UIX-674 uses a keyboard-accessible Base UI tooltip rather than a native
+  // title; the visible tooltip must repeat the action-specific accessible name.
+  await undo.focus();
+  await expect(page.getByRole("tooltip")).toHaveText(
     "Отменить: размер токена изменён",
   );
 

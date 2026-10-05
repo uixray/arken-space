@@ -60,19 +60,15 @@ for (const role of ["GM", "PLAYER"] as const)
       });
       await page.goto("/");
       await expect(page.locator(".map-viewport")).toBeVisible();
-      if (role === "GM") {
-        const toggle = page.getByRole("button", {
-          name: "Показывать скрытый слой мастера",
-        });
-        await expect(toggle).toBeVisible();
-        await expect(toggle).toHaveAttribute("aria-pressed", "true");
-        await toggle.click();
-        await expect(toggle).toHaveAttribute("aria-pressed", "false");
-        await toggle.click();
-        const box = await toggle.boundingBox();
-        expect(box!.x).toBeGreaterThanOrEqual(0);
-        expect(box!.x + box!.width).toBeLessThanOrEqual(width);
-      }
+      // The map-scale GM-layer switch was removed; master tools remain in the
+      // actual map toolbar, while players must not receive those controls.
+      await expect(
+        page.getByRole("button", { name: "Показывать скрытый слой мастера" }),
+      ).toHaveCount(0);
+      if (role === "GM")
+        await expect(page.locator('.map-tool[data-tool="FOG"]')).toBeVisible();
+      else
+        await expect(page.locator('.map-tool[data-tool="FOG"]')).toHaveCount(0);
       if (width === 360) {
         await page.locator("#compact-nav-menu").click();
         const menu = page.getByRole("region", { name: "Меню кампании" });

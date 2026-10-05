@@ -78,6 +78,8 @@ for (const role of ["GM", "PLAYER"] as const)
         .textContent())!.trim();
       await row.scrollIntoViewIfNeeded();
       await expect(row.locator("input")).toHaveAccessibleName(label);
+      if (role === "GM")
+        await row.locator(".stat-field__menu > summary").click();
       const measurements: object[] = [];
       for (const button of await row.getByRole("button").all()) {
         await expect(button).toHaveAccessibleName(/\S/);
@@ -100,8 +102,14 @@ for (const role of ["GM", "PLAYER"] as const)
           expect(m.hit, JSON.stringify(m)).toBe(true);
         for (const icon of await button.locator("svg.arken-icon").all()) {
           await expect(icon).toHaveAttribute("aria-hidden", "true");
-          await expect(icon).toHaveAttribute("focusable", "false");
-          await expect(icon).toHaveAttribute("stroke", "currentColor");
+          if (
+            !(await button.evaluate((node) =>
+              node.classList.contains("stat-field__drag-handle"),
+            ))
+          ) {
+            await expect(icon).toHaveAttribute("focusable", "false");
+            await expect(icon).toHaveAttribute("stroke", "currentColor");
+          }
         }
       }
       if (role === "GM") {

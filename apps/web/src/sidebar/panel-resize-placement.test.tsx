@@ -112,7 +112,7 @@ describe("ручка изменения высоты", () => {
   });
 });
 
-it("groups quick rolls and shares an ability without executing it", () => {
+it("keeps quick roll groups visually distinct without redundant headings and shares an ability without executing it", () => {
   const onEntryAction = vi.fn().mockResolvedValue(undefined);
   renderComponent(
     <QuickRollPanel
@@ -142,17 +142,25 @@ it("groups quick rolls and shares an ability without executing it", () => {
       onEntryAction={onEntryAction}
     />,
   );
-  expect(screen.getByRole("heading", { name: "Обычные" })).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "Боевые" })).toBeTruthy();
-  expect(screen.queryByRole("heading", { name: "Навыки" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Сила" })).toHaveClass(
+    "quick-roll-button--ordinary",
+  );
+  expect(screen.getByRole("button", { name: "Инициатива" })).toHaveClass(
+    "quick-roll-button--combat",
+  );
+  expect(screen.queryByRole("heading", { name: "Обычные" })).toBeNull();
+  expect(screen.queryByRole("heading", { name: "Боевые" })).toBeNull();
   expect(screen.getByRole("tab", { name: "Характеристики" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
   fireEvent.click(screen.getByRole("tab", { name: "Способности" }));
-  expect(screen.queryByRole("heading", { name: "Обычные" })).toBeNull();
-  expect(screen.getByRole("heading", { name: "Навыки" })).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "Способности" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Ближний бой" })).toHaveClass(
+    "quick-roll-button--skill",
+  );
+  expect(screen.getByRole("button", { name: "Огненная стрела" })).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "Навыки" })).toBeNull();
+  expect(screen.queryByRole("heading", { name: "Способности" })).toBeNull();
   fireEvent.click(
     screen.getByRole("button", {
       name: "Показать без выполнения: Огненная стрела",

@@ -39,7 +39,7 @@
     },
     {
       "file": "apps/web/src/ScenePicker.tsx",
-      "kind": "role:listbox",
+      "kind": "role:menu",
       "count": 1
     },
     {
@@ -178,6 +178,11 @@
       "count": 6
     },
     {
+      "file": "apps/web/src/sidebar/StatLayoutCard.tsx",
+      "kind": "tag:details",
+      "count": 1
+    },
+    {
       "file": "apps/web/src/sidebar/TokenPalette.tsx",
       "kind": "tag:AssetPicker",
       "count": 1
@@ -215,6 +220,11 @@
     {
       "file": "apps/web/src/ui/SceneManagerDialog.tsx",
       "kind": "tag:FormSelect",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/ui/ToolbarTooltip.tsx",
+      "kind": "tag:Popup",
       "count": 1
     }
   ]

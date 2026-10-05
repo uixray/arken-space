@@ -29,6 +29,10 @@ import { CharacterPanel } from "./CharacterWorkspace";
 // controls, dialog shell, file-upload leaf and self-fetching gallery are
 // replaced. No mock receives a role or computes ownership.
 vi.mock("@gravity-ui/uikit", () => ({
+  Toaster: class {
+    add = vi.fn();
+    remove = vi.fn();
+  },
   Button: ({
     children,
     disabled,

@@ -43,7 +43,7 @@ const worstOverflow = (page: Page) =>
     let label = 0;
     for (const row of document.querySelectorAll(field)) {
       const input = row.querySelector("input");
-      const caption = row.firstElementChild;
+      const caption = row.querySelector(".stat-field__roll-name");
       if (input) value = Math.max(value, input.scrollWidth - input.clientWidth);
       if (caption)
         label = Math.max(label, caption.scrollWidth - caption.clientWidth);
