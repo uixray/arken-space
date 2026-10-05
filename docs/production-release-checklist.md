@@ -33,6 +33,23 @@ Restic and S3 credentials belong only in root-owned mode-`600` files under
 проверяет владельца и права restic env и password file до чтения, запрещает
 backup-секреты в `.env` и никогда не печатает их значения.
 
+## CI cadence while preparing a candidate
+
+Keep UI fixes in one bounded local batch. After the batch, run only the tests
+and browser checks that cover the changed behavior. Do not push each individual
+pixel or test assertion fix: every PR push currently starts the complete GitHub
+`checks`, browser E2E and multiplayer workflows again. Review the whole batch,
+commit it, then push **once** to obtain the full candidate result. If CI finds
+failures, collect all shard results before making the next repair batch and
+push once again. Record the exact SHA and whether each check is targeted local
+evidence or complete candidate evidence; never call a targeted pass a full gate.
+
+This batching rule changes *when* CI is triggered, not which release checks
+must pass. Do not disable the full PR workflows or publish from a red/unfinished
+candidate just to save time. The agreed reduced gate for a seven-person test
+publication is a separate product decision and still needs explicit deployment
+approval, backup and rollback evidence.
+
 ## Code quality gate (outside `release.sh`)
 
 Run this on the exact reviewed revision before using the production-host script:
