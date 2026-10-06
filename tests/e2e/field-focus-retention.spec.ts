@@ -48,6 +48,7 @@ async function openFirstSheet(page: Page) {
   await expect(
     page.locator(`[data-character-sheet-id="${character.id}"]`),
   ).toBeVisible();
+  await workspace.getByRole("tab", { name: "Инвентарь" }).click();
   return character.id;
 }
 
@@ -202,6 +203,10 @@ test("фокус в поле характеристики переживает �
    */
   await signInAsGm(page, gmToken);
   const characterId = await openFirstSheet(page);
+  await page
+    .locator(".character-workspace")
+    .getByRole("tab", { name: "Показатели" })
+    .click();
 
   const statField = page
     .locator(".character-card--stats .stat-field input")

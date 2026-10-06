@@ -95,6 +95,7 @@ for (const role of ["GM", "PLAYER"] as const)
       await page.setViewportSize({ width, height: 850 });
       await page.goto("/");
       await openWorkspaceSection(page, "Персонажи");
+      await page.getByRole("tab", { name: "Личность" }).click();
       const trigger = page.locator(".character-media-gallery__thumb").first();
       await trigger.click();
       const viewer = page.locator(".character-media-viewer");

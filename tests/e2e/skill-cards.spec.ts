@@ -303,6 +303,10 @@ async function mockApp(page: Page, getSnapshot: () => GameSnapshot) {
 
 async function openCharacterWorkspace(page: Page) {
   await openWorkspaceSection(page, "Персонажи");
+  await page
+    .locator(".character-workspace")
+    .getByRole("tab", { name: "Показатели" })
+    .click();
   await expect(page.locator(".character-action-card")).toBeVisible();
 }
 
