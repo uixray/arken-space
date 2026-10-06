@@ -207,15 +207,12 @@ export function App() {
     publishedThemeIds,
     save: saveThemePreference,
   });
-
   useLayoutEffect(() => {
     setRootThemeId(themePreference.selection);
   }, [setRootThemeId, themePreference.selection]);
-
   useLayoutEffect(() => {
     setThemeSettingsOpen(false);
   }, [personalTheme?.scopeKey]);
-
   useEffect(
     () => () => {
       setRootThemeId(null);
@@ -352,7 +349,6 @@ export function App() {
   const [requestedCharacterId, setRequestedCharacterId] = useState<
     string | null
   >(null);
-
   useEffect(() => {
     if (!snapshot) {
       setOperatorFeedbackAllowed(false);
@@ -374,7 +370,6 @@ export function App() {
       active = false;
     };
   }, [snapshot?.me.id]);
-
   const handleWorkspaceChange = useCallback(
     (nextWorkspace: WorkspaceDestination | null) => {
       const returnTarget =
@@ -397,7 +392,6 @@ export function App() {
     },
     [compactNavigationRef],
   );
-
   useEffect(() => {
     if (!error || !snapshot) return;
     notify({

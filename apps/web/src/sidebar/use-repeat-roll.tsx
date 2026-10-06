@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
+import { AppIcon } from "../ui/AppIcon";
+import { CloseIcon } from "../ui/icons";
 
 type RepeatAction = (count: number) => void;
 type RepeatMenu = { x: number; y: number; action: RepeatAction };
@@ -96,7 +98,7 @@ export function useRepeatRoll() {
             aria-label="Закрыть выбор количества"
             onClick={() => setMenu(null)}
           >
-            ×
+            <AppIcon icon={CloseIcon} />
           </button>
         </div>,
         document.body,

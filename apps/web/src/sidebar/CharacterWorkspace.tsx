@@ -2389,7 +2389,7 @@ export function CharacterPanel({
                         })
                       }
                     >
-                      +{resource.restAmount ?? 0}
+                      <AppIcon icon={AddIcon} /> {resource.restAmount ?? 0}
                     </Button>
                     <Button
                       disabled={!editable}
