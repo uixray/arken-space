@@ -141,6 +141,10 @@ test("ушедшего вверх читателя подгрузка не ут�
 
   // Уводим читателя вверх — дальше порога в 48 px, иначе лента справедливо
   // считает его стоящим у дна.
+  await growContent(page, 800);
+  await expect
+    .poll(() => distanceToBottom(page))
+    .toBeLessThanOrEqual(AT_BOTTOM_TOLERANCE);
   await page.evaluate((selector) => {
     const list = document.querySelector(selector);
     if (!(list instanceof HTMLElement)) throw new Error("Лента не найдена");
@@ -179,6 +183,10 @@ test("слежение возвращается, когда читатель с�
     .poll(() => distanceToBottom(page))
     .toBeLessThanOrEqual(AT_BOTTOM_TOLERANCE);
 
+  await growContent(page, 800);
+  await expect
+    .poll(() => distanceToBottom(page))
+    .toBeLessThanOrEqual(AT_BOTTOM_TOLERANCE);
   await page.locator(LIST).evaluate((list) => list.scrollTo({ top: 0 }));
   const awayFromBottom = await distanceToBottom(page);
   expect(awayFromBottom).toBeGreaterThan(400);
