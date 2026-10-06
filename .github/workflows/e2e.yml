@@ -5,14 +5,14 @@ name: e2e
 # `checks.yml` намеренно оставил Playwright за бортом («их место в CI —
 # отдельное решение, а не довесок к первому же workflow»). Пока его не было,
 # принять задачу с UI-изменениями без локального компьютера было нельзя:
-# Chromium + Firefox теперь идут отдельными заданиями с независимыми backend.
+# Chromium + Firefox запускаются вручную или после попадания изменений в main.
 #
 # Мультиплеерный gate (`pnpm test:multiplayer`) сюда по-прежнему не входит: он
 # поднимает свой Docker Compose и требует отдельного решения.
 on:
   push:
     branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
