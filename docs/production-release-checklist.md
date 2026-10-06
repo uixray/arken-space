@@ -33,6 +33,38 @@ Restic and S3 credentials belong only in root-owned mode-`600` files under
 проверяет владельца и права restic env и password file до чтения, запрещает
 backup-секреты в `.env` и никогда не печатает их значения.
 
+## CI cadence while preparing a candidate
+
+Keep UI fixes in one bounded local batch. After the batch, run only the tests
+and browser checks that cover the changed behavior. Do not push each individual
+pixel or test assertion fix: every PR push currently starts the complete GitHub
+`checks`, browser E2E and multiplayer workflows again. Review the whole batch,
+commit it, then push **once** to obtain the full candidate result. If CI finds
+failures, collect all shard results before making the next repair batch and
+push once again. Record the exact SHA and whether each check is targeted local
+evidence or complete candidate evidence; never call a targeted pass a full gate.
+
+Fast PR checks (build, types, lint, format) remain automatic. The complete
+unit, Chromium/Firefox and multiplayer workflows are started explicitly once
+the candidate SHA is frozen:
+
+```sh
+git rev-parse HEAD
+gh workflow run checks.yml --ref <candidate-branch>
+gh workflow run e2e.yml --ref <candidate-branch>
+gh workflow run multiplayer.yml --ref <candidate-branch>
+```
+
+The manual workflow triggers must first be merged into the default branch,
+as GitHub does not dispatch a workflow that exists only on a PR branch. Record
+each resulting run ID and `headSha`; reject any result for a different SHA.
+If a failure requires a new commit, collect every shard failure, repair them
+as one batch, freeze the new SHA, and dispatch the three workflows once more.
+No targeted local pass can substitute for these full production-candidate
+gates. The agreed reduced gate for a seven-person test publication is a
+separate product decision and still needs explicit deployment approval,
+backup and rollback evidence.
+
 ## Code quality gate (outside `release.sh`)
 
 Run this on the exact reviewed revision before using the production-host script:
