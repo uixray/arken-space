@@ -12,14 +12,19 @@ async function snapshot(page: Page): Promise<GameSnapshot> {
 
 async function signInAsGm(page: Page, token: string) {
   await page.goto(`/gm/${token}`);
-  await page.getByRole("button", { name: "Войти", exact: true }).click();
+  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
   await expect(page).toHaveURL("/");
   await expect(page.locator("canvas").first()).toBeVisible();
 }
 
 async function openThemeSettings(page: Page) {
-  await page.locator(".account-menu > summary").click();
-  await page.getByRole("button", { name: "Оформление", exact: true }).click();
+  if (await page.locator("#compact-nav-menu").isVisible()) {
+    await page.locator("#compact-nav-menu").click();
+    await page.getByRole("button", { name: "Оформление и тема" }).click();
+  } else {
+    await page.locator(".account-menu > summary").click();
+    await page.getByRole("button", { name: "Оформление", exact: true }).click();
+  }
   const dialog = page.getByRole("dialog", { name: "Оформление", exact: true });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -27,8 +32,7 @@ async function openThemeSettings(page: Page) {
 
 async function selectTheme(page: Page, label: RegExp) {
   const dialog = page.getByRole("dialog", { name: "Оформление", exact: true });
-  await dialog.getByRole("combobox", { name: "Тема", exact: true }).click();
-  await page.getByRole("option", { name: label }).click();
+  await dialog.getByRole("radio", { name: label }).check();
 }
 
 test("UIX-317 real player theme persists per membership and distinguishes reset from system", async ({
@@ -56,7 +60,7 @@ test("UIX-317 real player theme persists per membership and distinguishes reset 
   await page
     .getByLabel("Имя", { exact: true })
     .fill("Theme persistence player");
-  await page.getByRole("button", { name: "Войти", exact: true }).click();
+  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
   await expect(page).toHaveURL("/");
   expect((await snapshot(page)).me.role).toBe("PLAYER");
 
@@ -87,7 +91,7 @@ test("UIX-317 real player theme persists per membership and distinguishes reset 
   await page
     .getByLabel("Имя", { exact: true })
     .fill("Theme persistence player");
-  await page.getByRole("button", { name: "Войти", exact: true }).click();
+  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
   await expect(page.locator("canvas").first()).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute(
     "data-player-theme",
@@ -169,7 +173,7 @@ test("UIX-317 real player theme persists per membership and distinguishes reset 
   await page
     .getByLabel("Имя", { exact: true })
     .fill("Theme persistence player");
-  await page.getByRole("button", { name: "Войти", exact: true }).click();
+  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
   await expect(page.locator("canvas").first()).toBeVisible();
   expect((await snapshot(page)).personalTheme).toMatchObject({
     selectedThemeId: "system",

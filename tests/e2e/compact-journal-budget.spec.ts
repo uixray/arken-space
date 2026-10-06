@@ -19,7 +19,7 @@ async function bootstrap(page: Page): Promise<GameSnapshot> {
 
 async function enterAsPlayer(page: Page, gmToken: string) {
   await page.goto(`/gm/${gmToken}`);
-  await page.getByRole("button", { name: "Войти", exact: true }).click();
+  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
   // A click finishing does not mean the async login has installed its cookie.
   await expect(page).toHaveURL("/");
   await expect(page.locator("canvas").first()).toBeVisible();
@@ -38,7 +38,7 @@ async function enterAsPlayer(page: Page, gmToken: string) {
   await expect(await page.request.post("/api/auth/logout")).toBeOK();
   await page.goto(new URL(invite.url).pathname);
   await page.getByLabel("Имя", { exact: true }).fill("Игрок compact budget");
-  await page.getByRole("button", { name: "Войти", exact: true }).click();
+  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
   await expect(page).toHaveURL("/");
   expect((await bootstrap(page)).me.role).toBe("PLAYER");
 }
@@ -149,7 +149,11 @@ async function assertCompactBudget(
     .toBeLessThanOrEqual(1);
   for (const target of [
     page.locator(".resource-counters__summary"),
-    page.locator(".activity-quick-rolls .g-button").last(),
+    page
+      .locator(
+        '.quick-roll-panel [role="tabpanel"]:not([hidden]) .activity-quick-rolls .g-button',
+      )
+      .last(),
   ]) {
     await target.scrollIntoViewIfNeeded();
     await expect(target).toBeVisible();

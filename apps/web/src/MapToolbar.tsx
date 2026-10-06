@@ -19,6 +19,7 @@ import { CanvasHistoryControls } from "./renderers/CanvasHistoryControls";
 import { GridSettings } from "./renderers/GridSettings";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import { AppIcon } from "./ui/AppIcon";
+import { ToolbarButton, ToolbarSummary } from "./ui/ToolbarTooltip";
 import {
   CollapseToolbarIcon,
   CoverBrushIcon,
@@ -28,6 +29,7 @@ import {
   ExpandToolbarIcon,
   FogBrushIcon,
   FogPolygonIcon,
+  MapObjectsIcon,
   MoreToolsIcon,
   PanIcon,
   PingIcon,
@@ -38,6 +40,9 @@ import {
 
 export interface MapToolbarProps {
   pauseControl?: ReactNode;
+  tokenTrayControl?: ReactNode;
+  objectListOpen?: boolean;
+  onToggleObjectList?: () => void;
   tool: MapTool;
   onToolSelect: (tool: MapTool) => void;
   snapshot: GameSnapshot;
@@ -63,6 +68,9 @@ export interface MapToolbarProps {
 
 export function MapToolbar({
   pauseControl,
+  tokenTrayControl,
+  objectListOpen,
+  onToggleObjectList,
   tool,
   onToolSelect,
   snapshot,
@@ -176,8 +184,17 @@ export function MapToolbar({
       className={`map-toolbar${toolbarCollapsed ? " is-collapsed" : ""}`}
       role="toolbar"
       aria-label="Инструменты карты"
+      onKeyDownCapture={(event) => {
+        if (event.key !== "Escape") return;
+        const focusedTool = (event.target as HTMLElement).closest<HTMLElement>(
+          ".map-tool",
+        );
+        if (focusedTool && toolbarRef.current?.contains(focusedTool)) {
+          focusedTool.blur();
+        }
+      }}
     >
-      <button
+      <ToolbarButton
         type="button"
         className="map-toolbar__collapse"
         aria-expanded={!toolbarCollapsed}
@@ -196,11 +213,10 @@ export function MapToolbar({
         <AppIcon
           icon={toolbarCollapsed ? ExpandToolbarIcon : CollapseToolbarIcon}
         />
-      </button>
+      </ToolbarButton>
 
       <div className="toolbar-group">
-        {pauseControl}
-        <button
+        <ToolbarButton
           aria-label="Перемещение"
           title={`Перемещение по карте (средняя кнопка мыши) · ${shortcutLabel("PAN")}`}
           className="map-tool"
@@ -210,12 +226,12 @@ export function MapToolbar({
         >
           <AppIcon icon={PanIcon} />
           <span className="map-tool__label">Двигать</span>
-        </button>
+        </ToolbarButton>
 
         {!previewSnapshot && snapshot.me.role === "GM" && (
           <>
             <div className="toolbar-group__title">Туман</div>
-            <button
+            <ToolbarButton
               aria-label="Открыть туман"
               title={`Открыть выбранную область тумана · ${shortcutLabel("FOG")}`}
               className="map-tool"
@@ -225,8 +241,8 @@ export function MapToolbar({
             >
               <AppIcon icon={RevealFogIcon} />
               <span className="map-tool__label">Открыть</span>
-            </button>
-            <button
+            </ToolbarButton>
+            <ToolbarButton
               aria-label="Закрыть туман"
               title={`Закрыть выбранную область туманом · ${shortcutLabel("COVER")}`}
               className="map-tool"
@@ -236,8 +252,8 @@ export function MapToolbar({
             >
               <AppIcon icon={CoverFogIcon} />
               <span className="map-tool__label">Закрыть</span>
-            </button>
-            <button
+            </ToolbarButton>
+            <ToolbarButton
               aria-label="Открыть туман кистью"
               title={`Открыть туман круглой кистью (клик или протяжка) · ${shortcutLabel("FOG_BRUSH")}`}
               className="map-tool"
@@ -247,8 +263,8 @@ export function MapToolbar({
             >
               <AppIcon icon={FogBrushIcon} />
               <span className="map-tool__label">Кисть</span>
-            </button>
-            <button
+            </ToolbarButton>
+            <ToolbarButton
               aria-label="Закрыть туман кистью"
               title={`Закрыть область круглой кистью тумана · ${shortcutLabel("COVER_BRUSH")}`}
               className="map-tool"
@@ -258,7 +274,7 @@ export function MapToolbar({
             >
               <AppIcon icon={CoverBrushIcon} />
               <span className="map-tool__label">Кисть закр.</span>
-            </button>
+            </ToolbarButton>
             {(tool === "FOG_BRUSH" || tool === "COVER_BRUSH") && (
               <label className="map-tool-text" title="Радиус кисти тумана">
                 <span>Радиус</span>
@@ -276,7 +292,7 @@ export function MapToolbar({
                 />
               </label>
             )}
-            <button
+            <ToolbarButton
               aria-label="Открыть туман полигоном"
               title={`Открыть туман многоугольником (клик — вершина, Enter/двойной клик — завершить, Esc — отмена) · ${shortcutLabel("FOG_POLYGON")}`}
               className="map-tool"
@@ -286,8 +302,8 @@ export function MapToolbar({
             >
               <AppIcon icon={FogPolygonIcon} />
               <span className="map-tool__label">Полигон</span>
-            </button>
-            <button
+            </ToolbarButton>
+            <ToolbarButton
               aria-label="Закрыть туман полигоном"
               title={`Закрыть область многоугольником тумана (клик — вершина, Enter/двойной клик — завершить, Esc — отмена) · ${shortcutLabel("COVER_POLYGON")}`}
               className="map-tool"
@@ -297,10 +313,10 @@ export function MapToolbar({
             >
               <AppIcon icon={CoverPolygonIcon} />
               <span className="map-tool__label">Полигон закр.</span>
-            </button>
+            </ToolbarButton>
 
             <div className="toolbar-group__title">Метки</div>
-            <button
+            <ToolbarButton
               aria-label="Линейка"
               title={`Измерить расстояние на карте · ${shortcutLabel("RULER")}`}
               className="map-tool"
@@ -310,8 +326,8 @@ export function MapToolbar({
             >
               <AppIcon icon={RulerIcon} />
               <span className="map-tool__label">Линейка</span>
-            </button>
-            <button
+            </ToolbarButton>
+            <ToolbarButton
               aria-label="Пинг"
               title={`Показать точку группе · ${shortcutLabel("PING")}`}
               className="map-tool"
@@ -321,11 +337,11 @@ export function MapToolbar({
             >
               <AppIcon icon={PingIcon} />
               <span className="map-tool__label">Пинг</span>
-            </button>
+            </ToolbarButton>
           </>
         )}
 
-        <button
+        <ToolbarButton
           aria-label="Рисование"
           title={`Нарисовать линию на карте · ${shortcutLabel("DRAW")}`}
           className="map-tool"
@@ -335,11 +351,11 @@ export function MapToolbar({
         >
           <AppIcon icon={DrawIcon} />
           <span className="map-tool__label">Рисовать</span>
-        </button>
+        </ToolbarButton>
 
         {(previewSnapshot || snapshot.me.role !== "GM") && (
           <>
-            <button
+            <ToolbarButton
               aria-label="Линейка"
               title={`Измерить расстояние на карте · ${shortcutLabel("RULER")}`}
               className="map-tool"
@@ -349,8 +365,8 @@ export function MapToolbar({
             >
               <AppIcon icon={RulerIcon} />
               <span className="map-tool__label">Линейка</span>
-            </button>
-            <button
+            </ToolbarButton>
+            <ToolbarButton
               aria-label="Пинг"
               title={`Показать точку группе · ${shortcutLabel("PING")}`}
               className="map-tool"
@@ -360,15 +376,9 @@ export function MapToolbar({
             >
               <AppIcon icon={PingIcon} />
               <span className="map-tool__label">Пинг</span>
-            </button>
+            </ToolbarButton>
           </>
         )}
-
-        <CursorPresenceMenu
-          preference={cursorPreference}
-          role={snapshot.me.role === "GM" ? "GM" : "PLAYER"}
-          onChange={onCursorPreferenceChange}
-        />
 
         {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
           <>
@@ -378,7 +388,7 @@ export function MapToolbar({
               onSave={onGridSave}
             />
             <details ref={resizeSettingsRef} className="resize-settings">
-              <summary
+              <ToolbarSummary
                 aria-label="Настройки размера карты"
                 title="Настройки размера карты"
                 className="toolbar-detail-trigger"
@@ -386,9 +396,9 @@ export function MapToolbar({
               >
                 <AppIcon icon={ResizeMapIcon} />
                 <span className="map-tool__label">Размер</span>
-              </summary>
+              </ToolbarSummary>
               <div className="resize-settings-popover">
-                <button
+                <ToolbarButton
                   aria-pressed={canvasEditMode === "BACKGROUND"}
                   onClick={() => {
                     onToolSelect("PAN");
@@ -396,8 +406,8 @@ export function MapToolbar({
                   }}
                 >
                   Изображение
-                </button>
-                <button
+                </ToolbarButton>
+                <ToolbarButton
                   aria-pressed={canvasEditMode === "WORLD"}
                   onClick={() => {
                     onToolSelect("PAN");
@@ -405,8 +415,8 @@ export function MapToolbar({
                   }}
                 >
                   Область
-                </button>
-                <button
+                </ToolbarButton>
+                <ToolbarButton
                   onClick={() => {
                     onCanvasEditModeChange(null);
                     if (resizeSettingsRef.current) {
@@ -418,7 +428,7 @@ export function MapToolbar({
                   }}
                 >
                   Готово
-                </button>
+                </ToolbarButton>
               </div>
             </details>
           </>
@@ -435,18 +445,49 @@ export function MapToolbar({
           />
         </div>
       )}
-
       {!previewSnapshot && overflowTools && (
         <details className="toolbar-overflow" ref={toolbarOverflowRef}>
-          <summary
+          <ToolbarSummary
+            className="toolbar-detail-trigger"
             aria-label="Дополнительные инструменты"
             title="Дополнительные инструменты карты"
           >
             <AppIcon icon={MoreToolsIcon} />
-          </summary>
+            <span className="map-tool__label">Ещё</span>
+          </ToolbarSummary>
           <div className="toolbar-overflow-menu">{overflowTools}</div>
         </details>
       )}
+      <div className="toolbar-shortcuts" aria-label="Быстрый доступ к панелям">
+        {onToggleObjectList && (
+          <ToolbarButton
+            type="button"
+            aria-label="Объекты карты"
+            title="Список объектов и токенов на карте"
+            className="map-tool map-object-list-trigger"
+            data-tool="MAP_OBJECTS"
+            aria-pressed={objectListOpen}
+            aria-expanded={objectListOpen}
+            onClick={onToggleObjectList}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape" || !objectListOpen) return;
+              onToggleObjectList();
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+          >
+            <AppIcon icon={MapObjectsIcon} />
+            <span className="map-tool__label">Объекты</span>
+          </ToolbarButton>
+        )}
+        {tokenTrayControl}
+        <CursorPresenceMenu
+          preference={cursorPreference}
+          role={snapshot.me.role === "GM" ? "GM" : "PLAYER"}
+          onChange={onCursorPreferenceChange}
+        />
+      </div>
+      {pauseControl && <div className="map-toolbar__pause">{pauseControl}</div>}
     </div>
   );
 }

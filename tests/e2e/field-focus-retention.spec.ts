@@ -203,7 +203,9 @@ test("фокус в поле характеристики переживает �
   await signInAsGm(page, gmToken);
   const characterId = await openFirstSheet(page);
 
-  const statField = page.locator(".stat-field input").first();
+  const statField = page
+    .locator(".character-card--stats .stat-field input")
+    .first();
   await statField.click();
   await expect(statField).toBeFocused();
 

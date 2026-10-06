@@ -17,6 +17,7 @@ import {
 } from "../test-support/game-snapshot-fixtures";
 import { RESOURCE_ADJUST_DELAY_MS } from "../resource-regen";
 import { RollVisibilityContext } from "../roll-visibility-context";
+import { CampaignActionsContext } from "../campaign-actions-context";
 import { ApiError } from "../api";
 import { ActivityPanel } from "./ChatPanels";
 
@@ -96,9 +97,15 @@ function renderActivity(
   const rendered = renderComponent(<ActivityPanel {...props} />, {
     wrapper: ({ children }: { children: ReactNode }) => (
       <ThemeProvider theme="dark" lang="ru">
-        <RollVisibilityContext.Provider value="GM_ONLY">
-          {children}
-        </RollVisibilityContext.Provider>
+        <CampaignActionsContext.Provider
+          value={
+            { catalog: { onRollEntry: vi.fn(async () => undefined) } } as never
+          }
+        >
+          <RollVisibilityContext.Provider value="GM_ONLY">
+            {children}
+          </RollVisibilityContext.Provider>
+        </CampaignActionsContext.Provider>
       </ThemeProvider>
     ),
   });
@@ -147,7 +154,7 @@ afterEach(() => {
 describe("ActivityPanel action context (UIX-621)", () => {
   it("follows snapshot.me.characterId B for rolls and resources when several owned rows begin with A", async () => {
     const { props } = renderActivity();
-    expect(screen.getByText("Броски и ресурсы · Бета")).toBeVisible();
+    expect(screen.getByText("Бета", { exact: true })).toBeVisible();
     expect(
       screen.queryByLabelText("Персонаж для броска"),
     ).not.toBeInTheDocument();
@@ -199,7 +206,9 @@ describe("ActivityPanel action context (UIX-621)", () => {
     const { rerender } = renderActivity(snapshot(a.id), { onRoll });
     fireEvent.click(rollButton());
     rerender(snapshot(null));
-    expect(screen.getByText("Бросаем… Альфа · Ловкость")).toBeVisible();
+    expect(
+      screen.queryByText("Бросаем… Альфа · Ловкость"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Ловкость" }),
     ).not.toBeInTheDocument();
@@ -228,17 +237,18 @@ describe("ActivityPanel action context (UIX-621)", () => {
       "aria-busy",
       "true",
     );
-    expect(screen.getByText("Бросаем… Альфа · Ловкость")).toHaveAttribute(
-      "role",
-      "status",
-    );
+    expect(
+      screen.queryByText("Бросаем… Альфа · Ловкость"),
+    ).not.toBeInTheDocument();
     rerender(snapshot(b.id));
-    expect(screen.getByText("Броски и ресурсы · Бета")).toBeVisible();
+    expect(screen.getByText("Бета", { exact: true })).toBeVisible();
     expect(resourceInput()).toHaveValue(7);
     expect(rollButton()).toBeDisabled();
     fireEvent.click(rollButton());
     expect(onRoll).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Бросаем… Альфа · Ловкость")).toBeVisible();
+    expect(
+      screen.queryByText("Бросаем… Альфа · Ловкость"),
+    ).not.toBeInTheDocument();
     await act(async () => first.reject(new Error("Бросок отклонён")));
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Альфа · Ловкость: Бросок отклонён",

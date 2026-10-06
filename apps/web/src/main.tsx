@@ -19,6 +19,7 @@ import {
 import { installPerformanceReporting } from "./performance-reporting";
 // Токены идут первыми: и Gravity foundation, и styles.css на них ссылаются.
 import "./design-system/tokens.generated.css";
+import "./design-system/foundations.css";
 import "./ui/gravity-foundation.css";
 import "./styles.css";
 import "./mobile-foundation.css";

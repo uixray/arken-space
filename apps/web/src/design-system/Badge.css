@@ -1,0 +1,52 @@
+/* ==========================================================================
+   Arken Space Standalone Badge / Label Component
+   ========================================================================== */
+
+.arken-badge,
+.g-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs, 4px);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm, 4px);
+  font-size: var(--font-size-caption, 10px);
+  font-weight: 500;
+  line-height: 1.2;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.g-label_theme_normal,
+.arken-badge--normal {
+  background-color: var(--color-surface, #20201d);
+  color: var(--color-text-muted, #aaa598);
+  border: 1px solid var(--color-border, #47443b);
+}
+
+.g-label_theme_info,
+.arken-badge--info {
+  background-color: #1e2638;
+  color: #8da4ef;
+  border: 1px solid #2f3b58;
+}
+
+.g-label_theme_success,
+.arken-badge--success {
+  background-color: #1a2e20;
+  color: #7bc48f;
+  border: 1px solid #284c32;
+}
+
+.g-label_theme_warning,
+.arken-badge--warning {
+  background-color: #332617;
+  color: #e5a95d;
+  border: 1px solid #543f26;
+}
+
+.g-label_theme_danger,
+.arken-badge--danger {
+  background-color: #331c1a;
+  color: #e27d75;
+  border: 1px solid #542d2a;
+}

@@ -31,12 +31,9 @@ const RESOURCE_FIELDS: readonly ResourceField[] = [
   "recoverable",
 ];
 
-/** Structural sheet edits preserve fractional custom resources while clamping. */
-function clampResourceMapCurrent(resource: Resource): number {
-  return Math.min(
-    resource.maximum ?? resource.current,
-    Math.max(0, resource.current),
-  );
+/** Sheet edits may keep temporary points above maximum, including fractions. */
+function normalizeResourceMapCurrent(resource: Resource): number {
+  return Number.isFinite(resource.current) ? Math.max(0, resource.current) : 0;
 }
 
 /**
@@ -68,7 +65,7 @@ export function applyResourceMapPatch(
     }
     if (!baseHasKey && desiredHasKey) {
       const added = { ...intent.desired[key]! };
-      added.current = clampResourceMapCurrent(added);
+      added.current = normalizeResourceMapCurrent(added);
       rebased[key] = added;
       continue;
     }
@@ -96,7 +93,7 @@ export function applyResourceMapPatch(
       Object.assign(nextResource, { [field]: desiredResource[field] });
     }
     if (changed && (currentChanged || maximumChanged)) {
-      nextResource.current = clampResourceMapCurrent(nextResource);
+      nextResource.current = normalizeResourceMapCurrent(nextResource);
     }
     if (changed) rebased[key] = nextResource;
   }
@@ -174,7 +171,6 @@ export function buildCharacterCounterPatch(
       current: 0,
       maximum: 0,
     };
-    const maximum = currentResource.maximum ?? currentResource.current;
     const requestedValue =
       intent.resource.kind === "DELTA"
         ? currentResource.current + intent.resource.delta
@@ -183,7 +179,7 @@ export function buildCharacterCounterPatch(
       ...base.resources,
       [intent.resource.key]: {
         ...currentResource,
-        current: clampResourceValue(requestedValue, maximum),
+        current: clampResourceValue(requestedValue),
       },
     };
   }

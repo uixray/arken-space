@@ -33,6 +33,14 @@
   border-radius: 8px;
   font: inherit;
 }
+.player-requests select {
+  padding-right: 30px;
+}
+.player-requests .arken-select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 38px;
+}
 .player-requests__grid,
 .player-requests__filters {
   display: grid;

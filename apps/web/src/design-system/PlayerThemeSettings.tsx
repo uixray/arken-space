@@ -1,7 +1,6 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "./Button";
 
-import { FormSelect } from "../ui/GravityFormControls";
 import type { PlayerThemeDefinition } from "./player-themes";
 import { isPlayerThemeId } from "./player-themes";
 import "./PlayerThemeSettings.css";
@@ -128,36 +127,38 @@ function ScopedPlayerThemeSettings({
         базовый интерфейс и не означает сброс к назначенной теме.
       </p>
 
-      <label
+      <fieldset
         className="player-theme-settings__field"
-        htmlFor={`${descriptionId}-select`}
+        aria-describedby={[descriptionId, error ? errorId : undefined]
+          .filter(Boolean)
+          .join(" ")}
+        aria-invalid={Boolean(error)}
       >
-        <span>Тема</span>
-        <FormSelect
-          id={`${descriptionId}-select`}
-          value={visibleDraftThemeId}
-          disabled={pending}
-          aria-describedby={[descriptionId, error ? errorId : undefined]
-            .filter(Boolean)
-            .join(" ")}
-          aria-invalid={Boolean(error)}
-          onChange={(event) => {
-            const next = event.target.value as PlayerThemeSelection;
-            if (!allowedThemeIds.has(next)) return;
-            setDraftThemeId(next);
-            onPreview(next);
-          }}
-        >
-          <option value="system">
-            {optionLabel("system", "Системное оформление")}
-          </option>
-          {visiblePublishedThemes.map((theme) => (
-            <option key={theme.id} value={theme.id}>
-              {optionLabel(theme.id, visibleName(theme))}
-            </option>
-          ))}
-        </FormSelect>
-      </label>
+        <legend>Тема</legend>
+        {[
+          { id: "system", name: "Системное оформление" },
+          ...visiblePublishedThemes.map((theme) => ({
+            id: theme.id,
+            name: visibleName(theme),
+          })),
+        ].map(({ id, name }) => (
+          <label className="player-theme-settings__option" key={id}>
+            <input
+              type="radio"
+              name={`${descriptionId}-theme`}
+              value={id}
+              checked={visibleDraftThemeId === id}
+              disabled={pending}
+              onChange={() => {
+                if (!allowedThemeIds.has(id)) return;
+                setDraftThemeId(id);
+                onPreview(id);
+              }}
+            />
+            <span>{optionLabel(id, name)}</span>
+          </label>
+        ))}
+      </fieldset>
 
       {error ? (
         <p id={errorId} className="player-theme-settings__error" role="alert">

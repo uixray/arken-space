@@ -30,7 +30,7 @@ test("UIX-293 real GM replacement reaches connected player and survives reload",
   const digest = (value: Buffer) =>
     createHash("sha256").update(value).digest("hex");
   await page.goto(`/gm/${gmToken}`);
-  await page.getByRole("button", { name: "Войти", exact: true }).click();
+  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
   await expect(page.locator(".app-shell")).toBeVisible();
   const initial = (await (
     await page.request.get("/api/bootstrap")
@@ -84,7 +84,9 @@ test("UIX-293 real GM replacement reaches connected player and survives reload",
     const listener = await player.newPage();
     await listener.goto(new URL(invite.url).pathname);
     await listener.getByLabel("Имя", { exact: true }).fill("Слушатель");
-    await listener.getByRole("button", { name: "Войти", exact: true }).click();
+    await listener
+      .getByRole("button", { name: "Войти в игру", exact: true })
+      .click();
     await expect(listener.locator(".app-shell")).toBeVisible();
     const before = (await (
       await listener.request.get("/api/bootstrap")
@@ -248,7 +250,9 @@ for (const kind of [
       return response.json();
     };
     await page.goto(`/gm/${gmToken}`);
-    await page.getByRole("button", { name: "Войти", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Войти в игру", exact: true })
+      .click();
     await expect(page.locator(".app-shell")).toBeVisible();
     const initial = await snapshot(page);
     const scene = initial.scenes.find((s) => s.active)!;
@@ -422,7 +426,9 @@ for (const kind of [
           .getByLabel("Имя", { exact: true })
           .fill("Наблюдатель карты");
       }
-      await player.getByRole("button", { name: "Войти", exact: true }).click();
+      await player
+        .getByRole("button", { name: "Войти в игру", exact: true })
+        .click();
       await expect(player.locator(".map-viewport")).toBeVisible();
       await player.locator(".map-viewport").press("f");
       const portrait = player.getByRole("img", {
@@ -805,7 +811,7 @@ for (const kind of [
           await other.goto(new URL((await otherInvite.json()).url).pathname);
           await other.getByLabel("Имя", { exact: true }).fill("Другой игрок");
           await other
-            .getByRole("button", { name: "Войти", exact: true })
+            .getByRole("button", { name: "Войти в игру", exact: true })
             .click();
           await expect(other.locator(".app-shell")).toBeVisible();
           expect(

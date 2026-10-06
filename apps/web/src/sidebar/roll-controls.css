@@ -1,0 +1,79 @@
+/* Compact quick-roll categories and stat editing. */
+.quick-roll-panel__tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.quick-roll-panel__tabs button {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.quick-roll-panel__tabs button[aria-selected="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--surface-3, var(--surface-2));
+  box-shadow: inset 0 -3px var(--accent);
+  font-weight: 700;
+}
+.quick-roll-panel [hidden] {
+  display: none;
+}
+.character-card .stat-field {
+  grid-template-columns: minmax(0, 1fr) 112px;
+}
+.stat-field .stat-field__roll-name {
+  grid-column: 1;
+  min-width: 0;
+  width: auto;
+  height: auto;
+  text-align: left;
+}
+.stat-field__roll-name .g-button__text {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.stat-field__value {
+  display: grid;
+  grid-column: 2;
+  grid-template-columns: 28px 56px 28px;
+  align-items: center;
+}
+.stat-field .stat-field__value > button {
+  grid-row: 1;
+  min-width: 0;
+  width: 28px;
+  padding-inline: 0;
+}
+.stat-field .stat-field__value > button:first-child {
+  grid-column: 1;
+}
+.stat-field .stat-field__value > button:last-child {
+  grid-column: 3;
+}
+.stat-field .stat-field__value .g-text-input {
+  grid-row: 1;
+  grid-column: 2;
+  width: 56px;
+  padding-inline: 0;
+}
+.stat-field .stat-field__value .g-text-input__content {
+  padding-inline: 0;
+}
+.stat-field .stat-field__value input.g-text-input__control {
+  padding-inline: 0;
+  text-align: center;
+  appearance: textfield;
+}
+.stat-field__value input::-webkit-inner-spin-button,
+.stat-field__value input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.stat-field__actions:empty {
+  display: none;
+}

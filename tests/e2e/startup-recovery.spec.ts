@@ -71,7 +71,7 @@ for (const width of [1280, 390]) {
       recovering = true;
       await retry.press("Enter");
       await expect.poll(() => retries).toBe(1);
-      await expect(page.getByRole("status")).toContainText(
+      await expect(page.locator(".arken-state--loading")).toContainText(
         "Загружаем кампанию…",
       );
       await expect(alert).toHaveCount(0);

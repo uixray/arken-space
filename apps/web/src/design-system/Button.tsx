@@ -33,7 +33,9 @@ export type ButtonView =
   | "flat-action"
   | "normal-contrast"
   | "outlined-contrast"
-  | "flat-contrast";
+  | "flat-contrast"
+  | "danger"
+  | "action-danger";
 
 export type ButtonSize = "xs" | "s" | "m" | "l" | "xl";
 export type ButtonPin =

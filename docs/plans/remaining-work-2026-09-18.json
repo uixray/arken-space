@@ -20,6 +20,98 @@
   },
   "issues": [
     {
+      "id": "LOCAL-9802",
+      "uuid": "494c4f62-2022-4513-aa9a-3024f77b1470",
+      "title": "[arken-space] Bug: Music restarts when a token is deleted",
+      "category": "bug",
+      "linearStatus": "Done",
+      "linearStatusType": "completed",
+      "priority": {
+        "value": 2,
+        "name": "High"
+      },
+      "parentId": null,
+      "url": "",
+      "createdAt": "2026-09-22T08:20:54.069Z",
+      "updatedAt": "2026-10-01T07:46:00.000Z",
+      "originalDescription": "Замечено на проде во время игры: при удалении токена с холста происходит перезапуск фоновой музыки. Вероятно, удаление токена триггерит перерендер компонента плеера или сброс состояния аудио-контекста из-за изменения общего стейта сцены.",
+      "originalAcceptanceCriteria": "## Acceptance Criteria\n- Удаление токена на холсте не прерывает и не перезапускает играющий трек.\n- Музыка продолжает играть бесшовно при любых манипуляциях с объектами на сцене.",
+      "gaps": ["Local offline creation"],
+      "nextAction": "Sync status to Linear",
+      "dependencies": [],
+      "sourceLinks": [],
+      "implementationStatus": "Completed. Looping audio track wrap calculation and unneeded seek triggers eliminated in MusicBar.tsx. Verified with 27 unit tests."
+    },
+    {
+      "id": "LOCAL-6359",
+      "uuid": "c474ddf4-6d67-425f-a386-8b292ffbe988",
+      "title": "[arken-space] Feature: Allow players to edit their own character cards and abilities",
+      "category": "bug",
+      "linearStatus": "Done",
+      "linearStatusType": "completed",
+      "priority": {
+        "value": 2,
+        "name": "High"
+      },
+      "parentId": null,
+      "url": "",
+      "createdAt": "2026-09-22T08:20:54.082Z",
+      "updatedAt": "2026-10-01T07:46:00.000Z",
+      "originalDescription": "Запрос с прода во время игры: сейчас игроки не могут самостоятельно вносить изменения в карточки своих персонажей и их способности. Это создает лишнюю операционную нагрузку на мастера.",
+      "originalAcceptanceCriteria": "## Acceptance Criteria\n- Игрок видит кнопку/режим редактирования только на карточке своего персонажа.\n- Игрок может изменить текст, статы и способности своего персонажа и успешно сохранить их.\n- Изменения мгновенно синхронизируются с мастером и другими игроками.\n- Игрок не может редактировать чужих персонажей или NPC.",
+      "gaps": ["Local offline creation"],
+      "nextAction": "Sync status to Linear",
+      "dependencies": [],
+      "sourceLinks": [],
+      "implementationStatus": "Completed. Backend catalog assignment, update, and delete routes now verify character ownership/controller via canAccessCharacter. UI enables skill and ability management for character editors. Verified with integration and component tests."
+    },
+    {
+      "id": "LOCAL-6504",
+      "uuid": "0ede250f-db0a-419f-9aee-bee1bc845227",
+      "title": "[arken-space] Bug: Long token names are truncated on zoom out",
+      "category": "bug",
+      "linearStatus": "Done",
+      "linearStatusType": "completed",
+      "priority": {
+        "value": 2,
+        "name": "High"
+      },
+      "parentId": null,
+      "url": "",
+      "createdAt": "2026-09-22T08:20:54.082Z",
+      "updatedAt": "2026-10-01T07:46:00.000Z",
+      "originalDescription": "Замечено на проде: при сильном отдалении холста (zoom out) длинные названия токенов некорректно обрезаются по длине (text clipping/truncation).",
+      "originalAcceptanceCriteria": "## Acceptance Criteria\n- При зуме (zoom out) текст названия токена остается читаемым и не обрезается посреди слова/буквы рамкой.\n- Размеры текстового блока (Text/Label в Konva) корректно пересчитываются с учетом текущего scale камеры, либо текст просто масштабируется целиком.",
+      "gaps": ["Local offline creation"],
+      "nextAction": "Sync status to Linear",
+      "dependencies": [],
+      "sourceLinks": [],
+      "implementationStatus": "Completed. Konva label width and horizontal centering in Orthographic2DRenderer.tsx scaled with 1/scale so long names remain intact without text clipping."
+    },
+    {
+      "id": "LOCAL-505",
+      "uuid": "c9bcc2e4-e8cc-417a-84be-8add3549d185",
+      "title": "[arken-space] Bug: GM-placed tokens do not sync to players without page reload",
+      "category": "bug",
+      "linearStatus": "Done",
+      "linearStatusType": "completed",
+      "priority": {
+        "value": 2,
+        "name": "High"
+      },
+      "parentId": null,
+      "url": "",
+      "createdAt": "2026-09-22T08:20:54.082Z",
+      "updatedAt": "2026-10-01T07:46:00.000Z",
+      "originalDescription": "Критический баг с прода: часть токенов, размещенных мастером на холсте, не появлялась у игроков в реальном времени. Токены становились видны только после принудительной перезагрузки страницы (F5) у игроков.",
+      "originalAcceptanceCriteria": "## Acceptance Criteria\n- Добавление токена мастером мгновенно (через WebSocket) отображает этот токен на экранах всех подключенных игроков.\n- Не требуется перезагрузка страницы для получения актуального состояния холста.",
+      "gaps": ["Local offline creation"],
+      "nextAction": "Sync status to Linear",
+      "dependencies": [],
+      "sourceLinks": [],
+      "implementationStatus": "Completed. Removed snapshotVersion corruption from appendChatMessage in chat-state.ts; real-time canvas snapshots are no longer dropped."
+    },
+    {
       "id": "UIX-647",
       "uuid": "e9a0f28e-d1ff-4ea9-9cc5-8b039530b746",
       "title": "ARKPATH: поздравительная кампания Миши про Птусика Мортедо",
@@ -489,7 +581,7 @@
           "url": "https://linear.app/uixraydesign/issue/UIX-398/arken-space-decompose-apptsx-stabilise-actions-then-split-by-domain"
         }
       ],
-      "implementationStatus": "Unknown."
+      "implementationStatus": "In progress. Coding guidelines (docs/CODING_GUIDELINES.md) codified. App.tsx decomposed: AppHeader, AppModals, TokenTray, ScenePicker extracted (Phase 1); useGameSocketSubscriptions extracted (Phase 2). Line count dropped from 2,865 to 2,222 (-643 lines). Architecture tests enforce line limit and socket segregation. 167 test files pass 100% green."
     },
     {
       "id": "UIX-364",

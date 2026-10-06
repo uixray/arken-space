@@ -1,6 +1,13 @@
-import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import type { AssetDto, GameSnapshot, SceneDto } from "@arken/contracts";
-import { Label } from "@gravity-ui/uikit";
+import { Label } from "../design-system/Badge";
 import { Button } from "../design-system/Button";
 import { ArkenDialog } from "./ArkenDialog";
 import { ImageUploadField } from "./ImageUploadField";
@@ -90,6 +97,8 @@ export function SceneManagerDialog({
   open,
   snapshot,
   viewedSceneId,
+  initialEditSceneId,
+  editRequest = 0,
   onClose,
   onView,
   onPublish,
@@ -100,6 +109,8 @@ export function SceneManagerDialog({
   open: boolean;
   snapshot: GameSnapshot;
   viewedSceneId: string | null;
+  initialEditSceneId?: string | null;
+  editRequest?: number;
   onClose: () => void;
   onView: (sceneId: string) => void;
   onPublish: (sceneId: string) => Promise<void>;
@@ -108,6 +119,28 @@ export function SceneManagerDialog({
   variant?: "modal" | "workspace";
 }) {
   const [editing, setEditing] = useState<SceneDto | "NEW" | null>(null);
+  const restoreConfigureFocus = useRef<string | null>(null);
+  useEffect(() => {
+    const sceneId = restoreConfigureFocus.current;
+    if (editing || !sceneId) return;
+    restoreConfigureFocus.current = null;
+    const frame = requestAnimationFrame(() => {
+      const button = Array.from(
+        document.querySelectorAll<HTMLButtonElement>(
+          "button[data-scene-configure]",
+        ),
+      ).find((candidate) => candidate.dataset.sceneConfigure === sceneId);
+      button?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [editing]);
+  useEffect(() => {
+    if (!open || !initialEditSceneId) return;
+    const scene = snapshot.scenes.find(
+      (item) => item.id === initialEditSceneId,
+    );
+    if (scene) setEditing(scene);
+  }, [open, initialEditSceneId, editRequest]);
   const placementCount = (sceneId: string) =>
     snapshot.tokens.filter((token) => token.sceneId === sceneId).length;
 
@@ -119,59 +152,76 @@ export function SceneManagerDialog({
       variant={variant}
       onClose={onClose}
     >
-      <div className="scene-manager-heading">
-        <p>Подготавливайте сцену локально, не переключая игроков.</p>
-        <Button view="action" onClick={() => setEditing("NEW")}>
-          Создать сцену
-        </Button>
-      </div>
-      <div className="scene-manager-list">
-        {snapshot.scenes.length === 0 && (
-          <p className="empty">
-            Сцен пока нет. Создайте сцену для подготовки игры.
-          </p>
-        )}
-        {snapshot.scenes.map((scene) => {
-          const viewed =
-            scene.id === viewedSceneId || (!viewedSceneId && scene.active);
-          return (
-            <article className="scene-manager-card" key={scene.id}>
-              <div>
-                <strong>{scene.name}</strong>
-                <span>{placementCount(scene.id)} токенов на сцене</span>
-              </div>
-              <div className="scene-manager-statuses">
-                {viewed && <Label theme="info">Просматривается мастером</Label>}
-                {scene.active && (
-                  <Label theme="success">Показана игрокам</Label>
-                )}
-              </div>
-              <div className="dialog-actions">
-                <Button
-                  view="action"
-                  onClick={() => onView(scene.id)}
-                  disabled={viewed}
-                >
-                  Открыть для мастера
-                </Button>
-                {!scene.active && (
-                  <Button onClick={() => void onPublish(scene.id)}>
-                    Показать игрокам
+      {!editing && (
+        <div className="scene-manager-heading">
+          <p>Подготавливайте сцену локально, не переключая игроков.</p>
+          <Button view="action" onClick={() => setEditing("NEW")}>
+            Создать сцену
+          </Button>
+        </div>
+      )}
+      {!editing && (
+        <div className="scene-manager-list">
+          {snapshot.scenes.length === 0 && (
+            <p className="empty">
+              Сцен пока нет. Создайте сцену для подготовки игры.
+            </p>
+          )}
+          {snapshot.scenes.map((scene) => {
+            const viewed =
+              scene.id === viewedSceneId || (!viewedSceneId && scene.active);
+            return (
+              <article className="scene-manager-card" key={scene.id}>
+                <div>
+                  <strong>{scene.name}</strong>
+                  <div className="scene-manager-meta">
+                    <span>{placementCount(scene.id)} токенов на сцене</span>
+                    <div className="scene-manager-statuses">
+                      {viewed && (
+                        <Label theme="info">Просматривается мастером</Label>
+                      )}
+                      {scene.active && (
+                        <Label theme="success">Показана игрокам</Label>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="dialog-actions">
+                  <Button
+                    view="action"
+                    onClick={() => onView(scene.id)}
+                    disabled={viewed}
+                  >
+                    Открыть для мастера
                   </Button>
-                )}
-                <Button onClick={() => setEditing(scene)}>Настроить</Button>
-              </div>
-            </article>
-          );
-        })}
-      </div>
+                  {!scene.active && (
+                    <Button onClick={() => void onPublish(scene.id)}>
+                      Показать игрокам
+                    </Button>
+                  )}
+                  <Button
+                    data-scene-configure={scene.id}
+                    onClick={() => setEditing(scene)}
+                  >
+                    Настроить
+                  </Button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
       {editing && (
         <SceneEditor
           key={editing === "NEW" ? "new" : `${editing.id}:${editing.revision}`}
           scene={editing === "NEW" ? null : editing}
           maps={snapshot.assets.filter((asset) => asset.kind === "MAP")}
           onUpload={onUpload}
-          onCancel={() => setEditing(null)}
+          onCancel={() => {
+            restoreConfigureFocus.current =
+              editing === "NEW" ? null : editing.id;
+            setEditing(null);
+          }}
           onSave={async (draft) => {
             await onSave(editing === "NEW" ? null : editing, draft);
             setEditing(null);
@@ -284,7 +334,7 @@ function SceneEditor({
     const { label, ...constraints } = numericFields[key];
     const id = `${fieldPrefix}-${key}`;
     return (
-      <label key={key} htmlFor={id}>
+      <label key={key} htmlFor={id} className="scene-form-field">
         <span>{label}</span>
         <FormInput
           id={id}
@@ -302,7 +352,9 @@ function SceneEditor({
           aria-invalid={Boolean(errors[key])}
           onChange={(e) => number(key, e.target.value)}
         />
-        <small id={`${id}-hint`}>{numericHint(key)}</small>
+        <small className="scene-form-field__hint" id={`${id}-hint`}>
+          {numericHint(key)}
+        </small>
         {errors[key] && (
           <span className="field-error" id={`${id}-error`}>
             {errors[key]}
@@ -419,8 +471,8 @@ function SceneEditor({
             {numericField("gridSize")}
             {numericField("gridOffsetX")}
             {numericField("gridOffsetY")}
-            <label>
-              Цвет сетки
+            <label className="scene-form-field">
+              <span>Цвет сетки</span>
               <FormInput
                 type="color"
                 value={form.state.draft.gridColor}
@@ -477,6 +529,9 @@ function SceneEditor({
           </p>
         )}
         <div className="dialog-actions">
+          <Button type="button" view="flat" onClick={onCancel}>
+            Отмена
+          </Button>
           <Button
             type="submit"
             view="action"
@@ -487,9 +542,6 @@ function SceneEditor({
             }
           >
             Сохранить
-          </Button>
-          <Button type="button" onClick={onCancel}>
-            Отмена
           </Button>
         </div>
       </form>

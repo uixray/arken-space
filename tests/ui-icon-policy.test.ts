@@ -59,9 +59,11 @@ describe("UIX-645 icon source policy", () => {
         "apps/web/src/styles.css",
       ]),
     );
+    // UIX-621 intentionally hides InitiativePanel, so it is not part of the reachable product UI.
     expect(closure.files).not.toContain(
       "apps/web/src/sidebar/InitiativePanel.tsx",
     );
+    expect(closure.files).toContain("apps/web/src/App.tsx");
     expect(scanProtectedSources()).toEqual([]);
   });
 
@@ -145,7 +147,7 @@ describe("UIX-645 icon source policy", () => {
   it("UIX645_APP_SHELL_GLYPH_RETURN detects a diversion of the actual source", () => {
     const file = "apps/web/src/App.tsx";
     const source = readFileSync(path.join(process.cwd(), file), "utf8");
-    const anchor = "<AppIcon icon={AddIcon} />";
+    const anchor = "<AppIcon icon={SidebarExpandIcon} />";
     expect(source.split(anchor)).toHaveLength(2);
     expect(scanUiSource(source, file)).toEqual([]);
     const diverted = source.replace(anchor, "<span>＋</span>");
@@ -167,7 +169,7 @@ describe("UIX-645 icon source policy", () => {
     ["apps/web/src/ui/SelectionActions.tsx", "CloseIcon", "×"],
     ["apps/web/src/ui/ImageUploadField.tsx", "DeleteIcon", "×"],
     ["apps/web/src/StickerPicker.tsx", "StickerPickerIcon", "☺"],
-    ["apps/web/src/sidebar/ChatPanels.tsx", "MoreIcon", "⋯"],
+    ["apps/web/src/sidebar/ChatPanels.tsx", "SettingsIcon", "⚙"],
   ])("detects a glyph restored in %s", (file, icon, glyph) => {
     const source = readFileSync(path.join(process.cwd(), file), "utf8");
     const anchor = `<AppIcon icon={${icon}} />`;

@@ -135,7 +135,10 @@ test.describe("лента журнала с сохранённым legacy-сос
         expect(
           worst.px,
           `ширина ${width}px: «${worst.pair}» перекрываются на ${Math.round(worst.px)}px`,
-        ).toBeLessThanOrEqual(0);
+          // Firefox may report the same edge as 0.000015px apart due to
+          // floating-point rounding. Keep the tolerance well below one CSS
+          // layout unit (1/64px), so a real overlap still fails.
+        ).toBeLessThanOrEqual(0.001);
       }
     } finally {
       await setBattle(page, "END_BATTLE");

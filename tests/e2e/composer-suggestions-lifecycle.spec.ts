@@ -324,7 +324,12 @@ for (const role of ["GM", "PLAYER"] as const) {
       await composer.fill("/");
       await expect(popup).toBeVisible();
       const outside = panel.locator("#activity-message-list");
-      await panel.locator(".activity-roll-controls__heading strong").click();
+      if (role === "GM")
+        await panel.getByRole("button", { name: "Статы и скилы" }).click();
+      else
+        await panel
+          .getByText("Нет доступного персонажа для броска.", { exact: true })
+          .click();
       await expect(popup).toHaveCount(0);
       await expect(composer).toHaveValue("/");
       await commands.click();
@@ -398,6 +403,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         name: "Персонаж для броска",
         exact: true,
       });
+      await panel.getByRole("tab", { name: "Способности" }).click();
       if (role === "GM") {
         await select.click();
         const option = page.getByRole("option", {
@@ -434,8 +440,9 @@ for (const role of ["GM", "PLAYER"] as const) {
         await expect(select).toBeFocused();
         await select.press("Enter");
         await expect(option).toBeVisible();
-        await page.keyboard.press("Home");
-        await page.keyboard.press("Enter");
+        await page
+          .getByRole("option", { name: "Картограф", exact: true })
+          .click();
         await expect(select).toContainText("Картограф");
         await expect(
           panel.getByRole("button", { name: "Наблюдение", exact: true }),
@@ -466,7 +473,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         if (name !== labels[2]) await page.keyboard.press("Tab");
       }
       await expect(
-        panel.getByText("Сцена готова.", { exact: true }),
+        panel.getByText("Сцена готова", { exact: true }),
       ).toHaveCount(0);
       await page.keyboard.press("Escape");
       await expect(trigger).toBeFocused();
@@ -495,7 +502,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         ).toBeChecked();
       }
       await expect(
-        panel.getByText("Сцена готова.", { exact: true }),
+        panel.getByText("Сцена готова", { exact: true }),
       ).toBeVisible();
       await composer.click();
       await expect(filters).not.toHaveAttribute("open", "");

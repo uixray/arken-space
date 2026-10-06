@@ -61,6 +61,14 @@ async function openPicker() {
   return trigger;
 }
 
+it("shows sticker artwork without visible file names while keeping accessible names", async () => {
+  render(<StickerPicker onSelect={async () => {}} />);
+  await openPicker();
+  const option = screen.getByRole("option", { name: "Стикер 1" });
+  expect(option.querySelector("img")).not.toBeNull();
+  expect(option.textContent).toBe("");
+});
+
 function deferred() {
   let resolve!: () => void;
   let reject!: (error: Error) => void;

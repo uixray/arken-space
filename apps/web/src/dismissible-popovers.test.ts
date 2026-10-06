@@ -21,8 +21,11 @@ const sourceOf = (relative: string) =>
 
 const SOURCES = [
   "./App.tsx",
+  "./AppHeader.tsx",
   "./MapToolbar.tsx",
   "./MusicBar.tsx",
+  "./ScenePicker.tsx",
+  "./TokenTray.tsx",
   "./WorkspaceNav.tsx",
   "./renderers/GridSettings.tsx",
   "./sidebar/ChatPanels.tsx",
@@ -37,9 +40,9 @@ const SOURCES = [
  * вредно — человек раскрыл ресурсы и работает рядом с ними.
  */
 const IN_FLOW_SECTIONS = new Set([
-  "subsection",
   "initiative-panel",
   "resource-counters",
+  "character-hero__backstory",
 ]);
 
 interface FoundDetails {
@@ -116,9 +119,9 @@ describe("поповеры закрываются общим механизмо�
       .filter((item) => IN_FLOW_SECTIONS.has(item.className))
       .map((item) => item.className);
     expect([...new Set(inFlow)].sort()).toEqual([
+      "character-hero__backstory",
       "initiative-panel",
       "resource-counters",
-      "subsection",
     ]);
   });
 });

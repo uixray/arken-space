@@ -108,6 +108,18 @@ describe("character workspace state", () => {
       collapsedIds: [],
     });
   });
+
+  it("reopens a restored sole character because no rail is available", () => {
+    let state = createCharacterWorkspaceState(["one"]);
+    state = characterWorkspaceReducer(state, { type: "SYNC", ids: [] });
+    expect(state.openIds).toEqual([]);
+    state = characterWorkspaceReducer(state, { type: "SYNC", ids: ["one"] });
+    expect(state).toEqual({
+      openIds: ["one"],
+      activeId: "one",
+      collapsedIds: [],
+    });
+  });
 });
 
 describe("character rail identity", () => {

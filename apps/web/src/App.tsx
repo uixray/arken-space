@@ -11,7 +11,6 @@ import {
   useState,
   useSyncExternalStore,
   type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
 import type {
   GameSnapshot,
@@ -22,38 +21,27 @@ import type {
   StoryPostDto,
   TokenDto,
 } from "@arken/contracts";
-import { api, ApiError, reportClientEvent } from "./api";
+import { api, ApiError } from "./api";
+import { mergeTokenPlacementUpdate } from "./token-projection";
 import { AuthGate } from "./AuthGate";
-import { createGameSocket, type GameSocket } from "./realtime";
+import { useGameSocketSubscriptions } from "./use-game-socket-subscriptions";
 import { Sidebar } from "./Sidebar";
-import { MusicBar } from "./MusicBar";
-import { FeedbackReporter } from "./FeedbackReporter";
-import { fetchOperatorCapability } from "./operator-feedback";
-import { appendChatMessage } from "./chat-state";
-import { upsertDirectThread } from "./direct-chat-state";
-import { setErrorReportContext } from "./error-report-context";
+import { AppHeader } from "./AppHeader";
 import {
-  addRollToast,
-  removeRollToast,
-  scheduleRollToastRemoval,
-  shouldShowRollToast,
-  type RollToast,
-} from "./toast-state";
+  focusWorkspaceReturnTarget,
+  workspaceReturnTarget,
+} from "./WorkspaceNav";
+import { MusicBar } from "./MusicBar";
+import { AppModals } from "./AppModals";
+import { TokenTray } from "./TokenTray";
+import { CompactMenuSurface } from "./ui/CompactMenuSurface";
+import { fetchOperatorCapability } from "./operator-feedback";
+import { setErrorReportContext } from "./error-report-context";
+import { removeRollToast, type RollToast } from "./toast-state";
 import { notify } from "./ui/notifications";
-import { TextPromptDialog } from "./ui/TextPromptDialog";
-import { ArkenDialog } from "./ui/ArkenDialog";
 import { ErrorState, LoadingState } from "./ui/EntityState";
 import { AppIcon } from "./ui/AppIcon";
-import {
-  AddIcon,
-  CloseIcon,
-  PublishedSceneIcon,
-  PublishSceneIcon,
-  ScenePickerIcon,
-  SessionMenuIcon,
-  SidebarExpandIcon,
-} from "./ui/icons";
-import { useDismissibleDetails } from "./ui/dismissible-details";
+import { CloseIcon, SidebarExpandIcon } from "./ui/icons";
 import { canvasHistoryVersion } from "./canvas-history-label";
 import { normalizeClientDiceResult } from "./dice-result";
 import {
@@ -80,16 +68,13 @@ import { useAccessActions } from "./use-access-actions";
 import { useCatalogActions } from "./use-catalog-actions";
 import { useStatLayoutActions } from "./use-stat-layout-actions";
 import { useInitiativeActions } from "./use-initiative-actions";
-import { WorkspaceNav } from "./WorkspaceNav";
 import { CompactNavigation } from "./CompactNavigation";
 import {
   useCompactNavigation,
   type CompactSurface,
 } from "./ui/useCompactNavigation";
-import { ShortcutsDialog } from "./ShortcutsDialog";
 import { MapToolbar } from "./MapToolbar";
 import { GamePauseOverlay } from "./GamePauseOverlay";
-import { workspaceNavItems } from "./workspace-nav";
 import { useChatHistoryActions } from "./use-chat-history-actions";
 import { useStoryActions } from "./use-story-actions";
 import { usePlayerRequestActions } from "./use-player-request-actions";
@@ -109,32 +94,21 @@ import {
   mergeCharacterMutationResponse,
   reconcileGameSnapshot,
 } from "./character-mutation";
-import { applyPlayerRequestChanged } from "./player-request-realtime";
 import {
   readSidebarCollapsed,
   writeSidebarCollapsed,
 } from "./sidebar-preference";
-import {
-  clampSidebarWidth,
-  readSidebarWidth,
-  writeSidebarWidth,
-} from "./sidebar-width-preference";
-import {
-  applyCursorMoved,
-  type CursorPresence,
-} from "./renderers/cursor-presence";
+import { useSidebarResize } from "./use-sidebar-resize";
+import type { CursorPresence } from "./renderers/cursor-presence";
 import {
   CURSOR_PREFERENCE_DEFAULT,
   type CursorPreference,
   readCursorPreference,
   writeCursorPreference,
 } from "./cursor-preference";
-import { resolvePlayerThemeId } from "./design-system/player-themes";
-import { PlayerThemeSettings } from "./design-system/PlayerThemeSettings";
 import { usePlayerThemeRuntime } from "./design-system/player-theme-runtime-context";
 import { usePlayerThemePreference } from "./design-system/usePlayerThemePreference";
 import { patchPersonalThemePreference } from "./design-system/personal-theme-api";
-
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
     default: module.Orthographic2DRenderer,
@@ -143,6 +117,7 @@ const Orthographic2DRenderer = lazy(() =>
 
 type WorkspaceDestination =
   | "characters"
+  | "story"
   | "tokens"
   | "scenes"
   | "setup"
@@ -153,40 +128,11 @@ type WorkspaceDestination =
   | "world-encyclopedia"
   | "world-codex";
 
-type SceneViewEmission = {
-  socket: GameSocket;
-  connectionId: string | null;
-  sceneId: string | null;
-};
-
 function replacePersonalTheme(
   snapshot: GameSnapshot,
   personalTheme: PersonalThemeDto,
 ): GameSnapshot {
   return { ...snapshot, personalTheme };
-}
-
-/**
- * A socket can already be connected by the time React commits it to state.
- * Both the Socket.IO connect callback and the viewed-scene effect therefore
- * use this gate: exactly one of them emits a given value on a transport, while
- * a new socket id (or an explicit reset on disconnect) restores it again.
- */
-function emitSceneViewIfNeeded(
-  socket: GameSocket,
-  lastEmission: { current: SceneViewEmission | null },
-  sceneId: string | null,
-) {
-  const connectionId = socket.id ?? null;
-  const previous = lastEmission.current;
-  if (
-    previous?.socket === socket &&
-    previous.connectionId === connectionId &&
-    previous.sceneId === sceneId
-  )
-    return;
-  lastEmission.current = { socket, connectionId, sceneId };
-  socket.emit("scene:view", { sceneId });
 }
 
 export function App() {
@@ -261,15 +207,12 @@ export function App() {
     publishedThemeIds,
     save: saveThemePreference,
   });
-
   useLayoutEffect(() => {
     setRootThemeId(themePreference.selection);
   }, [setRootThemeId, themePreference.selection]);
-
   useLayoutEffect(() => {
     setThemeSettingsOpen(false);
   }, [personalTheme?.scopeKey]);
-
   useEffect(
     () => () => {
       setRootThemeId(null);
@@ -293,29 +236,14 @@ export function App() {
   const [mapRollVisibility, setMapRollVisibility] =
     useState<import("@arken/contracts").MessageVisibility>("PUBLIC");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  // UIX-372: drag-resized sidebar width in px; null keeps the CSS default
-  // (--sidebar-width fallback) until the GM/player has customized it.
-  const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
-  const sidebarWidthRef = useRef<number | null>(null);
-  useEffect(() => {
-    sidebarWidthRef.current = sidebarWidth;
-  }, [sidebarWidth]);
-  const sidebarResizeDragRef = useRef<{
-    pointerId: number;
-    anchorRight: number;
-  } | null>(null);
   const [storyPosts, setStoryPosts] = useState<
     Array<StoryPostDto | StoryPostAdminDto>
   >([]);
   const [storyNextCursor, setStoryNextCursor] = useState<string | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
-  const [socket, setSocket] = useState<GameSocket | null>(null);
   const [presence, setPresence] = useState<
     Array<{ membershipId: string; online: boolean }>
   >([]);
-  const [connection, setConnection] = useState<
-    "CONNECTING" | "ONLINE" | "RECONNECTING" | "RESYNCING" | "OFFLINE"
-  >("CONNECTING");
   const [tool, setTool] = useState<MapTool>("PAN");
   // UIX-313: shared brush radius (world units) for the circular fog brush,
   // reused for both FOG_BRUSH and COVER_BRUSH.
@@ -334,11 +262,6 @@ export function App() {
   // A GM may inspect and prepare another scene without moving the players.
   // The server-side `active` flag remains the broadcast scene.
   const [viewedSceneId, setViewedSceneId] = useState<string | null>(null);
-  // Socket.IO keeps the same client object across transport reconnects, so an
-  // effect depending on `socket` alone does not rerun. The connect handler
-  // reads this ref to restore the current GM canvas on every new transport.
-  const viewedSceneIdRef = useLatestRef(viewedSceneId);
-  const lastSceneViewEmissionRef = useRef<SceneViewEmission | null>(null);
   const [recentlyPublishedSceneId, setRecentlyPublishedSceneId] = useState<
     string | null
   >(null);
@@ -366,9 +289,6 @@ export function App() {
   // UIX-392: ephemeral cursor presence, keyed by membershipId so a later
   // cursor:moved always replaces a member's previous position instead of
   // accumulating a trail.
-  // Read by the socket handlers, which are registered once per connection and
-  // must not be torn down just to learn who "I" am.
-  const ownMembershipIdRef = useLatestRef(snapshot?.me.id);
   const [cursors, setCursors] = useState<CursorPresence[]>([]);
   const [cursorPreference, setCursorPreference] = useState(
     CURSOR_PREFERENCE_DEFAULT,
@@ -377,14 +297,17 @@ export function App() {
     null,
   );
   const [error, setError] = useState("");
-  const [createSceneOpen, setCreateSceneOpen] = useState(false);
   const [sceneDialogRequest, setSceneDialogRequest] = useState(0);
+  const [requestedSceneEditId, setRequestedSceneEditId] = useState<
+    string | null
+  >(null);
   const [campaignRenameOpen, setCampaignRenameOpen] = useState(false);
   const [playerHandoffOpen, setPlayerHandoffOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [playerHandoffPending, setPlayerHandoffPending] = useState(false);
   const [playerHandoffError, setPlayerHandoffError] = useState("");
   const [workspace, setWorkspace] = useState<WorkspaceDestination | null>(null);
+  const [mapObjectsOpen, setMapObjectsOpen] = useState(false);
   const compactIdentity = snapshot
     ? `${snapshot.campaign.id}:${snapshot.me.id}:${snapshot.me.role}:${previewSnapshot?.me.id ?? ""}`
     : null;
@@ -401,6 +324,11 @@ export function App() {
     previousSurface,
   });
   const [compactSectionsOpen, setCompactSectionsOpen] = useState(false);
+  const [headerMusicTarget, setHeaderMusicTarget] =
+    useState<HTMLElement | null>(null);
+  const [menuMusicTarget, setMenuMusicTarget] = useState<HTMLElement | null>(
+    null,
+  );
   useEffect(() => {
     setWorkspace(null);
     setCompactSectionsOpen(false);
@@ -421,25 +349,6 @@ export function App() {
   const [requestedCharacterId, setRequestedCharacterId] = useState<
     string | null
   >(null);
-  const scenePickerRef = useRef<HTMLDetailsElement>(null);
-  /**
-   * UIX-531: меню сеанса, «Ещё» на панели карты и лоток токенов — последние
-   * поповеры без общего закрытия.
-   *
-   * Меню сеанса объявлено в одном CSS-правиле с поповерами музыки
-   * (`styles.css:3719`): та же шапка, тот же z-index, то же свешивание поверх
-   * правого сайдбара. UIX-517 починила соседей по правилу, а его пропустила —
-   * открытое меню перехватывало клики по вкладкам чата ровно так же.
-   */
-  const accountMenuRef = useRef<HTMLDetailsElement>(null);
-  const tokenTrayRef = useRef<HTMLDetailsElement>(null);
-  useDismissibleDetails(scenePickerRef, undefined, {
-    listbox: true,
-    closeOnViewportChange: true,
-  });
-  useDismissibleDetails(accountMenuRef);
-  useDismissibleDetails(tokenTrayRef);
-
   useEffect(() => {
     if (!snapshot) {
       setOperatorFeedbackAllowed(false);
@@ -461,9 +370,10 @@ export function App() {
       active = false;
     };
   }, [snapshot?.me.id]);
-
   const handleWorkspaceChange = useCallback(
     (nextWorkspace: WorkspaceDestination | null) => {
+      const returnTarget =
+        nextWorkspace === null ? workspaceReturnTarget() : null;
       const { compact, selectSurface, previousSurface } =
         compactNavigationRef.current;
       if (compact) {
@@ -473,21 +383,15 @@ export function App() {
             : nextWorkspace
               ? "journal"
               : previousSurface,
-          // Utility workspaces own their initial focus and Escape handling.
           !nextWorkspace || nextWorkspace === "characters",
         );
       }
       setWorkspace(nextWorkspace);
-      // UIX-472: закрывая раздел, возвращаем фокус на его кнопку в строке —
-      // раньше он возвращался на выпадающий список, которого больше нет.
       if (nextWorkspace === null && !compact)
-        requestAnimationFrame(() =>
-          document.querySelector<HTMLElement>(".workspace-nav__item")?.focus(),
-        );
+        requestAnimationFrame(() => focusWorkspaceReturnTarget(returnTarget));
     },
     [compactNavigationRef],
   );
-
   useEffect(() => {
     if (!error || !snapshot) return;
     notify({
@@ -503,7 +407,6 @@ export function App() {
     string | null
   >(null);
   const [rollToasts, setRollToasts] = useState<RollToast[]>([]);
-  const toastAppearanceRef = useRef(0);
   const knownChatMessageIdsRef = useRef(new Set<string>());
   const characterMutationQueuesRef = useRef(
     new Map<
@@ -518,6 +421,12 @@ export function App() {
   }, []);
   const sidebarCampaignId = snapshot?.campaign.id;
   const sidebarMembershipId = snapshot?.me.id;
+  const {
+    sidebarWidth,
+    handleSidebarResizeStart,
+    handleSidebarResizeMove,
+    handleSidebarResizeEnd,
+  } = useSidebarResize(sidebarCampaignId, sidebarMembershipId);
   useEffect(() => {
     if (!sidebarCampaignId || !sidebarMembershipId) return;
     setSidebarCollapsed(
@@ -538,59 +447,6 @@ export function App() {
         snapshot.me.id,
         collapsed,
       );
-    },
-    [snapshot],
-  );
-  useEffect(() => {
-    if (!sidebarCampaignId || !sidebarMembershipId) return;
-    setSidebarWidth(
-      readSidebarWidth(
-        window.localStorage,
-        sidebarCampaignId,
-        sidebarMembershipId,
-      ),
-    );
-  }, [sidebarCampaignId, sidebarMembershipId]);
-  const handleSidebarResizeStart = useCallback(
-    (event: ReactPointerEvent<HTMLButtonElement>) => {
-      if (event.button !== 0) return;
-      const aside = event.currentTarget.closest<HTMLElement>(".sidebar");
-      const rect = aside?.getBoundingClientRect();
-      if (!rect) return;
-      sidebarResizeDragRef.current = {
-        pointerId: event.pointerId,
-        anchorRight: rect.right,
-      };
-      event.currentTarget.setPointerCapture(event.pointerId);
-      event.preventDefault();
-    },
-    [],
-  );
-  const handleSidebarResizeMove = useCallback(
-    (event: ReactPointerEvent<HTMLButtonElement>) => {
-      const drag = sidebarResizeDragRef.current;
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      setSidebarWidth(clampSidebarWidth(drag.anchorRight - event.clientX));
-      event.preventDefault();
-    },
-    [],
-  );
-  const handleSidebarResizeEnd = useCallback(
-    (event: ReactPointerEvent<HTMLButtonElement>) => {
-      const drag = sidebarResizeDragRef.current;
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      sidebarResizeDragRef.current = null;
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }
-      if (snapshot && sidebarWidthRef.current != null) {
-        writeSidebarWidth(
-          window.localStorage,
-          snapshot.campaign.id,
-          snapshot.me.id,
-          sidebarWidthRef.current,
-        );
-      }
     },
     [snapshot],
   );
@@ -615,6 +471,41 @@ export function App() {
       ),
     );
   }, [campaignId, snapshot?.me.id]);
+  const loadStoryPosts = useCallback(async (cursor?: string) => {
+    const query = new URLSearchParams({ limit: "50" });
+    if (cursor) query.set("cursor", cursor);
+    const page = await api<{
+      posts: Array<StoryPostDto | StoryPostAdminDto>;
+      nextCursor: string | null;
+    }>(`/api/story/posts?${query.toString()}`);
+    setStoryPosts((current) => {
+      if (!cursor) return page.posts;
+      const byId = new Map(current.map((post) => [post.id, post]));
+      for (const post of page.posts) byId.set(post.id, post);
+      return [...byId.values()];
+    });
+    setStoryNextCursor(page.nextCursor);
+  }, []);
+
+  const { socket, setSocket, connection, setConnection } =
+    useGameSocketSubscriptions({
+      campaignId: campaignId ?? null,
+      authRequired,
+      ownMembershipId: snapshot?.me.id,
+      viewedSceneId,
+      loadStoryPosts,
+      setSnapshot,
+      setPings,
+      setRulers,
+      setCursors,
+      setRollToasts,
+      setPresence,
+      setError,
+      knownChatMessageIdsRef,
+      activeChatThreadIdRef,
+      chatOpenRef,
+    });
+
   const updateCursorPreference = useCallback(
     (next: CursorPreference) => {
       setCursorPreference((current) => {
@@ -636,22 +527,6 @@ export function App() {
     },
     [campaignId, snapshot, socket],
   );
-
-  const loadStoryPosts = useCallback(async (cursor?: string) => {
-    const query = new URLSearchParams({ limit: "50" });
-    if (cursor) query.set("cursor", cursor);
-    const page = await api<{
-      posts: Array<StoryPostDto | StoryPostAdminDto>;
-      nextCursor: string | null;
-    }>(`/api/story/posts?${query.toString()}`);
-    setStoryPosts((current) => {
-      if (!cursor) return page.posts;
-      const byId = new Map(current.map((post) => [post.id, post]));
-      for (const post of page.posts) byId.set(post.id, post);
-      return [...byId.values()];
-    });
-    setStoryNextCursor(page.nextCursor);
-  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -700,215 +575,6 @@ export function App() {
       buildRevision: snapshot?.buildRevision,
     });
   }, [snapshot, tool]);
-  useEffect(() => {
-    if (!campaignId || authRequired) return;
-    const next = createGameSocket();
-    setSocket(next);
-    next.on("connect", () => {
-      setConnection("ONLINE");
-      emitSceneViewIfNeeded(
-        next,
-        lastSceneViewEmissionRef,
-        viewedSceneIdRef.current,
-      );
-    });
-    next.on("disconnect", (reason) => {
-      if (lastSceneViewEmissionRef.current?.socket === next)
-        lastSceneViewEmissionRef.current = null;
-      setConnection("RECONNECTING");
-      reportClientEvent({
-        level: "warn",
-        event: "realtime.disconnected",
-        message: reason,
-      });
-    });
-    next.io.on("reconnect_attempt", () => setConnection("RECONNECTING"));
-    next.io.on("reconnect_failed", () => setConnection("OFFLINE"));
-    next.on("game:snapshot", (nextSnapshot) => {
-      setSnapshot((current) => reconcileGameSnapshot(current, nextSnapshot));
-      setConnection("ONLINE");
-    });
-    next.on("scene:activated", (event) =>
-      setSnapshot((current) =>
-        current && event.sequence > current.snapshotVersion
-          ? {
-              ...current,
-              snapshotVersion: event.sequence,
-              scenes: current.scenes.map((scene) => ({
-                ...scene,
-                active: scene.id === event.data,
-              })),
-            }
-          : current,
-      ),
-    );
-    next.on("token:moving", (movement) =>
-      setSnapshot((current) =>
-        current
-          ? {
-              ...current,
-              tokens: current.tokens.map((token) =>
-                token.id === movement.tokenId
-                  ? { ...token, x: movement.x, y: movement.y }
-                  : token,
-              ),
-            }
-          : current,
-      ),
-    );
-    next.on("token:moved", (event) =>
-      setSnapshot((current) =>
-        current && event.sequence > current.snapshotVersion
-          ? {
-              ...current,
-              snapshotVersion: event.sequence,
-              tokens: current.tokens.map((token) =>
-                token.id === event.data.id ? event.data : token,
-              ),
-            }
-          : current,
-      ),
-    );
-    next.on("fog:created", (event) =>
-      setSnapshot((current) =>
-        current && event.sequence > current.snapshotVersion
-          ? {
-              ...current,
-              snapshotVersion: event.sequence,
-              fogReveals: [...current.fogReveals, event.data],
-            }
-          : current,
-      ),
-    );
-    next.on("fog:removed", (event) =>
-      setSnapshot((current) =>
-        current && event.sequence > current.snapshotVersion
-          ? {
-              ...current,
-              snapshotVersion: event.sequence,
-              fogReveals: current.fogReveals.filter(
-                (fog) => fog.id !== event.data.fogRevealId,
-              ),
-            }
-          : current,
-      ),
-    );
-    next.on("map:ping", (ping) => {
-      setPings((current) => [...current.slice(-7), ping]);
-      window.setTimeout(
-        () =>
-          setPings((current) =>
-            current.filter((item) => item.createdAt !== ping.createdAt),
-          ),
-        3500,
-      );
-    });
-    next.on("ruler:updated", (ruler) =>
-      setRulers((current) => [
-        ...current.filter((item) => item.membershipId !== ruler.membershipId),
-        ruler,
-      ]),
-    );
-    next.on("ruler:cleared", (ruler) =>
-      setRulers((current) =>
-        current.filter(
-          (item) =>
-            item.membershipId !== ruler.membershipId ||
-            item.sceneId !== ruler.sceneId,
-        ),
-      ),
-    );
-    next.on("cursor:moved", (cursor) =>
-      setCursors((current) =>
-        applyCursorMoved(current, cursor, ownMembershipIdRef.current),
-      ),
-    );
-    next.on("cursor:gone", (event) =>
-      setCursors((current) =>
-        current.filter((item) => item.membershipId !== event.membershipId),
-      ),
-    );
-    next.on("story:changed", () => {
-      void loadStoryPosts().catch(() => undefined);
-    });
-    next.on("player-request:changed", (request) => {
-      setSnapshot((current) => applyPlayerRequestChanged(current, request));
-    });
-    next.on("chat:thread_created", ({ thread, state }) => {
-      setSnapshot((current) =>
-        current ? upsertDirectThread(current, thread, state) : current,
-      );
-    });
-    next.on("chat:created", (event) => {
-      const unseen = !knownChatMessageIdsRef.current.has(event.data.id);
-      if (unseen) knownChatMessageIdsRef.current.add(event.data.id);
-      // Chat is append-only. It must be deduplicated by message id rather than
-      // rejected by the global entity sequence: a later snapshot can arrive
-      // before this envelope without containing this newly committed message.
-      setSnapshot((current) =>
-        current
-          ? appendChatMessage(current, event.data, event.sequence, {
-              activeThreadId: activeChatThreadIdRef.current,
-              ownMembershipId: current.me.id,
-            })
-          : current,
-      );
-      if (shouldShowRollToast(unseen, event.data.kind, chatOpenRef.current)) {
-        const appearanceId = ++toastAppearanceRef.current;
-        let added = false;
-        setRollToasts((current) => {
-          const next = addRollToast(current, {
-            message: event.data,
-            appearanceId,
-          });
-          added = next !== current;
-          return next;
-        });
-        scheduleRollToastRemoval(() => {
-          if (added)
-            setRollToasts((current) =>
-              removeRollToast(current, event.data.id, appearanceId),
-            );
-        });
-      }
-    });
-    next.on("character:updated", (event) =>
-      setSnapshot((current) =>
-        current && event.sequence > current.snapshotVersion
-          ? {
-              ...current,
-              snapshotVersion: event.sequence,
-              characters: current.characters.map((item) => {
-                if (item.id !== event.data.id) return item;
-                return mergeCharacterMutationResponse(item, event.data) ?? item;
-              }),
-            }
-          : current,
-      ),
-    );
-    next.on("audio:state", (event) =>
-      setSnapshot((current) =>
-        current && event.sequence > current.snapshotVersion
-          ? { ...current, snapshotVersion: event.sequence, audio: event.data }
-          : current,
-      ),
-    );
-    next.on("presence:updated", setPresence);
-    next.on("server:error", (problem) => setError(problem.message));
-    return () => {
-      next.disconnect();
-      if (lastSceneViewEmissionRef.current?.socket === next)
-        lastSceneViewEmissionRef.current = null;
-      setSocket(null);
-      setCursors([]);
-    };
-  }, [
-    authRequired,
-    campaignId,
-    loadStoryPosts,
-    ownMembershipIdRef,
-    viewedSceneIdRef,
-  ]);
 
   /*
    * UIX-398 step A0. These four back 45 call sites between them and used to
@@ -1084,7 +750,10 @@ export function App() {
           ),
       }),
   );
-  useSyncExternalStore(tokenMutations.subscribe, tokenMutations.getVersion);
+  const tokenMutationVersion = useSyncExternalStore(
+    tokenMutations.subscribe,
+    tokenMutations.getVersion,
+  );
   useEffect(() => {
     tokenMutations.reset();
     return () => tokenMutations.reset();
@@ -1372,10 +1041,6 @@ export function App() {
     if (!view) return undefined;
     const broadcast =
       view.scenes.find((scene) => scene.active) ?? view.scenes[0];
-    // The GM can look at a scene other than the broadcast one; players always
-    // see whatever is being broadcast. `!previewSnapshot` short-circuits
-    // first, so reading the role off `view` matches the original behaviour of
-    // reading it off `snapshot`.
     return !previewSnapshot && view.me.role === "GM" && viewedSceneId
       ? (view.scenes.find((scene) => scene.id === viewedSceneId) ?? broadcast)
       : broadcast;
@@ -1385,23 +1050,6 @@ export function App() {
       retainBulkMoveIntentsForScene(current, activeSceneValue?.id),
     );
   }, [activeSceneValue?.id]);
-  /**
-   * UIX-408 — сервер должен знать, какую сцену рассматривает мастер.
-   *
-   * Без этого сузить выборку тумана и рисунков нельзя: `viewedSceneId` —
-   * локальное состояние клиента, и мастер, открывший сцену для подготовки,
-   * получил бы её пустой, а потом рисовал бы туман поверх пустоты.
-   *
-   * Сервер отвечает свежим снапшотом этому одному сокету — одна сборка на одно
-   * осознанное действие мастера.
-   */
-  useEffect(() => {
-    // Do not buffer this event while offline: the connect handler above emits
-    // the latest value once per transport and avoids replaying an obsolete
-    // intermediate selection after a reconnect.
-    if (socket?.connected)
-      emitSceneViewIfNeeded(socket, lastSceneViewEmissionRef, viewedSceneId);
-  }, [socket, viewedSceneId]);
 
   const activeSceneRef = useLatestRef(activeSceneValue);
   const tokenActions = useTokenDefinitionActions({
@@ -1493,48 +1141,89 @@ export function App() {
     ],
   );
 
-  if (authRequired) return <AuthGate onAuthenticated={load} />;
+  const viewSnapshot = useMemo(() => {
+    // Reproject optimistic tokens whenever the external mutation store changes.
+    void tokenMutationVersion;
+    if (previewSnapshot) return previewSnapshot;
+    if (!snapshot) return null;
+    return {
+      ...snapshot,
+      tokens: projectBulkMoveIntents(
+        tokenMutations.project(snapshot.tokens),
+        "TOKEN",
+        bulkMoveIntents,
+      ) as GameSnapshot["tokens"],
+      drawings: projectBulkMoveIntents(
+        snapshot.drawings ?? [],
+        "DRAWING",
+        bulkMoveIntents,
+      ) as GameSnapshot["drawings"],
+    };
+  }, [
+    previewSnapshot,
+    snapshot,
+    tokenMutations,
+    tokenMutationVersion,
+    bulkMoveIntents,
+  ]);
 
-  if (!snapshot)
-    return (
-      <main className="loading">
-        <div className="wordmark">arken-space</div>
-        {error ? (
-          <ErrorState description={error} onRetry={load} />
-        ) : (
-          <LoadingState label="Загружаем кампанию…" />
-        )}
-      </main>
-    );
-
-  const viewSnapshot = previewSnapshot ?? {
-    ...snapshot,
-    tokens: projectBulkMoveIntents(
-      tokenMutations.project(snapshot.tokens),
-      "TOKEN",
-      bulkMoveIntents,
-    ) as GameSnapshot["tokens"],
-    drawings: projectBulkMoveIntents(
-      snapshot.drawings ?? [],
-      "DRAWING",
-      bulkMoveIntents,
-    ) as GameSnapshot["drawings"],
-  };
-  const broadcastScene =
-    viewSnapshot.scenes.find((scene) => scene.active) ?? viewSnapshot.scenes[0];
-  // Derived above the guards so a hook can read it; see `activeSceneValue`.
+  const broadcastScene = viewSnapshot
+    ? (viewSnapshot.scenes.find((scene) => scene.active) ??
+      viewSnapshot.scenes[0])
+    : undefined;
   const activeScene = activeSceneValue;
-  const activeTokens = activeScene
-    ? viewSnapshot.tokens.filter((token) => token.sceneId === activeScene.id)
-    : [];
-  const activeFog = activeScene
-    ? viewSnapshot.fogReveals.filter((fog) => fog.sceneId === activeScene.id)
-    : [];
-  const activeDrawings = activeScene
-    ? (viewSnapshot.drawings ?? []).filter(
-        (drawing) => drawing.sceneId === activeScene.id,
-      )
-    : [];
+  const activeTokens = useMemo(
+    () =>
+      activeScene && viewSnapshot
+        ? viewSnapshot.tokens.filter(
+            (token) => token.sceneId === activeScene.id,
+          )
+        : [],
+    [activeScene?.id, viewSnapshot?.tokens],
+  );
+  const activeFog = useMemo(
+    () =>
+      activeScene && viewSnapshot
+        ? viewSnapshot.fogReveals.filter(
+            (fog) => fog.sceneId === activeScene.id,
+          )
+        : [],
+    [activeScene?.id, viewSnapshot?.fogReveals],
+  );
+  const activeDrawings = useMemo(
+    () =>
+      activeScene && viewSnapshot
+        ? (viewSnapshot.drawings ?? []).filter(
+            (drawing) => drawing.sceneId === activeScene.id,
+          )
+        : [],
+    [activeScene?.id, viewSnapshot?.drawings],
+  );
+
+  const activePings = useMemo(
+    () =>
+      activeScene
+        ? pings.filter((ping) => ping.sceneId === activeScene.id)
+        : [],
+    [activeScene?.id, pings],
+  );
+
+  const activeRulers = useMemo(
+    () =>
+      activeScene
+        ? rulers.filter((ruler) => ruler.sceneId === activeScene.id)
+        : [],
+    [activeScene?.id, rulers],
+  );
+
+  const activeCursors = useMemo(
+    () =>
+      cursorPreference.receiveEnabled && activeScene
+        ? cursors.filter((cursor) => cursor.sceneId === activeScene.id)
+        : [],
+    [cursorPreference.receiveEnabled, activeScene?.id, cursors],
+  );
+
   // UIX-395: undo/redo history only ever depends on the active scene's own
   // canvas content (fog, drawings, token placement/movement) -- not on
   // unrelated campaign events like chat, dice or audio, which used to also
@@ -1546,6 +1235,578 @@ export function App() {
     activeDrawings,
     activeTokens,
   );
+
+  const handleOpenCharacter = useCallback(
+    (characterId: string) => {
+      setRequestedCharacterId(null);
+      handleWorkspaceChange("characters");
+      requestAnimationFrame(() => setRequestedCharacterId(characterId));
+    },
+    [handleWorkspaceChange],
+  );
+
+  const handleCanvasEditCancel = useCallback(() => {
+    setCanvasEditMode(null);
+  }, []);
+
+  const handleCanvasPatch = useCallback(
+    async (
+      patch: Parameters<
+        NonNullable<
+          import("./renderers/SceneRenderer").SceneRendererProps["onCanvasPatch"]
+        >
+      >[0],
+    ) => {
+      if (!activeScene) return;
+      await run(() =>
+        api(`/api/scenes/${activeScene.id}/canvas`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            actionId: crypto.randomUUID(),
+            revision: activeScene.revision ?? 0,
+            ...patch,
+          }),
+        }),
+      );
+    },
+    [activeScene?.id, activeScene?.revision, run],
+  );
+
+  const handleFogCreate = useCallback(
+    async (
+      payload: Parameters<
+        NonNullable<
+          import("./renderers/SceneRenderer").SceneRendererProps["onFogCreate"]
+        >
+      >[0],
+    ) => {
+      if (!activeScene) return;
+      const isCover =
+        tool === "COVER" || tool === "COVER_BRUSH" || tool === "COVER_POLYGON";
+      await run(() =>
+        api("/api/fog-reveals", {
+          method: "POST",
+          body: JSON.stringify({
+            actionId: crypto.randomUUID(),
+            sceneId: activeScene.id,
+            operation: isCover ? "COVER" : "REVEAL",
+            ...payload,
+          }),
+        }),
+      );
+    },
+    [activeScene?.id, tool, run],
+  );
+
+  const handleDrawingCreate = useCallback(
+    async (
+      drawing: Parameters<
+        NonNullable<
+          import("./renderers/SceneRenderer").SceneRendererProps["onDrawingCreate"]
+        >
+      >[0],
+    ) => {
+      if (!activeScene) return undefined;
+      let created: import("@arken/contracts").DrawingDto | undefined;
+      await run(async () => {
+        created = await api<import("@arken/contracts").DrawingDto>(
+          "/api/drawings",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              actionId: crypto.randomUUID(),
+              sceneId: activeScene.id,
+              ...drawing,
+            }),
+          },
+        );
+      });
+      if (created) {
+        const reconciled = created;
+        setSnapshot((current) => {
+          if (!current) return current;
+          const drawings = current.drawings ?? [];
+          if (drawings.some((item) => item.id === reconciled.id))
+            return current;
+          return {
+            ...current,
+            drawings: [...drawings, reconciled],
+          };
+        });
+      }
+      return created;
+    },
+    [activeScene?.id, run],
+  );
+
+  const handlePing = useCallback(
+    (
+      point: Parameters<
+        NonNullable<
+          import("./renderers/SceneRenderer").SceneRendererProps["onPing"]
+        >
+      >[0],
+    ) => {
+      if (!activeScene) return;
+      socket?.emit(
+        "map:ping",
+        {
+          sceneId: activeScene.id,
+          ...point,
+        },
+        (result: { ok: boolean; reason?: string }) => {
+          if (!result.ok && result.reason === "NO_VISIBLE_PLAYERS")
+            notify({
+              title: "На карте нет игроков, которые могут это увидеть",
+              tone: "info",
+            });
+        },
+      );
+    },
+    [activeScene?.id, socket],
+  );
+
+  const handleTokenLayerChange = useCallback(
+    (tokenId: string, revision: number, layer: TokenDto["layer"]) =>
+      run(() =>
+        api(`/api/tokens/${tokenId}/layer`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            actionId: crypto.randomUUID(),
+            revision,
+            layer,
+          }),
+        }),
+      ),
+    [run],
+  );
+
+  const handleTokenConditionsChange = useCallback(
+    async (
+      tokenId: string,
+      _revision: number,
+      conditions: import("@arken/contracts").TokenCondition[],
+    ) => tokenMutations.setConditions(tokenId, conditions),
+    [tokenMutations],
+  );
+
+  const handleTokenDelete = useCallback(
+    (tokenId: string, revision: number) =>
+      run(() =>
+        api(`/api/tokens/${tokenId}`, {
+          method: "DELETE",
+          body: JSON.stringify({
+            actionId: crypto.randomUUID(),
+            revision,
+          }),
+        }),
+      ),
+    [run],
+  );
+
+  const handleTokenResize = useCallback(
+    async (
+      tokenId: string,
+      revision: number,
+      size: { width: number; height: number },
+    ) => {
+      const actionId = crypto.randomUUID();
+      try {
+        const updated = await runResult(() =>
+          api<Partial<TokenDto> & Pick<TokenDto, "id">>(
+            `/api/tokens/${tokenId}/size`,
+            {
+              method: "PATCH",
+              headers: { "x-action-id": actionId },
+              body: JSON.stringify({
+                actionId,
+                revision,
+                ...size,
+              }),
+            },
+          ),
+        );
+        setSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                tokens: current.tokens.map((token) =>
+                  token.id === updated.id
+                    ? mergeTokenPlacementUpdate(token, updated)
+                    : token,
+                ),
+              }
+            : current,
+        );
+      } catch (reason) {
+        await recoverFromCanvasMutation(reason);
+        throw reason;
+      }
+    },
+    [recoverFromCanvasMutation, runResult],
+  );
+
+  const handleTokenAppearanceChange = useCallback(
+    (
+      tokenId: string,
+      revision: number,
+      appearance: { baseColor: string; frameColor: string | null },
+    ) =>
+      run(() =>
+        api(`/api/tokens/${tokenId}/appearance`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            actionId: crypto.randomUUID(),
+            revision,
+            ...appearance,
+          }),
+        }),
+      ),
+    [run],
+  );
+
+  const handleDrawingUpdate = useCallback(
+    async (
+      drawingId: string,
+      revision: number,
+      patch: Record<string, unknown>,
+    ) => {
+      try {
+        const updated = await runResult(() =>
+          api<import("@arken/contracts").DrawingDto>(
+            `/api/drawings/${drawingId}`,
+            {
+              method: "PATCH",
+              body: JSON.stringify({
+                actionId: crypto.randomUUID(),
+                revision,
+                ...patch,
+              }),
+            },
+          ),
+        );
+        setSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                drawings: (current.drawings ?? []).map((item) =>
+                  item.id === updated.id ? updated : item,
+                ),
+              }
+            : current,
+        );
+      } catch (reason) {
+        await recoverFromCanvasMutation(reason);
+        throw reason;
+      }
+    },
+    [recoverFromCanvasMutation, runResult],
+  );
+
+  const handleDrawingDelete = useCallback(
+    (drawingId: string, revision: number) =>
+      run(() =>
+        api(`/api/drawings/${drawingId}`, {
+          method: "DELETE",
+          body: JSON.stringify({
+            actionId: crypto.randomUUID(),
+            revision,
+          }),
+        }),
+      ),
+    [run],
+  );
+
+  const handleDrawingCopy = useCallback(
+    (drawingId: string, revision: number) =>
+      run(() =>
+        api(`/api/drawings/${drawingId}/copy`, {
+          method: "POST",
+          body: JSON.stringify({
+            actionId: crypto.randomUUID(),
+            revision,
+          }),
+        }),
+      ),
+    [run],
+  );
+
+  const handleBulkMovePreview = useCallback(
+    (
+      intentId: string,
+      targets: Parameters<
+        NonNullable<
+          import("./renderers/SceneRenderer").SceneRendererProps["onBulkMovePreview"]
+        >
+      >[1],
+      delta: Parameters<
+        NonNullable<
+          import("./renderers/SceneRenderer").SceneRendererProps["onBulkMovePreview"]
+        >
+      >[2],
+    ) => {
+      if (!activeScene) return;
+      setBulkMoveIntents((current) =>
+        appendBulkMoveIntent(current, {
+          actionId: intentId,
+          sceneId: activeScene.id,
+          targets,
+          delta,
+        }),
+      );
+    },
+    [activeScene?.id],
+  );
+
+  const handleBulkMoveDiscard = useCallback((intentIds: readonly string[]) => {
+    const discarded = new Set(intentIds);
+    setBulkMoveIntents((current) => {
+      const next = current.filter((intent) => !discarded.has(intent.actionId));
+      return next.length === current.length ? current : next;
+    });
+  }, []);
+
+  const handleBulkMove = useCallback(
+    async (
+      intentId: string,
+      targets: Parameters<
+        NonNullable<
+          import("./renderers/SceneRenderer").SceneRendererProps["onBulkMove"]
+        >
+      >[1],
+      delta: Parameters<
+        NonNullable<
+          import("./renderers/SceneRenderer").SceneRendererProps["onBulkMove"]
+        >
+      >[2],
+    ) => {
+      if (!activeScene) return { revisions: { tokens: {}, drawings: {} } };
+      try {
+        const acknowledgement = await runResult(() =>
+          api<{
+            revisions: {
+              tokens: Record<string, number>;
+              drawings: Record<string, number>;
+            };
+          }>("/api/canvas/bulk", {
+            method: "POST",
+            body: JSON.stringify({
+              actionId: crypto.randomUUID(),
+              sceneId: activeScene.id,
+              operation: "MOVE",
+              deltaX: delta.x,
+              deltaY: delta.y,
+              targets,
+            }),
+          }),
+        );
+        setBulkMoveIntents((current) => {
+          const acknowledged = acknowledgeBulkMoveIntent(
+            current,
+            intentId,
+            acknowledgement.revisions,
+          );
+          const canonical = snapshotRef.current;
+          return canonical
+            ? reconcileBulkMoveIntents(
+                acknowledged,
+                canonical.tokens,
+                canonical.drawings ?? [],
+              )
+            : acknowledged;
+        });
+        return acknowledgement;
+      } catch (reason) {
+        setBulkMoveIntents((current) =>
+          rejectBulkMoveIntent(current, intentId),
+        );
+        throw reason;
+      }
+    },
+    [activeScene?.id, runResult, snapshotRef],
+  );
+
+  const handleBulkMoveFailure = useCallback(
+    async (reason: unknown) => {
+      await recoverFromCanvasMutation(reason);
+    },
+    [recoverFromCanvasMutation],
+  );
+
+  const handleBulkDelete = useCallback(
+    (
+      request: Parameters<
+        NonNullable<
+          import("./renderers/SceneRenderer").SceneRendererProps["onBulkDelete"]
+        >
+      >[0],
+    ) =>
+      run(() =>
+        api("/api/canvas/bulk", {
+          method: "POST",
+          body: JSON.stringify({
+            actionId: crypto.randomUUID(),
+            sceneId: request.sceneId,
+            operation: "DELETE",
+            targets: request.targets,
+          }),
+        }),
+      ),
+    [run],
+  );
+
+  const battleZone = viewSnapshot?.campaign.battleZone;
+  const campaignRevision = viewSnapshot?.campaign.revision;
+  const handleRecruitFromBattleZone = useCallback(() => {
+    if (!battleZone || campaignRevision === undefined) return;
+    void run(() => initiativeActions.onRecruitFromBattleZone(campaignRevision));
+  }, [battleZone, campaignRevision, initiativeActions, run]);
+
+  const handleCreateCharacter = useCallback(
+    async (
+      name: string,
+      template?: import("./character-workspace-state").CharacterTemplateFields,
+    ) =>
+      run(
+        () =>
+          api("/api/characters", {
+            method: "POST",
+            body: JSON.stringify({
+              name,
+              actionId: crypto.randomUUID(),
+              ...(template ? { template } : {}),
+            }),
+          }),
+        true,
+      ),
+    [run],
+  );
+
+  const handlePreviewPlayer = useCallback(async (membershipId: string) => {
+    const playerView = await api<GameSnapshot>(`/api/preview/${membershipId}`);
+    setTool("PAN");
+    setPreviewSnapshot(playerView);
+  }, []);
+
+  const handleCampaignClock = useCallback(
+    (
+      command:
+        | "ADVANCE_DAY"
+        | "LONG_REST"
+        | "START_BATTLE"
+        | "END_BATTLE"
+        | "RESET_CLOCK",
+      revision: number,
+    ) =>
+      run(
+        () =>
+          api("/api/campaign/clock", {
+            method: "POST",
+            body: JSON.stringify({
+              actionId: crypto.randomUUID(),
+              command,
+              revision,
+            }),
+          }),
+        true,
+      ),
+    [run],
+  );
+
+  const handlePublishActiveScene = useCallback(() => {
+    if (!activeScene) return;
+    if ([broadcastScene?.id, recentlyPublishedSceneId].includes(activeScene.id))
+      return;
+    void run(async () => {
+      await api("/api/scenes/activate", {
+        method: "POST",
+        body: JSON.stringify({
+          actionId: crypto.randomUUID(),
+          sceneId: activeScene.id,
+        }),
+      });
+      setRecentlyPublishedSceneId(activeScene.id);
+      notify({
+        title: "Игроки перемещены",
+        message: `Активная сцена: ${activeScene.name}`,
+        tone: "success",
+      });
+    });
+  }, [activeScene, broadcastScene?.id, recentlyPublishedSceneId, notify, run]);
+
+  const handlePlaceTokenFromTray = useCallback(
+    (definitionId: string) => {
+      if (!activeScene) return;
+      void placeOptimistically({
+        path: `/api/token-definitions/${definitionId}/placements`,
+        body: {
+          actionId: crypto.randomUUID(),
+          definitionId,
+          sceneId: activeScene.id,
+        },
+      });
+    },
+    [activeScene, placeOptimistically],
+  );
+
+  const handleCampaignRename = useCallback(
+    async (name: string) => {
+      const current = snapshotRef.current;
+      if (!current) return;
+      const updated = await api<GameSnapshot["campaign"]>("/api/campaign", {
+        method: "PATCH",
+        body: JSON.stringify({
+          actionId: crypto.randomUUID(),
+          revision: current.campaign.revision,
+          name,
+        }),
+      });
+      setSnapshot((prev) => (prev ? { ...prev, campaign: updated } : prev));
+      setCampaignRenameOpen(false);
+    },
+    [snapshotRef],
+  );
+
+  const handleLogout = useCallback(async () => {
+    await api("/api/auth/logout", { method: "POST" });
+    window.location.replace("/");
+  }, []);
+
+  const handleResync = useCallback(() => {
+    const current = snapshotRef.current;
+    if (!current) return;
+    setConnection("RESYNCING");
+    socket?.emit("game:resync", current.snapshotVersion);
+  }, [socket, snapshotRef]);
+
+  const handleOpenThemeSettings = useCallback(() => {
+    themePreference.cancel();
+    setThemeSettingsOpen(true);
+  }, [themePreference]);
+
+  const handleUploadAudio = useCallback(
+    (file: File, kind: "AUDIO") => assetActions.uploadAsset(file, kind),
+    [assetActions],
+  );
+
+  const loadAfterHome = () => {
+    window.history.replaceState(null, "", "/");
+    void load();
+  };
+  if (authRequired || new URLSearchParams(window.location.search).has("home"))
+    return <AuthGate onAuthenticated={loadAfterHome} />;
+
+  if (!snapshot || !viewSnapshot)
+    return (
+      <main className="loading">
+        <div className="wordmark">arken-space</div>
+        {error ? (
+          <ErrorState description={error} onRetry={load} />
+        ) : (
+          <LoadingState label="Загружаем кампанию…" />
+        )}
+      </main>
+    );
 
   const workspaceHidden =
     workspace === "characters" ||
@@ -1568,426 +1829,71 @@ export function App() {
               Перейти к карте
             </a>
           )}
-          <header className="topbar">
-            {compact && (
-              <>
-                <div className="compact-session-caption">
-                  <strong>{activeScene?.name ?? "Нет активной сцены"}</strong>
-                  <span role="status">
-                    {viewSnapshot.me.role === "GM"
-                      ? "Мастер"
-                      : viewSnapshot.me.displayName}{" "}
-                    ·{" "}
-                    {connection === "ONLINE"
-                      ? "в сети"
-                      : connection === "OFFLINE"
-                        ? "нет связи"
-                        : "подключаемся"}
-                  </span>
-                </div>
-                <button
-                  className="compact-sections-button"
-                  type="button"
-                  disabled={Boolean(previewSnapshot)}
-                  onClick={() => setCompactSectionsOpen(true)}
-                >
-                  Разделы
-                </button>
-              </>
-            )}
-            <div className="brand">
-              <strong>arken-space</strong>
-            </div>
-            <div className="scene-switcher">
-              {snapshot.me.role === "GM" && !previewSnapshot ? (
-                <details ref={scenePickerRef} className="scene-picker">
-                  <summary
-                    aria-label="Выбрать просматриваемую сцену"
-                    aria-haspopup="listbox"
-                    aria-controls="scene-picker-options"
-                  >
-                    {activeScene?.mapAssetId &&
-                    viewSnapshot.assets.find(
-                      (asset) => asset.id === activeScene.mapAssetId,
-                    ) ? (
-                      <img
-                        src={
-                          viewSnapshot.assets.find(
-                            (asset) => asset.id === activeScene.mapAssetId,
-                          )!.url
-                        }
-                        alt=""
-                      />
-                    ) : (
-                      <span
-                        className="scene-picker__placeholder"
-                        aria-hidden="true"
-                      />
-                    )}
-                    <span>{activeScene?.name ?? "Сцена не выбрана"}</span>
-                    <AppIcon icon={ScenePickerIcon} />
-                  </summary>
-                  <div
-                    className="scene-picker__menu"
-                    id="scene-picker-options"
-                    role="listbox"
-                    aria-label="Сцены"
-                  >
-                    {viewSnapshot.scenes.map((scene) => {
-                      const background = viewSnapshot.assets.find(
-                        (asset) => asset.id === scene.mapAssetId,
-                      );
-                      const tokenCount = viewSnapshot.tokens.filter(
-                        (token) => token.sceneId === scene.id,
-                      ).length;
-                      return (
-                        <button
-                          key={scene.id}
-                          type="button"
-                          role="option"
-                          aria-selected={scene.id === activeScene?.id}
-                          onClick={(event) => {
-                            setViewedSceneId(scene.id);
-                            event.currentTarget
-                              .closest("details")
-                              ?.removeAttribute("open");
-                            scenePickerRef.current
-                              ?.querySelector("summary")
-                              ?.focus();
-                          }}
-                        >
-                          {background ? (
-                            <img src={background.url} alt="" />
-                          ) : (
-                            <span
-                              className="scene-picker__placeholder"
-                              aria-hidden="true"
-                            />
-                          )}
-                          <span>
-                            <strong>{scene.name}</strong>
-                            <small>{tokenCount} токенов</small>
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </details>
-              ) : (
-                <div
-                  className="scene-picker scene-picker--readonly"
-                  aria-label="Активная сцена"
-                >
-                  <span>{activeScene?.name ?? "Сцена не выбрана"}</span>
-                </div>
-              )}
-              {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
-                <button
-                  className="topbar-icon-button publish-scene"
-                  aria-label={
-                    activeScene.id === broadcastScene?.id ||
-                    activeScene.id === recentlyPublishedSceneId
-                      ? "Сцена уже показана игрокам"
-                      : "Показать выбранную сцену игрокам"
-                  }
-                  title={
-                    activeScene.id === broadcastScene?.id ||
-                    activeScene.id === recentlyPublishedSceneId
-                      ? "Сцена у игроков"
-                      : "Показать выбранную сцену игрокам"
-                  }
-                  aria-pressed={
-                    activeScene.id === broadcastScene?.id ||
-                    activeScene.id === recentlyPublishedSceneId
-                  }
-                  onClick={() => {
-                    void run(async () => {
-                      await api("/api/scenes/activate", {
-                        method: "POST",
-                        body: JSON.stringify({
-                          actionId: crypto.randomUUID(),
-                          sceneId: activeScene.id,
-                        }),
-                      });
-                      setRecentlyPublishedSceneId(activeScene.id);
-                      notify({
-                        title: "Игроки перемещены",
-                        message: `Активная сцена: ${activeScene.name}`,
-                        tone: "success",
-                      });
-                    });
-                  }}
-                >
-                  <AppIcon
-                    icon={
-                      activeScene.id === broadcastScene?.id
-                        ? PublishedSceneIcon
-                        : PublishSceneIcon
-                    }
-                  />
-                </button>
-              )}
-              {!previewSnapshot && snapshot.me.role === "GM" && (
-                <button
-                  className="topbar-icon-button"
-                  aria-label="Создать сцену"
-                  title="Создать новую сцену"
-                  onClick={() => setSceneDialogRequest((value) => value + 1)}
-                >
-                  <AppIcon icon={AddIcon} />
-                </button>
-              )}
-            </div>
-            {/* UIX-472: разделы строкой; не поместившиеся — под «Ещё». Состав
-              и расчёт вместимости живут в `workspace-nav.ts`. */}
-            <WorkspaceNav
-              items={workspaceNavItems({
-                isGm: snapshot.me.role === "GM",
-                operatorFeedbackAllowed,
-              })}
-              active={workspace}
-              onSelect={handleWorkspaceChange}
-            />
-            <div className="status-line">
-              <MusicBar
-                audio={snapshot.audio}
-                assets={snapshot.assets}
-                role={snapshot.me.role}
-                socket={socket}
-                onUpload={(file) => assetActions.uploadAsset(file, "AUDIO")}
-              />
-              <details className="account-menu" ref={accountMenuRef}>
-                <summary aria-label="Меню сеанса" title="Меню сеанса">
-                  <AppIcon icon={SessionMenuIcon} />
-                </summary>
-                <div className="account-menu__content">
-                  <span
-                    className={
-                      connection === "ONLINE" ? "status online" : "status"
-                    }
-                  >
-                    {connection === "ONLINE"
-                      ? "в сети"
-                      : connection === "RESYNCING"
-                        ? "синхронизация"
-                        : connection === "OFFLINE"
-                          ? "нет связи"
-                          : "переподключение"}
-                  </span>
-                  {connection !== "ONLINE" && (
-                    <button
-                      onClick={() => {
-                        setConnection("RESYNCING");
-                        socket?.emit("game:resync", snapshot.snapshotVersion);
-                      }}
-                    >
-                      Синхронизировать
-                    </button>
-                  )}
-                  <span className="account-menu__identity">
-                    {previewSnapshot
-                      ? `Просмотр: ${viewSnapshot.me.displayName}`
-                      : snapshot.me.role === "PLAYER"
-                        ? `Вы играете как: ${snapshot.me.displayName}`
-                        : `${snapshot.me.displayName} · Мастер`}
-                  </span>
-                  <span
-                    className="account-menu__build"
-                    title={`Схема ${snapshot.schemaVersion}, сборка ${snapshot.buildVersion}, Git ${snapshot.buildRevision ?? "unknown"}`}
-                  >
-                    v{snapshot.snapshotVersion} ·{" "}
-                    {(snapshot.buildRevision ?? "unknown").slice(0, 7)}
-                  </span>
-                  {snapshot.me.role === "GM" && !previewSnapshot && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // Вернуть фокус на видимый вход в меню, а не на скрытую кнопку.
-                        const menu = accountMenuRef.current;
-                        if (menu) {
-                          menu.open = false;
-                          menu.querySelector<HTMLElement>("summary")?.focus();
-                        }
-                        setCampaignRenameOpen(true);
-                      }}
-                    >
-                      Переименовать кампанию
-                    </button>
-                  )}
-                  {!previewSnapshot && personalTheme && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const menu = accountMenuRef.current;
-                        if (menu) {
-                          menu.open = false;
-                          menu.querySelector<HTMLElement>("summary")?.focus();
-                        }
-                        themePreference.cancel();
-                        setThemeSettingsOpen(true);
-                      }}
-                    >
-                      Оформление
-                    </button>
-                  )}
-                  {/* UIX-462: шпаргалка рядом с выходом — сюда лезут, когда ищут
-                    «что-то про программу, а не про игру». */}
-                  <button onClick={() => setShortcutsOpen(true)}>
-                    Клавиши и команды
-                  </button>
-                  {!previewSnapshot && (
-                    <FeedbackReporter
-                      onOpen={() => {
-                        // The dialog must restore focus to the persistent menu
-                        // entry, not a report button hidden after menu dismissal.
-                        const menu = accountMenuRef.current;
-                        if (menu) {
-                          menu.open = false;
-                          menu.querySelector<HTMLElement>("summary")?.focus();
-                        }
-                      }}
-                      buildVersion={snapshot.buildVersion}
-                      buildRevision={snapshot.buildRevision}
-                      connection={connection}
-                    />
-                  )}
-                  {previewSnapshot && (
-                    <button onClick={() => setPreviewSnapshot(null)}>
-                      Вернуться к мастеру
-                    </button>
-                  )}
-                  {snapshot.me.role === "PLAYER" && !previewSnapshot ? (
-                    <button onClick={() => setPlayerHandoffOpen(true)}>
-                      Сменить игрока
-                    </button>
-                  ) : (
-                    <button
-                      onClick={async () => {
-                        await api("/api/auth/logout", { method: "POST" });
-                        window.location.replace("/");
-                      }}
-                    >
-                      Выйти
-                    </button>
-                  )}
-                </div>
-              </details>
-            </div>
-          </header>
-          {personalTheme ? (
-            <ArkenDialog
-              open={themeSettingsOpen}
-              title="Оформление"
-              footer={false}
-              onClose={() => {
-                if (themePreference.pending) return;
-                themePreference.cancel();
-                setThemeSettingsOpen(false);
-              }}
-            >
-              <PlayerThemeSettings
-                publishedThemes={personalTheme.publishedThemes}
-                currentResolvedThemeId={themePreference.selection}
-                defaultThemeId={resolvePlayerThemeId({
-                  selectedThemeId: null,
-                  defaultThemeId: personalTheme.defaultThemeId,
-                  publishedThemeIds: new Set(publishedThemeIds),
-                })}
-                savedOverrideThemeId={
-                  themePreference.preference?.selectedThemeId ?? null
-                }
-                scopeKey={personalTheme.scopeKey}
-                pending={themePreference.pending}
-                error={themePreference.error}
-                onPreview={themePreference.preview}
-                onApply={() => void themePreference.apply()}
-                onReset={() => void themePreference.reset()}
-                onCancel={() => {
-                  themePreference.cancel();
-                  setThemeSettingsOpen(false);
-                }}
-              />
-            </ArkenDialog>
-          ) : null}
-          <ArkenDialog
-            open={compact && compactSectionsOpen}
-            title="Разделы"
-            footer={false}
-            onClose={() => setCompactSectionsOpen(false)}
-          >
-            <div className="compact-sections-list">
-              {workspaceNavItems({
-                isGm: snapshot.me.role === "GM",
-                operatorFeedbackAllowed,
-              }).map((item) => (
-                <button
-                  type="button"
-                  key={item.id}
-                  onClick={() => {
-                    setCompactSectionsOpen(false);
-                    handleWorkspaceChange(item.id);
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-            <p className="compact-desktop-note">
-              Подготовка мира и сложные редакторы рассчитаны на компьютер.
-              Мобильные инструменты появятся отдельными этапами.
-            </p>
-          </ArkenDialog>
-          <ArkenDialog
-            open={playerHandoffOpen}
-            title="Сменить игрока?"
-            applyLabel="Сменить игрока"
-            loading={playerHandoffPending}
-            error={playerHandoffError}
-            onApply={() => void handOffToNextPlayer()}
-            onClose={() => {
+          <AppHeader
+            compact={compact}
+            activeScene={activeScene}
+            broadcastScene={broadcastScene}
+            recentlyPublishedSceneId={recentlyPublishedSceneId}
+            viewSnapshot={viewSnapshot}
+            snapshot={snapshot}
+            connection={connection}
+            previewSnapshot={previewSnapshot}
+            operatorFeedbackAllowed={operatorFeedbackAllowed}
+            workspace={workspace}
+            personalTheme={personalTheme}
+            onMusicControlsTarget={setHeaderMusicTarget}
+            onOpenCompactSections={() => setCompactSectionsOpen(true)}
+            onSelectScene={setViewedSceneId}
+            onRequestEditScene={(sceneId) => {
+              setRequestedSceneEditId(sceneId);
+              setSceneDialogRequest((value) => value + 1);
+            }}
+            onPublishScene={handlePublishActiveScene}
+            onRequestCreateScene={() => {
+              setRequestedSceneEditId(null);
+              setSceneDialogRequest((value) => value + 1);
+            }}
+            onSelectWorkspace={handleWorkspaceChange}
+            onResync={handleResync}
+            onOpenCampaignRename={() => setCampaignRenameOpen(true)}
+            onOpenThemeSettings={handleOpenThemeSettings}
+            onOpenShortcuts={() => setShortcutsOpen(true)}
+            onExitPreview={() => setPreviewSnapshot(null)}
+            onOpenPlayerHandoff={() => setPlayerHandoffOpen(true)}
+            onLogout={handleLogout}
+          />
+          <AppModals
+            personalTheme={personalTheme}
+            themePreference={themePreference}
+            publishedThemeIds={publishedThemeIds}
+            themeSettingsOpen={themeSettingsOpen}
+            onCloseThemeSettings={() => {
+              if (themePreference.pending) return;
+              themePreference.cancel();
+              setThemeSettingsOpen(false);
+            }}
+            compact={compact}
+            compactSectionsOpen={compactSectionsOpen}
+            onCloseCompactSections={() => setCompactSectionsOpen(false)}
+            isGm={snapshot.me.role === "GM"}
+            operatorFeedbackAllowed={operatorFeedbackAllowed}
+            onSelectWorkspace={handleWorkspaceChange}
+            playerHandoffOpen={playerHandoffOpen}
+            playerHandoffPending={playerHandoffPending}
+            playerHandoffError={playerHandoffError}
+            onApplyPlayerHandoff={handOffToNextPlayer}
+            onClosePlayerHandoff={() => {
               if (!playerHandoffPending) {
                 setPlayerHandoffError("");
                 setPlayerHandoffOpen(false);
               }
             }}
-          >
-            <p className="arken-dialog-message">
-              Завершите текущие действия перед передачей компьютера:
-              несохранённые данные в открытых формах будут потеряны. Следующий
-              игрок войдёт по своей личной ссылке. На общем экране не открывайте
-              личные заметки или сообщения, которые не должны видеть другие
-              игроки.
-            </p>
-          </ArkenDialog>
-          <TextPromptDialog
-            open={campaignRenameOpen}
-            title="Название кампании"
-            label="Название кампании"
-            initialValue={snapshot.campaign.name}
-            applyLabel="Сохранить"
-            onClose={() => setCampaignRenameOpen(false)}
-            onApply={async (name) => {
-              const updated = await api<GameSnapshot["campaign"]>(
-                "/api/campaign",
-                {
-                  method: "PATCH",
-                  body: JSON.stringify({
-                    actionId: crypto.randomUUID(),
-                    revision: snapshot.campaign.revision,
-                    name,
-                  }),
-                },
-              );
-              setSnapshot((current) =>
-                current ? { ...current, campaign: updated } : current,
-              );
-              setCampaignRenameOpen(false);
-            }}
-          />
-          <ShortcutsDialog
-            open={shortcutsOpen}
-            isGm={viewSnapshot.me.role === "GM"}
-            onClose={() => setShortcutsOpen(false)}
+            campaignRenameOpen={campaignRenameOpen}
+            campaignName={snapshot.campaign.name}
+            onApplyCampaignRename={handleCampaignRename}
+            onCloseCampaignRename={() => setCampaignRenameOpen(false)}
+            shortcutsOpen={shortcutsOpen}
+            onCloseShortcuts={() => setShortcutsOpen(false)}
           />
           <div
             className={`workbench${
@@ -2054,6 +1960,18 @@ export function App() {
                       />
                     ) : undefined
                   }
+                  tokenTrayControl={
+                    !previewSnapshot ? (
+                      <TokenTray
+                        tokenDefinitions={snapshot.tokenDefinitions}
+                        assets={snapshot.assets}
+                        role={snapshot.me.role}
+                        onPlaceToken={handlePlaceTokenFromTray}
+                      />
+                    ) : undefined
+                  }
+                  objectListOpen={mapObjectsOpen}
+                  onToggleObjectList={() => setMapObjectsOpen((open) => !open)}
                   tool={tool}
                   onToolSelect={setTool}
                   snapshot={snapshot}
@@ -2107,6 +2025,11 @@ export function App() {
                   <Orthographic2DRenderer
                     key={`${activeScene.id}:${snapshot.campaign.paused}`}
                     paused={snapshot.campaign.paused}
+                    externalObjectListOpen={mapObjectsOpen}
+                    onObjectListToggle={() =>
+                      setMapObjectsOpen((open) => !open)
+                    }
+                    onObjectListClose={() => setMapObjectsOpen(false)}
                     scene={
                       gridPreview
                         ? { ...activeScene, grid: gridPreview }
@@ -2117,31 +2040,15 @@ export function App() {
                     drawings={activeDrawings}
                     assets={viewSnapshot.assets}
                     role={viewSnapshot.me.role}
-                    onOpenCharacter={(characterId) => {
-                      setRequestedCharacterId(null);
-                      handleWorkspaceChange("characters");
-                      requestAnimationFrame(() =>
-                        setRequestedCharacterId(characterId),
-                      );
-                    }}
+                    onOpenCharacter={handleOpenCharacter}
                     membershipId={viewSnapshot.me.id}
                     onSelectionChange={setSelectedTokenIds}
                     socket={snapshot.campaign.paused ? null : socket}
                     tool={snapshot.campaign.paused ? "PAN" : tool}
                     onToolSelect={setTool}
-                    pings={pings.filter(
-                      (ping) => ping.sceneId === activeScene.id,
-                    )}
-                    rulers={rulers.filter(
-                      (ruler) => ruler.sceneId === activeScene.id,
-                    )}
-                    cursors={
-                      cursorPreference.receiveEnabled
-                        ? cursors.filter(
-                            (cursor) => cursor.sceneId === activeScene.id,
-                          )
-                        : []
-                    }
+                    pings={activePings}
+                    rulers={activeRulers}
+                    cursors={activeCursors}
                     cursorSendEnabled={cursorPreference.sendEnabled}
                     cursorShared={
                       snapshot.me.role === "GM" && cursorPreference.sendEnabled
@@ -2152,88 +2059,11 @@ export function App() {
                     fogBrushRadius={fogBrushRadius}
                     encounters={[]}
                     canvasEditMode={canvasEditMode}
-                    onCanvasEditCancel={() => setCanvasEditMode(null)}
-                    onCanvasPatch={(patch) =>
-                      run(() =>
-                        api(`/api/scenes/${activeScene.id}/canvas`, {
-                          method: "PATCH",
-                          body: JSON.stringify({
-                            actionId: crypto.randomUUID(),
-                            revision: activeScene.revision ?? 0,
-                            ...patch,
-                          }),
-                        }),
-                      )
-                    }
-                    onFogCreate={async (payload) => {
-                      const isCover =
-                        tool === "COVER" ||
-                        tool === "COVER_BRUSH" ||
-                        tool === "COVER_POLYGON";
-                      await run(() =>
-                        api("/api/fog-reveals", {
-                          method: "POST",
-                          body: JSON.stringify({
-                            actionId: crypto.randomUUID(),
-                            sceneId: activeScene.id,
-                            operation: isCover ? "COVER" : "REVEAL",
-                            ...payload,
-                          }),
-                        }),
-                      );
-                    }}
-                    onDrawingCreate={async (drawing) => {
-                      let created:
-                        import("@arken/contracts").DrawingDto | undefined;
-                      await run(async () => {
-                        created = await api<
-                          import("@arken/contracts").DrawingDto
-                        >("/api/drawings", {
-                          method: "POST",
-                          body: JSON.stringify({
-                            actionId: crypto.randomUUID(),
-                            sceneId: activeScene.id,
-                            ...drawing,
-                          }),
-                        });
-                      });
-                      if (created) {
-                        const reconciled = created;
-                        setSnapshot((current) => {
-                          if (!current) return current;
-                          const drawings = current.drawings ?? [];
-                          if (
-                            drawings.some((item) => item.id === reconciled.id)
-                          )
-                            return current;
-                          return {
-                            ...current,
-                            drawings: [...drawings, reconciled],
-                          };
-                        });
-                      }
-                      return created;
-                    }}
-                    onPing={(point) => {
-                      socket?.emit(
-                        "map:ping",
-                        {
-                          sceneId: activeScene.id,
-                          ...point,
-                        },
-                        (result) => {
-                          if (
-                            !result.ok &&
-                            result.reason === "NO_VISIBLE_PLAYERS"
-                          )
-                            notify({
-                              title:
-                                "На карте нет игроков, которые могут это увидеть",
-                              tone: "info",
-                            });
-                        },
-                      );
-                    }}
+                    onCanvasEditCancel={handleCanvasEditCancel}
+                    onCanvasPatch={handleCanvasPatch}
+                    onFogCreate={handleFogCreate}
+                    onDrawingCreate={handleDrawingCreate}
+                    onPing={handlePing}
                     onPlaceTokenDefinition={async (definitionId, point) => {
                       void placeOptimistically({
                         path: `/api/token-definitions/${definitionId}/placements`,
@@ -2245,224 +2075,19 @@ export function App() {
                         },
                       });
                     }}
-                    onTokenLayerChange={(tokenId, revision, layer) =>
-                      run(() =>
-                        api(`/api/tokens/${tokenId}/layer`, {
-                          method: "PATCH",
-                          body: JSON.stringify({
-                            actionId: crypto.randomUUID(),
-                            revision,
-                            layer,
-                          }),
-                        }),
-                      )
-                    }
-                    onTokenConditionsChange={async (
-                      tokenId,
-                      _revision,
-                      conditions,
-                    ) => tokenMutations.setConditions(tokenId, conditions)}
-                    onTokenDelete={(tokenId, revision) =>
-                      run(() =>
-                        api(`/api/tokens/${tokenId}`, {
-                          method: "DELETE",
-                          body: JSON.stringify({
-                            actionId: crypto.randomUUID(),
-                            revision,
-                          }),
-                        }),
-                      )
-                    }
-                    onTokenResize={async (tokenId, revision, size) => {
-                      const actionId = crypto.randomUUID();
-                      try {
-                        const updated = await runResult(() =>
-                          api<TokenDto>(`/api/tokens/${tokenId}/size`, {
-                            method: "PATCH",
-                            headers: { "x-action-id": actionId },
-                            body: JSON.stringify({
-                              actionId,
-                              revision,
-                              ...size,
-                            }),
-                          }),
-                        );
-                        setSnapshot((current) =>
-                          current
-                            ? {
-                                ...current,
-                                tokens: current.tokens.map((token) =>
-                                  token.id === updated.id ? updated : token,
-                                ),
-                              }
-                            : current,
-                        );
-                      } catch (reason) {
-                        await recoverFromCanvasMutation(reason);
-                        throw reason;
-                      }
-                    }}
-                    onTokenAppearanceChange={(tokenId, revision, appearance) =>
-                      run(() =>
-                        api(`/api/tokens/${tokenId}/appearance`, {
-                          method: "PATCH",
-                          body: JSON.stringify({
-                            actionId: crypto.randomUUID(),
-                            revision,
-                            ...appearance,
-                          }),
-                        }),
-                      )
-                    }
-                    onDrawingUpdate={async (drawingId, revision, patch) => {
-                      try {
-                        const updated = await runResult(() =>
-                          api<import("@arken/contracts").DrawingDto>(
-                            `/api/drawings/${drawingId}`,
-                            {
-                              method: "PATCH",
-                              body: JSON.stringify({
-                                actionId: crypto.randomUUID(),
-                                revision,
-                                ...patch,
-                              }),
-                            },
-                          ),
-                        );
-                        // Apply the PATCH response (with its new revision)
-                        // directly rather than waiting for the broadcast
-                        // snapshot round-trip: on a slow network the broadcast
-                        // can lag behind the next debounced edit, which would
-                        // otherwise keep reading a stale revision and 409 on
-                        // every subsequent request.
-                        setSnapshot((current) =>
-                          current
-                            ? {
-                                ...current,
-                                drawings: (current.drawings ?? []).map(
-                                  (item) =>
-                                    item.id === updated.id ? updated : item,
-                                ),
-                              }
-                            : current,
-                        );
-                      } catch (reason) {
-                        // This used to rebuild everything on 409 and stay silent
-                        // on every other failure -- backwards on both counts. A
-                        // conflict is the one case the broadcast already corrects,
-                        // while a 5xx or a dropped connection is what actually
-                        // leaves local state untrustworthy, and swallowing it left
-                        // the user's edit silently discarded.
-                        await recoverFromCanvasMutation(reason);
-                        throw reason;
-                      }
-                    }}
-                    onDrawingDelete={(drawingId, revision) =>
-                      run(() =>
-                        api(`/api/drawings/${drawingId}`, {
-                          method: "DELETE",
-                          body: JSON.stringify({
-                            actionId: crypto.randomUUID(),
-                            revision,
-                          }),
-                        }),
-                      )
-                    }
-                    onDrawingCopy={(drawingId, revision) =>
-                      run(() =>
-                        api(`/api/drawings/${drawingId}/copy`, {
-                          method: "POST",
-                          body: JSON.stringify({
-                            actionId: crypto.randomUUID(),
-                            revision,
-                          }),
-                        }),
-                      )
-                    }
-                    onBulkMovePreview={(intentId, targets, delta) => {
-                      setBulkMoveIntents((current) =>
-                        appendBulkMoveIntent(current, {
-                          actionId: intentId,
-                          sceneId: activeScene.id,
-                          targets,
-                          delta,
-                        }),
-                      );
-                    }}
-                    onBulkMoveDiscard={(intentIds) => {
-                      const discarded = new Set(intentIds);
-                      setBulkMoveIntents((current) => {
-                        const next = current.filter(
-                          (intent) => !discarded.has(intent.actionId),
-                        );
-                        return next.length === current.length ? current : next;
-                      });
-                    }}
-                    onBulkMove={async (intentId, targets, delta) => {
-                      try {
-                        const acknowledgement = await runResult(() =>
-                          api<{
-                            revisions: {
-                              tokens: Record<string, number>;
-                              drawings: Record<string, number>;
-                            };
-                          }>("/api/canvas/bulk", {
-                            method: "POST",
-                            body: JSON.stringify({
-                              actionId: crypto.randomUUID(),
-                              sceneId: activeScene.id,
-                              operation: "MOVE",
-                              deltaX: delta.x,
-                              deltaY: delta.y,
-                              targets,
-                            }),
-                          }),
-                        );
-                        setBulkMoveIntents((current) => {
-                          const acknowledged = acknowledgeBulkMoveIntent(
-                            current,
-                            intentId,
-                            acknowledgement.revisions,
-                          );
-                          const canonical = snapshotRef.current;
-                          return canonical
-                            ? reconcileBulkMoveIntents(
-                                acknowledged,
-                                canonical.tokens,
-                                canonical.drawings ?? [],
-                              )
-                            : acknowledged;
-                        });
-                        return acknowledgement;
-                      } catch (reason) {
-                        // Remove the failed draft before the queue remounts the
-                        // Konva stage. Canonical state was never changed, so
-                        // rollback cannot overwrite a newer socket revision.
-                        setBulkMoveIntents((current) =>
-                          rejectBulkMoveIntent(current, intentId),
-                        );
-                        throw reason;
-                      }
-                    }}
-                    onBulkMoveFailure={async (reason) => {
-                      // The executor removes the rejected intent, and the queue
-                      // discards its unsent tail. Preserve earlier acknowledged
-                      // moves until their canonical socket snapshot arrives.
-                      await recoverFromCanvasMutation(reason);
-                    }}
-                    onBulkDelete={(request) =>
-                      run(() =>
-                        api("/api/canvas/bulk", {
-                          method: "POST",
-                          body: JSON.stringify({
-                            actionId: crypto.randomUUID(),
-                            sceneId: request.sceneId,
-                            operation: "DELETE",
-                            targets: request.targets,
-                          }),
-                        }),
-                      )
-                    }
+                    onTokenLayerChange={handleTokenLayerChange}
+                    onTokenConditionsChange={handleTokenConditionsChange}
+                    onTokenDelete={handleTokenDelete}
+                    onTokenResize={handleTokenResize}
+                    onTokenAppearanceChange={handleTokenAppearanceChange}
+                    onDrawingUpdate={handleDrawingUpdate}
+                    onDrawingDelete={handleDrawingDelete}
+                    onDrawingCopy={handleDrawingCopy}
+                    onBulkMovePreview={handleBulkMovePreview}
+                    onBulkMoveDiscard={handleBulkMoveDiscard}
+                    onBulkMove={handleBulkMove}
+                    onBulkMoveFailure={handleBulkMoveFailure}
+                    onBulkDelete={handleBulkDelete}
                   />
                 </Suspense>
               ) : (
@@ -2509,59 +2134,6 @@ export function App() {
                   ))}
                 </div>
               )}
-              {!previewSnapshot && (
-                <details className="token-tray" ref={tokenTrayRef}>
-                  <summary>
-                    Токены · {snapshot.tokenDefinitions?.length ?? 0}
-                  </summary>
-                  <div className="token-tray-list">
-                    {(snapshot.tokenDefinitions?.length ?? 0) === 0 && (
-                      <p className="muted">
-                        {snapshot.me.role === "GM"
-                          ? "Создайте токен персонажа в подготовке."
-                          : "Мастер ещё не назначил вам доступные токены."}
-                      </p>
-                    )}
-                    {(snapshot.tokenDefinitions ?? []).map((definition) => {
-                      const asset = snapshot.assets.find(
-                        (item) => item.id === definition.defaultAssetId,
-                      );
-                      return (
-                        <button
-                          key={definition.id}
-                          draggable
-                          onDragStart={(event) =>
-                            event.dataTransfer.setData(
-                              "application/x-arken-token-definition",
-                              definition.id,
-                            )
-                          }
-                          onClick={() => {
-                            if (!activeScene) return;
-                            void placeOptimistically({
-                              path: `/api/token-definitions/${definition.id}/placements`,
-                              body: {
-                                actionId: crypto.randomUUID(),
-                                definitionId: definition.id,
-                                sceneId: activeScene.id,
-                              },
-                            });
-                          }}
-                        >
-                          {asset ? (
-                            <img src={asset.url} alt="" />
-                          ) : (
-                            <span aria-hidden="true">
-                              {definition.name.slice(0, 2).toUpperCase()}
-                            </span>
-                          )}
-                          <strong>{definition.name}</strong>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </details>
-              )}
             </main>
             {previewSnapshot ? (
               <aside
@@ -2600,15 +2172,8 @@ export function App() {
                 onSetOwnInitiative={initiativeActions.onSetOwnInitiative}
                 onRollInitiative={initiativeActions.onRollInitiative}
                 onRecruitFromBattleZone={
-                  // Кнопка появляется, только когда зона задана на этой же сцене:
-                  // ручка, всегда отвечающая отказом, хуже отсутствующей.
                   viewSnapshot.campaign.battleZone
-                    ? () =>
-                        void run(() =>
-                          initiativeActions.onRecruitFromBattleZone(
-                            viewSnapshot.campaign.revision,
-                          ),
-                        )
+                    ? handleRecruitFromBattleZone
                     : undefined
                 }
                 snapshot={snapshot}
@@ -2623,6 +2188,7 @@ export function App() {
                 onResizeHandleDown={handleSidebarResizeStart}
                 onResizeHandleMove={handleSidebarResizeMove}
                 onResizeHandleUp={handleSidebarResizeEnd}
+                workspaceSidebarWidth={sidebarWidth}
                 workspace={workspace}
                 operatorFeedbackAllowed={operatorFeedbackAllowed}
                 onWorkspaceChange={handleWorkspaceChange}
@@ -2631,47 +2197,43 @@ export function App() {
                 storyPosts={storyPosts}
                 storyNextCursor={storyNextCursor}
                 onRoll={submitRoll}
-                onCreateCharacter={async (name, template) =>
-                  run(
-                    () =>
-                      api("/api/characters", {
-                        method: "POST",
-                        body: JSON.stringify({
-                          name,
-                          actionId: crypto.randomUUID(),
-                          ...(template ? { template } : {}),
-                        }),
-                      }),
-                    true,
-                  )
-                }
+                onCreateCharacter={handleCreateCharacter}
                 sceneDialogRequest={sceneDialogRequest}
+                requestedSceneEditId={requestedSceneEditId}
                 viewedSceneId={activeScene?.id ?? null}
-                onPreviewPlayer={async (membershipId) => {
-                  const playerView = await api<GameSnapshot>(
-                    `/api/preview/${membershipId}`,
-                  );
-                  setTool("PAN");
-                  setPreviewSnapshot(playerView);
-                }}
+                onPreviewPlayer={handlePreviewPlayer}
                 onUpdateCounters={updateCharacterCounters}
-                onCampaignClock={(command, revision) =>
-                  run(
-                    () =>
-                      api("/api/campaign/clock", {
-                        method: "POST",
-                        body: JSON.stringify({
-                          actionId: crypto.randomUUID(),
-                          command,
-                          revision,
-                        }),
-                      }),
-                    true,
-                  )
-                }
+                onCampaignClock={handleCampaignClock}
+              />
+            )}
+            {compact && compactSurface === "menu" && (
+              <CompactMenuSurface
+                snapshot={snapshot}
+                viewSnapshot={viewSnapshot}
+                connection={connection}
+                operatorFeedbackAllowed={operatorFeedbackAllowed}
+                onSelectWorkspace={(w) => handleWorkspaceChange(w)}
+                onSelectSurface={selectCompactSurface}
+                onMusicControlsTarget={setMenuMusicTarget}
+                onOpenThemeSettings={handleOpenThemeSettings}
+                onOpenShortcuts={() => setShortcutsOpen(true)}
+                onOpenPlayerHandoff={() => setPlayerHandoffOpen(true)}
+                onLogout={handleLogout}
               />
             )}
           </div>
+          <MusicBar
+            audio={snapshot.audio}
+            assets={snapshot.assets}
+            role={snapshot.me.role}
+            socket={socket}
+            onUpload={handleUploadAudio}
+            controlsTarget={
+              compact && compactSurface === "menu"
+                ? menuMusicTarget
+                : headerMusicTarget
+            }
+          />
           {compact && (
             <CompactNavigation
               active={compactSurface}
@@ -2680,29 +2242,6 @@ export function App() {
               characterAvailable={!previewSnapshot}
             />
           )}
-          <TextPromptDialog
-            open={createSceneOpen}
-            title="Новая сцена"
-            label="Название сцены"
-            applyLabel="Создать"
-            onClose={() => setCreateSceneOpen(false)}
-            onApply={async (name) => {
-              await run(async () => {
-                const scene = await api<import("@arken/contracts").SceneDto>(
-                  "/api/scenes",
-                  {
-                    method: "POST",
-                    body: JSON.stringify({
-                      actionId: crypto.randomUUID(),
-                      name,
-                    }),
-                  },
-                );
-                setViewedSceneId(scene.id);
-              }, true);
-              setCreateSceneOpen(false);
-            }}
-          />
         </div>
       </RollVisibilityContext.Provider>
     </CampaignActionsContext.Provider>

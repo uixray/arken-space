@@ -1,119 +1,89 @@
 # Текущее проверенное состояние Arken Space
 
-Сверка выпуска: **18 сентября 2026, 20:50 UTC**; локальный post-release checkpoint
-обновлён **19 сентября, 00:27 MSK**. Это снимок, а не автоматически обновляемый статус.
+> Сверено 19 сентября 2026 после production release PR85. Это снимок, а не автоматически обновляемый статус.
 
 ## С чего продолжать
 
 1. [Единая точка входа](README.md).
 2. [План на следующие месяцы](plans/global-roadmap-2026-09-18.md).
-3. [Полный остаток существующих задач](plans/remaining-work-2026-09-18.md) и его [машиночитаемый источник](plans/remaining-work-2026-09-18.json).
-4. [Пакеты исполнения для моделей](plans/execution-packets-2026-09-18.md).
-5. [Правила работы агента](agent-guide.md).
+3. [Полный остаток задач](plans/remaining-work-2026-09-18.md) и [машиночитаемый источник](plans/remaining-work-2026-09-18.json).
+4. [Пакеты исполнения](plans/execution-packets-2026-09-18.md).
+5. [Правила агента](agent-guide.md).
+6. [Отчёт текущего выпуска](release-2026-09-19.md).
 
-Linear — источник статусов и исходных критериев. Git показывает реализацию; CI и runtime — проверенное поведение. Ни один из этих источников по отдельности не доказывает полную приёмку.
+Linear хранит статусы и исходные критерии; Git — реализацию; CI/runtime — проверенное поведение. Ни один источник отдельно не доказывает полную приёмку.
 
-## Идентичность текущего выпуска
+## Текущий production
 
-| Уровень                          | Подтверждённое состояние                                                                                                                                                                                       |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Целевая `origin/main`            | `cce56397a6b1e91fcf2fc6951e506d64b62647cb`                                                                                                                                                                     |
-| Последний проверенный production | `cce56397a6b1e91fcf2fc6951e506d64b62647cb`; health/database/schema 2 PASS, в том числе после контролируемого restart                                                                                           |
-| Реализация нового пула           | PR [82](https://github.com/uixray/arken-space/pull/82) слит; тестовые блокеры исправлены в слитых PR [83](https://github.com/uixray/arken-space/pull/83) и [84](https://github.com/uixray/arken-space/pull/84) |
-| `checks` точной main             | [35388600458](https://github.com/uixray/arken-space/actions/runs/35388600458): SUCCESS                                                                                                                         |
-| multiplayer точной main          | [35388600599](https://github.com/uixray/arken-space/actions/runs/35388600599): SUCCESS, 3/3 без skipped/flaky                                                                                                  |
-| E2E точной main                  | [35388600465](https://github.com/uixray/arken-space/actions/runs/35388600465): SUCCESS: 4/4 shards + aggregate; 977 PASS, 29 skipped, 0 failed/flaky/errors                                                    |
-| Host gates нового выпуска        | Backup `ec6b8217`, restore 22/22, deploy, disk/auth/WebSocket/rollback, persistence и browser postflight PASS; подробности в [отчёте](release-2026-09-18.md)                                                   |
+| Уровень                    | Проверенное состояние                                                                                                                                    |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `origin/main` и production | `aab0731a947852bbcb3c5955ed52008468353ae4`; PR85 merged, tree совпадает с PR head `e67bacc37a1ac4b77a2524388cc76a8ffacf5698`                             |
+| `checks`                   | [35443744021](https://github.com/uixray/arken-space/actions/runs/35443744021) SUCCESS                                                                    |
+| `E2E`                      | [35443743897](https://github.com/uixray/arken-space/actions/runs/35443743897) SUCCESS: 1063 PASS / 29 existing SKIP / 0 FAIL / 0 FLAKY / 0 report errors |
+| `multiplayer`              | [35443743956](https://github.com/uixray/arken-space/actions/runs/35443743956) SUCCESS, 3/3 без retry                                                     |
+| Confirmed backup           | `5ae46818eefb19341819a54553d35d9ee50eb5247fc9aace9f90c2e44f4136a9`                                                                                       |
+| Restore                    | 22/22 PASS; 44→45 migrations, 55/55 tables, 120 media files, exact `aab0731…`, schema 2, cleanup без leftovers                                           |
+| Runtime                    | health/database `ok`; auth/cookie/logout→401 и WebSocket 101 PASS, в том числе после controlled restart                                                  |
 
-Не перезапускать эти workflow из-за смены чата. Сначала прочитать их фактическое состояние. Не использовать успех PR или предыдущего SHA вместо точной main.
+## Выпуск и recovery
 
-## Что вошло в production
+Confirmed release сохранил rollback images, собрал и запустил target, но raw `release.sh` завершился exit 1: после build было 6,777,135,104 bytes при required 7,516,192,768. Порог не снижался.
 
-- Работа с картой: WASD без перехвата полей ввода, разделение пинга и инструментов, более надёжные групповые перемещения/удаления, отмена незавершённого выделения/рисования.
-- Формы и окна: читаемые длинные подписи, корректные слои меню, возвращение фокуса, закрытие интерфейса скрытого владельца, поведение при resize/zoom.
-- Медиа: безопасная замена используемых изображений/аудио, обновление versioned URL, учёт ссылок и прав, сообщения о повреждённом preview.
-- Галереи, ресурсы персонажей и операторская обратная связь: состояния загрузки/ошибок/занятости, навигация, защита приватных данных при потере доступа.
-- Визуальная основа: Lucide, русские сообщения, контраст/фокус/readonly, более удобные компактные экраны.
-- `classic-v1` сохраняет прежнее оформление. Это **не** завершённый пользовательский выбор и сохранение персональных тем.
+Удалены только 19 заранее перечисленных reclaimable/non-shared build-cache IDs. Manifests всех images/volumes до и после идентичны; production/rollback images и данные не удалялись. Recovery disk gate: 7,851,753,472 bytes PASS. После controlled restart: 7,851,646,976 bytes PASS.
 
-## Что действительно проверено
+Persistence до deploy, после deploy и после restart совпадает:
 
-Для точной main multiplayer receipt подтверждает один изолированный контур, GM + 6 контекстов, восстановление после разрыва/перезапуска, разграничение доступа и смену участника в общем браузере. Для изображения и реального OGG проверены скачивание, воспроизведение в браузере, reload и backend restart с теми же байтами; контейнеры/тома удалены, утечек нет. Это не тест слухового восприятия и не живая игровая сессия людей.
+- 55 table counts;
+- 120 media files, 74,699,580 bytes;
+- aggregate media SHA-256 `6bcace0864428fdd3e8a709cb3ddfc3698efcf5fea5e012d20e45a9d1c11b35b`;
+- `.env` digest, owner и mode.
 
-Последний зелёный PR84: Chromium 489 passed / 14 skipped; Firefox 488 passed / 15 skipped; 0 failed/flaky. 29 skipped нельзя считать принятыми: часть требует отдельного isolated live server/DB, две исторические fixme и один Chromium-CDP touch-сценарий неприменим к Firefox.
+Rollback остаётся на точных images предыдущего `cce56397…`; deployed server/web image IDs и полный recovery описаны в [релизном отчёте](release-2026-09-19.md).
 
-Перед выпуском read-only снимок production: 55 таблиц с учтёнными количествами, 120 файлов медиа, 74 699 580 байт. Этот снимок **не заменяет** свежую резервную копию и восстановление.
+## Что опубликовано для мастера и игроков
 
-## Незавершённое — не скрывать за зелёным CI
+Тема сохраняется отдельно для каждого игрока в каждой кампании (membership).
+Предпросмотр, отмена, сохранение и сброс к своей теме не смешиваются; прежнее
+`classic-v1` и системное оформление доступны. Назначение мастером default не
+перезаписывает личный выбор. В выпуск также входят единые иконки Lucide,
+читаемые подложки элементов над картой, компактные основные targets и корректные
+слои меню диалогов. Полная приёмка всех игровых поверхностей остаётся отдельной.
 
-### Приоритет владельца от 19 сентября: конечный дизайн-пул
+## Browser evidence
 
-В работе только UIX-317 / 644 / 645 / 624 / 502: персональные темы и завершение
-согласованной визуальной основы. Граница, оставшиеся критерии и остановка
-зафиксированы в [конечном плане](plans/design-finish-2026-09-19.md). После
-завершения и проверок этого пула владелец просит приостановить работу, **не**
-переходить автоматически к следующим задачам большого roadmap.
+Production observer функционально подтвердил:
 
-Локальная основа переключения тем прошла 49 адресных unit/DOM/config проверок;
-это не работающая настройка сервиса: App / API / БД пока не подключены.
-Вопрос о сохранении отдельно в каждой кампании или глобально остаётся открытым.
-Локальный startup-блокер Node compile cache устранён только в окружении
-проверок, без удаления данных. Web/E2E types PASS; финальные controller 8/8
-и CSS/contrast 16/16 подтверждены отдельно. Новый compact-input browser gate
-остановлен на собственном лимите памяти до завершения measurements; приёмка
-браузера не подменяется прежним зелёным release CI. Production и статусы
-Linear этим не изменены.
+- exact revision/schema и canvas после reload;
+- персональный theme preview/cancel без persistence и с восстановлением исходной темы;
+- existing audio range `206`;
+- zero page errors, authorized HTTP errors и observer errors;
+- logout→401.
 
-### Остальные ограничения
+Все 3 реально полученных JS/CSS payload hashes совпали с файлами deployed web container (`production-runtime-hashes.json`). Первый screenshot поймал exit-анимацию отменённого dialog; это был дефект наблюдателя, не runtime. Исправленный run в `release-2026-09-19/browser-final/` завершился PASS: `final-browser-summary.json` подтверждает zero errors, theme preview/cancel, audio `206` и совпадение всех runtime hashes. Финальный screenshot вручную принят: ready map, портреты/токены и журнал видимы, ghosted dialog отсутствует. Technical production release завершён в 13:30 UTC.
 
-- Полный живой rehearsal мастера и шести игроков (UIX-217) и ручная production acceptance.
-- UIX-644 имеет `overallAcceptance: INCOMPLETE`. Исторические FAIL/BLOCKED в ledger требуют сверки с более поздними исправлениями; нельзя ни автоматически закрыть их, ни начинать заново старый уже исправленный дефект.
-- UIX-316 — родитель полноценной мобильной программы; P1 foundation не закрывает P2–P6 и реальные устройства.
-- UIX-317: не определено окончательное владение персональной темой — аккаунт, кампания или membership. Не выбирать молча.
-- UIX-293: не определено включение вложений чата/истории в общий каталог. Не смешивать эти области без решения.
-- Performance/decomposition: новый этап изменения `App.tsx` требует измерений UIX-407, а не только предпочтения к более коротким файлам.
-- Отдельные игры, контент игроков, исследовательские и portfolio-карточки не означают недостающую функциональность основного VTT.
+## Статусы конечного дизайн-пула
 
-## Состояние задач и запреты
+- **Done:** UIX-502, UIX-624 (P1), UIX-645.
+- **In Progress:** UIX-317, UIX-644.
 
-Живая сверка Linear 18 сентября: **20 In Progress/In Review, 57 Backlog, 0 Todo**. UIX-417 перешла в Done после слияния PR82. Полный реестр хранит исходные критерии и отделяет статус карточки от проверенности реализации; процент готовности из числа карточек не вычисляется.
+UIX-317 не является полной all-surface WCAG/first-paint/physical-device приёмкой. UIX-644 сохраняет исходные незакрытые границы: causal replay исторического ResizeObserver incident и headed native Firefox popup visual/pointer/Escape/focus. Зелёный release не отменяет эти критерии.
 
-Приоритет владельца: завершение текущего выпуска; параллельно (явно разрешено 18 сентября) актуальный план и документация; затем существующие Review/In Progress по исходным критериям, далее существующий Backlog. Новых карточек не создавать. Подзадачи Backlog, обязательные для закрытия активного родителя, исполняются внутри его пула, а не как произвольное расширение.
+Не начинать автоматически следующий backlog. После фиксации финального screenshot и release evidence работа ставится на ограниченную паузу до явного следующего запроса владельца.
 
-Предыдущая попытка записи в Linear была отклонена auto-review; повторять её или обходить запрет через другой канал нельзя до отдельного разрешения. Чтение разрешено. Фактическую реализацию и предложения смены статуса пока фиксировать в checkpoint, не подменяя статус Linear.
+## Границы доказательств
 
-Неотслеживаемый `tests/e2e/selection-recovery.spec.ts` сохраняется локально и не входит в опубликованный кандидат. SHA-256: `7A5AB2F67EA250F787DFAC9AC441CE387CD61C4F9B99AAA48210A935EB6D6D9A`. Не применять `git add .`, `git clean`, reset или checkout к нему.
+- Human GM + 6 session, физические телефоны/Safari и субъективное прослушивание не подтверждены.
+- 29 existing E2E skips не считаются приёмкой.
+- Local Docker был недоступен из-за stale/inaccessible `sailor-ingest.sock`; окружение не ремонтировалось. Ручной media gate прошёл на отдельном loopback-only disposable host contour без production mounts, с очисткой assets/containers/volumes/network/image.
+- Подробные исторические checkpoints остаются в Git, [финальном плане](plans/design-finish-2026-09-19.md) и [отчёте выпуска 18 сентября](release-2026-09-18.md). Не переносить их старые ограничения в текущий статус.
 
-Рабочее дерево: `D:\AI\personal\experiments\arken-space\.worktrees\uix-421-scene-inputs`. Старый путь без `.worktrees` неверен. Локальный полный Lucide React 1.41.0 сохранён в `D:\AI\personal\experiments\arken-space\asset-library.local\lucide-react\1.41.0` (архив, лицензия, инструкция повторного использования), он не является runtime-зависимостью всего пакета и не включается целиком в бандл.
+## Защищённые локальные материалы
+
+- Неотслеживаемый `tests/e2e/selection-recovery.spec.ts` не входит в published candidate. SHA-256: `7A5AB2F67EA250F787DFAC9AC441CE387CD61C4F9B99AAA48210A935EB6D6D9A`. Не применять к нему `git add .`, `git clean`, reset или checkout.
+- Рабочее дерево: `D:\AI\personal\experiments\arken-space\.worktrees\uix-421-scene-inputs`.
+- Полный Lucide React 1.41.0 сохранён в `D:\AI\personal\experiments\arken-space\asset-library.local\lucide-react\1.41.0`; архив/лицензия не являются целиком runtime bundle.
+- Операторские release receipts: `C:\Users\UIXRay\.codex\visualizations\2026\09\16\01a0a7d5-b072-7022-8e9d-4538c0a92b07\release-2026-09-19`.
 
 ## Следующий безопасный шаг
 
-Технический выпуск и postflight завершены; не повторять CI/deploy из-за нового чата. Ручная партия GM+6 и физические устройства не подтверждены этим выпуском. См. [отчёт с ограничениями и восстановлением disk gate](release-2026-09-18.md).
-
-План и документация готовы в локальной ветке `codex/project-roadmap-2026-09-18`, отдельно от production. Сверка UIX-502 по восьми исходным AC завершена: **closure ready**, 18 связанных exact-main результатов PASS; [матрица](plans/uix-502-modal-popovers.md). Linear остаётся In Review из-за ранее отклонённой записи; это не повод снова тестировать или расширять критерии. Далее — связанный остаток UIX-507/644 по пакетам, сохраняя protected test и не создавая карточек.
-
-Post-release pool 19 сентября (пока локальный, не опубликован):
-
-- **UIX-507: closure-ready, 10/10 исходных AC.** Отдельный live gate 4/4 PASS
-  на source-equivalent runtime дополняет 58 selection + 8 HUD exact-main cases.
-  После восстановления памяти завершён последний SCENE_REGION renderer fixture
-  4/4 PASS; web typecheck и scoped lint PASS. Linear пока In Review, новый
-  регрессионный тест локальный. Не повторять пройденные CI/live gates.
-  [Полная матрица и границы evidence](plans/uix-507-multi-selection.md#closure-сверка--2026-09-19).
-- **UIX-644:** реестр сверён без исключения mixed reachable buckets:
-  37 buckets / 76 occurrences, 26 PASS / 2 FAIL / 9 BLOCKED. Две FAIL-строки
-  описывают один исторический observer incident; общий статус INCOMPLETE.
-  Blind replay старых observer probes не нужен. Native Firefox popup требует
-  поддерживаемого headed environment, не переписывания компонента.
-- **UIX-645:** миграция и anti-glyph guard интегрированы; exact-main central
-  icon/compact gate 20/20 PASS. Не переустанавливать Lucide. Остаток —
-  неопубликованные персональные темы, зависимые от UIX-317; текущая dark theme
-  проверена, plural-theme acceptance не заявлена.
-- 21 bookkeeping/documentation tests и 4 новых component cases PASS; web typecheck
-  и scoped lint PASS. Product source, production и Linear statuses не менялись.
-
-Материалы текущего оператора: `C:\Users\UIXRay\.codex\visualizations\2026\09\16\01a0a7d5-b072-7022-8e9d-4538c0a92b07\release-2026-09-18\checkpoint.md`. Это локальные доказательства, не публичная ссылка и не обязательная зависимость будущего разработчика: в конце gate перенести безопасный итог в этот файл и связанный релизный отчёт.
-
-## История
-
-Старый снимок 6 сентября сохранён в [архиве](current-state-2026-09-06.md). Его SHA, разрешения, красные PR и next actions **не являются текущими**. Датированные документы объясняют решения; при конфликте сначала проверять свежие Git/Linear/runtime.
+Технический release и scoped browser acceptance завершены. Зафиксировать stage gate и поставить работу на согласованную паузу. Не перезапускать неизменённые CI, backup/restore, deploy, restart, persistence, browser или payload gates. Не расширять scope и не создавать новый backlog pool.

@@ -1,5 +1,7 @@
+import { ToolbarButton } from "./ToolbarTooltip";
 import { useEffect, useId, useState } from "react";
-import { Popup, Switch } from "@gravity-ui/uikit";
+import { Popup } from "../design-system/Popup";
+import { Switch } from "../design-system/Switch";
 import type { CursorPreference } from "../cursor-preference";
 import { AppIcon } from "./AppIcon";
 import { CursorPresenceIcon } from "./icons";
@@ -42,12 +44,27 @@ export function CursorPresenceMenu({
       { threshold: 0 },
     );
     observer.observe(anchor);
-    return () => observer.disconnect();
+    const closeIfAnchorLeavesViewport = () => {
+      const rect = anchor.getBoundingClientRect();
+      if (
+        rect.bottom <= 0 ||
+        rect.top >= window.innerHeight ||
+        rect.right <= 0 ||
+        rect.left >= window.innerWidth
+      ) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("resize", closeIfAnchorLeavesViewport);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", closeIfAnchorLeavesViewport);
+    };
   }, [open, anchor]);
 
   if (role !== "GM")
     return (
-      <button
+      <ToolbarButton
         type="button"
         aria-label={
           preference.receiveEnabled
@@ -70,13 +87,15 @@ export function CursorPresenceMenu({
         }
       >
         <AppIcon icon={CursorPresenceIcon} />
-        <span className="map-tool__label">Курсоры</span>
-      </button>
+        <span className="map-tool__label">
+          {preference.receiveEnabled ? "Курсоры" : "Курсоры скрыты"}
+        </span>
+      </ToolbarButton>
     );
 
   return (
     <>
-      <button
+      <ToolbarButton
         ref={setAnchor}
         type="button"
         aria-label="Настроить видимость курсоров"
@@ -90,23 +109,18 @@ export function CursorPresenceMenu({
       >
         <AppIcon icon={CursorPresenceIcon} />
         <span className="map-tool__label">Курсоры</span>
-      </button>
+      </ToolbarButton>
       <Popup
+        id={dialogId}
+        ariaLabel="Видимость курсоров"
         open={open}
         onOpenChange={setOpen}
         anchorElement={anchor}
-        placement={["bottom-start", "top-start"]}
+        placement={["right-start", "left-start"]}
         strategy="fixed"
         initialFocus={0}
       >
-        {/* Popup places its role and labeling props on different elements.
-            Keep the dialog semantics together on the actual content owner. */}
-        <div
-          id={dialogId}
-          className="cursor-presence-menu"
-          role="dialog"
-          aria-label="Видимость курсоров"
-        >
+        <div className="cursor-presence-menu">
           <Switch
             checked={preference.receiveEnabled}
             onUpdate={(receiveEnabled) =>

@@ -228,8 +228,8 @@ for (const role of ["GM", "PLAYER"] as const) {
         await expect(tableMessage).not.toHaveCSS("color", "rgba(0, 0, 0, 0)");
         const failure = page.locator(".roll-result--critical-failure");
         const success = page.locator(".roll-result--critical-success");
-        await expect(failure).toContainText("Критический провал");
-        await expect(success).toContainText("Критический успех");
+        await expect(failure).toContainText("Крит. провал");
+        await expect(success).toContainText("Крит. успех");
         await expect(failure.locator(".roll-critical-label")).toBeVisible();
         await expect(success.locator(".roll-critical-label")).toBeVisible();
         if (theme.id === "light") {
@@ -239,10 +239,26 @@ for (const role of ["GM", "PLAYER"] as const) {
             .locator(".roll-result :is(.roll-critical-label, .roll-total)")
             .evaluateAll((nodes) => {
               const rgb = (value: string) => {
-                const match = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(value);
-                if (!match) throw new Error(`Expected opaque sRGB: ${value}`);
-                return match.slice(1).map(Number);
+                const legacy = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(value);
+                if (legacy) return legacy.slice(1).map(Number);
+                // Firefox serializes CSS Color 4 values in the color(srgb)
+                // form. Keep the same opaque-sRGB contrast check rather than
+                // treating a serialization difference as a visual failure.
+                const modern =
+                  /^color\(srgb (\d*\.?\d+) (\d*\.?\d+) (\d*\.?\d+)\)$/.exec(
+                    value,
+                  );
+                if (modern)
+                  return modern
+                    .slice(1)
+                    .map((channel) => Number(channel) * 255);
+                throw new Error(`Expected opaque sRGB: ${value}`);
               };
+              const transparent = (value: string) =>
+                value === "rgba(0, 0, 0, 0)" ||
+                /^color\(srgb \d*\.?\d+ \d*\.?\d+ \d*\.?\d+ \/ 0\)$/.test(
+                  value,
+                );
               const luminance = (color: number[]) =>
                 color.reduce((sum, channel, index) => {
                   const s = channel / 255;
@@ -252,8 +268,8 @@ for (const role of ["GM", "PLAYER"] as const) {
                 }, 0);
               return nodes.map((node) => {
                 const card = node.closest(".roll-result")!;
-                const background = getComputedStyle(card).backgroundColor;
                 const foreground = getComputedStyle(node).color;
+                let background = "";
                 for (
                   let current: Element | null = node;
                   current;
@@ -268,14 +284,16 @@ for (const role of ["GM", "PLAYER"] as const) {
                     style.maskImage !== "none"
                   )
                     throw new Error("Unsupported text compositing");
-                  if (
-                    (current === card || card.contains(current)) &&
-                    (style.backgroundImage !== "none" ||
-                      (current !== card &&
-                        style.backgroundColor !== "rgba(0, 0, 0, 0)"))
-                  )
+                  if (style.backgroundImage !== "none")
                     throw new Error("Unsupported critical text backing");
+                  // The number tile intentionally has its own critical-state
+                  // background. Measure against the nearest opaque backing,
+                  // not the outer card behind it.
+                  if (!background && !transparent(style.backgroundColor))
+                    background = style.backgroundColor;
+                  if (current === card) break;
                 }
+                if (!background) throw new Error("No opaque critical backing");
                 const a = luminance(rgb(foreground));
                 const b = luminance(rgb(background));
                 return {
@@ -303,21 +321,18 @@ for (const role of ["GM", "PLAYER"] as const) {
         });
 
         const dialog = await openThemeDialog(page);
-        const select = dialog.getByRole("combobox", {
-          name: "Тема",
-          exact: true,
-        });
-        await select.click();
         const visibleName =
           theme.id === "classic-v1" ? "Прежнее оформление" : theme.name;
-        // The controlled option appends “сейчас” / “по умолчанию” markers.
-        const option = page.getByRole("option", {
+        // The theme chooser is now a visible radio list, not a portal select.
+        // The selected row still appends “сейчас” / “по умолчанию” markers.
+        const option = dialog.getByRole("radio", {
           name: new RegExp(
             `^${visibleName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?: —|$)`,
           ),
         });
         await expect(option).toBeVisible();
-        const hit = await option.evaluate((node) => {
+        await expect(option).toBeChecked();
+        const hit = await option.locator("..").evaluate((node) => {
           const box = node.getBoundingClientRect();
           const target = document.elementFromPoint(
             box.left + box.width / 2,
@@ -326,25 +341,12 @@ for (const role of ["GM", "PLAYER"] as const) {
           return target === node || node.contains(target);
         });
         expect(hit).toBe(true);
-        const popup = page.locator(".arken-form-select-popup");
-        // Layer values live on the actual portal wrappers, not the semantic
-        // content nodes (whose computed z-index is correctly "auto").
-        const [dialogZ, popupZ] = await Promise.all([
-          dialog.evaluate((node) => {
-            const wrapper = node.closest(".g-modal");
-            if (!wrapper) throw new Error("Missing modal layer wrapper");
-            return Number(getComputedStyle(wrapper).zIndex);
-          }),
-          popup.evaluate((node) => {
-            const wrapper = node.closest("[data-floating-ui-status]");
-            if (!wrapper) throw new Error("Missing popup layer wrapper");
-            return Number(getComputedStyle(wrapper).zIndex);
-          }),
-        ]);
+        const dialogZ = await dialog.evaluate((node) => {
+          const wrapper = node.closest(".g-modal");
+          if (!wrapper) throw new Error("Missing modal layer wrapper");
+          return Number(getComputedStyle(wrapper).zIndex);
+        });
         expect(dialogZ).toBeGreaterThan(0);
-        expect(popupZ).toBeGreaterThan(dialogZ);
-        await page.keyboard.press("Escape");
-        await expect(select).toBeFocused();
         await info.attach(`theme-surfaces-${role}-${width}-${theme.id}`, {
           body: await page.screenshot({ fullPage: true }),
           contentType: "image/png",

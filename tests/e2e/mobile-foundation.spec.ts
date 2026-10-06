@@ -69,7 +69,7 @@ async function assertSurface(
 ) {
   const nav = page.getByRole("navigation", { name: "Основные области" });
   await expect(nav).toBeVisible();
-  await expect(nav.getByRole("button")).toHaveCount(3);
+  await expect(nav.getByRole("button")).toHaveCount(4);
   for (const surface of Object.keys(roots) as Surface[]) {
     const button = page.locator(`#compact-nav-${surface}`);
     await expect(button).toHaveAttribute(
@@ -260,12 +260,12 @@ for (const role of ["GM", "PLAYER"] as const) {
         await test.step("Персональная ссылка и настоящая роль", async () => {
           await page.goto(`/gm/${gmToken}`);
           await targetGeometry(
-            page.getByRole("button", { name: "Войти", exact: true }),
+            page.getByRole("button", { name: "Войти в игру", exact: true }),
             "gm-entry",
           );
           await recordLayout("gm-entry", true);
           await page
-            .getByRole("button", { name: "Войти", exact: true })
+            .getByRole("button", { name: "Войти в игру", exact: true })
             .click();
           await expect(page).toHaveURL("/");
           if (role === "PLAYER") {
@@ -289,7 +289,7 @@ for (const role of ["GM", "PLAYER"] as const) {
             await expect(name).toBeFocused();
             await page.keyboard.press("Tab");
             const enter = page.getByRole("button", {
-              name: "Войти",
+              name: "Войти в игру",
               exact: true,
             });
             await expect(enter).toBeFocused();
@@ -325,13 +325,23 @@ for (const role of ["GM", "PLAYER"] as const) {
             );
           }
           await targetGeometry(
-            page.getByLabel("Меню сеанса", { exact: true }),
-            "account-trigger",
+            page.locator("#compact-nav-menu"),
+            "menu-trigger",
           );
+          await page.locator("#compact-nav-menu").click();
+          const compactMenu = page.getByRole("region", {
+            name: "Меню кампании",
+          });
+          await expect(compactMenu).toBeVisible();
           await targetGeometry(
-            page.getByRole("button", { name: "Разделы", exact: true }),
+            compactMenu.getByRole("button", { name: "Токены", exact: true }),
             "sections-trigger",
           );
+          await targetGeometry(
+            compactMenu.getByRole("button", { name: "Выйти из кампании" }),
+            "account-trigger",
+          );
+          await switchSurface(page, "map");
         });
 
         const canvas = page.locator("#main-content canvas").first();
@@ -362,6 +372,7 @@ for (const role of ["GM", "PLAYER"] as const) {
           await expect(tokens).toBeVisible();
           await page.keyboard.press("Escape");
           await expect(tokens).toBeHidden();
+          await switchSurface(page, "map");
           await assertSurface(page, "map", false);
         });
 
@@ -468,7 +479,8 @@ for (const role of ["GM", "PLAYER"] as const) {
           await postLog(page, 30, "Мобильный журнал");
           await switchSurface(page, "journal");
           await assertSurface(page, "journal", false);
-          await page.locator("#chat-tab-activity").click();
+          // The journal is the only activity view for both roles and has no tab.
+          await expect(page.locator("#chat-panel-activity")).toBeVisible();
           const list = page.locator(listSelector);
           await expect(list.getByText(/^Мобильный журнал 29 —/)).toHaveCount(1);
           await expect
@@ -701,7 +713,7 @@ test("desktop-first Characters survive compact map roundtrip without remount", a
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/gm/${gmToken}`);
-  await page.getByRole("button", { name: "Войти", exact: true }).click();
+  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
   await expect(page).toHaveURL("/");
   const character = (await bootstrap(page)).characters[0];
   expect(character).toBeTruthy();
@@ -751,7 +763,7 @@ test("compact player preview exposes only available surfaces and account exit", 
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/gm/${gmToken}`);
-  await page.getByRole("button", { name: "Войти", exact: true }).click();
+  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
   await expect(page).toHaveURL("/");
   const character = (await bootstrap(page)).characters[0];
   expect(character).toBeTruthy();
@@ -794,12 +806,16 @@ test("compact player preview exposes only available surfaces and account exit", 
   await page.setViewportSize({ width: 360, height: 800 });
   const nav = page.getByRole("navigation", { name: "Основные области" });
   await expect(nav).toBeVisible();
-  await expect(nav.getByRole("button")).toHaveCount(2);
+  await expect(nav.getByRole("button")).toHaveCount(3);
   await expect(page.locator("#compact-nav-character")).toHaveCount(0);
   await expect(page.locator(roots.character)).toHaveCount(0);
+  await page.locator("#compact-nav-menu").click();
+  const compactMenu = page.getByRole("region", { name: "Меню кампании" });
+  await expect(compactMenu).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Разделы", exact: true }),
-  ).toBeDisabled();
+    compactMenu.getByRole("button", { name: "Подготовка", exact: true }),
+  ).toHaveCount(0);
+  await switchSurface(page, "map");
   for (const surface of ["map", "journal"] as const) {
     await switchSurface(page, surface);
     await expect(page.locator(roots[surface])).toBeVisible();
@@ -808,16 +824,25 @@ test("compact player preview exposes only available surfaces and account exit", 
       roots[surface].slice(1),
     );
   }
-  await page.getByLabel("Меню сеанса", { exact: true }).click();
+  await page.locator("#compact-nav-menu").click();
   await expect(
-    page.getByText("Просмотр: Игрок preview", { exact: true }),
+    compactMenu.getByText("Игрок preview", { exact: true }),
   ).toBeVisible();
+  // Preview exit stays available through the desktop account control after
+  // expanding the viewport; compact menu deliberately has no duplicate action.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByLabel("Меню сеанса", { exact: true }).click();
   await page
     .getByRole("button", { name: "Вернуться к мастеру", exact: true })
     .click();
+  await page.setViewportSize({ width: 360, height: 800 });
   await assertSurface(page, "map", false);
+  await page.locator("#compact-nav-menu").click();
   await expect(
-    page.getByRole("button", { name: "Разделы", exact: true }),
-  ).toBeEnabled();
+    page.getByRole("region", { name: "Меню кампании" }).getByRole("button", {
+      name: "Подготовка",
+      exact: true,
+    }),
+  ).toBeVisible();
   expect((await bootstrap(page)).me.role).toBe("GM");
 });

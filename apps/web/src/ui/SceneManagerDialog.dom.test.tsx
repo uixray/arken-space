@@ -56,6 +56,33 @@ const scene: SceneDto = {
   active: true,
 };
 
+it("opens the requested scene settings without showing the scene list", async () => {
+  renderComponent(
+    <SceneManagerDialog
+      open
+      variant="workspace"
+      snapshot={gmSnapshot({ scenes: [scene] })}
+      viewedSceneId={scene.id}
+      initialEditSceneId={scene.id}
+      editRequest={1}
+      onClose={vi.fn()}
+      onView={vi.fn()}
+      onPublish={vi.fn()}
+      onSave={vi.fn()}
+      onUpload={vi.fn()}
+    />,
+  );
+  expect(
+    await screen.findByRole("dialog", { name: "Настройка: Тестовая сцена" }),
+  ).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Настроить" })).toBeNull();
+  expect(
+    screen.queryByText(
+      "Подготавливайте сцену локально, не переключая игроков.",
+    ),
+  ).toBeNull();
+});
+
 async function openEditor(
   options: { scene?: SceneDto; assets?: AssetDto[] } = {},
 ) {

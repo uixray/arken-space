@@ -485,6 +485,7 @@ test("GM and six isolated players recover authoritative state without security l
       membershipId: string;
       characterId: string | null;
       label: string;
+      revision: number;
       tokenHash?: string;
     }>;
     const grants = allGrants.filter((grant) =>
@@ -585,6 +586,8 @@ test("GM and six isolated players recover authoritative state without security l
       )
       .toBe(placementsBefore + 1);
     await openWorkspaceSection(pages[0]!, "Персонажи");
+    // The rail remains available for character actions even with one sheet.
+    // It must expose only this player's accessible character.
     await expect(pages[0]!.locator(".character-rail__item")).toHaveCount(1);
     await expect(pages[0]!.locator(".character-sheet-card")).toHaveCount(1);
     await expect(
@@ -594,20 +597,31 @@ test("GM and six isolated players recover authoritative state without security l
     await expect(
       pages[0]!.getByRole("button", { name: "Подготовка", exact: true }),
     ).toHaveCount(0);
-    // Local audio consent is deliberately per-browser and must survive a
-    // reload without changing shared playback state.
+    // Explicit local mute and volume are per-browser and must survive a reload
+    // without changing shared playback state.
     const playerMusic = pages[0]!.getByRole("region", { name: "Музыка" });
     await expect(playerMusic).toBeVisible();
     await playerMusic.getByLabel("Громкость", { exact: true }).click();
-    await playerMusic.getByRole("button", { name: "Включить звук" }).click();
+    const volumePopover = playerMusic.locator(".music-volume-popover");
+    await volumePopover.getByRole("button", { name: "Выключить звук" }).click();
+    await pages[0]!.reload();
+    await pages[0]!.getByLabel("Громкость", { exact: true }).click();
+    await volumePopover.getByRole("button", { name: "Включить звук" }).click();
     await expect(
-      playerMusic.getByRole("slider", { name: "Личная громкость" }),
+      volumePopover.getByRole("button", { name: "Выключить звук" }),
     ).toBeVisible();
+    const localVolume = playerMusic.getByRole("slider", {
+      name: "Личная громкость",
+    });
+    await expect(localVolume).toBeVisible();
+    await localVolume.focus();
+    await localVolume.press("Home");
+    await expect(localVolume).toHaveValue("0");
     await pages[0]!.reload();
     await pages[0]!.getByLabel("Громкость", { exact: true }).click();
     await expect(
       pages[0]!.getByRole("slider", { name: "Личная громкость" }),
-    ).toBeVisible();
+    ).toHaveValue("0");
 
     const gmConnection = await connectSocket(gm);
     connections.push(gmConnection);
@@ -1291,6 +1305,10 @@ test("GM and six isolated players recover authoritative state without security l
 
     const playerTwoMap = pages[1]!.locator(".map-viewport");
     const beforePingOverlay = await playerTwoMap.screenshot();
+    // Observe the short-lived overlay concurrently with socket delivery.
+    // Waiting for the socket assertion first can consume its 3.5s lifetime
+    // when seven browser contexts are sharing the CI worker.
+    const pingOverlay = expectPingOverlay(pages[1]!, beforePingOverlay);
     const receivedPing = waitForPing(
       connections[2]!.socket,
       (ping) =>
@@ -1304,11 +1322,13 @@ test("GM and six isolated players recover authoritative state without security l
       x: coveredForeignToken.x + coveredForeignToken.width / 2,
       y: coveredForeignToken.y + coveredForeignToken.height / 2,
     });
-    await expect(receivedPing).resolves.toMatchObject({
-      sceneId: initialScene.id,
-      membershipId: playerOneSnapshot.me.id,
-    });
-    await expectPingOverlay(pages[1]!, beforePingOverlay);
+    await Promise.all([
+      expect(receivedPing).resolves.toMatchObject({
+        sceneId: initialScene.id,
+        membershipId: playerOneSnapshot.me.id,
+      }),
+      pingOverlay,
+    ]);
 
     const mapViewport = pages[0]!.locator(".map-viewport");
     const mapBounds = await mapViewport.boundingBox();
@@ -1430,8 +1450,8 @@ test("GM and six isolated players recover authoritative state without security l
       .getByRole("dialog", { name: "Токены" })
       .getByRole("button", { name: "Закрыть окно" })
       .click();
-    // Rolls and table events now share the unified activity feed.
-    await pages[0]!.locator("#chat-tab-activity").click();
+    // Players have one persistent activity feed, without a redundant tab.
+    await expect(pages[0]!.locator("#chat-panel-activity")).toBeVisible();
     await expect(
       pages[0]!.locator(".message", { hasText: publicMarkers[1] }),
     ).toBeVisible();
@@ -1748,21 +1768,22 @@ test("GM and six isolated players recover authoritative state without security l
       (grant) => grant.characterId === characters[5].id,
     );
     if (!sixthGrant) throw new Error("Sixth player access grant not found");
+    const rotateRevision = sixthGrant.revision;
     const rotatedSocketDisconnected = new Promise<void>((resolve) =>
       connections[6]!.socket.once("disconnect", () => resolve()),
     );
     const rotateResponses = await Promise.all([
       gm.request.post(baseUrl + `/api/player-access/${sixthGrant.id}/rotate`, {
-        data: { actionId: actionId() },
+        data: { actionId: actionId(), revision: rotateRevision },
       }),
       gm.request.post(baseUrl + `/api/player-access/${sixthGrant.id}/rotate`, {
-        data: { actionId: actionId() },
+        data: { actionId: actionId(), revision: rotateRevision },
       }),
     ]);
     expect(rotateResponses.filter((response) => response.ok())).toHaveLength(1);
-    expect(rotateResponses.filter((response) => !response.ok())).toHaveLength(
-      1,
-    );
+    const rotateLosers = rotateResponses.filter((response) => !response.ok());
+    expect(rotateLosers).toHaveLength(1);
+    expect(rotateLosers[0]!.status()).toBe(409);
     const rotateResponse = await expectOk(
       rotateResponses.find((response) => response.ok())!,
     );
@@ -1812,7 +1833,7 @@ test("GM and six isolated players recover authoritative state without security l
     const reactivated = (await reactivatedResponse.json()) as {
       created: boolean;
       url: string;
-      grant: { id: string; membershipId: string };
+      grant: { id: string; membershipId: string; revision: number };
     };
     expect(reactivated).toMatchObject({
       created: true,
@@ -1822,13 +1843,26 @@ test("GM and six isolated players recover authoritative state without security l
       },
     });
     expect(reactivated.url).toContain("/join/");
+    const reactivatedGrant = (
+      (await (
+        await expectOk(await gm.request.get(baseUrl + "/api/player-access"))
+      ).json()) as typeof grants
+    ).find((grant) => grant.id === sixthGrant.id);
+    if (!reactivatedGrant)
+      throw new Error("Reactivated player access grant not found");
     const sameRotateAction = actionId();
     const sameRotateResponses = await Promise.all([
       gm.request.post(baseUrl + `/api/player-access/${sixthGrant.id}/rotate`, {
-        data: { actionId: sameRotateAction },
+        data: {
+          actionId: sameRotateAction,
+          revision: reactivatedGrant.revision,
+        },
       }),
       gm.request.post(baseUrl + `/api/player-access/${sixthGrant.id}/rotate`, {
-        data: { actionId: sameRotateAction },
+        data: {
+          actionId: sameRotateAction,
+          revision: reactivatedGrant.revision,
+        },
       }),
     ]);
     expect(

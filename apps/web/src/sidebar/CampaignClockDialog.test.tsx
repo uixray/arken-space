@@ -169,18 +169,17 @@ describe("окно времени кампании", () => {
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
   });
 
-  it("передаёт следующий день и длинный отдых с текущей ревизией", async () => {
+  it("предлагает только длинный отдых, а обычная смена дня не дублируется", async () => {
     const props = renderClock();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Следующий день" }),
-    );
+    expect(
+      screen.queryByRole("button", { name: "Следующий день" }),
+    ).not.toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("button", { name: "Длинный отдых" }),
     );
 
-    expect(props.onCommand).toHaveBeenNthCalledWith(1, "ADVANCE_DAY", 12);
-    expect(props.onCommand).toHaveBeenNthCalledWith(2, "LONG_REST", 12);
+    expect(props.onCommand).toHaveBeenCalledExactlyOnceWith("LONG_REST", 12);
   });
 
   it("отправляет сброс только после отдельного подтверждения", async () => {

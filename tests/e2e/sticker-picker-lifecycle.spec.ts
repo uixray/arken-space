@@ -81,7 +81,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       await page.goto("/");
       await expect.poll(() => reads.story).toBeGreaterThan(0);
       if (width === 390) await page.locator("#compact-nav-journal").click();
-      await page.locator("#chat-tab-activity").click();
+      await expect(page.locator("#chat-panel-activity")).toBeVisible();
       const trigger = page.locator(".chat-compose .sticker-picker > button");
       const panel = page.getByRole("dialog", { name: "Выбор стикера" });
       const search = panel.getByRole("searchbox");

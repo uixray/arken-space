@@ -23,14 +23,15 @@ export function feedForChatStream(stream: ChatStream): SidebarFeed {
  * он не видит.
  */
 export function chatFeedOrder(isGm: boolean): readonly SidebarFeed[] {
+  // GM-facing story/channel navigation is temporarily out of scope. With only
+  // the unified activity feed left, render no redundant one-item tab bar.
+  if (isGm) return ["ACTIVITY"];
   return [
     "ACTIVITY",
     // TABLE и ROLLS живут внутри «Событий», отдельной вкладки у них нет.
     ...CHAT_STREAM_ORDER.filter(
       (stream) =>
-        stream !== "TABLE" &&
-        stream !== "ROLLS" &&
-        (isGm || stream !== "STORY"),
+        stream !== "TABLE" && stream !== "ROLLS" && stream !== "STORY",
     ),
   ];
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { TextArea, TextInput } from "@gravity-ui/uikit";
+import { Input as TextInput } from "./design-system/Input";
+import { TextArea } from "./design-system/TextArea";
 import { Button } from "./design-system/Button";
 import { api } from "./api";
 import { createFeedbackDiagnostics } from "./feedback-diagnostics";
@@ -160,7 +161,7 @@ export function FeedbackReporter(props: Props) {
     <>
       <Button
         size="s"
-        view="flat"
+        view="normal"
         onClick={() => {
           props.onOpen?.();
           setOpen(true);

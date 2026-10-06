@@ -27,9 +27,9 @@ test(`${MARKER}: late success preserves a newer activity draft and private send`
   gmToken,
 }) => {
   await page.goto(`/gm/${gmToken}`);
-  await page.getByRole("button", { name: "Войти", exact: true }).click();
+  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
   await expect(page).toHaveURL("/");
-  await page.locator("#chat-tab-activity").click();
+  await expect(page.locator("#chat-panel-activity")).toBeVisible();
   const composer = page
     .locator("#chat-panel-activity")
     .getByLabel("Сообщение или бросок", { exact: true });
@@ -118,9 +118,9 @@ test(`${MARKER}: activity failure restores only an untouched consumed draft`, as
   gmToken,
 }) => {
   await page.goto(`/gm/${gmToken}`);
-  await page.getByRole("button", { name: "Войти", exact: true }).click();
+  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
   await expect(page).toHaveURL("/");
-  await page.locator("#chat-tab-activity").click();
+  await expect(page.locator("#chat-panel-activity")).toBeVisible();
   const composer = page
     .locator("#chat-panel-activity")
     .getByLabel("Сообщение или бросок", { exact: true });

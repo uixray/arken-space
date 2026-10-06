@@ -29,6 +29,18 @@ export const CAMERA_MIN_SCALE = 0.25;
 export const CAMERA_MAX_SCALE = 3;
 export const CAMERA_FIT_PADDING = 0.92;
 
+/** Pan without changing zoom so the center of a token lands at viewport center. */
+export function centerRectAtScale(
+  rect: CameraFitRect,
+  viewport: CameraFitViewport,
+  scale: number,
+): CameraFitResult["position"] {
+  return {
+    x: viewport.width / 2 - (rect.x + rect.width / 2) * scale,
+    y: viewport.height / 2 - (rect.y + rect.height / 2) * scale,
+  };
+}
+
 /**
  * Computes the scale + position that centers and fits `rect` (world
  * coordinates) inside `viewport` (screen pixels), clamped to the same
@@ -48,13 +60,8 @@ export function fitRect(
         CAMERA_FIT_PADDING,
     ),
   );
-  const centerX = rect.x + rect.width / 2;
-  const centerY = rect.y + rect.height / 2;
   return {
     scale,
-    position: {
-      x: viewport.width / 2 - centerX * scale,
-      y: viewport.height / 2 - centerY * scale,
-    },
+    position: centerRectAtScale(rect, viewport, scale),
   };
 }

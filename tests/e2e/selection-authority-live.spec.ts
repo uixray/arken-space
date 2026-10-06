@@ -18,7 +18,9 @@ for (const initiator of ["token", "drawing"] as const) {
     expect(new URL(info.project.use.baseURL!).hostname).toBe("127.0.0.1");
     await page.setViewportSize({ width: 1280, height: 850 });
     await page.goto(`/gm/${gmToken}`);
-    await page.getByRole("button", { name: "Войти", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Войти в игру", exact: true })
+      .click();
     await expect(page.locator(".app-shell")).toBeVisible();
     const snapshot = async (client: Page): Promise<GameSnapshot> => {
       const response = await client.request.get("/api/bootstrap");
@@ -45,7 +47,9 @@ for (const initiator of ["token", "drawing"] as const) {
       const player = await context.newPage();
       await player.goto(new URL((await invitation.json()).url).pathname);
       await player.getByLabel("Имя", { exact: true }).fill("Тестовый игрок");
-      await player.getByRole("button", { name: "Войти", exact: true }).click();
+      await player
+        .getByRole("button", { name: "Войти в игру", exact: true })
+        .click();
       await expect(player.locator(".app-shell")).toBeVisible();
       const membership = (await snapshot(player)).me;
       expect(membership.role).toBe("PLAYER");

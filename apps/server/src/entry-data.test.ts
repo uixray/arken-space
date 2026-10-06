@@ -8,6 +8,77 @@ import {
 } from "./entry-data.js";
 
 describe("normalizeLegacyEntryData", () => {
+  it("repairs legacy seeded action and uses fields into the current contract", () => {
+    const normalized = normalizeLegacyEntryData({
+      rollActions: [
+        {
+          id: "fire-bolt-roll",
+          label: "Урон огнем",
+          formula: "2d6 + intelligence",
+        },
+      ],
+      uses: { current: 3, maximum: 3, rechargeRate: "LONG_REST" },
+    });
+
+    expect(entryDataSchema.parse(normalized)).toMatchObject({
+      rollActions: [
+        {
+          id: "fire-bolt-roll",
+          kind: "CUSTOM",
+          label: "Урон огнем",
+          dice: "2d6",
+          modifiers: [{ type: "CHARACTERISTIC", key: "intelligence" }],
+          order: 0,
+          advantage: false,
+          consumeUse: false,
+        },
+      ],
+      uses: { current: 3, max: 3, recharge: "DAY" },
+    });
+  });
+
+  it("keeps canonical fields authoritative and preserves short-rest recharge", () => {
+    const normalized = normalizeLegacyEntryData({
+      rollActions: [
+        {
+          id: "heal-roll",
+          label: "Лечение",
+          formula: "1d6 + intelligence",
+          kind: "DAMAGE",
+          dice: "1d8",
+          modifiers: [{ type: "CONSTANT", value: 2 }],
+        },
+      ],
+      uses: {
+        current: 1,
+        max: 4,
+        maximum: 3,
+        recharge: "WEEK",
+        rechargeRate: "SHORT_REST",
+      },
+    });
+
+    expect(entryDataSchema.parse(normalized)).toMatchObject({
+      rollActions: [
+        {
+          kind: "DAMAGE",
+          dice: "1d8",
+          modifiers: [{ type: "CONSTANT", value: 2 }],
+        },
+      ],
+      uses: { current: 1, max: 4, recharge: "WEEK" },
+    });
+    expect(
+      (
+        normalizeLegacyEntryData({
+          uses: { current: 0, maximum: 2, rechargeRate: "SHORT_REST" },
+        }) as { uses: { recharge: string } }
+      ).uses.recharge,
+    ).toBe("SHORT_REST");
+  });
+});
+
+describe("normalizeLegacyEntryData", () => {
   it.each([
     ["mind", "intelligence"],
     ["spirit", "willpower"],

@@ -1,6 +1,7 @@
 import { useComposerSuggestions } from "../ui/use-composer-suggestions";
 import { RollVisibilityContext } from "../roll-visibility-context";
 import {
+  memo,
   useCallback,
   useContext,
   useEffect,
@@ -10,7 +11,6 @@ import {
   type ClipboardEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
   type RefObject,
   type UIEvent as ReactUIEvent,
 } from "react";
@@ -32,12 +32,17 @@ import {
   rollableStatRows,
   statLabelsFromLayout,
   statResourceRowsFromLayout,
-  statRowsFromLayout,
 } from "../stat-keys";
+import { useCampaignActions } from "../campaign-actions-context";
 
 import { useDismissibleDetails } from "../ui/dismissible-details";
 import { AppIcon } from "../ui/AppIcon";
-import { MoreIcon, SendIcon } from "../ui/icons";
+import {
+  DecreaseIcon,
+  SelectedOptionIcon,
+  SendIcon,
+  SettingsIcon,
+} from "../ui/icons";
 import {
   ACTIVITY_FILTERS,
   ACTIVITY_FILTER_LABEL,
@@ -50,8 +55,9 @@ import { RollCharacterName } from "./RollCharacterName";
 import { createRollAvatarSource } from "../roll-avatar-source";
 import { createRollCharacterNameSource } from "../roll-character-name";
 import { buildChatTimeline } from "../chat-date";
-import { formatDiceBreakdown, normalizeClientDiceResult } from "../dice-result";
+import { normalizeClientDiceResult } from "../dice-result";
 import { getDiceCritical } from "../dice-critical";
+import { OutcomeFrame } from "./OutcomeFrame";
 import { parseSkillCard, SkillChatCard } from "../SkillCards";
 import { StickerPicker } from "../StickerPicker";
 import { StoryPost } from "../StoryChannel";
@@ -77,10 +83,8 @@ import {
   filterActivityEvents,
   physicalDiceStorageKey,
   physicalRollBonus,
+  physicalRollPresentation,
   physicalRollChatRequest,
-  readRollLogCollapsed,
-  rollLogHistoryPresentation,
-  writeRollLogCollapsed,
   type ActivityFilter,
 } from "../activity-roll-controls";
 import type { Props } from "../Sidebar";
@@ -118,6 +122,85 @@ const SEND_TOOLTIP =
  * всплывающей подсказке кнопки отправки — `SEND_TOOLTIP` выше, слово в слово.
  */
 const SEND_HINT = "Enter — всем · Ctrl+Enter — только мастеру";
+
+function compactDiceDetails(
+  dice: NonNullable<ReturnType<typeof normalizeClientDiceResult>>,
+) {
+  const diceLabel =
+    dice.terms.map((term) => term.notation).join(" + ") || dice.formula;
+  const selected = dice.poolTotals
+    ? dice.poolTotals[dice.selectedPool ?? 0]
+    : dice.terms.reduce((sum, term) => sum + term.subtotal, 0);
+  const modifier = dice.modifiers
+    .filter((item) => item.value !== 0)
+    .map((item) => `${item.value > 0 ? "+" : ""}${item.value}`)
+    .join("");
+  return {
+    diceLabel,
+    calculation: modifier ? `${selected}${modifier}` : null,
+  };
+}
+
+function SystemMessageCard({ body }: { body: string }) {
+  const resourceText = body.match(/(?:^| — )ресурсы: (.+)$/i)?.[1];
+  const resourceChanges = resourceText
+    ?.split(/, (?=[^,]+: )/)
+    .map((part) =>
+      /^(.*?): (-?\d+)(?:\/(-?\d+))? → (-?\d+)(?:\/(-?\d+))?$/.exec(part),
+    );
+  if (resourceChanges?.length && resourceChanges.every(Boolean)) {
+    return (
+      <div className="system-card-list">
+        {resourceChanges.map((change, index) => {
+          const [, name, beforeText, , afterText, maximumText] = change!;
+          const before = Number(beforeText);
+          const after = Number(afterText);
+          const delta = after - before;
+          return (
+            <div
+              className="roll-result roll-result--system"
+              key={`${name}-${index}`}
+            >
+              <div className="roll-details">
+                <div className="roll-details__heading">
+                  <span>{name}</span>
+                </div>
+                <div className="roll-details__math">
+                  <small>
+                    {before}
+                    {delta < 0 ? <AppIcon icon={DecreaseIcon} /> : "+"}
+                    {Math.abs(delta)}
+                  </small>
+                  {maximumText && <small>Max {maximumText}</small>}
+                </div>
+              </div>
+              <strong
+                className="roll-total"
+                aria-label={`${name}: итоговое значение`}
+              >
+                {after}
+              </strong>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  const [heading, ...details] = body.split(/\.\s+/);
+  return (
+    <div className="roll-result roll-result--system">
+      <div className="roll-details">
+        <div className="roll-details__heading">
+          <span>{(heading ?? body).replace(/\.$/, "")}</span>
+        </div>
+        {details.length > 0 && <small>{details.join(". ")}</small>}
+      </div>
+      <span className="roll-result__system-mark" aria-hidden="true">
+        <AppIcon icon={SelectedOptionIcon} />
+      </span>
+    </div>
+  );
+}
 
 function useHistoryScrollHandler(input: {
   resetKey: unknown;
@@ -168,19 +251,18 @@ function useHistoryScrollHandler(input: {
   );
 }
 
-export function ChatMessageBody({
+function ChatMessageBodyComponent({
+  isActive,
   message,
   catalogEntryIds,
   playerRequests,
   onOpenPlayerRequests,
-  avatar,
 }: {
+  isActive?: boolean;
   message: GameSnapshot["messages"][number];
   catalogEntryIds?: ReadonlySet<string>;
   playerRequests?: GameSnapshot["playerRequests"];
   onOpenPlayerRequests?: () => void;
-  /** UIX-454: портрет бросающего; у не-бросков не показывается. */
-  avatar?: ReactNode;
 }) {
   if (message.playerRequestId)
     return (
@@ -219,6 +301,23 @@ export function ChatMessageBody({
       <SkillChatCard
         card={skillCard}
         critical={critical}
+        outcomeFrame={
+          <OutcomeFrame
+            frame={
+              dice?.frame ??
+              (critical
+                ? {
+                    setKey: "ARKEN_CRITICAL_V1",
+                    frameKey:
+                      critical.kind === "success"
+                        ? "critical-success"
+                        : "critical-failure",
+                  }
+                : null)
+            }
+            active={isActive ?? false}
+          />
+        }
         sourceRemoved={
           skillCard.entry.sourceRemoved ||
           Boolean(
@@ -230,6 +329,8 @@ export function ChatMessageBody({
       />
     );
   if (message.kind !== "DICE" || !dice) {
+    if (message.kind === "SYSTEM")
+      return <SystemMessageCard body={message.body} />;
     const physicalBonus = physicalRollBonus(message.body);
     /**
      * UIX-454: физический бросок рисуется тем же макетом, что обычный. Раньше
@@ -238,19 +339,30 @@ export function ChatMessageBody({
      * На месте итога стоит бонус: результата система не знает и не должна
      * делать вид, что знает.
      */
-    if (physicalBonus)
+    if (physicalBonus) {
+      const presentation = physicalRollPresentation(message.body);
       return (
         <div className="roll-result roll-result--physical">
-          {avatar}
           <div className="roll-details">
-            <div>{message.body}</div>
-            <small>Бросьте кубик и прибавьте бонус</small>
+            <div className="roll-details__heading">
+              <span>{presentation?.label ?? message.body}</span>
+            </div>
+            <div className="roll-details__math">
+              <small>
+                {!presentation || presentation.mode === "NORMAL"
+                  ? "d20"
+                  : "2d20"}{" "}
+                · {physicalBonus} к броску
+              </small>
+              <small>физ. бросок</small>
+            </div>
           </div>
           <strong className="roll-total" aria-label="Бонус к броску">
             {physicalBonus}
           </strong>
         </div>
       );
+    }
     return (
       <>
         <p>{message.body}</p>
@@ -267,26 +379,66 @@ export function ChatMessageBody({
       </>
     );
   }
+  const details = compactDiceDetails(dice);
+  const pureRollHeading = message.body.replace(
+    /^(Чистый бросок .+?)\s*·\s*(?:преимущество|помеха)$/iu,
+    "$1",
+  );
+  const isPureRoll = pureRollHeading.startsWith("Чистый бросок ");
   return (
     <div
-      className={`roll-result${critical ? ` roll-result--critical-${critical.kind}` : ""}`}
+      className={`roll-result${isPureRoll ? " roll-result--pure" : ""}${critical ? ` roll-result--critical-${critical.kind}` : ""}`}
     >
-      {avatar}
       <div className="roll-details">
-        <div>{message.body}</div>
-        {critical && (
-          <span className="roll-critical-label">{critical.label}</span>
-        )}
-        <small>{formatDiceBreakdown(dice)}</small>
+        <div className="roll-details__heading">
+          <span>{pureRollHeading}</span>
+        </div>
+        <div className="roll-details__math">
+          <small>{details.diceLabel}</small>
+          {(critical ||
+            details.calculation ||
+            (dice.rollMode && dice.rollMode !== "NORMAL")) && (
+            <span className="roll-details__math-right">
+              {dice.rollMode && dice.rollMode !== "NORMAL" && (
+                <span className="roll-mode-badge">
+                  {dice.rollMode === "ADVANTAGE" ? "Преимущество" : "Помеха"}
+                </span>
+              )}
+              {critical && (
+                <span className="roll-critical-label">
+                  {critical.kind === "success" ? "Крит. успех" : "Крит. провал"}
+                </span>
+              )}
+              {details.calculation && <small>{details.calculation}</small>}
+            </span>
+          )}
+        </div>
       </div>
-      {/* Итог справа: глаз ищет число на краю строки, а не в середине, и в
-       * ленте из десятка бросков они выстраиваются в столбец. */}
-      <strong className="roll-total" aria-label="Итог броска">
-        {dice.total}
-      </strong>
+      <div className="roll-result__numbers">
+        <strong className="roll-total" aria-label="Итог броска">
+          <OutcomeFrame
+            frame={
+              dice.frame ??
+              (critical
+                ? {
+                    setKey: "ARKEN_CRITICAL_V1",
+                    frameKey:
+                      critical.kind === "success"
+                        ? "critical-success"
+                        : "critical-failure",
+                  }
+                : null)
+            }
+            active={isActive ?? false}
+          />
+          {dice.total}
+        </strong>
+      </div>
     </div>
   );
 }
+
+export const ChatMessageBody = memo(ChatMessageBodyComponent);
 
 export function ActivityPanel({
   snapshot,
@@ -313,7 +465,7 @@ export function ActivityPanel({
   onOpenPlayerRequestCreate: () => void;
   /** UIX-424, шаг 8: счётчики выносливости и маны правят те же `resources`. */
   onUpdateCounters: Props["onUpdateCounters"];
-  /** UIX-431: выделенные рамкой токены — из них пополняется очередь ходов. */
+  /** Сохранённая панель инициативы остаётся вне этого feed; данные/API сохранены. */
   selectedTokenIds: readonly string[];
   onUpdateInitiative: (
     participants: InitiativeParticipantDto[],
@@ -330,9 +482,9 @@ export function ActivityPanel({
     revision: number,
     isGm: boolean,
   ) => Promise<void>;
-  /** UIX-466 п. 3: подтянуть в очередь тех, кто в зоне боя. */
   onRecruitFromBattleZone?: () => void;
 }) {
+  const { catalog: catalogActions } = useCampaignActions();
   const avatarFor = useMemo(() => createRollAvatarSource(snapshot), [snapshot]);
   const characterNameFor = useMemo(
     () => createRollCharacterNameSource(snapshot),
@@ -372,12 +524,7 @@ export function ActivityPanel({
   // The ref closes the same-render double-click gap; state is for feedback.
   const quickRollInFlight = useRef(false);
   const rollVisibility = useContext(RollVisibilityContext);
-  // UIX-372: the roll/event log can get long and spammy with quick rolls, so
-  // it can be collapsed to a compact "last N entries" view independently of
-  // whole-sidebar collapse or width resize.
-  const [rollLogCollapsed, setRollLogCollapsed] = useState(() =>
-    readRollLogCollapsed(window.localStorage, snapshot.me.id),
-  );
+  const [visibleHistoryLimit, setVisibleHistoryLimit] = useState(6);
   const characterStats =
     snapshot.characters.find(
       (character) => character.id === snapshot.me.characterId,
@@ -559,6 +706,7 @@ export function ActivityPanel({
      * считает и переключатель у костей существует.
      */
     mode: RollMode = "NORMAL",
+    count = 1,
   ) => {
     if (!rollCharacter || quickRollInFlight.current) return;
     quickRollInFlight.current = true;
@@ -568,21 +716,23 @@ export function ActivityPanel({
     setPendingQuickRoll({ characterName, label });
     setQuickRollError("");
     try {
-      if (physicalDice) {
-        const request = physicalRollChatRequest(
-          label,
-          bonus,
-          rollCharacter.id,
-          mode,
-        );
-        await onChat(
-          request.body,
-          rollVisibility,
-          "TABLE",
-          request.characterId,
-        );
-      } else {
-        await onRoll(formula, label, rollVisibility, rollCharacter.id, mode);
+      for (let index = 0; index < count; index += 1) {
+        if (physicalDice) {
+          const request = physicalRollChatRequest(
+            label,
+            bonus,
+            rollCharacter.id,
+            mode,
+          );
+          await onChat(
+            request.body,
+            rollVisibility,
+            "TABLE",
+            request.characterId,
+          );
+        } else {
+          await onRoll(formula, label, rollVisibility, rollCharacter.id, mode);
+        }
       }
     } catch (reason) {
       const message =
@@ -599,13 +749,10 @@ export function ActivityPanel({
     () => buildActivityTimeline(activityEvents),
     [activityEvents],
   );
-  const historyPresentation = rollLogHistoryPresentation(
-    timeline.length,
-    rollLogCollapsed,
-  );
+  const visibleEntryCount = Math.min(timeline.length, visibleHistoryLimit);
   const visibleTimeline =
-    historyPresentation.visibleEntryCount < timeline.length
-      ? timeline.slice(-historyPresentation.visibleEntryCount)
+    visibleEntryCount < timeline.length
+      ? timeline.slice(-visibleEntryCount)
       : timeline;
   const catalogEntryIds = useMemo(
     () => new Set(snapshot.catalogEntries.map((entry) => entry.id)),
@@ -622,7 +769,7 @@ export function ActivityPanel({
   // Jumping to a specific message (e.g. from a notification) must be able to
   // reveal it even if the log is currently collapsed to its compact view.
   useEffect(() => {
-    if (focusedMessageId) setRollLogCollapsed(false);
+    if (focusedMessageId) setVisibleHistoryLimit(Number.POSITIVE_INFINITY);
   }, [focusedMessageId]);
   useEffect(() => {
     if (!focusedMessageId) return;
@@ -640,9 +787,12 @@ export function ActivityPanel({
   return (
     <section
       className="chat-panel activity-feed"
-      role="tabpanel"
+      role={snapshot.me.role === "GM" ? "region" : "tabpanel"}
       id="chat-panel-activity"
-      aria-labelledby="chat-tab-activity"
+      aria-label={snapshot.me.role === "GM" ? "События" : undefined}
+      aria-labelledby={
+        snapshot.me.role === "GM" ? undefined : "chat-tab-activity"
+      }
     >
       <div
         className="activity-feed__controls"
@@ -650,76 +800,27 @@ export function ActivityPanel({
         aria-label="Быстрые броски и ресурсы"
         tabIndex={0}
       >
-        <section className="activity-roll-controls" aria-label="Быстрые броски">
-          <div className="activity-roll-controls__heading">
-            <strong>
-              {snapshot.me.role === "PLAYER" && rollCharacter
-                ? `Броски и ресурсы · ${rollCharacter.name}`
-                : "Быстрые броски"}
-            </strong>
-            {snapshot.me.role === "GM" &&
-              availableRollCharacters.length > 0 && (
-                <FormSelect
-                  aria-label="Персонаж для броска"
-                  value={rollCharacter?.id ?? ""}
-                  onChange={(event) => setRollCharacterId(event.target.value)}
-                >
-                  {availableRollCharacters.map((character) => (
-                    <option key={character.id} value={character.id}>
-                      {character.name}
-                    </option>
-                  ))}
-                </FormSelect>
-              )}
-            {/* UIX-532: подпись живёт внутри флажка. Обёртка `<label>` его не
-                подписывала — uikit рисует свой `<label>` внутри, а вложенные не
-                связываются: программа чтения с экрана называла поле «флажок». */}
-            <FormInput
-              className="compact-check"
-              type="checkbox"
-              checked={physicalDice}
-              onChange={(event) => {
-                const enabled = event.target.checked;
-                setPhysicalDice(enabled);
-                window.localStorage.setItem(
-                  physicalDiceStorageKey(snapshot.me.id),
-                  String(enabled),
-                );
-              }}
+        {snapshot.me.role === "GM" && availableRollCharacters.length > 0 && (
+          <div className="activity-character-picker">
+            <FormSelect
+              id="activity-roll-character"
+              aria-label="Персонаж для броска"
+              value={rollCharacter?.id ?? ""}
+              onChange={(event) => setRollCharacterId(event.target.value)}
             >
-              Физические кубы
-            </FormInput>
+              {availableRollCharacters.map((character) => (
+                <option key={character.id} value={character.id}>
+                  {character.name}
+                </option>
+              ))}
+            </FormSelect>
           </div>
-
-          {rollCharacter ? (
-            <QuickRollPanel
-              rollCharacter={rollCharacter}
-              campaignId={snapshot.campaign.id}
-              membershipId={snapshot.me.id}
-              rows={rollableStatRows(
-                statRowsFromLayout(snapshot.campaign.statLayout),
-              )}
-              quickRollPending={pendingQuickRoll !== null}
-              gmOnly={rollVisibility === "GM_ONLY"}
-              onQuickRoll={(formula, label, bonus, mode) =>
-                void submitQuickRoll(formula, label, bonus, mode)
-              }
-            />
-          ) : (
-            <p className="muted">Нет доступного персонажа для броска.</p>
-          )}
-          {pendingQuickRoll && (
-            <p role="status">
-              Бросаем… {pendingQuickRoll.characterName} ·{" "}
-              {pendingQuickRoll.label}
-            </p>
-          )}
-          {quickRollError && (
-            <p className="composer-error" role="alert">
-              {quickRollError}
-            </p>
-          )}
-        </section>
+        )}
+        {snapshot.me.role === "PLAYER" && rollCharacter && (
+          <div className="activity-character-picker activity-character-picker--player">
+            <strong>{rollCharacter.name}</strong>
+          </div>
+        )}
         {rollCharacter && (
           <ResourceCounters
             scopeKey={rollCharacter.id}
@@ -742,6 +843,58 @@ export function ActivityPanel({
             {resourceError}
           </p>
         )}
+        <section className="activity-roll-controls" aria-label="Быстрые броски">
+          {rollCharacter ? (
+            <QuickRollPanel
+              rollCharacter={rollCharacter}
+              campaignId={snapshot.campaign.id}
+              membershipId={snapshot.me.id}
+              rows={rollableStatRows(
+                snapshot.campaign.statLayout.flatMap((group) =>
+                  group.rows
+                    .filter((row) => row.source !== "RESOURCE")
+                    .map(({ key, label }) => ({ key, label, group: group.id })),
+                ),
+              )}
+              quickRollPending={pendingQuickRoll !== null}
+              gmOnly={rollVisibility === "GM_ONLY"}
+              physicalDiceControl={
+                <FormInput
+                  className="compact-check quick-roll-panel__physical-dice"
+                  type="checkbox"
+                  checked={physicalDice}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setPhysicalDice(enabled);
+                    window.localStorage.setItem(
+                      physicalDiceStorageKey(snapshot.me.id),
+                      String(enabled),
+                    );
+                  }}
+                >
+                  Физические кубы
+                </FormInput>
+              }
+              onEntryAction={(entry, mode, rollActionId) =>
+                catalogActions.onRollEntry(rollCharacter.id, entry.id, {
+                  mode,
+                  rollActionId,
+                  entryRevision: entry.revision,
+                })
+              }
+              onQuickRoll={(formula, label, bonus, mode, count) =>
+                void submitQuickRoll(formula, label, bonus, mode, count)
+              }
+            />
+          ) : (
+            <p className="muted">Нет доступного персонажа для броска.</p>
+          )}
+          {quickRollError && (
+            <p className="composer-error" role="alert">
+              {quickRollError}
+            </p>
+          )}
+        </section>
       </div>
       <div className="activity-log-toolbar">
         <span className="eyebrow">Журнал</span>
@@ -753,8 +906,7 @@ export function ActivityPanel({
             aria-label={activityFilterSummaryTitle(activityFilters)}
             title={activityFilterSummaryTitle(activityFilters)}
           >
-            <AppIcon icon={MoreIcon} />
-            <span className="activity-filters-summary__label">Показывать</span>
+            <AppIcon icon={SettingsIcon} />
             {hiddenActivityStreamCount(activityFilters) > 0 && (
               <span className="activity-filters-badge" aria-hidden="true">
                 {hiddenActivityStreamCount(activityFilters)}
@@ -782,33 +934,6 @@ export function ActivityPanel({
           </fieldset>
         </details>
       </div>
-      {historyPresentation.showControl && (
-        <div className="activity-log-history-control">
-          {historyPresentation.truncatedLabel && (
-            <span className="activity-log-truncated-note">
-              {historyPresentation.truncatedLabel}
-            </span>
-          )}
-          <button
-            type="button"
-            className="activity-log-toggle"
-            aria-expanded={!rollLogCollapsed}
-            aria-controls="activity-message-list"
-            title={
-              rollLogCollapsed
-                ? "Показать всю ленту событий"
-                : "Показать только последние записи"
-            }
-            onClick={() => {
-              const next = !rollLogCollapsed;
-              setRollLogCollapsed(next);
-              writeRollLogCollapsed(window.localStorage, snapshot.me.id, next);
-            }}
-          >
-            {historyPresentation.actionLabel}
-          </button>
-        </div>
-      )}
       {/* UIX-532: лента прокручивается, значит должна доставаться и с
           клавиатуры. Без `tabIndex` до неё нельзя добраться табом, и человек
           без мыши не может пролистать журнал вовсе — прокрутка есть, а
@@ -824,6 +949,22 @@ export function ActivityPanel({
         ref={listRef}
         onScroll={onScroll}
       >
+        {visibleEntryCount < timeline.length && (
+          <div className="activity-log-history-control">
+            <span className="activity-log-truncated-note">
+              Показаны последние {visibleEntryCount} из {timeline.length}.
+            </span>
+            <button
+              type="button"
+              className="activity-log-toggle"
+              aria-controls="activity-message-list"
+              title="Загрузить более ранние события"
+              onClick={() => setVisibleHistoryLimit((limit) => limit + 10)}
+            >
+              Показать больше
+            </button>
+          </div>
+        )}
         {timeline.length === 0 && (
           <p className="chat-empty">
             {
@@ -858,11 +999,21 @@ export function ActivityPanel({
               data-activity-stream={stream}
               tabIndex={-1}
             >
-              <header>
-                <strong>{message.displayName}</strong>
-                <RollCharacterName
-                  name={characterNameFor(message.characterId)}
+              <header
+                className={
+                  message.kind === "DICE" ? "message__roll-header" : undefined
+                }
+              >
+                <RollAvatar
+                  {...avatarFor(message.characterId)}
+                  fallbackName={message.displayName}
                 />
+                <div className="message__identity">
+                  <strong>{message.displayName}</strong>
+                  <RollCharacterName
+                    name={characterNameFor(message.characterId)}
+                  />
+                </div>
                 <time>
                   {new Date(occurredAt).toLocaleTimeString([], {
                     hour: "2-digit",
@@ -872,18 +1023,13 @@ export function ActivityPanel({
                 {message.visibility === "GM_ONLY" && <span>{"мастеру"}</span>}
               </header>
               <ChatMessageBody
+                isActive={item === visibleTimeline.at(-1)}
                 message={message}
                 catalogEntryIds={
                   snapshot.me.role === "GM" ? catalogEntryIds : undefined
                 }
                 playerRequests={snapshot.playerRequests}
                 onOpenPlayerRequests={onOpenPlayerRequestCreate}
-                avatar={
-                  <RollAvatar
-                    {...avatarFor(message.characterId)}
-                    fallbackName={message.displayName}
-                  />
-                }
               />
             </article>
           );
@@ -1217,6 +1363,8 @@ export function DirectChatPanel({
     }
   }
 
+  const timeline = buildChatTimeline(messages);
+
   return (
     <section
       className="chat-panel direct-chat-panel"
@@ -1239,7 +1387,7 @@ export function DirectChatPanel({
             return (
               <option key={contact.membershipId} value={contact.membershipId}>
                 {contact.displayName}
-                {unread ? ` ? ${unread}` : ""}
+                {unread ? ` • ${unread}` : ""}
               </option>
             );
           })}
@@ -1277,7 +1425,7 @@ export function DirectChatPanel({
             нет сообщений.
           </p>
         )}
-        {buildChatTimeline(messages).map((item) =>
+        {timeline.map((item) =>
           item.type === "DATE" ? (
             <div className="chat-date-divider" key={`direct-date-${item.key}`}>
               <span>{item.label}</span>
@@ -1297,7 +1445,10 @@ export function DirectChatPanel({
                   })}
                 </time>
               </header>
-              <ChatMessageBody message={item.message} />
+              <ChatMessageBody
+                isActive={item === timeline.at(-1)}
+                message={item.message}
+              />
             </article>
           ),
         )}
@@ -1612,11 +1763,23 @@ export function ChatPanel({
               className={`message ${item.message.kind.toLowerCase()}`}
               tabIndex={-1}
             >
-              <header>
-                <strong>{item.message.displayName}</strong>
-                <RollCharacterName
-                  name={characterNameFor(item.message.characterId)}
+              <header
+                className={
+                  item.message.kind === "DICE"
+                    ? "message__roll-header"
+                    : undefined
+                }
+              >
+                <RollAvatar
+                  {...avatarFor(item.message.characterId)}
+                  fallbackName={item.message.displayName}
                 />
+                <div className="message__identity">
+                  <strong>{item.message.displayName}</strong>
+                  <RollCharacterName
+                    name={characterNameFor(item.message.characterId)}
+                  />
+                </div>
                 <time>
                   {new Date(item.message.createdAt).toLocaleTimeString([], {
                     hour: "2-digit",
@@ -1626,18 +1789,13 @@ export function ChatPanel({
                 {item.message.visibility === "GM_ONLY" && <span>мастеру</span>}
               </header>
               <ChatMessageBody
+                isActive={item === timeline.at(-1)}
                 message={item.message}
                 catalogEntryIds={
                   snapshot.me.role === "GM" ? catalogEntryIds : undefined
                 }
                 playerRequests={snapshot.playerRequests}
                 onOpenPlayerRequests={onOpenPlayerRequests}
-                avatar={
-                  <RollAvatar
-                    {...avatarFor(item.message.characterId)}
-                    fallbackName={item.message.displayName}
-                  />
-                }
               />
             </article>
           ),

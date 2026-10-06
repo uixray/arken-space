@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
-import { activityReadTargets, feedForChatStream } from "./sidebar-feed";
+import {
+  activityReadTargets,
+  chatFeedOrder,
+  feedForChatStream,
+} from "./sidebar-feed";
 import { normalizeCharacterControllerIds } from "./character-controller-access-state";
 
 const snapshot = (messages: GameSnapshot["messages"]): GameSnapshot =>
@@ -29,6 +33,11 @@ const message = (
   }) as GameSnapshot["messages"][number];
 
 describe("unified activity feed routing", () => {
+  it("hides the GM story tab and the redundant one-tab navigation", () => {
+    expect(chatFeedOrder(true)).toEqual(["ACTIVITY"]);
+    expect(chatFeedOrder(false)).not.toContain("STORY");
+  });
+
   it("maps TABLE notification and deep-link requests to the activity feed", () => {
     expect(feedForChatStream("TABLE")).toBe("ACTIVITY");
     expect(feedForChatStream("ROLLS")).toBe("ACTIVITY");

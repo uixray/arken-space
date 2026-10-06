@@ -1,4 +1,10 @@
-import { useMemo, useState, type FormEvent } from "react";
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import type { CatalogEntryDto } from "@arken/contracts";
 import { Button } from "./design-system/Button";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
@@ -115,14 +121,24 @@ export function CatalogEntryForm({
   );
   const [name, setName] = useState(existing?.name ?? "");
   const [description, setDescription] = useState(existing?.description ?? "");
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const control = descriptionRef.current;
+    if (!control) return;
+    control.style.height = "auto";
+    const maxHeight = Math.max(240, window.innerHeight / 2);
+    control.style.height = `${Math.min(control.scrollHeight, maxHeight)}px`;
+    control.style.overflowY =
+      control.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, [description]);
   const [usesEnabled, setUsesEnabled] = useState(Boolean(existing?.data.uses));
   const [usesCurrent, setUsesCurrent] = useState(
     existing?.data.uses?.current ?? 0,
   );
   const [usesMax, setUsesMax] = useState(existing?.data.uses?.max ?? 1);
-  const [recharge, setRecharge] = useState<"DAY" | "BATTLE" | "WEEK">(
-    existing?.data.uses?.recharge ?? "DAY",
-  );
+  const [recharge, setRecharge] = useState<
+    "DAY" | "BATTLE" | "WEEK" | "SHORT_REST"
+  >(existing?.data.uses?.recharge ?? "DAY");
   const [progressText, setProgressText] = useState(
     existing?.data.uses?.progressText ?? "",
   );
@@ -325,6 +341,8 @@ export function CatalogEntryForm({
       <label>
         Описание
         <FormTextArea
+          controlRef={descriptionRef}
+          rows={1}
           value={description}
           maxLength={10000}
           onChange={(event) => setDescription(event.target.value)}
@@ -333,14 +351,13 @@ export function CatalogEntryForm({
 
       <fieldset>
         <legend>Использования</legend>
-        <label>
-          <FormInput
-            type="checkbox"
-            checked={usesEnabled}
-            onChange={(event) => setUsesEnabled(event.target.checked)}
-          />{" "}
+        <FormInput
+          type="checkbox"
+          checked={usesEnabled}
+          onChange={(event) => setUsesEnabled(event.target.checked)}
+        >
           Ограничить количество использований
-        </label>
+        </FormInput>
         {usesEnabled && (
           <>
             <label>
@@ -373,6 +390,7 @@ export function CatalogEntryForm({
                 <option value="DAY">В день</option>
                 <option value="BATTLE">В бой</option>
                 <option value="WEEK">В неделю</option>
+                <option value="SHORT_REST">За короткий отдых</option>
               </FormSelect>
             </label>
             <label>

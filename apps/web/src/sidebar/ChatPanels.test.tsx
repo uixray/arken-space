@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -265,6 +266,7 @@ describe("подпись персонажа в ленте (UIX-501)", () => {
       "Мастер",
     );
     expect(markup).toContain("<strong>Мастер</strong>");
+    expect(markup).toContain('class="roll-avatar"');
     expect(markup).toContain('class="message-character"');
     expect(markup).toContain("Тейн");
   });
@@ -299,7 +301,7 @@ describe("dice presentation boundary (UIX-289)", () => {
     semanticOutcome: { kind: "CRITICAL_SUCCESS", keptNaturalD20: 20 },
   };
 
-  function renderDiceBody(dice: unknown, skill: boolean) {
+  function renderDiceBody(dice: unknown, skill: boolean, body = "Test roll") {
     const payload = skill
       ? {
           ...(dice as Record<string, unknown>),
@@ -324,7 +326,7 @@ describe("dice presentation boundary (UIX-289)", () => {
       membershipId: "member-1",
       displayName: "Test participant",
       characterId: null,
-      body: "Test roll",
+      body,
       visibility: "PUBLIC",
       kind: "DICE",
       threadId: "table-1",
@@ -335,6 +337,69 @@ describe("dice presentation boundary (UIX-289)", () => {
     return renderToStaticMarkup(<ChatMessageBody message={message} />);
   }
 
+  it("omits a duplicate unmodified result and puts critical status on the math row", () => {
+    const markup = renderDiceBody(
+      {
+        ...validDice,
+        formula: "1d20",
+        resolvedFormula: "1d20",
+        modifiers: [],
+        total: 20,
+      },
+      false,
+    );
+    const document = new DOMParser().parseFromString(markup, "text/html");
+    const math = document.querySelector(".roll-details__math");
+    expect(math?.textContent).toBe("1d20Крит. успех");
+    expect(math?.querySelectorAll("small")).toHaveLength(1);
+    expect(
+      document.querySelector(".roll-details__heading .roll-critical-label"),
+    ).toBeNull();
+    expect(document.querySelector(".roll-total")?.textContent).toBe("20");
+  });
+
+  it.each([
+    ["ADVANTAGE", "преимущество", "Преимущество"],
+    ["DISADVANTAGE", "помеха", "Помеха"],
+  ])(
+    "keeps pure roll mode only in the badge (%s)",
+    (rollMode, suffix, badge) => {
+      const markup = renderDiceBody(
+        {
+          ...validDice,
+          formula: "1d100",
+          resolvedFormula: "1d100",
+          terms: [{ notation: "1d100", rolls: [97], subtotal: 97 }],
+          modifiers: [],
+          total: 97,
+          semanticOutcome: undefined,
+          rollMode,
+        },
+        false,
+        `Чистый бросок стогранника · ${suffix}`,
+      );
+      const document = new DOMParser().parseFromString(markup, "text/html");
+      expect(document.querySelector(".roll-result--pure")).not.toBeNull();
+      expect(
+        document.querySelector(".roll-details__heading")?.textContent,
+      ).toBe("Чистый бросок стогранника");
+      expect(document.querySelector(".roll-mode-badge")?.textContent).toBe(
+        badge,
+      );
+      expect(
+        document.querySelector(".roll-details__math > small")?.textContent,
+      ).toBe("1d100");
+    },
+  );
+
+  it("shows actual arithmetic after the critical status when a modifier exists", () => {
+    const markup = renderDiceBody(validDice, false);
+    const document = new DOMParser().parseFromString(markup, "text/html");
+    const right = document.querySelector(".roll-details__math-right");
+    expect(right?.textContent).toBe("Крит. успех20+5");
+    expect(document.querySelector(".roll-total")?.textContent).toBe("25");
+  });
+
   it.each([false, true])(
     "keeps total and critical label when decorative frame is invalid (skill=%s)",
     (skill) => {
@@ -342,11 +407,14 @@ describe("dice presentation boundary (UIX-289)", () => {
         { ...validDice, frame: { setKey: "PRIVATE", frameKey: "unpublished" } },
         skill,
       );
-      expect(markup).toMatch(
-        /<strong[^>]*aria-label="Итог броска"[^>]*>25<\/strong>/,
+      const document = new DOMParser().parseFromString(markup, "text/html");
+      const total = document.querySelector('strong[aria-label="Итог броска"]');
+      expect(total?.textContent).toBe("25");
+      expect(document.body.textContent).toContain(
+        skill ? "Критический успех" : "Крит. успех",
       );
-      expect(markup).toContain("Критический успех");
-      expect(markup).not.toContain("Критический провал");
+      expect(document.body.textContent).not.toContain("Критический провал");
+      expect(markup).not.toContain("/assets/frames/unpublished.png");
     },
   );
 
@@ -376,10 +444,10 @@ describe("dice presentation boundary (UIX-289)", () => {
         },
         skill,
       );
-      expect(markup).toMatch(
-        /<strong[^>]*aria-label="Итог броска"[^>]*>25<\/strong>/,
-      );
-      expect(markup).not.toContain("roll-critical-label");
+      const document = new DOMParser().parseFromString(markup, "text/html");
+      const total = document.querySelector('strong[aria-label="Итог броска"]');
+      expect(total?.textContent).toBe("25");
+      expect(document.querySelector(".roll-critical-label")).toBeNull();
     },
   );
 });

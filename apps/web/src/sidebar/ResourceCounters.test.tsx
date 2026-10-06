@@ -44,7 +44,7 @@ vi.mock("@gravity-ui/uikit", () => ({
 /**
  * UIX-424, шаг 8. Счётчики стоят там, где раньше были снятые кнопки бросков, и
  * тратятся каждый ход — поэтому проверяется не отрисовка, а границы: за ноль и
- * за максимум уходить нельзя, и правит их только тот, кто ведёт персонажа.
+ * ниже нуля уходить нельзя, но временные очки сверх максимума допустимы.
  *
  * UIX-468 добавил накопление нажатий и восстановление. Главное здесь — откат:
  * показанное до ответа число обязано вернуться к серверному, если сервер отказал.
@@ -181,7 +181,7 @@ describe("счётчики ресурсов", () => {
     });
   });
 
-  it("отправляет фактическую дельту после обрезки по верхней границе", async () => {
+  it("копит очки сверх максимума и показывает второй слой шкалы", async () => {
     const props = renderCounters({
       rows: [rows[0]!],
       resources: { physicalPower: { current: 9, maximum: 10 } },
@@ -195,14 +195,24 @@ describe("счётчики ресурсов", () => {
       restore.click();
     });
 
-    expect(enduranceInput()).toHaveValue(10);
+    expect(enduranceInput()).toHaveValue(12);
+    const bar = screen.getByRole("progressbar", {
+      name: "Уровень: Выносливость",
+    });
+    expect(bar).toHaveAttribute(
+      "aria-valuetext",
+      "12 из 10, сверх максимума 2",
+    );
+    expect(bar.querySelector(".resource-bar__overflow")).toHaveStyle({
+      width: "20%",
+    });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(RESOURCE_ADJUST_DELAY_MS);
     });
     expect(props.onSpend).toHaveBeenCalledWith({
       key: "physicalPower",
       kind: "DELTA",
-      delta: 1,
+      delta: 3,
     });
   });
 
@@ -409,7 +419,7 @@ describe("счётчики ресурсов", () => {
     });
   });
 
-  it("не восстанавливает сверх максимума", async () => {
+  it("восстанавливает только до максимума", async () => {
     const props = renderCounters({
       rows: [rows[0]!],
       resources: { physicalPower: { current: 9, maximum: 10 } },
@@ -422,6 +432,20 @@ describe("счётчики ресурсов", () => {
       kind: "DELTA",
       delta: 1,
     });
+  });
+
+  it("после переполнения отключает реген, но оставляет плюс и ввод", () => {
+    renderCounters({
+      rows: [rows[0]!],
+      resources: { physicalPower: { current: 12, maximum: 10 } },
+    });
+    expect(
+      screen.getByRole("button", { name: "Восстановить 3: Выносливость" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Вернуть одно очко: Выносливость" }),
+    ).toBeEnabled();
+    expect(enduranceInput()).toBeEnabled();
   });
 
   it("восстанавливает ману её собственной величиной регена", () => {
@@ -529,7 +553,7 @@ describe("счётчики ресурсов", () => {
     expect(enduranceInput()).toHaveValue(4);
   });
 
-  it("обрезает введённое число по границам ресурса", async () => {
+  it("сохраняет введённое число сверх максимума", async () => {
     const props = renderCounters();
     const input = enduranceInput();
     fireEvent.change(input, { target: { value: "99" } });
@@ -537,12 +561,12 @@ describe("счётчики ресурсов", () => {
     expect(props.onSpend).toHaveBeenCalledWith({
       key: "physicalPower",
       kind: "SET",
-      value: 10,
+      value: 99,
     });
   });
 
-  it("не даёт уйти ниже нуля и выше максимума", () => {
-    // Ограничение здесь, а не только на сервере: иначе счётчик уводит в минус
+  it("не даёт уйти ниже нуля, но позволяет выйти за максимум", () => {
+    // Ограничение снизу здесь, а не только на сервере: иначе счётчик уводит в минус
     // на глазах, а отказ приходит позже.
     renderCounters();
     expect(

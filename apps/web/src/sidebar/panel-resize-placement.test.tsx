@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { CharacterDto } from "@arken/contracts";
-import { renderComponent, screen } from "../test-support/render";
+import { fireEvent, renderComponent, screen } from "../test-support/render";
 import { DiceTrayPanel } from "./DiceTrayPanel";
 import { QuickRollPanel } from "./QuickRollPanel";
 
@@ -110,4 +110,65 @@ describe("ручка изменения высоты", () => {
       panel?.lastElementChild?.classList.contains("panel-resize-handle"),
     ).toBe(true);
   });
+});
+
+it("keeps quick roll groups visually distinct without redundant headings and shares an ability without executing it", () => {
+  const onEntryAction = vi.fn().mockResolvedValue(undefined);
+  renderComponent(
+    <QuickRollPanel
+      rollCharacter={{
+        ...character,
+        entries: [
+          {
+            id: "fire",
+            kind: "ABILITY",
+            name: "Огненная стрела",
+            description: "Пламя",
+            data: { rollActions: [] },
+            revision: 1,
+            sourceCatalogEntryId: null,
+          },
+        ],
+      }}
+      campaignId="camp"
+      membershipId="grouped-mem"
+      rows={[
+        { key: "strength", label: "Сила", group: "characteristics" },
+        { key: "initiative", label: "Инициатива", group: "combat" },
+      ]}
+      quickRollPending={false}
+      gmOnly={false}
+      onQuickRoll={() => {}}
+      onEntryAction={onEntryAction}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "Сила" })).toHaveClass(
+    "quick-roll-button--ordinary",
+  );
+  expect(screen.getByRole("button", { name: "Инициатива" })).toHaveClass(
+    "quick-roll-button--combat",
+  );
+  expect(screen.queryByRole("heading", { name: "Обычные" })).toBeNull();
+  expect(screen.queryByRole("heading", { name: "Боевые" })).toBeNull();
+  expect(screen.getByRole("tab", { name: "Характеристики" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  fireEvent.click(screen.getByRole("tab", { name: "Способности" }));
+  expect(screen.getByRole("button", { name: "Ближний бой" })).toHaveClass(
+    "quick-roll-button--skill",
+  );
+  expect(screen.getByRole("button", { name: "Огненная стрела" })).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "Навыки" })).toBeNull();
+  expect(screen.queryByRole("heading", { name: "Способности" })).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Показать без выполнения: Огненная стрела",
+    }),
+  );
+  expect(onEntryAction).toHaveBeenCalledWith(
+    expect.objectContaining({ id: "fire" }),
+    "SHARE",
+    undefined,
+  );
 });

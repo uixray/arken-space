@@ -6,6 +6,7 @@ import {
   physicalRollBonus,
   physicalRollChatRequest,
   physicalRollMessage,
+  physicalRollPresentation,
   readRollLogCollapsed,
   rollLogCollapsedStorageKey,
   rollLogHistoryPresentation,
@@ -94,6 +95,17 @@ describe("activity roll controls", () => {
   it("extracts the physical bonus for prominent rendering", () => {
     expect(physicalRollBonus(physicalRollMessage("Сила воли", 4))).toBe("+4");
     expect(physicalRollBonus("Обычное сообщение · бонус +4.")).toBeNull();
+  });
+  it("condenses a stored physical roll without changing its message", () => {
+    expect(physicalRollPresentation(physicalRollMessage("Сила", 8))).toEqual({
+      label: "Сила",
+      bonus: "+8",
+      mode: "NORMAL",
+    });
+    expect(
+      physicalRollPresentation(physicalRollMessage("Сила", 8, "ADVANTAGE")),
+    ).toMatchObject({ mode: "ADVANTAGE", label: "Сила" });
+    expect(physicalRollPresentation("Другое сообщение")).toBeNull();
   });
 
   it("keeps the GM-selected character attribution for a physical roll", () => {

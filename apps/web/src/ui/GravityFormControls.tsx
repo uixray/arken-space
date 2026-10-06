@@ -1,6 +1,7 @@
 import {
   Children,
   isValidElement,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -12,7 +13,10 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
-import { Checkbox, Select, TextArea, TextInput } from "@gravity-ui/uikit";
+import { Checkbox } from "../design-system/Checkbox";
+import { Input } from "../design-system/Input";
+import { TextArea } from "../design-system/TextArea";
+import { Select } from "../design-system/Select";
 
 import {
   buildFormSelectUtilityOptions,
@@ -90,7 +94,7 @@ export function FormInput({
       ["number", "search", "url", "email", "password", "tel", "text"] as const
     ).find((candidate) => candidate === type) ?? "text";
   return (
-    <TextInput
+    <Input
       {...props}
       controlRef={controlRef}
       // Native constraints and ARIA descriptions are not top-level uikit props.
@@ -185,6 +189,34 @@ export function FormSelect({
   const [open, setOpen] = useState(false);
   const controlRef = useRef<HTMLButtonElement>(null);
   const [popupWidth, setPopupWidth] = useState<number>();
+  const popupClassName = useOverlayPopupClassName("arken-form-select-popup");
+  useEffect(() => {
+    if (!open || !popupClassName?.includes("arken-select-popup--modal")) return;
+    const owner = controlRef.current?.closest(".g-modal_open");
+    if (!owner) return;
+    const closeWhenAnotherModalOwnsFocus = () => {
+      const modals = document.querySelectorAll(".g-modal_open");
+      if (modals.length > 0 && modals[modals.length - 1] !== owner)
+        setOpen(false);
+    };
+    const observer = new MutationObserver(closeWhenAnotherModalOwnsFocus);
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    document.addEventListener("focusin", closeWhenAnotherModalOwnsFocus, true);
+    closeWhenAnotherModalOwnsFocus();
+    return () => {
+      observer.disconnect();
+      document.removeEventListener(
+        "focusin",
+        closeWhenAnotherModalOwnsFocus,
+        true,
+      );
+    };
+  }, [open, popupClassName]);
   useLayoutEffect(() => {
     if (!open || !controlRef.current) return;
     const control = controlRef.current;
@@ -199,24 +231,32 @@ export function FormSelect({
           : undefined,
       );
     };
-    const schedule = () => {
+    const schedule = (centerAnchor: boolean) => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(measure);
+      frame = requestAnimationFrame(() => {
+        if (centerAnchor) {
+          // A height reduction can leave an open popup beyond the viewport.
+          // Only a viewport resize should reposition the page, not a change
+          // to the trigger's own width.
+          control.scrollIntoView?.({ block: "center", inline: "nearest" });
+        }
+        measure();
+      });
     };
     measure();
     const observer =
       typeof ResizeObserver === "undefined"
         ? undefined
-        : new ResizeObserver(schedule);
+        : new ResizeObserver(() => schedule(false));
     observer?.observe(control);
-    window.addEventListener("resize", schedule);
+    const onViewportResize = () => schedule(true);
+    window.addEventListener("resize", onViewportResize);
     return () => {
       observer?.disconnect();
-      window.removeEventListener("resize", schedule);
+      window.removeEventListener("resize", onViewportResize);
       cancelAnimationFrame(frame);
     };
   }, [open]);
-  const popupClassName = useOverlayPopupClassName("arken-form-select-popup");
   const childOptions = Children.toArray(children)
     .filter(
       (child): child is ReactElement<OptionProps> =>
@@ -240,10 +280,6 @@ export function FormSelect({
       const control = controlRef.current;
       if (!control) return;
       const active = document.activeElement;
-      // A real browser can leave focus on the fading option (and then body)
-      // when a controlled update removes that option. Restore only while this
-      // Select still owns focus; never override a dialog/input focused by the
-      // consumer's onChange handler.
       if (
         !active ||
         active === document.body ||
@@ -271,6 +307,7 @@ export function FormSelect({
       disabled={disabled}
       ref={controlRef}
       popupClassName={popupClassName}
+      open={open}
       onOpenChange={setOpen}
       renderPopup={({ renderFilter, renderList }) => (
         <div

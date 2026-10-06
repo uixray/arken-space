@@ -8,7 +8,7 @@ export type HttpRouteKey =
   | `PUT /${string}`;
 
 export type CampaignRoutePolicy =
-  "CAMPAIGN" | "WORLD_CONTENT_CANON" | "OPERATOR_FEEDBACK";
+  "CAMPAIGN" | "WORLD_CONTENT_CANON" | "OPERATOR_FEEDBACK" | "PUBLIC_ROADMAP";
 
 export type RoutePolicyEntry = Readonly<{
   key: HttpRouteKey;
@@ -54,6 +54,11 @@ export const OPERATOR_FEEDBACK_ROUTE_KEYS = [
   "GET /api/operator/feedback/:id/attachments/:attachmentId",
   "GET /api/operator/feedback/:id/export",
   "PATCH /api/operator/feedback/:id",
+] as const satisfies readonly HttpRouteKey[];
+
+/** Anonymous roadmap voting is global, not campaign-scoped. */
+export const PUBLIC_ROADMAP_ROUTE_KEYS = [
+  "POST /api/public/roadmap-votes/:itemId",
 ] as const satisfies readonly HttpRouteKey[];
 
 export const CAMPAIGN_ROUTE_KEYS = [
@@ -140,6 +145,7 @@ export const CAMPAIGN_ROUTE_KEYS = [
 
 export const GLOBAL_ROUTE_EXCEPTIONS = {
   OPERATOR_FEEDBACK: OPERATOR_FEEDBACK_ROUTE_KEYS,
+  PUBLIC_ROADMAP: PUBLIC_ROADMAP_ROUTE_KEYS,
   WORLD_CONTENT_CANON: WORLD_CONTENT_CANON_ROUTE_KEYS,
 } as const satisfies Record<
   Exclude<CampaignRoutePolicy, "CAMPAIGN">,
@@ -156,12 +162,17 @@ export const ROUTE_POLICY_REGISTRY: readonly RoutePolicyEntry[] = [
     key,
     policy: "OPERATOR_FEEDBACK" as const,
   })),
+  ...PUBLIC_ROADMAP_ROUTE_KEYS.map((key) => ({
+    key,
+    policy: "PUBLIC_ROADMAP" as const,
+  })),
 ];
 
 const ROUTE_POLICIES = new Set<CampaignRoutePolicy>([
   "CAMPAIGN",
   "WORLD_CONTENT_CANON",
   "OPERATOR_FEEDBACK",
+  "PUBLIC_ROADMAP",
 ]);
 
 const PATH_PARAMETER_PATTERN = /:([A-Za-z][A-Za-z0-9_]*)/g;

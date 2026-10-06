@@ -6,6 +6,18 @@ import {
   type WorkspaceNavItem,
 } from "./workspace-nav";
 
+export function workspaceReturnTarget(): HTMLElement | null {
+  return (
+    document.querySelector<HTMLElement>(
+      '.workspace-nav__more > summary[data-active-workspace], .workspace-nav__item[aria-pressed="true"]',
+    ) ?? document.querySelector<HTMLElement>(".workspace-nav__item")
+  );
+}
+
+export function focusWorkspaceReturnTarget(previous: HTMLElement | null): void {
+  (previous?.isConnected ? previous : workspaceReturnTarget())?.focus();
+}
+
 /**
  * UIX-472 — разделы строкой, а не выпадающим списком.
  *
@@ -158,11 +170,7 @@ export function WorkspaceNav({
             {item.label}
           </span>
         ))}
-        {items.map((item) => (
-          <span key={`more-${item.id}`} data-measure="more">
-            Ещё {items.length} · {item.label}
-          </span>
-        ))}
+        <span data-measure="more">Ещё {items.length}</span>
       </div>
       {visible.map((item) => button(item, false))}
       {overflow.length > 0 && (
@@ -175,17 +183,11 @@ export function WorkspaceNav({
                 ? `Открыт раздел: ${activeOverflow.label}`
                 : "Ещё разделы"
             }
-            style={{ width: Math.min(moreWidth, available || moreWidth) }}
           >
             Ещё
             <span className="workspace-nav__count" aria-hidden="true">
               {overflow.length}
             </span>
-            {activeOverflow && (
-              <span className="workspace-nav__active">
-                {activeOverflow.label}
-              </span>
-            )}
           </summary>
           <div className="workspace-nav__menu">
             {overflow.map((item) => button(item, true))}

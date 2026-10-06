@@ -371,13 +371,14 @@ for (const role of ["GM", "PLAYER"] as const) {
         // expose an option in the DOM.
         await trigger.press("ArrowDown");
         await expect(list).toBeVisible();
-        const firstText = (
-          await list.getByRole("option").first().innerText()
-        ).trim();
+        // The pointer selected option 2 above. Home selects option 1 via
+        // keyboard regardless of the popup's component-defined highlight or
+        // whether ArrowDown would stop at the last option.
         await page.keyboard.press("Home");
+        await expect(list.getByRole("option").first()).toBeFocused();
         await page.keyboard.press("Enter");
         await expect(list).toBeHidden();
-        await expect(trigger).toContainText(firstText);
+        await expect(trigger).not.toContainText(selectedText);
         await expect(trigger).toBeFocused();
 
         await trigger.click();

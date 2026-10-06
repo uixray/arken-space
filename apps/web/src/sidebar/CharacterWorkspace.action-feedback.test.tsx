@@ -273,6 +273,9 @@ async function galleryLoaded() {
 function selectPortrait(
   file = new File(["portrait"], "portrait.png", { type: "image/png" }),
 ) {
+  if (!screen.queryByLabelText("Загрузить портрет для персонажа")) {
+    fireEvent.click(screen.getByRole("button", { name: /^Изменить портрет:/ }));
+  }
   fireEvent.change(screen.getByLabelText("Загрузить портрет для персонажа"), {
     target: { files: [file] },
   });
@@ -280,9 +283,149 @@ function selectPortrait(
 }
 
 describe("character action feedback", () => {
+  it("moves initiative and reaction to a keyboard-operable vital tab", async () => {
+    renderComponent(
+      view(snapshot([character({ stats: { initiative: 2, reaction: 3 } })])),
+    );
+    await galleryLoaded();
+    const tabs = screen.getByRole("tablist", {
+      name: "Ключевые показатели персонажа",
+    });
+    const resourcesTab = within(tabs).getByRole("tab", { name: "Ресурсы" });
+    const initiativeTab = within(tabs).getByRole("tab", {
+      name: "Показатели",
+    });
+    expect(resourcesTab).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(resourcesTab, { key: "ArrowRight" });
+    expect(initiativeTab).toHaveAttribute("aria-selected", "true");
+    expect(initiativeTab).toHaveFocus();
+    const panel = screen.getByRole("tabpanel", {
+      name: "Показатели",
+    });
+    expect(
+      within(panel).getByRole("spinbutton", { name: "Инициатива" }),
+    ).toHaveValue(2);
+    expect(
+      within(panel).getByRole("spinbutton", { name: "Реакция" }),
+    ).toHaveValue(3);
+  });
+  it("keeps regen beside resources, not among rollable combat rows", async () => {
+    const update = vi.fn(async () => undefined);
+    const state = snapshot([
+      character({
+        stats: { enduranceRegen: 3, manaRegen: 2 },
+        resources: {
+          physicalPower: { current: 5, maximum: 10 },
+          magicPower: { current: 4, maximum: 8 },
+        },
+      }),
+    ]);
+    renderComponent(view(state, { onUpdateCounters: update }));
+    await galleryLoaded();
+    const vitals = screen.getByLabelText("Ключевые показатели");
+    expect(
+      within(vitals).getByRole("spinbutton", { name: "Реген Выносливости" }),
+    ).toHaveValue(3);
+    expect(
+      within(vitals).getByRole("spinbutton", { name: "Реген Маны" }),
+    ).toHaveValue(2);
+    expect(
+      screen.queryByRole("button", { name: "Реген Выносливости" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      within(vitals).getByRole("button", { name: "Увеличить Выносливость" }),
+    );
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(
+        state.characters[0]!.id,
+        state.characters[0]!.revision,
+        {
+          resources: {
+            ...state.characters[0]!.resources,
+            physicalPower: { current: 6, maximum: 10 },
+          },
+        },
+        expect.any(Object),
+      ),
+    );
+  });
+  it("shows custom resources in the single resources tab", async () => {
+    const save = vi.fn(async () => {});
+    renderComponent(
+      view(
+        snapshot([
+          character({ resources: { Ярость: { current: 3, maximum: 5 } } }),
+        ]),
+        { onUpdateCounters: save },
+      ),
+    );
+    await galleryLoaded();
+    expect(
+      screen.getByRole("progressbar", { name: "Уровень: Ярость" }),
+    ).toHaveAttribute("aria-valuenow", "3");
+    fireEvent.click(screen.getByRole("button", { name: "Настроить" }));
+    const input = screen.getByRole("spinbutton", { name: "Текущее" });
+    expect(input).toHaveValue(3);
+    fireEvent.change(input, { target: { value: "4" } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(save).toHaveBeenCalled());
+  });
+  it("shows inventory and notes in their own tab", async () => {
+    renderComponent(view(snapshot()));
+    await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Инвентарь" }));
+    expect(screen.getByRole("tabpanel", { name: "Инвентарь" })).toBeVisible();
+  });
+  it("edits coins in the vital wallet and saves on blur or Enter", async () => {
+    const update = vi.fn(async () => undefined);
+    const state = snapshot([
+      character({ wallet: { gold: 2, silver: 3, copper: 4, sp: 5 } }),
+    ]);
+    const rendered = renderComponent(view(state, { onUpdateCounters: update }));
+    await galleryLoaded();
+    const gold = screen.getByRole("spinbutton", { name: "Кошелёк: золото" });
+    const silver = screen.getByRole("spinbutton", { name: "Кошелёк: серебро" });
+    const copper = screen.getByRole("spinbutton", { name: "Кошелёк: медь" });
+    expect(gold).toHaveValue(2);
+    expect(silver).toHaveValue(3);
+    expect(copper).toHaveValue(4);
+    fireEvent.change(gold, { target: { value: "25" } });
+    fireEvent.blur(gold);
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(
+        state.characters[0]!.id,
+        state.characters[0]!.revision,
+        { wallet: { gold: 25, silver: 3, copper: 4, sp: 5 } },
+        undefined,
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Сохраняем…")).not.toBeInTheDocument(),
+    );
+    const savedState = snapshot([
+      character({
+        revision: 8,
+        wallet: { gold: 25, silver: 3, copper: 4, sp: 5 },
+      }),
+    ]);
+    rendered.rerender(view(savedState, { onUpdateCounters: update }));
+    copper.focus();
+    fireEvent.change(copper, { target: { value: "-1" } });
+    fireEvent.keyDown(copper, { key: "Enter" });
+    await waitFor(() =>
+      expect(update).toHaveBeenLastCalledWith(
+        savedState.characters[0]!.id,
+        savedState.characters[0]!.revision,
+        { wallet: { gold: 25, silver: 3, copper: 0, sp: 5 } },
+        undefined,
+      ),
+    );
+  });
+
   it("explains empty players and unchanged access", async () => {
     renderComponent(view(gmSnapshot({ characters: [character()] })));
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Личность" }));
     const access = within(
       screen.getByRole("group", { name: "Доступ к персонажу" }),
     );
@@ -304,6 +447,7 @@ describe("character action feedback", () => {
       view(state, { onReplaceControllers: save }),
     );
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Личность" }));
     const button = screen.getByRole("button", { name: "Сохранить доступ" });
     const descriptionId = button.getAttribute("aria-describedby");
     expect(button).toHaveAccessibleDescription("Изменений доступа нет.");
@@ -354,6 +498,7 @@ describe("character action feedback", () => {
     );
     renderComponent(view(snapshot(), { onReplaceControllers: save }));
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Личность" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Другой игрок" }));
     fireEvent.click(screen.getByRole("button", { name: "Сохранить доступ" }));
     await act(async () => pending.reject(new Error("conflict")));
@@ -377,6 +522,7 @@ describe("character action feedback", () => {
       .mockResolvedValue(undefined);
     renderComponent(view(snapshot(), { onReplaceControllers: save }));
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Личность" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Другой игрок" }));
     const button = screen.getByRole("button", { name: "Сохранить доступ" });
     fireEvent.click(button);
@@ -398,6 +544,9 @@ describe("character action feedback", () => {
   it("describes portrait selection and removal on the upload button", async () => {
     renderComponent(view(snapshot()));
     await galleryLoaded();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Изменить портрет: Персонаж A" }),
+    );
     const button = screen.getByRole("button", {
       name: "Загрузить и назначить",
     });
@@ -545,35 +694,70 @@ describe("character action feedback", () => {
     await galleryLoaded();
     const first = within(screen.getByRole("article", { name: "Персонаж A" }));
     const second = within(screen.getByRole("article", { name: "Персонаж B" }));
-    const firstUpload = first.getByRole("button", {
+    fireEvent.click(first.getByRole("tab", { name: "Личность" }));
+    fireEvent.click(second.getByRole("tab", { name: "Личность" }));
+    const firstAccessDescription = first
+      .getByRole("button", { name: "Сохранить доступ" })
+      .getAttribute("aria-describedby");
+    const secondAccessDescription = second
+      .getByRole("button", { name: "Сохранить доступ" })
+      .getAttribute("aria-describedby");
+    fireEvent.click(
+      first.getByRole("button", { name: "Изменить портрет: Персонаж A" }),
+    );
+    const firstPortrait = within(
+      screen.getByRole("dialog", { name: "Портрет: Персонаж A" }),
+    );
+    const firstUpload = firstPortrait.getByRole("button", {
       name: "Загрузить и назначить",
     });
-    const secondUpload = second.getByRole("button", {
+    const firstDescription = firstUpload.getAttribute("aria-describedby");
+    const firstFile = new File(["a"], "a.png", { type: "image/png" });
+    const secondFile = new File(["b"], "b.png", { type: "image/png" });
+    fireEvent.change(
+      firstPortrait.getByLabelText("Загрузить портрет для персонажа"),
+      {
+        target: { files: [firstFile] },
+      },
+    );
+    fireEvent.click(firstUpload);
+    fireEvent.click(
+      firstPortrait.getByRole("button", { name: /закрыть|close/i }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Портрет: Персонаж A" }),
+      ).not.toBeInTheDocument(),
+    );
+    fireEvent.click(
+      second.getByRole("button", { name: "Изменить портрет: Персонаж B" }),
+    );
+    const secondPortrait = within(
+      screen.getByRole("dialog", { name: "Портрет: Персонаж B" }),
+    );
+    const secondUpload = secondPortrait.getByRole("button", {
       name: "Загрузить и назначить",
     });
     const descriptions = [
-      firstUpload,
-      secondUpload,
-      first.getByRole("button", { name: "Сохранить доступ" }),
-      second.getByRole("button", { name: "Сохранить доступ" }),
-    ].map((button) => button.getAttribute("aria-describedby"));
+      firstDescription,
+      secondUpload.getAttribute("aria-describedby"),
+      firstAccessDescription,
+      secondAccessDescription,
+    ];
     expect(descriptions.every(Boolean)).toBe(true);
     expect(new Set(descriptions).size).toBe(4);
-    const firstFile = new File(["a"], "a.png", { type: "image/png" });
-    const secondFile = new File(["b"], "b.png", { type: "image/png" });
-    fireEvent.change(first.getByLabelText("Загрузить портрет для персонажа"), {
-      target: { files: [firstFile] },
-    });
-    fireEvent.click(firstUpload);
     expect(secondUpload).toHaveAccessibleDescription(
       "Сначала выберите изображение портрета.",
     );
     expect(
-      second.getByLabelText("Загрузить портрет для персонажа"),
+      secondPortrait.getByLabelText("Загрузить портрет для персонажа"),
     ).toBeEnabled();
-    fireEvent.change(second.getByLabelText("Загрузить портрет для персонажа"), {
-      target: { files: [secondFile] },
-    });
+    fireEvent.change(
+      secondPortrait.getByLabelText("Загрузить портрет для персонажа"),
+      {
+        target: { files: [secondFile] },
+      },
+    );
     expect(secondUpload).toBeEnabled();
     await act(async () => uploading.resolve(portrait));
     expect(upload).toHaveBeenCalledExactlyOnceWith(firstFile, "PORTRAIT");
@@ -581,12 +765,10 @@ describe("character action feedback", () => {
       portraitAssetId: "portrait-new",
       revision: 7,
     });
-    expect(firstUpload).toBeDisabled();
-    expect(firstUpload).toHaveAccessibleDescription(
-      "Сначала выберите изображение портрета.",
-    );
     expect(secondUpload).toBeEnabled();
-    expect(second.getByRole("button", { name: "Удалить b.png" })).toBeEnabled();
+    expect(
+      secondPortrait.getByRole("button", { name: "Удалить b.png" }),
+    ).toBeEnabled();
     expect(secondUpload).toHaveAccessibleDescription(
       "Файл выбран. Загрузите его, чтобы назначить портрет.",
     );
@@ -743,7 +925,7 @@ describe("character action feedback", () => {
       onRollInitiative: unexpectedAction,
       onPreviewPlayer: unexpectedAction,
       onUpdateCounters: unexpectedAction,
-      onCampaignClock: unexpectedAction,
+      onCampaignClock: vi.fn(async () => {}),
       requestedChatMessageId: null,
       onRequestedChatMessageHandled: unexpectedAction,
       onChatVisibilityChange: unexpectedAction,
@@ -765,6 +947,57 @@ describe("character action feedback", () => {
     );
     await galleryLoaded();
 
+    const characterNav = screen.getByRole("navigation", {
+      name: "Персонажи кампании",
+    });
+    const navActions = characterNav.querySelector(".character-rail__actions");
+    expect(navActions).toBe(characterNav.lastElementChild);
+    expect(
+      within(characterNav).getByRole("button", { name: "Создать персонажа" }),
+    ).toBeVisible();
+    expect(
+      within(characterNav).getByRole("button", { name: "Архив персонажей" }),
+    ).toBeVisible();
+    expect(
+      document.querySelector(
+        ".character-workspace__header .character-workspace__create",
+      ),
+    ).toBeNull();
+
+    const railToggle = screen.getByRole("button", {
+      name: "Свернуть список персонажей",
+    });
+    expect(railToggle.closest("header")?.querySelector("button")).toBe(
+      railToggle,
+    );
+    fireEvent.click(railToggle);
+    expect(
+      screen.getAllByRole("button", { name: /^Архивировать персонажа/ }),
+    ).toHaveLength(1);
+    expect(
+      screen
+        .getByRole("navigation", { name: "Персонажи кампании" })
+        .querySelector(".character-rail__archive"),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Развернуть список персонажей" }),
+    );
+    const day = screen.getByRole("button", {
+      name: `День ${state.campaign.day}`,
+    });
+    fireEvent.click(day);
+    await waitFor(() =>
+      expect(workspaceProps.onCampaignClock).toHaveBeenCalledExactlyOnceWith(
+        "ADVANCE_DAY",
+        state.campaign.revision,
+      ),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Следующий день" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Время кампании" }),
+    ).not.toBeInTheDocument();
     const rail = screen.getByRole("navigation", {
       name: "Персонажи кампании",
     });

@@ -5,6 +5,7 @@ import type {
   PlayerRequestTransition,
 } from "@arken/contracts";
 import { ArkenDialog } from "./ui/ArkenDialog";
+import { FormSelect } from "./ui/GravityFormControls";
 import {
   canCancelRequest,
   canEditRequest,
@@ -173,7 +174,7 @@ export function PlayerRequestsWorkspace({
               <div className="player-requests__grid">
                 <div className="player-requests__field">
                   <label htmlFor={horizonId}>Когда</label>
-                  <select
+                  <FormSelect
                     id={horizonId}
                     value={draft.horizon}
                     onChange={(e) =>
@@ -190,11 +191,11 @@ export function PlayerRequestsWorkspace({
                         </option>
                       ),
                     )}
-                  </select>
+                  </FormSelect>
                 </div>
                 <div className="player-requests__field">
                   <label htmlFor={audienceId}>Кто увидит</label>
-                  <select
+                  <FormSelect
                     id={audienceId}
                     value={draft.audience}
                     onChange={(e) =>
@@ -211,11 +212,11 @@ export function PlayerRequestsWorkspace({
                         </option>
                       ),
                     )}
-                  </select>
+                  </FormSelect>
                 </div>
                 <div className="player-requests__field">
                   <label htmlFor={characterId}>Персонаж (необязательно)</label>
-                  <select
+                  <FormSelect
                     id={characterId}
                     value={draft.characterId}
                     onChange={(e) =>
@@ -228,7 +229,7 @@ export function PlayerRequestsWorkspace({
                         {character.name}
                       </option>
                     ))}
-                  </select>
+                  </FormSelect>
                 </div>
               </div>
             )}
@@ -256,7 +257,7 @@ export function PlayerRequestsWorkspace({
           </form>
         )}
         <div className="player-requests__filters" aria-label="Фильтры заявок">
-          <select
+          <FormSelect
             aria-label="Состояние"
             value={filters.state}
             onChange={(e) =>
@@ -269,8 +270,8 @@ export function PlayerRequestsWorkspace({
             <option value="OPEN">Открытые</option>
             <option value="CLOSED">Закрытые</option>
             <option value="ALL">Все состояния</option>
-          </select>
-          <select
+          </FormSelect>
+          <FormSelect
             aria-label="Срок"
             value={filters.horizon}
             onChange={(e) =>
@@ -286,8 +287,8 @@ export function PlayerRequestsWorkspace({
                 {l}
               </option>
             ))}
-          </select>
-          <select
+          </FormSelect>
+          <FormSelect
             aria-label="Аудитория"
             value={filters.audience}
             onChange={(e) =>
@@ -303,7 +304,7 @@ export function PlayerRequestsWorkspace({
                 {l}
               </option>
             ))}
-          </select>
+          </FormSelect>
         </div>
         {error && (
           <p className="player-requests__error" role="alert">

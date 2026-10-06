@@ -113,7 +113,21 @@ describe("formatDiceBreakdown", () => {
         poolTotals: [7, 16],
         selectedPool: 1,
       }),
-    ).toBe("1d20 (16) · Выпало: 7 и 16 → выбран 16");
+    ).toBe("1d20 (16) · Итоги попыток: 7 и 16 → выбран 16");
+  });
+
+  it("labels pool values as totals when a modifier changes the die face", () => {
+    expect(
+      formatDiceBreakdown({
+        ...valid,
+        total: 12,
+        terms: [{ notation: "1d20", rolls: [10], subtotal: 10 }],
+        modifiers: [{ source: "initiative", value: 2 }],
+        rollMode: "DISADVANTAGE",
+        poolTotals: [12, 14],
+        selectedPool: 0,
+      }),
+    ).toBe("1d20 (10) · +2 · Итоги попыток: 12 и 14 → выбран 12");
   });
 
   it("still formats a valid roll when decorative frame metadata is invalid", () => {

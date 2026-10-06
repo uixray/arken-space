@@ -60,24 +60,33 @@ for (const role of ["GM", "PLAYER"] as const)
       });
       await page.goto("/");
       await expect(page.locator(".map-viewport")).toBeVisible();
-      if (role === "GM") {
-        const toggle = page.getByRole("checkbox", {
-          name: "Показывать скрытый слой мастера",
-        });
-        await expect(toggle).toBeVisible();
-        const label = toggle.locator("..");
-        await expect(label).toHaveText("Мастер");
-        const labelBox = await label.boundingBox();
-        expect(labelBox!.x).toBeGreaterThanOrEqual(0);
-        expect(labelBox!.x + labelBox!.width).toBeLessThanOrEqual(width);
+      // The map-scale GM-layer switch was removed; master tools remain in the
+      // actual map toolbar, while players must not receive those controls.
+      await expect(
+        page.getByRole("button", { name: "Показывать скрытый слой мастера" }),
+      ).toHaveCount(0);
+      if (role === "GM")
+        await expect(page.locator('.map-tool[data-tool="FOG"]')).toBeVisible();
+      else
+        await expect(page.locator('.map-tool[data-tool="FOG"]')).toHaveCount(0);
+      if (width === 360) {
+        await page.locator("#compact-nav-menu").click();
+        const menu = page.getByRole("region", { name: "Меню кампании" });
+        await expect(menu.locator(".compact-menu-user-name")).toHaveText(
+          snapshot.me.displayName,
+        );
+        await expect(menu.locator(".compact-menu-user-role")).toHaveText(
+          role === "GM" ? "Гейммастер (GM)" : "Игрок",
+        );
+      } else {
+        const session = page.locator(".account-menu");
+        await session.locator("summary").click();
+        const identity = session.locator(".account-menu__identity");
+        await expect(identity).toHaveText(
+          role === "GM" ? "GM Smith · Мастер" : "Вы играете как: Player One",
+        );
+        await expect(identity).toBeVisible();
       }
-      const session = page.locator(".account-menu");
-      await session.locator("summary").click();
-      const identity = session.locator(".account-menu__identity");
-      await expect(identity).toHaveText(
-        role === "GM" ? "GM Smith · Мастер" : "Вы играете как: Player One",
-      );
-      await expect(identity).toBeVisible();
       await page.screenshot({
         path: testInfo.outputPath(`session-role-${role}-${width}.png`),
       });

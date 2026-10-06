@@ -46,7 +46,10 @@
     "scope": "Reconciliation preserves every static row and historical failure. The full acceptance denominator remains all37 buckets/76 occurrences:26PASS,2FAIL,9BLOCKED. Eight applicability-blocked buckets include mixed buckets with reachable siblings and are not N/A, waived or excluded from acceptance. The derived29/60 subset is planning information only. The two FAIL rows describe one unresolved ResizeObserver incident. The other live-environment BLOCKED row requires headed Firefox native-popup acceptance. Overall acceptance remains INCOMPLETE.",
     "occurrenceApplicability": {
       "inventoryResolution": "RESOLVED_FOR_CURRENT_PRODUCT_REACHABILITY",
-      "staticInventoryPreserved": { "buckets": 37, "jsxOccurrences": 76 },
+      "staticInventoryPreserved": {
+        "buckets": 37,
+        "jsxOccurrences": 76
+      },
       "reconciledBuckets": 8,
       "reconciledOccurrences": 16,
       "supportedReachableOccurrencesWithPassEvidence": 5,
@@ -59,16 +62,18 @@
       ]
     },
     "currentCandidateAdditions": {
-      "baseRevision": "b51a18ceddc5c7c38064c191a4da608c368c9bc9",
-      "freezeRevision": null,
-      "candidateState": "PENDING_NEW_EVIDENCE",
+      "baseRevision": "e67bacc37a1ac4b77a2524388cc76a8ffacf5698",
+      "freezeRevision": "e67bacc37a1ac4b77a2524388cc76a8ffacf5698",
+      "candidateState": "EVIDENCE_COMPLETE_EXACT_CI_GREEN",
       "addedBuckets": 2,
       "addedOccurrences": 2,
       "currentStaticInventoryIncludingAdditions": {
         "buckets": 39,
         "jsxOccurrences": 78
       },
-      "rule": "The historical37/76 denominator and its statuses/evidence remain immutable. These reachable b51 candidate rows remain BLOCKED until exact new runtime evidence is retained."
+      "rule": "Historical37/76 denominator and every old status/evidence remain immutable. Both new reachable theme Select rows have scoped PASS and exact e67 checks/E2E/multiplayer SUCCESS. This does not waive the original ResizeObserver causal gap, native Firefox popup acceptance or the rest of UIX-644.",
+      "passBuckets": 2,
+      "blockedBuckets": 0
     }
   },
   "evidence": {
@@ -253,27 +258,48 @@
       "revision": "47c475a180caef231be246f1c28dc6cbec5ae405",
       "artifact": "request-built-gate/final-results.json",
       "scope": "4/4PASS23.375s Chrome/Firefox, actual retained production web bundle1d00a8d + source-mode real API47c475a + fresh isolated PG18.1 database. PLAYER native keys/draft/resize/submit and GM filter/reopen. Four served bundle hashes match; six request rows count/full-row hash survive isolated DB restart. Not production deployment, UI reconnect, OS-native popup visuals or all-role/device matrix."
+    },
+    "designCandidateE67ThemeSurface": {
+      "status": "PASS",
+      "revision": "e67bacc37a1ac4b77a2524388cc76a8ffacf5698",
+      "artifact": "design-candidate-e67bacc-proof.json",
+      "scope": "Bound candidate e67bacc proof binds the v6 theme-surface 8/8 local result to product revision f630606d2a576781913e62209f77c3670c30cb13; f630606 is byte-identical product source for this scope. This is scoped browser evidence, not final CI or broad UIX-644 acceptance."
+    },
+    "designMemberDefaultFinal": {
+      "status": "PASS",
+      "revision": "e67bacc37a1ac4b77a2524388cc76a8ffacf5698",
+      "artifact": "design-member-default-final",
+      "scope": "Focused DOM receipt: 3/3 passes for the GM default-theme field pending disable, generic-error draft retention, and 409 conflict adoption/CAS revision reuse. It does not replace a browser lifecycle matrix."
+    },
+    "themeV5Lifecycle": {
+      "status": "PASS",
+      "revision": "e67bacc37a1ac4b77a2524388cc76a8ffacf5698",
+      "artifact": "design-candidate-e67bacc-proof.json",
+      "scope": "Local v5 GM default Select lifecycle4/4 and personal preference lifecycle8/8: desktop/compact owner, keyboard/focus, selection and successful save/reset/cancel/system paths. Pending/error/CAS caller states have separate DOM evidence, not an assertion from these browser cases."
+    },
+    "themePersistence4f3": {
+      "status": "PASS",
+      "revision": "4f3ee38fd6bd8e32fcd4354f9e5e99f9d7b52a86",
+      "artifact": "GitHub Actions 35410244501/e2e-report.json",
+      "scope": "Individual real-server player-theme persistence passes in Chromium and Firefox. The overall 4f3ee E2E run is red (1062 pass, 29 skip, one journal-End measurement flaky) only; it is not a full-green claim. Related theme source is unchanged for the e67 candidate per the binding proof."
+    },
+    "e67ExactCI": {
+      "status": "PASS",
+      "revision": "e67bacc37a1ac4b77a2524388cc76a8ffacf5698",
+      "artifact": "selection-closure-2026-09-18/ci-e67bacc-summary.json",
+      "workflowRuns": ["35412873275", "35412873288", "35412873306"],
+      "scope": "Exact checks, four-shard Chrome/Firefox E2E and multiplayer SUCCESS. E2E1063 PASS/29 existing SKIP/0 FAIL/0 FLAKY; includes both real-server personal-theme persistence cases. Individual component pending/error/CAS coverage is also included in exact checks. Not full UIX-644 or production acceptance."
     }
   },
   "sites": [
     {
-      "file": "apps/web/src/App.tsx",
-      "kind": "role:listbox",
+      "file": "apps/web/src/AppHeader.tsx",
+      "kind": "tag:details",
       "count": 1,
       "status": "PASS",
       "classification": "reachable",
-      "scope": "Scene picker in shell; GM interaction, PLAYER read-only, compact hidden path.",
-      "evidence": ["scenePicker"],
-      "next": "Real multiplayer persistence and physical devices remain separate gates."
-    },
-    {
-      "file": "apps/web/src/App.tsx",
-      "kind": "tag:details",
-      "count": 3,
-      "status": "PASS",
-      "classification": "reachable",
-      "scope": "Three source buckets with limited caller evidence: scene picker8, token tray8 plus geometry4, compact GM/PLAYER session foreign/own Escape and pointer layer from details cases.",
-      "evidence": ["scenePicker", "tokenTray", "remainingMenus"],
+      "scope": "Session menu details element in topbar.",
+      "evidence": ["remainingMenus"],
       "next": "No blanket current-SHA/full lifecycle claim: session desktop content actions and full combined matrix remain separate."
     },
     {
@@ -332,13 +358,33 @@
     },
     {
       "file": "apps/web/src/PlayerRequestsWorkspace.tsx",
-      "kind": "tag:select",
+      "kind": "tag:FormSelect",
       "count": 6,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Six controls migrated from native select to FormSelect in UIX-674. Prior native browser evidence no longer proves the new popup lifecycle; local screenshot only confirms arrow inset/open state.",
+      "evidence": ["requestsCurrent", "requestsBuilt"],
+      "next": "Run current-revision keyboard, dismissal, focus return and narrow viewport FormSelect lifecycle before marking PASS."
+    },
+    {
+      "file": "apps/web/src/ScenePicker.tsx",
+      "kind": "role:menu",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "UIX-674 changed the inner scene list from listbox/options to menu/menuitemradio with a separate menuitem edit action. Earlier listbox evidence is historical and does not prove the new role contract.",
+      "evidence": ["scenePicker"],
+      "next": "Run scoped current-revision keyboard, focus-return, dismissal and edit-action browser checks before claiming this role bucket PASS."
+    },
+    {
+      "file": "apps/web/src/ScenePicker.tsx",
+      "kind": "tag:details",
+      "count": 1,
       "status": "PASS",
       "classification": "reachable",
-      "scope": "Six native controls through existing PLAYER compact draft/submit and GM filter/reopen: current production web bundle with real isolated API/PG, four Chrome/Firefox cases. Native values/keys, not OS popup visuals.",
-      "evidence": ["requestsCurrent", "requestsBuilt"],
-      "next": "Native OS popup visual/physical-device matrix, CI PostgreSQL17 and production bundle remain separate; no full menu acceptance claim."
+      "scope": "Scene picker dropdown details element in topbar.",
+      "evidence": ["scenePicker"],
+      "next": "Real multiplayer persistence and physical devices remain separate gates."
     },
     {
       "file": "apps/web/src/StickerPicker.tsx",
@@ -369,6 +415,16 @@
       "scope": "One native source selector; desktop/narrow four cases. OS picker UI not inspected.",
       "evidence": ["built", "exactMainCceMenuRegression"],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/TokenTray.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Token tray details element.",
+      "evidence": ["tokenTray"],
+      "next": "No blanket current-SHA/full lifecycle claim: session desktop content actions and full combined matrix remain separate."
     },
     {
       "file": "apps/web/src/WorkspaceNav.tsx",
@@ -421,36 +477,52 @@
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
+      "file": "apps/web/src/design-system/Dialog.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "design-system-isolated",
+      "scope": "Design System isolated primitive",
+      "evidence": [],
+      "next": "Covered via Storybook and unit tests, not product overlay flow"
+    },
+    {
       "file": "apps/web/src/design-system/MemberDefaultThemeField.tsx",
       "kind": "tag:FormSelect",
       "count": 1,
-      "status": "BLOCKED",
-      "classification": "reachable-candidate-pending-evidence",
-      "baseRevision": "b51a18ceddc5c7c38064c191a4da608c368c9bc9",
-      "freezeRevision": null,
-      "scope": "Reachable GM member default-theme Select inside Setup membership controls, including pending, conflict and error presentation. The adjacent new Base UI Button is not a menu occurrence.",
-      "evidence": [],
-      "pendingEvidence": [
-        "tests/e2e/player-theme-preference.spec.ts only if it contains an explicit GM default-theme Select lifecycle case",
-        "tests/e2e/player-theme-persistence.spec.ts: isolated real-server default assignment and persistence"
+      "status": "PASS",
+      "classification": "reachable-scoped-evidence",
+      "baseRevision": "e67bacc37a1ac4b77a2524388cc76a8ffacf5698",
+      "freezeRevision": "e67bacc37a1ac4b77a2524388cc76a8ffacf5698",
+      "scope": "Reachable GM member default-theme Select in Setup membership controls. Scoped evidence covers desktop/compact lifecycle, keyboard/focus, pending, generic error, 409 CAS adoption and real-server persistence; it is not a blanket menu-registry acceptance.",
+      "evidence": [
+        "designMemberDefaultFinal",
+        "themeV5Lifecycle",
+        "themePersistence4f3",
+        "designCandidateE67ThemeSurface",
+        "e67ExactCI"
       ],
-      "next": "Keep BLOCKED until an explicit b51 GM runtime case covers open/select/close, keyboard/focus, desktop/compact containment and the real-server gate covers saved default/conflict behavior."
+      "next": "Scoped menu acceptance complete. Preserve historical registry gaps; no further work until the owner resumes."
     },
     {
-      "file": "apps/web/src/design-system/PlayerThemeSettings.tsx",
-      "kind": "tag:FormSelect",
+      "file": "apps/web/src/design-system/Popup.tsx",
+      "kind": "tag:Popup",
       "count": 1,
       "status": "BLOCKED",
-      "classification": "reachable-candidate-pending-evidence",
-      "baseRevision": "b51a18ceddc5c7c38064c191a4da608c368c9bc9",
-      "freezeRevision": null,
-      "scope": "Reachable personal appearance dialog Select for the campaign membership on the b51 candidate: System plus published personal themes, preview/apply/reset/cancel and pending/error states. The adjacent new Base UI Button is not a menu occurrence.",
+      "classification": "design-system-isolated",
+      "scope": "Design System isolated primitive",
       "evidence": [],
-      "pendingEvidence": [
-        "tests/e2e/player-theme-preference.spec.ts: GM/PLAYER desktop/compact runtime lifecycle on the b51 candidate",
-        "tests/e2e/player-theme-persistence.spec.ts: isolated real-server membership persistence"
-      ],
-      "next": "Keep BLOCKED until the new b51 evidence is retained and both named gates provide exact-revision evidence; do not inherit PASS from older shared FormSelect runs."
+      "next": "Covered via Storybook and unit tests, not product overlay flow"
+    },
+    {
+      "file": "apps/web/src/design-system/Select.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "design-system-isolated",
+      "scope": "Design System isolated primitive",
+      "evidence": [],
+      "next": "Covered via Storybook and unit tests, not product overlay flow"
     },
     {
       "file": "apps/web/src/renderers/GridSettings.tsx",
@@ -637,6 +709,16 @@
       }
     },
     {
+      "file": "apps/web/src/sidebar/QuickRollPanel.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Quick-roll tooltip migrated to a portal popup in UIX-674; local visual check confirms opacity and layering, not full interaction and viewport lifecycle.",
+      "evidence": [],
+      "next": "Verify hover/focus, escape and clipping on current built revision across compact and desktop widths."
+    },
+    {
       "file": "apps/web/src/sidebar/ResourceCounters.tsx",
       "kind": "tag:details",
       "count": 1,
@@ -677,6 +759,16 @@
         "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#смешанные-строки-активный-и-неактивный-код",
         "reactivationCriterion": "Re-open each hidden occurrence if its section becomes production-reachable."
       }
+    },
+    {
+      "file": "apps/web/src/sidebar/StatLayoutCard.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "UIX-674 row-actions disclosure in editable stat layout, used from character sheet and campaign setup. This is a new static site, not covered by the historical UIX-644 runtime ledger.",
+      "evidence": [],
+      "next": "Check Escape/outside dismissal, focus return and edge placement at desktop and compact widths with both reachable owners."
     },
     {
       "file": "apps/web/src/sidebar/TokenPalette.tsx",
@@ -807,6 +899,16 @@
       "scope": "Scene editor map selector under workspace→modal, keyboard/pointer and draft ownership through compact short-height resize.",
       "evidence": ["sceneEditorMap"],
       "next": "Save/upload/rejection and actual scene persistence/publication remain separate; this does not clear the original shared Select RO defect."
+    },
+    {
+      "file": "apps/web/src/ui/ToolbarTooltip.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "UIX-674 shared Base UI tooltip popup for map-toolbar buttons and summaries. Prior UIX-644 popup evidence does not cover this new portal.",
+      "evidence": [],
+      "next": "Check hover/focus opening, Escape/blur closure, viewport collision and coexisting toolbar menus at short and narrow sizes."
     }
   ],
   "supplementalSites": [

@@ -49,7 +49,10 @@ for (const width of [1280, 360]) {
     await page.goto("/join/pending-invite-test");
     const form = page.getByRole("form", { name: "Вход в игру" });
     const name = form.getByLabel("Имя", { exact: true });
-    const enter = form.getByRole("button", { name: "Войти", exact: true });
+    const enter = form.getByRole("button", {
+      name: "Войти в игру",
+      exact: true,
+    });
     try {
       await name.fill("Первое имя");
       await enter.click();

@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { expect, it, vi } from "vitest";
-import { renderComponent, screen, userEvent } from "../test-support/render";
+import {
+  fireEvent,
+  renderComponent,
+  screen,
+  userEvent,
+  waitFor,
+} from "../test-support/render";
 import { DiceTrayPanel } from "./DiceTrayPanel";
 
 it("показывает ожидание сразу и принимает второй бросок до ответа первого (UIX-621)", async () => {
@@ -21,16 +27,14 @@ it("показывает ожидание сразу и принимает вт�
     />,
   );
   await userEvent.click(screen.getByRole("button", { name: "d20" }));
-  expect(screen.getByRole("status")).toHaveTextContent("Бросаем… 1");
+  await waitFor(() => expect(onRoll).toHaveBeenCalledTimes(1));
   const first = finish;
   await userEvent.click(screen.getByRole("button", { name: "d6" }));
-  expect(onRoll).toHaveBeenCalledTimes(2);
-  expect(screen.getByRole("status")).toHaveTextContent("Бросаем… 2");
+  await waitFor(() => expect(onRoll).toHaveBeenCalledTimes(2));
   await act(async () => {
     first();
     finish();
   });
-  expect(screen.queryByRole("status")).not.toBeInTheDocument();
 });
 
 it("показывает отказ сервера и разрешает повторный бросок", async () => {
@@ -46,7 +50,6 @@ it("показывает отказ сервера и разрешает пов�
   await userEvent.click(screen.getByRole("button", { name: "d20" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Нет соединения");
   expect(screen.getByRole("button", { name: "d20" })).toBeEnabled();
-  expect(screen.queryByRole("status")).not.toBeInTheDocument();
 });
 
 it("собирает кости и доступные иконные режимы в один компактный блок", async () => {
@@ -63,10 +66,13 @@ it("собирает кости и доступные иконные режим�
   expect(
     screen.queryByRole("button", { name: "Формула" }),
   ).not.toBeInTheDocument();
-  const advantage = screen.getByRole("radio", { name: "Преимущество" });
+  const advantage = screen.getByRole("button", { name: "Преимущество" });
   expect(advantage).toHaveAttribute("title", "Преимущество");
-  const icons = ["Преимущество", "Обычно", "Помеха"].map((name) => {
-    const control = screen.getByRole("radio", { name });
+  expect(
+    screen.queryByRole("button", { name: "Обычно" }),
+  ).not.toBeInTheDocument();
+  const icons = ["Преимущество", "Помеха"].map((name) => {
+    const control = screen.getByRole("button", { name });
     expect(control.textContent).toBe("");
     expect(control.querySelectorAll("svg.arken-icon")).toHaveLength(1);
     const icon = control.querySelector("svg")!;
@@ -75,16 +81,39 @@ it("собирает кости и доступные иконные режим�
     expect(icon.innerHTML.length).toBeGreaterThan(0);
     return icon.innerHTML;
   });
-  expect(new Set(icons).size).toBe(3);
+  expect(new Set(icons).size).toBe(2);
   await userEvent.click(advantage);
-  expect(advantage).toHaveAttribute("aria-checked", "true");
+  expect(advantage).toHaveAttribute("aria-pressed", "true");
   await userEvent.click(screen.getByRole("button", { name: "d20" }));
-  expect(onRoll).toHaveBeenCalledWith(
-    "1d20",
-    "d20",
-    "PUBLIC",
-    "hero",
-    "ADVANTAGE",
+  await waitFor(() =>
+    expect(onRoll).toHaveBeenCalledWith(
+      "1d20",
+      "Чистый бросок двадцатки",
+      "PUBLIC",
+      "hero",
+      "ADVANTAGE",
+    ),
+  );
+  expect(advantage).toHaveAttribute("aria-pressed", "false");
+  await userEvent.click(screen.getByRole("button", { name: "d6" }));
+  await waitFor(() =>
+    expect(onRoll).toHaveBeenLastCalledWith(
+      "1d6",
+      "Чистый бросок куба",
+      "PUBLIC",
+      "hero",
+      "NORMAL",
+    ),
+  );
+  await userEvent.click(screen.getByRole("button", { name: "d100" }));
+  await waitFor(() =>
+    expect(onRoll).toHaveBeenLastCalledWith(
+      "1d100",
+      "Чистый бросок стогранника",
+      "PUBLIC",
+      "hero",
+      "NORMAL",
+    ),
   );
   const visibility = screen.getByRole("button", { name: "Только мастеру" });
   expect(visibility).toHaveAttribute("aria-pressed", "false");
@@ -93,4 +122,41 @@ it("собирает кости и доступные иконные режим�
   expect(visibility.closest(".dice-tray-panel__toolbar")).toBe(
     advantage.closest(".dice-tray-panel__toolbar"),
   );
+});
+
+it("двойной клик даёт ровно два чистых броска без окна", async () => {
+  const onRoll = vi.fn().mockResolvedValue(undefined);
+  renderComponent(
+    <DiceTrayPanel
+      characterId={null}
+      visibility="PUBLIC"
+      onVisibilityChange={vi.fn()}
+      onRoll={onRoll}
+    />,
+  );
+  await userEvent.dblClick(screen.getByRole("button", { name: "d12" }));
+  await waitFor(() => expect(onRoll).toHaveBeenCalledTimes(2));
+  expect(
+    screen.queryByRole("group", { name: "Сколько раз бросить" }),
+  ).toBeNull();
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  expect(onRoll).toHaveBeenCalledTimes(2);
+});
+
+it("Shift открывает выбор числа повторов без предварительного броска", async () => {
+  const onRoll = vi.fn().mockResolvedValue(undefined);
+  renderComponent(
+    <DiceTrayPanel
+      characterId={null}
+      visibility="PUBLIC"
+      onVisibilityChange={vi.fn()}
+      onRoll={onRoll}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "d6" }), {
+    shiftKey: true,
+  });
+  expect(onRoll).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole("button", { name: "3" }));
+  await waitFor(() => expect(onRoll).toHaveBeenCalledTimes(3));
 });

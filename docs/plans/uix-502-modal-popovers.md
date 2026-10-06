@@ -1,5 +1,11 @@
 # UIX-502 — modal-owned dropdowns
 
+> **Итог 19.09.2026: Done в Linear по исходным8 AC.** Exact candidate `e67bacc37`
+> прошёл checks/E2E/multiplayer; owner/nested/lifecycle/token-picker regression
+> сохраняется на desktop+narrow Chrome/Firefox. Это не закрытие всего UIX-644.
+> PR85 остаётся draft/unmerged, deployment не выполнялся.
+> [Финальный checkpoint](design-finish-2026-09-19.md#final-checkpoint--accepted-candidate-three-closures-work-paused).
+
 ## Замер
 
 PR #58 устраняет видимый дефект: внешний Floating UI wrapper Gravity Select поднят над modal, и hit-test проходит. Но правило глобально поднимает любой `.g-select-popup` до dialog+1, не различая owner workspace/modal, зависит от приватной DOM-структуры и не доказывает keyboard, focus, narrow placement или nested dialog lifecycle.

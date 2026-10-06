@@ -71,7 +71,7 @@ export function CampaignClockDialog({
     <>
       <ArkenDialog
         open={open}
-        title="Время кампании"
+        title="Длинный отдых и сброс времени"
         footer={false}
         onClose={close}
       >
@@ -79,7 +79,9 @@ export function CampaignClockDialog({
           <strong>День {campaign.day}</strong>
         </p>
         <p className="muted">
-          Здесь можно перевести календарь и провести общий отдых.
+          Длинный отдых переводит календарь на следующий день и восстанавливает
+          ресурсы. Обычная смена дня доступна по кнопке дня в карточке
+          персонажей.
         </p>
         {error && !resetConfirmationOpen ? (
           <p className="field-error" role="alert">
@@ -87,14 +89,6 @@ export function CampaignClockDialog({
           </p>
         ) : null}
         <div className="entity-form">
-          <Button
-            disabled={Boolean(pendingCommand)}
-            loading={pendingCommand === "ADVANCE_DAY"}
-            title="Перевести календарь на следующий день"
-            onClick={() => void runCommand("ADVANCE_DAY")}
-          >
-            Следующий день
-          </Button>
           <Button
             disabled={Boolean(pendingCommand)}
             loading={pendingCommand === "LONG_REST"}

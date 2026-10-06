@@ -63,6 +63,18 @@ for (const role of ["GM", "PLAYER"] as const)
         exact: true,
       });
       await expect(workspace).toBeVisible();
+      if (width === 390) {
+        // Compact mode has one visible surface: the topbar session details
+        // cannot overlay a workspace because that header is not rendered.
+        await page.locator("#compact-nav-menu").click();
+        await expect(workspace).toBeHidden();
+        await expect(
+          page.getByRole("region", { name: "Меню кампании" }),
+        ).toBeVisible();
+        await expect(page.locator(".account-menu:visible")).toHaveCount(0);
+        expect(mutations).toEqual([]);
+        return;
+      }
       const volume = page.locator(
         width === 390 ? ".account-menu" : ".music-volume-control",
       );

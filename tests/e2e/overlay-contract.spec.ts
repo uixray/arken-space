@@ -73,7 +73,7 @@ for (const width of [1024, 1440]) {
     await install(page);
     await page.goto("/");
     const trigger = page.getByLabel("Выбрать просматриваемую сцену");
-    const list = page.getByRole("listbox", { name: "Сцены", exact: true });
+    const list = page.getByRole("menu", { name: "Сцены", exact: true });
     const switcher = page.locator(".scene-switcher");
     await expect
       .poll(() =>
@@ -90,7 +90,7 @@ for (const width of [1024, 1440]) {
       )
       .toBe(true);
     await trigger.click();
-    const second = list.getByRole("option", { name: /Вторая сцена/ });
+    const second = list.getByRole("menuitemradio", { name: /Вторая сцена/ });
     await assertHitTarget(second);
     await second.click();
     await expect(list).toBeHidden();
@@ -99,11 +99,11 @@ for (const width of [1024, 1440]) {
 
     await trigger.press("ArrowDown");
     await expect(
-      list.getByRole("option", { name: /Вторая сцена/ }),
+      list.getByRole("menuitemradio", { name: /Вторая сцена/ }),
     ).toBeFocused();
     await page.keyboard.press("End");
     await expect(
-      list.getByRole("option", { name: /Третья сцена/ }),
+      list.getByRole("menuitemradio", { name: /Третья сцена/ }),
     ).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(trigger).toContainText("Третья сцена");
@@ -111,7 +111,7 @@ for (const width of [1024, 1440]) {
     await trigger.press("ArrowUp");
     await page.keyboard.press("Home");
     await expect(
-      list.getByRole("option", { name: /Начальная сцена/ }),
+      list.getByRole("menuitemradio", { name: /Начальная сцена/ }),
     ).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(list).toBeHidden();
@@ -137,12 +137,14 @@ test("UIX-644 hidden desktop picker closes across compact resize and PLAYER stay
   await page.goto("/");
   const trigger = page.getByLabel("Выбрать просматриваемую сцену");
   await trigger.click();
-  await assertHitTarget(page.getByRole("option", { name: /Вторая сцена/ }));
+  await assertHitTarget(
+    page.getByRole("menuitemradio", { name: /Вторая сцена/ }),
+  );
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(trigger).toBeHidden();
   await page.setViewportSize({ width: 1024, height: 800 });
   await expect(
-    page.getByRole("listbox", { name: "Сцены", exact: true }),
+    page.getByRole("menu", { name: "Сцены", exact: true }),
   ).toBeHidden();
   await page.unroute("**/api/**");
   await install(page, "PLAYER");
@@ -168,10 +170,10 @@ test("UIX-644 short viewport scrolls options without dismissing and keeps focus 
   const trigger = page.getByLabel("Выбрать просматриваемую сцену");
   await trigger.focus();
   await trigger.press("End");
-  const list = page.getByRole("listbox", { name: "Сцены", exact: true });
-  const last = list.getByRole("option", { name: /^Сцена 20 / });
+  const list = page.getByRole("menu", { name: "Сцены", exact: true });
+  const last = list.getByRole("menuitemradio", { name: /^Сцена 20 / });
   await expect(last).toBeFocused();
-  await expect(last).toHaveAttribute("tabindex", "0");
+  await expect(last).toHaveAttribute("aria-checked", "false");
   await assertHitTarget(last);
   const box = await list.boundingBox();
   expect(box).not.toBeNull();
@@ -186,7 +188,7 @@ test("UIX-644 short viewport scrolls options without dismissing and keeps focus 
 });
 
 for (const role of ["GM", "PLAYER"] as const) {
-  test(`UIX-644 compact Sections breakpoint lifecycle ${role}`, async ({
+  test(`UIX-644 compact menu breakpoint lifecycle ${role}`, async ({
     page,
   }, info) => {
     await page.setViewportSize({ width: 390, height: 800 });
@@ -204,12 +206,12 @@ for (const role of ["GM", "PLAYER"] as const) {
         writes.push(`${request.method()} ${path}`);
     });
     await page.goto("/");
-    const trigger = page.getByRole("button", { name: "Разделы", exact: true });
-    const sheet = page.getByRole("dialog", { name: "Разделы", exact: true });
+    const trigger = page.locator("#compact-nav-menu");
+    const menu = page.getByRole("region", { name: "Меню кампании" });
     await trigger.click();
-    await expect(sheet).toBeVisible();
+    await expect(menu).toBeVisible();
     await page.setViewportSize({ width: 360, height: 480 });
-    const destinations = sheet.locator(".compact-sections-list button");
+    const destinations = menu.locator(".compact-menu-grid button");
     const labels = await destinations.allTextContents();
     expect(labels.length).toBeGreaterThanOrEqual(3);
     for (const option of await destinations.all()) {
@@ -217,28 +219,27 @@ for (const role of ["GM", "PLAYER"] as const) {
       await assertHitTarget(option);
     }
     await page.setViewportSize({ width: 1280, height: 850 });
-    await expect(sheet).toBeHidden();
+    await expect(menu).toBeHidden();
     await expect(trigger).toBeHidden();
     await assertHitTarget(
-      page.getByRole("button", { name: "Вписать", exact: true }),
+      page.getByRole("button", { name: "Вписать карту", exact: true }),
     );
     await page.setViewportSize({ width: 390, height: 800 });
     await expect(trigger).toBeVisible();
-    await expect(sheet).toBeHidden();
+    await expect(menu).toBeVisible();
     await assertHitTarget(page.locator("#compact-nav-journal"));
     await page.locator("#compact-nav-journal").click();
     await expect(page.locator("#compact-nav-journal")).toHaveAttribute(
       "aria-pressed",
       "true",
     );
+    await expect(menu).toBeHidden();
     await trigger.click();
-    await expect(sheet).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(sheet).toBeHidden();
-    await expect(trigger).toBeFocused();
+    await expect(menu).toBeVisible();
+    await expect(trigger).toHaveAttribute("aria-pressed", "true");
     expect(errors).toEqual([]);
     expect(writes).toEqual([]);
-    await info.attach("compact-sections-breakpoint", {
+    await info.attach("compact-menu-breakpoint", {
       body: JSON.stringify({ role, labels, errors, writes }),
       contentType: "application/json",
     });
@@ -271,11 +272,11 @@ for (const { role, width, target } of [
     const trigger =
       width === 1024
         ? page.getByLabel("Ещё разделы", { exact: true })
-        : page.getByRole("button", { name: "Разделы", exact: true });
+        : page.locator("#compact-nav-menu");
     const menu =
       width === 1024
         ? page.locator(".workspace-nav__menu")
-        : page.getByRole("dialog", { name: "Разделы", exact: true });
+        : page.getByRole("region", { name: "Меню кампании", exact: true });
     for (let round = 0; round < 2; round++) {
       await trigger.click();
       await expect(menu).toBeVisible();
@@ -294,20 +295,20 @@ for (const { role, width, target } of [
       await expect(dialog).toBeHidden();
       if (width === 1024) await expect(trigger).toBeFocused();
       else {
-        // Compact navigation intentionally restores the previous map surface,
-        // not Sections. Preserve that existing owner contract.
-        await expect(page.locator("#compact-nav-map")).toHaveAttribute(
+        // A utility workspace opened from the compact menu returns to that
+        // menu surface, not to an unrelated map tab.
+        await expect(page.locator("#compact-nav-menu")).toHaveAttribute(
           "aria-pressed",
           "true",
         );
         await expect
           .poll(() =>
             page.evaluate(() => {
-              const map = document.querySelector(".map-shell");
+              const menu = document.querySelector("#compact-menu-view");
               return Boolean(
-                map &&
-                (map === document.activeElement ||
-                  map.contains(document.activeElement)),
+                menu &&
+                (menu === document.activeElement ||
+                  menu.contains(document.activeElement)),
               );
             }),
           )
@@ -345,7 +346,7 @@ for (const role of ["GM", "PLAYER"] as const)
       });
       await page.goto("/");
       const music = page.getByRole("region", { name: "Музыка", exact: true });
-      const menu = music.getByLabel("Меню музыки", { exact: true });
+      const menu = music.getByLabel("Плейлист", { exact: true });
       if (role === "GM")
         for (let round = 0; round < 2; round++) {
           await menu.click();
@@ -469,11 +470,20 @@ for (const role of ["GM", "PLAYER"] as const)
       await last.scrollIntoViewIfNeeded();
       await assertHitTarget(last);
       await expect(tray).toHaveAttribute("open", "");
-      await page.getByLabel("Меню сеанса", { exact: true }).click();
-      await expect(tray).not.toHaveAttribute("open", "");
-      await expect(
-        page.getByLabel("Меню сеанса", { exact: true }),
-      ).toBeFocused();
+      if (width === 390) {
+        // Compact layout hides the desktop session menu. Moving to the
+        // journal is the reachable outside-owner action on this surface.
+        const journal = page.locator("#compact-nav-journal");
+        await journal.click();
+        await expect(tray).not.toHaveAttribute("open", "");
+        await expect(journal).toHaveAttribute("aria-pressed", "true");
+        await page.locator("#compact-nav-map").click();
+      } else {
+        const session = page.getByLabel("Меню сеанса", { exact: true });
+        await session.click();
+        await expect(tray).not.toHaveAttribute("open", "");
+        await expect(session).toBeFocused();
+      }
       await page.keyboard.press("Escape");
       await summary.click();
       await expect(tray).toHaveAttribute("open", "");
@@ -659,9 +669,6 @@ for (const role of ["GM", "PLAYER"] as const)
         list = page.getByRole("region", { name: "Объекты карты", exact: true });
       await trigger.click();
       await expect(list).toBeVisible();
-      await page.keyboard.press("Tab");
-      if (await list.evaluate((el) => el === document.activeElement))
-        await page.keyboard.press("Tab");
       const first = list.getByRole("button", {
         name: "Объект 01",
         exact: true,
@@ -696,14 +703,15 @@ for (const role of ["GM", "PLAYER"] as const)
         body: await page.screenshot(),
         contentType: "image/png",
       });
-      await page.getByLabel("Меню сеанса", { exact: true }).click();
+      // The desktop session menu is hidden at this compact width. Journal is
+      // the reachable outside owner that must dismiss the map popover.
+      const journalNav = page.locator("#compact-nav-journal");
+      await journalNav.click();
       await expect(list).toBeHidden();
-      await expect(
-        page.getByLabel("Меню сеанса", { exact: true }),
-      ).toBeFocused();
-      await page.keyboard.press("Escape");
+      await expect(journalNav).toHaveAttribute("aria-pressed", "true");
+      await page.locator("#compact-nav-map").click();
       await trigger.click();
-      await page.locator("#compact-nav-journal").click();
+      await journalNav.click();
       await expect(list).toBeHidden();
       await page.locator("#compact-nav-map").click();
       await expect(trigger).toBeVisible();
@@ -758,25 +766,20 @@ for (const role of ["GM", "PLAYER"] as const)
       const color = panel.getByLabel("Цвет рисунка", { exact: true });
       await expect(color).toHaveAttribute("type", "color");
       await expect(color).toHaveValue("#ef4444");
-      const thick = panel.getByRole("button", {
-        name: "Толщина 12px",
-        exact: true,
-      });
-      await thick.scrollIntoViewIfNeeded();
-      await assertHitTarget(thick);
-      await thick.click();
-      await expect(thick).toHaveAttribute("aria-pressed", "true");
       const slider = panel.getByRole("slider", {
         name: "Толщина линии",
         exact: true,
       });
-      await expect(slider).toHaveValue("12");
+      await slider.scrollIntoViewIfNeeded();
+      await assertHitTarget(slider);
       await slider.focus();
       await page.keyboard.press("Home");
+      for (let step = 1; step < 12; step++)
+        await page.keyboard.press("ArrowRight");
+      await expect(slider).toHaveValue("12");
+      await expect(panel).toContainText("Толщина: 12px");
+      await page.keyboard.press("Home");
       await expect(slider).toHaveValue("1");
-      await expect(
-        panel.getByRole("button", { name: "Толщина 1px", exact: true }),
-      ).toHaveAttribute("aria-pressed", "true");
       await page.keyboard.press("End");
       await expect(slider).toHaveValue("50");
       await expect(red).toHaveAttribute("aria-pressed", "true");

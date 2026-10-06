@@ -1,6 +1,7 @@
 import { Button } from "../design-system/Button";
 import { humanizeFormula } from "../formula-display";
 import { useCampaignStatLabels } from "../campaign-stat-labels-context";
+import type { MouseEvent } from "react";
 
 /**
  * UIX-389: shared two-line presentation for a rollable characteristic/skill —
@@ -21,7 +22,7 @@ export function RollButton({
   name: string;
   formula: string;
   disabled?: boolean;
-  onClick: () => void;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   statLabels?: Readonly<Record<string, string>>;
 }) {
   const campaignStatLabels = useCampaignStatLabels();

@@ -1,10 +1,15 @@
 import { type Request, type Route } from "@playwright/test";
+import { resolve } from "node:path";
 import { captureAuthClickDiagnostics } from "./auth-click-diagnostics";
 import { expect, test } from "./campaign-fixture";
 
 // Font reflow must not move the login button out from under a held pointer.
-// Only external font binaries are held; auth requests and native input are real.
-const FONT_URL = /^https:\/\/fonts\.gstatic\.com\/[^?#]+\.woff2(?:[?#].*)?$/;
+// Use a real local font from an installed dev dependency: relying on a Google
+// Fonts request made this race test conditional on cache and external network.
+const FONT_URL = "https://fonts.gstatic.com/arken-e2e-auth-font.ttf";
+const FONT_PATH = resolve(
+  "node_modules/style-dictionary/examples/complete/assets/fonts/Roboto-Regular.ttf",
+);
 
 for (const transition of [false, true]) {
   test(
@@ -30,9 +35,11 @@ for (const transition of [false, true]) {
           heldFonts += 1;
           await fontBarrier;
         }
-        await route.continue().catch(() => {
-          routeFailures += 1;
-        });
+        await route
+          .fulfill({ path: FONT_PATH, contentType: "font/ttf" })
+          .catch(() => {
+            routeFailures += 1;
+          });
       };
       const onRequest = (request: Request) => {
         if (
@@ -69,6 +76,10 @@ for (const transition of [false, true]) {
           waitUntil: "domcontentloaded",
         });
         await expect(button).toBeVisible();
+        await page.addStyleTag({
+          content: `@font-face { font-family: "ArkenAuthRace"; src: url("${FONT_URL}") format("truetype"); }
+            .auth-panel button { font-family: "ArkenAuthRace", sans-serif !important; }`,
+        });
         await expect.poll(() => heldFonts).toBeGreaterThan(0);
         expect(await page.evaluate(() => document.fonts.status)).toBe(
           "loading",

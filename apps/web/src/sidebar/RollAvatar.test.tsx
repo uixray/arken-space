@@ -128,31 +128,92 @@ describe("строка броска", () => {
       (node) => node.className.split(" ")[0],
     );
 
-  it("ставит аватар слева, а итог справа", () => {
+  it.each([
+    { modifiers: [] },
+    { modifiers: [{ source: "zero", value: 0 }] },
+    {
+      modifiers: [
+        { source: "a", value: 4 },
+        { source: "b", value: -4 },
+      ],
+    },
+  ])("shows just the total when the net bonus is zero: %j", ({ modifiers }) => {
     renderComponent(
       <ChatMessageBody
-        message={diceMessage}
-        avatar={
-          <RollAvatar identity={null} fallbackName="Андрей" assetUrl={null} />
-        }
+        message={{
+          ...diceMessage,
+          dice: { ...diceMessage.dice!, modifiers, total: 13 },
+        }}
       />,
     );
-    expect(order()).toEqual(["roll-avatar", "roll-details", "roll-total"]);
+    expect(document.querySelector(".roll-total")?.textContent).toBe("13");
+    expect(document.querySelector(".roll-result__die")).toBeNull();
+    expect(document.querySelector(".roll-result__bonus")).toBeNull();
+  });
+
+  it("оставляет детали слева, а единый блок результата справа", () => {
+    renderComponent(<ChatMessageBody message={diceMessage} />);
+    expect(order()).toEqual(["roll-details", "roll-result__numbers"]);
     expect(screen.getByLabelText("Итог броска").textContent).toBe("17");
+    expect(document.querySelector(".roll-details__math")?.textContent).toBe(
+      "1d2013+4",
+    );
+    expect(document.querySelector(".roll-result__die")).toBeNull();
+    expect(document.querySelector(".roll-result__bonus")).toBeNull();
+  });
+
+  it("показывает изменения ресурса карточкой с итогом и максимумом", () => {
+    renderComponent(
+      <ChatMessageBody
+        message={{
+          ...diceMessage,
+          kind: "SYSTEM",
+          dice: null,
+          body: "Путник — ресурсы: Выносливость: 13/20 → 9/20",
+        }}
+      />,
+    );
+    expect(document.querySelector(".roll-details__heading")?.textContent).toBe(
+      "Выносливость",
+    );
+    const resourceMath = document.querySelector(".roll-details__math");
+    expect(resourceMath?.textContent).toBe("134Max 20");
+    expect(resourceMath?.querySelector("svg.arken-icon")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(
+      screen.getByLabelText("Выносливость: итоговое значение"),
+    ).toHaveTextContent("9");
+    expect(document.querySelector(".roll-result")?.textContent).not.toContain(
+      "Путник",
+    );
+  });
+
+  it("показывает общее системное событие в той же карточке", () => {
+    renderComponent(
+      <ChatMessageBody
+        message={{
+          ...diceMessage,
+          kind: "SYSTEM",
+          dice: null,
+          body: "Длинный отдых завершён. Перезаряжено: 5.",
+        }}
+      />,
+    );
+    expect(
+      document.querySelector(".roll-result--system")?.textContent,
+    ).toContain("Длинный отдых завершён");
+    expect(
+      document.querySelector(".roll-result--system")?.textContent,
+    ).toContain("Перезаряжено: 5");
   });
 
   it("рисует физический бросок тем же макетом, но с бонусом вместо итога", () => {
     // Раньше он выпадал в обычный текст и выглядел сообщением другого рода,
     // хотя за столом это тот же бросок — просто кубик настоящий.
-    renderComponent(
-      <ChatMessageBody
-        message={physicalMessage}
-        avatar={
-          <RollAvatar identity={null} fallbackName="Андрей" assetUrl={null} />
-        }
-      />,
-    );
-    expect(order()).toEqual(["roll-avatar", "roll-details", "roll-total"]);
+    renderComponent(<ChatMessageBody message={physicalMessage} />);
+    expect(order()).toEqual(["roll-details", "roll-total"]);
     expect(screen.getByLabelText("Бонус к броску").textContent).toBe("+3");
     // Итога здесь быть не может: результат выпадает на настоящем кубике.
     expect(screen.queryByLabelText("Итог броска")).toBeNull();
@@ -218,12 +279,18 @@ describe("лента бросков", () => {
     /**
      * Ровно та ошибка, которую поймал мастер: аватар был вписан в `ChatPanel`,
      * а лента бросков — это `ActivityPanel`. Компонентный тест этого не увидел
-     * бы, поэтому проверяется исходник: обе ленты обязаны передавать `avatar`.
+     * бы, поэтому проверяется исходник: обе ленты обязаны ставить аватар
+     * в заголовок сообщения рядом с автором.
      */
-    const source = await import("node:fs").then((fs) =>
-      fs.readFileSync("apps/web/src/sidebar/ChatPanels.tsx", "utf8"),
-    );
-    expect(source.split("avatar={").length - 1).toBeGreaterThanOrEqual(2);
+    const source = await import("node:fs").then((fs) => {
+      const rootPath = "apps/web/src/sidebar/ChatPanels.tsx";
+      const webPath = "src/sidebar/ChatPanels.tsx";
+      return fs.readFileSync(
+        fs.existsSync(rootPath) ? rootPath : webPath,
+        "utf8",
+      );
+    });
+    expect(source.split("<RollAvatar").length - 1).toBeGreaterThanOrEqual(2);
     // И ни одна из них не должна снова заводить свой источник картинок.
     expect(source).not.toContain("portraitUrlFor");
   });

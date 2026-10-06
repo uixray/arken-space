@@ -363,10 +363,18 @@ async function fillDraft(
       .toBeGreaterThan(0);
   }
   await expect(noImage).toHaveAttribute("aria-pressed", "false");
-  await editor.getByRole("checkbox", { name: "Сохранять пропорции" }).uncheck();
+  // The native input is visually hidden behind the design-system label.
+  // Exercise the same label target a pointer user clicks.
+  await editor
+    .getByRole("checkbox", { name: "Сохранять пропорции" })
+    .locator("xpath=..")
+    .click();
   await sizeInput(editor, "Ширина, клетки").fill("2");
   await sizeInput(editor, "Высота, клетки").fill("3");
-  await editor.getByRole("checkbox", { name: "Игрок для проверки" }).check();
+  await editor
+    .getByRole("checkbox", { name: "Игрок для проверки" })
+    .locator("xpath=..")
+    .click();
 }
 
 async function expectDraft(

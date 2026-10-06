@@ -1,0 +1,163 @@
+/**
+ * Arken Design System — Foundations
+ * Canonical 4px/8px rhythm scale, control heights, border radii, and typographic hierarchy.
+ *
+ * Core rule: Avoid ad-hoc pixel values (5px, 6px, 7px, 10px, 14px).
+ * Always reference semantic tokens to maintain visual hierarchy and breathing room.
+ */
+
+:root {
+  /* ==========================================================================
+     1. SPATIAL SCALE (Отступы)
+     ========================================================================== */
+  --space-2xs: 2px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-3xl: 48px;
+
+  /* ==========================================================================
+     2. LAW OF PROXIMITY RHYTHM (Закон близости в формах, карточках и списках)
+     ========================================================================== */
+  /** Микро-связь: лейбл к своему полю ввода, иконка к тексту кнопки */
+  --rhythm-micro: var(--space-xs);
+  /** Тесная группировка: чипы, связанные переключатели, кнопки одной группы тулбара */
+  --rhythm-tight: var(--space-sm);
+  /** Мезо-связь: расстояние между соседними полями ввода в одной группе */
+  --rhythm-field: var(--space-md);
+  /** Разделитель подгрупп: расстояние между подразделами внутри карточки */
+  --rhythm-group: var(--space-lg);
+  /** Макро-связь: смысловые разделы, fieldset к fieldset, заголовок секции к контенту */
+  --rhythm-section: var(--space-xl);
+  /** Внутренний отступ контейнеров: модальные окна, карточки, панели сайдбара */
+  --rhythm-container: var(--space-lg);
+
+  /* ==========================================================================
+     3. CONTROL HEIGHT HIERARCHY (Высота элементов ввода и кнопок)
+     ========================================================================== */
+  /** Компактные таблицы, инлайн-действия, чипы, бейджи */
+  --control-height-xs: 24px;
+  /** Сайдбары, тулбары холста, трекер инициативы, компактные формы */
+  --control-height-s: 28px;
+  /** Базовый стандарт стола: основные формы, диалоги, стандартные кнопки */
+  --control-height-m: 32px;
+  /** Акцентные поля, поиск, крупные кнопки */
+  --control-height-l: 36px;
+  /** Мобильные тач-таргеты и промо-кнопки */
+  --control-height-xl: 44px;
+
+  /* ==========================================================================
+     4. BORDER RADII HIERARCHY (Скругления углов)
+     ========================================================================== */
+  /** Мелкие индикаторы, прогресс-бары, маркеры */
+  --radius-xs: 2px;
+  /** Стандарт для кнопок, чекбоксов, инпутов (строгая тактильность без bubble UI) */
+  --radius-sm: 4px;
+  /** Селекты, выпадающие списки, карточки сущностей */
+  --radius-md: 6px;
+  /** Панели, модальные окна, крупные контейнеры стола */
+  --radius-lg: 8px;
+  /** Бейджи, теги, счетчики, переключатели (Switch) */
+  --radius-pill: 999px;
+
+  /* ==========================================================================
+     5. TYPOGRAPHY SCALE (Контрастная иерархия шрифтов)
+     ========================================================================== */
+  /** Таймстемпы, микро-счетчики, технические маркеры */
+  --font-size-micro: 10px;
+  --font-line-height-micro: 1.2;
+
+  /** Подписи полей (labels), заголовки колонок, метаданные */
+  --font-size-caption: 11px;
+  --font-line-height-caption: 1.3;
+
+  /** Базовый текст чата, описаний, характеристик */
+  --font-size-body: 12px;
+  --font-line-height-body: 1.45;
+
+  /** Выделенный текст, интро, важные примечания */
+  --font-size-body-lg: 14px;
+  --font-line-height-body-lg: 1.4;
+
+  /** Заголовки карточек, групп полей, акцентные подзаголовки */
+  --font-size-heading-sm: 14px;
+  --font-line-height-heading-sm: 1.3;
+
+  /** Заголовки секций сайдбара, панелей, вкладок */
+  --font-size-heading-md: 16px;
+  --font-line-height-heading-md: 1.3;
+
+  /** Заголовки диалогов, модальных окон, экранов */
+  --font-size-heading-lg: 20px;
+  --font-line-height-heading-lg: 1.25;
+
+  /** Результаты бросков кубиков d20, акцентные числовые индикаторы */
+  --font-size-display: 24px;
+  --font-line-height-display: 1.2;
+
+  /* ==========================================================================
+     6. ATMOSPHERIC DEPTH & LAYER ELEVATION (Благородная глубина без лишних рамок)
+     ========================================================================== */
+  /** Тончайшая грань для разделения поверхностей взамен глухих 1px рамок */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-delicate: rgba(255, 255, 255, 0.14);
+  --border-glow: rgba(var(--color-accent-rgb, 196, 111, 73), 0.35);
+
+  /** Плавающие поверхности стола с блюром */
+  --surface-panel-floating: rgba(23, 23, 21, 0.85);
+  --backdrop-blur-glass: blur(14px);
+
+  /** Мягкие объемные тени и световые фаски */
+  --shadow-elevation-card:
+    0 4px 16px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-elevation-panel:
+    0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --shadow-elevation-modal:
+    0 16px 48px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* ==========================================================================
+   Utility Rhythm Helper Classes for Forms and Panels
+   ========================================================================== */
+
+.arken-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.arken-stack--micro {
+  gap: var(--rhythm-micro);
+}
+
+.arken-stack--tight {
+  gap: var(--rhythm-tight);
+}
+
+.arken-stack--field {
+  gap: var(--rhythm-field);
+}
+
+.arken-stack--group {
+  gap: var(--rhythm-group);
+}
+
+.arken-stack--section {
+  gap: var(--rhythm-section);
+}
+
+.arken-cluster {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.arken-cluster--tight {
+  gap: var(--rhythm-tight);
+}
+
+.arken-cluster--field {
+  gap: var(--rhythm-field);
+}

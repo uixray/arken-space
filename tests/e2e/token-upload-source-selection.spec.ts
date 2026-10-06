@@ -903,7 +903,8 @@ test("UIX-589 palette replacement and controllers commit in one PATCH with stabl
     await editor.locator(".token-image-preview").press("ArrowRight");
     await editor
       .getByRole("checkbox", { name: "Игрок атомарной правки", exact: true })
-      .check();
+      .locator("xpath=..")
+      .click();
     const save = editor.getByRole("button", { name: "Сохранить", exact: true });
     await save.click();
     await expect.poll(() => fixture.heldPatches.length).toBe(1);

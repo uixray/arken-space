@@ -13,6 +13,9 @@ export default tseslint.config(
       "**/coverage/**",
       "**/drizzle/meta/**",
       "**/test-results/**",
+      "**/storybook-static/**",
+      ".data/**",
+      "**/.tmp-*",
       ".worktrees/**",
       ".agent/**",
       ".agents/**",
@@ -27,6 +30,23 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    files: [
+      "scripts/import-local-qa-stickers.mjs",
+      "scripts/verify-local-qa-stickers.mjs",
+    ],
+    languageOptions: {
+      globals: Object.fromEntries(
+        [
+          "process",
+          "console",
+          "URLSearchParams",
+          "document",
+          "HTMLImageElement",
+        ].map((name) => [name, "readonly"]),
+      ),
+    },
+  },
   {
     files: ["infra/static/players/**/*.js"],
     languageOptions: {

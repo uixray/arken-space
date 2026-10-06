@@ -182,14 +182,18 @@ async function textGeometry(target: Locator) {
     };
     // Include actual scrolling/clipping ancestors, not only viewport bounds.
     // A native input's internal scrollport can exclude its padding in Firefox.
-    // It clips the text, not the control's own border box. Native text fit is
-    // checked separately below; outer clipping starts at its actual parent.
+    // Gravity's text-input content wrapper clips the glyphs, not the native
+    // input's border box; its 2px inset must not be treated as outer clipping.
+    // Native text fit is checked separately below.
     for (
       let parent: Element | null =
-        element instanceof HTMLInputElement ||
-        element instanceof HTMLSelectElement
-          ? element.parentElement
-          : element;
+        element instanceof HTMLInputElement &&
+        element.parentElement?.matches(".g-text-input__content")
+          ? element.parentElement.parentElement
+          : element instanceof HTMLInputElement ||
+              element instanceof HTMLSelectElement
+            ? element.parentElement
+            : element;
       parent;
     ) {
       const style = getComputedStyle(parent);

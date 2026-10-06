@@ -1,0 +1,108 @@
+.landing-section-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 1.6vw, 20px);
+  min-width: 0;
+}
+
+.landing-section-nav a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  color: var(--muted);
+  font-size: max(12px, 0.82rem);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.landing-section-nav a:hover,
+.landing-section-nav a:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.landing-section-nav a:focus-visible,
+.roadmap-expand-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.landing-section[id],
+.landing-hero[id] {
+  scroll-margin-top: 20px;
+}
+
+.roadmap-expand-button {
+  margin-top: 20px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.roadmap-vote-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  margin-top: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.roadmap-vote-button.is-voted {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.roadmap-vote-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.roadmap-vote-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.roadmap-vote-error {
+  color: var(--g-color-text-danger);
+}
+.roadmap-vote-note {
+  color: var(--muted);
+  font-size: max(12px, 0.82rem);
+}
+
+@media (max-width: 760px) {
+  .landing-section-nav {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+    gap: 6px 14px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .landing-section-nav a {
+    min-height: 44px;
+    font-size: max(12px, 0.78rem);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .landing-shell {
+    scroll-behavior: smooth;
+  }
+}

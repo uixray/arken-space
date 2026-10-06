@@ -179,10 +179,13 @@ test("отмена и повтор называют действие, котор
     "aria-label",
     "Отменить: размер токена изменён",
   );
-  // Подсказка и доступное имя — один текст: всплывающая подсказка недоступна
-  // ни клавиатуре, ни программе чтения с экрана.
-  await expect(undo).toHaveAttribute(
-    "title",
+  // Enter via actual keyboard navigation: Firefox does not show focus tooltips
+  // for a pointer-modality programmatic .focus().
+  await undo.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(undo).toBeFocused();
+  await expect(page.getByRole("tooltip")).toHaveText(
     "Отменить: размер токена изменён",
   );
 

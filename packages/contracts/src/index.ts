@@ -577,7 +577,12 @@ export const rollActionSchema = z.object({
   consumeUse: z.boolean().default(false),
   cost: resourceCostSchema.optional(),
 });
-export const rechargePeriodSchema = z.enum(["DAY", "BATTLE", "WEEK"]);
+export const rechargePeriodSchema = z.enum([
+  "DAY",
+  "BATTLE",
+  "WEEK",
+  "SHORT_REST",
+]);
 export const abilityUsesSchema = z
   .object({
     current: z.number().int().nonnegative(),
@@ -1003,7 +1008,11 @@ export const createInviteSchema = z.object({
   label: z.string().trim().min(1).max(80),
   expiresInHours: z.number().int().min(1).max(720).default(168),
 });
-export const rotatePlayerAccessSchema = z.object({ actionId: actionIdSchema });
+export const rotatePlayerAccessSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+});
+export const revokePlayerAccessSchema = z.object({ actionId: actionIdSchema });
 export const rotateGmAccessSchema = z.object({
   actionId: actionIdSchema,
   token: z.string().min(32).max(512),
@@ -1041,6 +1050,7 @@ export interface PlayerAccessDto {
   membershipId: string;
   characterId: string | null;
   label: string;
+  revision: number;
   revokedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -2170,6 +2180,7 @@ export const characterCountersCommandSchema = z
           description: z.string().max(2000).optional(),
           imageAssetId: z.string().uuid().nullable().optional(),
           recoverable: z.boolean().optional(),
+          restAmount: z.number().finite().nonnegative().optional(),
         }),
       )
       .optional(),
@@ -2329,6 +2340,7 @@ export interface CharacterDto {
       description?: string;
       imageAssetId?: string | null;
       recoverable?: boolean;
+      restAmount?: number;
     }
   >;
   wallet: z.infer<typeof walletSchema>;
@@ -2730,7 +2742,7 @@ export interface SkillCardSnapshot {
     before: number;
     after: number;
     max: number;
-    recharge: "DAY" | "BATTLE" | "WEEK";
+    recharge: "DAY" | "BATTLE" | "WEEK" | "SHORT_REST";
   } | null;
   visibility: MessageVisibility;
 }

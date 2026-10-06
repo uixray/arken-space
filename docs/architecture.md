@@ -174,7 +174,7 @@ multi-campaign provisioning service.
 
 ### HTTP API по доменам
 
-Всего **161** HTTP-маршрут во всех server route-модулях: 85 остаются в
+Всего **162** HTTP-маршрута во всех server route-модулях: 85 остаются в
 `routes.ts`, остальные разделены по персонажам, столкновениям, паузе кампании,
 operator feedback, заявкам игроков, сюжетному каналу, картам, магии и
 содержимому мира.
@@ -377,7 +377,7 @@ sequenceDiagram
 
 ## Данные
 
-Drizzle schema содержит **55** прикладных таблиц.
+Drizzle schema содержит **56** прикладных таблиц.
 
 | Группа             | Таблицы                                                                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -391,6 +391,7 @@ Drizzle schema содержит **55** прикладных таблиц.
 | Сюжетный канал     | `story_posts`, `story_post_revisions`, `story_post_media`, `story_import_batches`, `story_import_sources`                                               |
 | Магия              | `spell_packs`, `spell_pack_versions`, `character_spell_assignments`, `character_spell_assignment_versions`                                              |
 | Заявки игроков     | `player_requests`                                                                                                                                       |
+| Публичные планы    | `public_roadmap_votes`                                                                                                                                  |
 | Media/audio        | `assets`, `campaign_audio_tracks`                                                                                                                       |
 | Аудит              | `game_events`, `action_journal`                                                                                                                         |
 | Обратная связь     | `feedback_reports`, `feedback_attachments`, `feedback_operator_audits`                                                                                  |
@@ -433,7 +434,7 @@ Drizzle schema содержит **55** прикладных таблиц.
   удалении меняйте content version и не считайте browser cache persistence;
 - `game_events` и `action_journal` обеспечивают разные виды истории.
 
-Миграции `0000`–`0044` (45 SQL files) применяются при старте server-контейнера
+Миграции `0000`–`0046` (47 SQL files) применяются при старте server-контейнера
 до запуска Fastify. Изменение schema обязано сопровождаться migration, тестами, обновлением
 backup/restore manifests и проверкой role-filtered snapshot.
 

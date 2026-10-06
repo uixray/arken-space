@@ -1,9 +1,21 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { MessageVisibility } from "@arken/contracts";
 import { RollModeControl, type RollMode } from "../RollModeControl";
 import { ROLL_MODIFIER_HINT, rollModeFromEvent } from "../roll-modifier-keys";
 import { AppIcon } from "../ui/AppIcon";
 import { SecretRollIcon } from "../ui/icons";
+import { useRepeatRoll } from "./use-repeat-roll";
+
+const pureRollNames: Record<number, string> = {
+  2: "чеканной монеты",
+  4: "калтропа",
+  6: "куба",
+  8: "бриллианта",
+  10: "десятки",
+  12: "дюжины",
+  20: "двадцатки",
+  100: "стогранника",
+};
 
 /**
  * UIX-504: компактная строка костей и режимов. Это более позднее решение,
@@ -36,13 +48,22 @@ export function DiceTrayPanel({
   ) => Promise<void>;
 }) {
   const [rollMode, setRollMode] = useState<RollMode>("NORMAL");
+  const rollModeRef = useRef<RollMode>("NORMAL");
+  const selectRollMode = (next: RollMode) => {
+    rollModeRef.current = next;
+    setRollMode(next);
+  };
   const [pendingRolls, setPendingRolls] = useState(0);
   const [rollError, setRollError] = useState("");
-  const sendRoll: typeof onRoll = async (...args) => {
+  const { onRollClick, popover } = useRepeatRoll();
+  const sendRolls = async (
+    count: number,
+    ...args: Parameters<typeof onRoll>
+  ) => {
     setPendingRolls((count) => count + 1);
     setRollError("");
     try {
-      await onRoll(...args);
+      for (let index = 0; index < count; index += 1) await onRoll(...args);
     } catch (error) {
       setRollError(
         error instanceof Error ? error.message : "Не удалось отправить бросок",
@@ -53,28 +74,40 @@ export function DiceTrayPanel({
   };
 
   return (
-    <section className="dice-tray-panel" aria-label="Физические кости">
+    <section
+      className="dice-tray-panel"
+      aria-label="Физические кости"
+      aria-busy={pendingRolls > 0}
+    >
       <div className="dice-tray-panel__body">
         <div
           className="dice-tray-panel__toolbar"
           aria-label="Кости и режим броска"
         >
-          {[2, 4, 6, 8, 10, 12, 20].map((sides) => (
+          {[2, 4, 6, 8, 10, 12, 20, 100].map((sides) => (
             <button
               key={sides}
               type="button"
               title={`Бросить d${sides} · ${ROLL_MODIFIER_HINT}`}
-              onClick={(event) =>
-                void sendRoll(
-                  `1d${sides}`,
-                  `d${sides}`,
-                  visibility,
-                  characterId,
-                  // UIX-456: зажатая клавиша перекрывает переключатель на
-                  // один бросок и не трогает выставленный режим.
-                  rollModeFromEvent(event.nativeEvent, rollMode),
-                )
-              }
+              onClick={(event) => {
+                const mode = rollModeFromEvent(
+                  event.nativeEvent,
+                  rollModeRef.current,
+                );
+                onRollClick(event, (count) => {
+                  // The mode is a one-shot modifier. Consume it only when
+                  // the delayed single or chosen batch actually dispatches.
+                  selectRollMode("NORMAL");
+                  void sendRolls(
+                    count,
+                    `1d${sides}`,
+                    `Чистый бросок ${pureRollNames[sides]}`,
+                    visibility,
+                    characterId,
+                    mode,
+                  );
+                });
+              }}
             >
               d{sides}
             </button>
@@ -82,7 +115,7 @@ export function DiceTrayPanel({
 
           <RollModeControl
             value={rollMode}
-            onChange={setRollMode}
+            onChange={selectRollMode}
             label="Режим броска"
             iconOnly
           />
@@ -102,8 +135,9 @@ export function DiceTrayPanel({
           </button>
         </div>
       </div>
-      {pendingRolls > 0 && <p role="status">Бросаем… {pendingRolls}</p>}
+
       {rollError && <p role="alert">{rollError}</p>}
+      {popover}
     </section>
   );
 }

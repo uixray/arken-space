@@ -1,6 +1,13 @@
 # UIX-645 — Lucide foundation checkpoint, 2026-09-06
 
-> **Текущий статус:** реализация и reachable-миграция находятся в main; для
+> **Итог 19.09.2026: Done в Linear.** Последний theme-axis закрыт72/72 icon
+> cases и v6 bundle audit47 named icons; exact candidate `e67bacc37` прошёл
+> checks35412873275 / E2E35412873288 / multiplayer35412873306. Полный pack
+> сохранён локально, runtime не загружает каталог/CDN. PR85 не слит/не deployed.
+> Предыдущие блокеры ниже — история; текущий итог см. в
+> [финальном checkpoint](design-finish-2026-09-19.md#final-checkpoint--accepted-candidate-three-closures-work-paused).
+
+> **Предыдущая сверка:** реализация и reachable-миграция находятся в main; для
 > closure использовать приложение «Сверка исходных критериев — 2026-09-19» в
 > конце файла. Исторические unchecked/pending формулировки ниже сохраняют ход
 > работы и не являются текущим списком повторной миграции. UIX-645 остаётся

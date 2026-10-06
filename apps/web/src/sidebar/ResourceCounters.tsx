@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "../design-system/Button";
 import type { CharacterDto } from "@arken/contracts";
-import { FormInput } from "../ui/GravityFormControls";
 import {
   clampResourceValue,
   RESOURCE_ADJUST_DELAY_MS,
@@ -9,12 +8,12 @@ import {
 } from "../resource-regen";
 import type { ResourceCounterIntent } from "../resource-counter-intent";
 import { AppIcon } from "../ui/AppIcon";
-import { AddIcon, DecreaseIcon } from "../ui/icons";
+import { AddIcon, DecreaseIcon, ExpandSectionIcon } from "../ui/icons";
 
 type OptimisticValue = { value: number; generation: number };
 
 type ResourceBatch = {
-  /** Изменение, уже обрезанное фактическими границами ресурса. */
+  /** Изменение, обрезанное только нижней границей ресурса. */
   delta: number;
   /** Версия показанного значения после последнего клика серии. */
   generation: number;
@@ -188,11 +187,10 @@ export function ResourceCounters({
     resourceKey: string,
     delta: number,
     serverCurrent: number,
-    maximum: number,
   ) => {
     const previousOptimistic = optimistic.current.get(stateKey);
     const base = previousOptimistic?.value ?? serverCurrent;
-    const value = clampResourceValue(base + delta, maximum);
+    const value = clampResourceValue(base + delta);
     const actualDelta = value - base;
     if (actualDelta === 0) return;
 
@@ -284,18 +282,23 @@ export function ResourceCounters({
   return (
     <details className="resource-counters" open>
       <summary className="resource-counters__summary">
-        <span>Ресурсы</span>
+        <span className="resource-counters__chevron" aria-hidden="true">
+          <AppIcon icon={ExpandSectionIcon} />
+        </span>
+        <span className="resource-counters__title">Ресурсы</span>
         {/* Значения в свёрнутом виде: свернувший блок всё равно должен видеть,
             сколько у него осталось. */}
         <span className="resource-counters__summary-values">
-          {rows
-            .map((row) => {
-              const resource = resources[row.key] ?? { current: 0, maximum: 0 };
-              const stateKey = scopedResourceKey(scopeKey, row.key);
-              const shown = drafts[stateKey] ?? resource.current;
-              return `${row.label}: ${shown}`;
-            })
-            .join(" · ")}
+          {rows.map((row) => {
+            const resource = resources[row.key] ?? { current: 0, maximum: 0 };
+            const stateKey = scopedResourceKey(scopeKey, row.key);
+            const shown = drafts[stateKey] ?? resource.current;
+            return (
+              <span key={row.key} className="resource-counters__summary-value">
+                {row.label}: {shown}
+              </span>
+            );
+          })}
         </span>
       </summary>
       <div className="resource-counters__list" aria-label="Очки ресурсов">
@@ -306,112 +309,169 @@ export function ResourceCounters({
           const maximum = resource.maximum ?? resource.current;
           const shown = drafts[stateKey] ?? resource.current;
           const regen = resourceRegenAmount(row.key, stats);
+          const percent =
+            maximum > 0
+              ? Math.max(0, Math.min(100, Math.round((shown / maximum) * 100)))
+              : 0;
+          const overflow = Math.max(0, shown - maximum);
+          const overflowPercent =
+            overflow > 0 && maximum > 0
+              ? ((((overflow - 1) % maximum) + 1) / maximum) * 100
+              : overflow > 0
+                ? 100
+                : 0;
+          const keyLower = row.key.toLowerCase();
+          const labelLower = row.label.toLowerCase();
+          const isStamina =
+            keyLower.includes("physical") ||
+            keyLower.includes("stamina") ||
+            labelLower.includes("вынослив");
+          const isMana =
+            keyLower.includes("magic") ||
+            keyLower.includes("mana") ||
+            labelLower.includes("ман");
+          const barVariant = isStamina
+            ? "stamina"
+            : isMana
+              ? "mana"
+              : "default";
+
           const change = (delta: number) =>
-            // Ограничение с обеих сторон здесь, а не только на сервере: без него
-            // счётчик уводит в минус на глазах, а отказ приходит позже.
-            queue(stateKey, row.key, delta, resource.current, maximum);
+            // Очки сверх максимума допустимы; отрицательные значения — нет.
+            queue(stateKey, row.key, delta, resource.current);
           return (
-            <div className="resource-counters__item" key={row.key}>
-              <label className="resource-counters__label" htmlFor={inputId}>
-                <span className="visually-hidden">Очки: </span>
-                {row.label}
-              </label>
-              <Button
-                view="flat"
-                disabled={!editable || shown <= 0}
-                aria-label={`Потратить одно очко: ${row.label}`}
-                title="Потратить одно очко"
-                onClick={() => change(-1)}
-              >
-                <AppIcon icon={DecreaseIcon} />
-              </Button>
-              {/* Ввод числом: поставить 3 из 17 щелчками по единице — это
-                  четырнадцать нажатий ради одного решения. */}
-              <FormInput
-                id={inputId}
-                type="number"
-                className="resource-counters__input"
-                aria-label={`Очки: ${row.label}`}
-                disabled={!editable}
-                min={0}
-                max={maximum}
-                value={String(shown)}
-                onChange={(event) => {
-                  cancelBatch(stateKey);
-                  const value = clampResourceValue(
-                    Number(event.target.value),
-                    maximum,
-                  );
-                  const generation = ++nextGeneration.current;
-                  inputGenerations.current.set(stateKey, generation);
-                  show(stateKey, value, generation);
-                }}
-                onBlur={(event) => {
-                  const generation = inputGenerations.current.get(stateKey);
-                  if (generation === undefined) return;
-                  commitSet(
-                    stateKey,
-                    row.key,
-                    clampResourceValue(Number(event.target.value), maximum),
-                    generation,
-                    resource.current,
-                  );
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter") return;
-                  event.preventDefault();
-                  const generation = inputGenerations.current.get(stateKey);
-                  if (generation === undefined) return;
-                  commitSet(
-                    stateKey,
-                    row.key,
-                    clampResourceValue(
-                      Number(event.currentTarget.value),
-                      maximum,
-                    ),
-                    generation,
-                    resource.current,
-                  );
-                }}
-              />
-              <span className="resource-counters__maximum">
-                <span aria-hidden="true">/ </span>
-                {maximum}
-              </span>
-              <Button
-                view="flat"
-                disabled={!editable || shown >= maximum}
-                aria-label={`Вернуть одно очко: ${row.label}`}
-                title="Вернуть одно очко"
-                onClick={() => change(1)}
-              >
-                <AppIcon icon={AddIcon} />
-              </Button>
-              {/* Кнопка восстановления есть только там, где системе известна
-                  величина регена. У прочих ресурсов её не из чего взять. */}
-              {regen > 0 && (
+            <div
+              className={`resource-counters__item resource-counters__item--${barVariant}`}
+              key={row.key}
+            >
+              <div className="resource-counters__item-row">
+                <label className="resource-counters__label" htmlFor={inputId}>
+                  <span className="visually-hidden">Очки: </span>
+                  {row.label}
+                </label>
+                <div className="resource-counters__value">
+                  <input
+                    id={inputId}
+                    type="number"
+                    className="resource-counters__input"
+                    aria-label={`Очки: ${row.label}`}
+                    disabled={!editable}
+                    min={0}
+                    value={String(shown)}
+                    onChange={(event) => {
+                      cancelBatch(stateKey);
+                      const value = clampResourceValue(
+                        Number(event.target.value),
+                      );
+                      const generation = ++nextGeneration.current;
+                      inputGenerations.current.set(stateKey, generation);
+                      show(stateKey, value, generation);
+                    }}
+                    onBlur={(event) => {
+                      const generation = inputGenerations.current.get(stateKey);
+                      if (generation === undefined) return;
+                      commitSet(
+                        stateKey,
+                        row.key,
+                        clampResourceValue(Number(event.target.value)),
+                        generation,
+                        resource.current,
+                      );
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") return;
+                      event.preventDefault();
+                      const generation = inputGenerations.current.get(stateKey);
+                      if (generation === undefined) return;
+                      commitSet(
+                        stateKey,
+                        row.key,
+                        clampResourceValue(Number(event.currentTarget.value)),
+                        generation,
+                        resource.current,
+                      );
+                    }}
+                  />
+                  <span className="resource-counters__maximum">
+                    <span aria-hidden="true">/ </span>
+                    {maximum}
+                  </span>
+                </div>
+              </div>
+              <div className="resource-counters__controls">
                 <Button
                   view="flat"
-                  className="resource-counters__regen"
-                  disabled={!editable || shown >= maximum}
-                  aria-label={`Восстановить ${regen}: ${row.label}`}
-                  title={`Восстановить на величину регена (${regen})`}
-                  onClick={() => {
-                    const value = clampResourceValue(shown + regen, maximum);
-                    if (value === shown) return;
-                    const generation = ++nextGeneration.current;
-                    commitDeltaNow(
-                      stateKey,
-                      row.key,
-                      value - shown,
-                      value,
-                      generation,
-                    );
-                  }}
+                  className="resource-counters__btn"
+                  disabled={!editable || shown <= 0}
+                  aria-label={`Потратить одно очко: ${row.label}`}
+                  title="Потратить одно очко"
+                  onClick={() => change(-1)}
                 >
-                  {`+${regen}`}
+                  <AppIcon icon={DecreaseIcon} />
                 </Button>
-              )}
+                <Button
+                  view="flat"
+                  className="resource-counters__btn"
+                  disabled={!editable}
+                  aria-label={`Вернуть одно очко: ${row.label}`}
+                  title="Вернуть одно очко"
+                  onClick={() => change(1)}
+                >
+                  <AppIcon icon={AddIcon} />
+                </Button>
+                {/* Кнопка восстановления есть только там, где системе известна
+                      величина регена. У прочих ресурсов её не из чего взять. */}
+                {regen > 0 && (
+                  <Button
+                    view="flat"
+                    className="resource-counters__regen"
+                    disabled={!editable || shown >= maximum}
+                    aria-label={`Восстановить ${regen}: ${row.label}`}
+                    title={`Восстановить на величину регена (${regen})`}
+                    onClick={() => {
+                      const value = Math.min(
+                        maximum,
+                        clampResourceValue(shown + regen),
+                      );
+                      if (value === shown) return;
+                      const generation = ++nextGeneration.current;
+                      commitDeltaNow(
+                        stateKey,
+                        row.key,
+                        value - shown,
+                        value,
+                        generation,
+                      );
+                    }}
+                  >
+                    {`+${regen}`}
+                  </Button>
+                )}
+                <div
+                  className="resource-bar"
+                  role="progressbar"
+                  aria-valuenow={shown}
+                  aria-valuemin={0}
+                  aria-valuemax={Math.max(maximum, shown)}
+                  aria-valuetext={
+                    overflow > 0
+                      ? `${shown} из ${maximum}, сверх максимума ${overflow}`
+                      : `${shown} из ${maximum}`
+                  }
+                  aria-label={`Уровень: ${row.label}`}
+                >
+                  <div
+                    className={`resource-bar__fill resource-bar__fill--${barVariant}`}
+                    style={{ width: `${percent}%` }}
+                  />
+                  {overflow > 0 && (
+                    <div
+                      className={`resource-bar__overflow resource-bar__overflow--${barVariant}`}
+                      style={{ width: `${overflowPercent}%` }}
+                    />
+                  )}
+                </div>
+              </div>
             </div>
           );
         })}

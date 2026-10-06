@@ -101,6 +101,14 @@ export function useComposerSuggestions(
     const isTextarea = target === textareaRef.current;
     const isTrigger = Boolean(target.closest(".composer-slash-action"));
     if (!optionTarget && !isTextarea && !isTrigger) return;
+    if (event.key === "Tab" && optionTarget) {
+      // Native Tab may land on another control inside the composer root, so
+      // the document-level outside-focus listener cannot close this popup.
+      // Keep Tab native; the popup should not remain open when the next
+      // focusable element happens to be inside the composer root.
+      dismiss();
+      return;
+    }
     // Home/End retain native caret behavior outside the option list.
     if ((event.key === "Home" || event.key === "End") && !optionTarget) return;
     const options = Array.from(
@@ -117,7 +125,7 @@ export function useComposerSuggestions(
     else if (event.key === "ArrowDown") next = (current + 1) % options.length;
     else if (event.key === "ArrowUp")
       next = current <= 0 ? options.length - 1 : current - 1;
-    else return; // Native Tab and option Enter/Space stay native, exactly once.
+    else return; // Option Enter/Space stay native, exactly once.
     event.preventDefault();
     event.stopPropagation();
     options[next]?.focus({ preventScroll: true });

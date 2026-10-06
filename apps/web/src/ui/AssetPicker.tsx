@@ -1,4 +1,10 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from "react";
 import type { AssetDto } from "@arken/contracts";
 import {
   computeArrowNavIndex,
@@ -26,6 +32,8 @@ export interface AssetPickerProps {
   loading?: boolean;
   /** Optional call-to-action shown alongside the empty-list message (e.g. "upload one"). */
   emptyAction?: { label: string; onSelect: () => void };
+  /** Upload a new image, refresh the asset list, and return its id. */
+  onUpload?: (file: File) => Promise<string>;
 }
 
 /** Fallback tile content when an image fails to load or points at a deleted asset. */
@@ -59,9 +67,13 @@ export function AssetPicker({
   disabled,
   loading,
   emptyAction,
+  onUpload,
   ...ariaProps
 }: AssetPickerProps) {
   const [filter, setFilter] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const uploadInput = useRef<HTMLInputElement>(null);
   const ariaLabel = ariaProps["aria-label"];
   const showFilter = filterable ?? assets.length > 12;
 
@@ -71,6 +83,21 @@ export function AssetPicker({
   );
 
   const { selectedMissing } = resolveAssetSelection(assets, value);
+
+  const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !onUpload || uploading) return;
+    setUploading(true);
+    setUploadError("");
+    try {
+      onChange(await onUpload(file));
+    } catch {
+      setUploadError("Не удалось загрузить изображение. Попробуйте ещё раз.");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleTileKeyDown = (
     event: KeyboardEvent<HTMLButtonElement>,
@@ -100,6 +127,27 @@ export function AssetPicker({
 
   return (
     <div className="asset-picker" role="group" aria-label={ariaLabel}>
+      {onUpload && (
+        <div className="asset-picker__upload">
+          <input
+            ref={uploadInput}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            hidden
+            disabled={disabled || uploading}
+            onChange={(event) => void handleUpload(event)}
+            aria-label="Новое изображение"
+          />
+          <button
+            type="button"
+            disabled={disabled || uploading}
+            onClick={() => uploadInput.current?.click()}
+          >
+            {uploading ? "Загружаем…" : "Загрузить новое изображение"}
+          </button>
+          {uploadError && <span role="alert">{uploadError}</span>}
+        </div>
+      )}
       {selectedMissing && (
         <p className="asset-picker__warning" role="status">
           Выбранное изображение больше недоступно. Выберите другое или снимите
@@ -112,7 +160,7 @@ export function AssetPicker({
           className="asset-picker__filter"
           placeholder="Поиск по имени…"
           value={filter}
-          disabled={disabled}
+          disabled={disabled || uploading}
           onChange={(event) => setFilter(event.target.value)}
           aria-label="Поиск изображений по имени"
         />
@@ -130,7 +178,7 @@ export function AssetPicker({
                   className="asset-picker__tile asset-picker__tile--none"
                   aria-pressed={!value && !hasExternalSelection}
                   aria-label={noneLabel}
-                  disabled={disabled}
+                  disabled={disabled || uploading}
                   tabIndex={0}
                   onClick={() => onChange(null)}
                   onKeyDown={(event) =>
@@ -151,7 +199,7 @@ export function AssetPicker({
                       className="asset-picker__tile"
                       aria-pressed={selected}
                       aria-label={asset.name}
-                      disabled={disabled}
+                      disabled={disabled || uploading}
                       tabIndex={0}
                       onClick={() => onChange(asset.id)}
                       onKeyDown={(event) =>

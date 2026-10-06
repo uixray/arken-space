@@ -6,6 +6,7 @@ import {
   useReducer,
   useRef,
   useState,
+  type CSSProperties,
 } from "react";
 import {
   statKeyFromLabel,
@@ -19,6 +20,7 @@ import {
 import { useCampaignActions } from "../campaign-actions-context";
 import { createPortal } from "react-dom";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
+import { RESOURCE_REGEN_STAT, isSystemRegenStatKey } from "@arken/system";
 import { Button } from "../design-system/Button";
 import { CatalogEntryForm } from "../CatalogEntryForm";
 import { ApiError, formatApiError } from "../api";
@@ -40,8 +42,9 @@ import {
 } from "../character-workspace-state";
 import { CharacterMediaGallery } from "./CharacterMediaGallery";
 import { CharacterActionCard } from "../SkillCards";
-import { RollModeControl, type RollMode } from "../RollModeControl";
 import { humanizeFormula } from "../formula-display";
+import { rollModeFromEvent } from "../roll-modifier-keys";
+import type { RollMode } from "../roll-mode";
 import { RollButton } from "./RollButton";
 import { CatalogEntryPicker } from "./CatalogEntryPicker";
 import { StatLayoutCard } from "./StatLayoutCard";
@@ -53,20 +56,22 @@ import {
   normalizeWallet,
   normalizeWalletValue,
   WALLET_ADJUST_DELAY_MS,
-  WALLET_KEYS,
   WALLET_LABELS,
   walletDeltaIsEmpty,
+  spendWalletCoin,
+  canSpendWalletCoin,
   type Wallet,
   type WalletDelta,
 } from "../wallet";
 import type { Props } from "../Sidebar";
 import { Empty } from "./MediaPanel";
-import { CampaignClockDialog } from "./CampaignClockDialog";
 import { AppIcon } from "../ui/AppIcon";
+import { notify } from "../ui/notifications";
 import {
   AddIcon,
   CharacterArchiveIcon,
   CloseIcon,
+  CoinsIcon,
   CollapseCharacterRailIcon,
   DecreaseIcon,
   ExpandCharacterRailIcon,
@@ -118,7 +123,8 @@ export function CharacterWorkspace({
   const workspaceRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [createCharacterOpen, setCreateCharacterOpen] = useState(false);
-  const [campaignClockOpen, setCampaignClockOpen] = useState(false);
+  const [dayPending, setDayPending] = useState(false);
+  const dayPendingRef = useRef(false);
   const sheetLimitDescriptionId = useId();
   const [railCollapsed, setRailCollapsed] = useState(false);
   // UIX-393: GM-only archive/restore. `archiveTarget` drives the confirm
@@ -205,26 +211,15 @@ export function CharacterWorkspace({
       aria-hidden={!active}
       className={`character-workspace${props.collapsed ? " is-sidebar-collapsed" : ""}`}
       aria-labelledby="character-workspace-title"
+      style={
+        props.workspaceSidebarWidth != null
+          ? ({
+              "--sidebar-width": `${props.workspaceSidebarWidth}px`,
+            } as CSSProperties)
+          : undefined
+      }
     >
       <header className="character-workspace__header">
-        <div>
-          <span className="eyebrow">Рабочее пространство</span>
-          <h2 ref={titleRef} id="character-workspace-title" tabIndex={-1}>
-            Персонажи
-          </h2>
-        </div>
-        <p className="muted">
-          Открыто {openCount}/{MAX_OPEN_CHARACTER_SHEETS}
-        </p>
-        {props.snapshot.me.role === "GM" && (
-          <Button
-            view="flat"
-            title="Управление временем кампании"
-            onClick={() => setCampaignClockOpen(true)}
-          >
-            День {props.snapshot.campaign.day}
-          </Button>
-        )}
         <button
           type="button"
           className="character-rail-toggle"
@@ -249,8 +244,57 @@ export function CharacterWorkspace({
             }
           />
         </button>
+        <div>
+          <span className="eyebrow">Рабочее пространство</span>
+          <h2 ref={titleRef} id="character-workspace-title" tabIndex={-1}>
+            Персонажи
+          </h2>
+        </div>
+        <p className="muted">
+          Открыто {openCount}/{MAX_OPEN_CHARACTER_SHEETS}
+        </p>
+        {props.snapshot.me.role === "GM" && (
+          <Button
+            view="flat"
+            disabled={dayPending}
+            loading={dayPending}
+            title="Перевести календарь на следующий день без восстановления ресурсов"
+            onClick={() => {
+              if (dayPendingRef.current) return;
+              dayPendingRef.current = true;
+              setDayPending(true);
+              void Promise.resolve()
+                .then(() =>
+                  props.onCampaignClock(
+                    "ADVANCE_DAY",
+                    props.snapshot.campaign.revision,
+                  ),
+                )
+                .then(() =>
+                  notify({ title: "Наступил следующий день", tone: "success" }),
+                )
+                .catch((reason) =>
+                  notify({
+                    title: "Не удалось перевести календарь",
+                    message: formatApiError(
+                      reason,
+                      "Не удалось изменить день.",
+                    ),
+                    tone: "danger",
+                  }),
+                )
+                .finally(() => {
+                  dayPendingRef.current = false;
+                  setDayPending(false);
+                });
+            }}
+          >
+            День {props.snapshot.campaign.day}
+          </Button>
+        )}
         <button
           type="button"
+          className="character-workspace__close"
           aria-label="Закрыть персонажей"
           title="Закрыть рабочее пространство персонажей"
           onClick={onClose}
@@ -262,26 +306,6 @@ export function CharacterWorkspace({
         className={`character-workspace__body${railCollapsed ? " is-rail-collapsed" : ""}`}
       >
         <nav className="character-rail" aria-label="Персонажи кампании">
-          {props.snapshot.me.role === "GM" && (
-            <button
-              type="button"
-              className="character-rail__create"
-              onClick={() => setCreateCharacterOpen(true)}
-            >
-              <AppIcon icon={AddIcon} />
-              Создать персонажа
-            </button>
-          )}
-          {props.snapshot.me.role === "GM" && (
-            <button
-              type="button"
-              className="character-rail__restore-archived"
-              onClick={() => setRestoreDialogOpen(true)}
-            >
-              <AppIcon icon={CharacterArchiveIcon} />
-              Архив персонажей
-            </button>
-          )}
           {sheetLimitReached && (
             <p className="muted" id={sheetLimitDescriptionId}>
               Закройте один из открытых листов, чтобы открыть другой.
@@ -292,7 +316,6 @@ export function CharacterWorkspace({
           ) : (
             characters.map((character) => {
               const isOpen = state.openIds.includes(character.id);
-              const isCollapsed = state.collapsedIds.includes(character.id);
               const full = !isOpen && sheetLimitReached;
               return (
                 <div className="character-rail__item" key={character.id}>
@@ -326,7 +349,7 @@ export function CharacterWorkspace({
                     </span>
                     <strong>{character.name}</strong>
                     <span className="character-rail__status">
-                      {isCollapsed ? "свернут" : isOpen ? "открыт" : ""}
+                      {isOpen ? "открыт" : ""}
                     </span>
                   </button>
                   {isOpen && (
@@ -342,24 +365,28 @@ export function CharacterWorkspace({
                       <AppIcon icon={CloseIcon} />
                     </button>
                   )}
-                  {props.snapshot.me.role === "GM" && (
-                    <button
-                      type="button"
-                      className="character-rail__archive danger-link"
-                      aria-label={`Архивировать персонажа ${character.name}`}
-                      title="Архивировать персонажа"
-                      onClick={() => setArchiveTarget(character)}
-                    >
-                      <span className="character-rail__archive-icon">
-                        <AppIcon icon={CharacterArchiveIcon} />
-                      </span>
-                      Архивировать
-                    </button>
-                  )}
                 </div>
               );
             })
           )}
+          <div className="character-rail__actions">
+            <button
+              type="button"
+              className="character-rail__create"
+              onClick={() => setCreateCharacterOpen(true)}
+            >
+              <AppIcon icon={AddIcon} /> Создать персонажа
+            </button>
+            {props.snapshot.me.role === "GM" && (
+              <button
+                type="button"
+                className="character-rail__restore-archived"
+                onClick={() => setRestoreDialogOpen(true)}
+              >
+                <AppIcon icon={CharacterArchiveIcon} /> Архив персонажей
+              </button>
+            )}
+          </div>
         </nav>
         <div
           className="character-sheet-deck"
@@ -373,12 +400,11 @@ export function CharacterWorkspace({
             state.openIds.map((id) => {
               const character = characters.find((item) => item.id === id);
               if (!character) return null;
-              const collapsed = state.collapsedIds.includes(id);
               return (
                 <article
                   className={`character-sheet-card${
                     state.activeId === id ? " is-active" : ""
-                  }${collapsed ? " is-collapsed" : ""}`}
+                  }`}
                   key={id}
                   data-character-sheet-id={id}
                   aria-label={`Лист персонажа ${character.name}`}
@@ -394,29 +420,13 @@ export function CharacterWorkspace({
                     </button>
                     <button
                       type="button"
-                      aria-label={`${collapsed ? "Развернуть" : "Свернуть"} лист ${character.name}`}
-                      onClick={() =>
-                        dispatch({
-                          type: collapsed ? "RESTORE" : "COLLAPSE",
-                          id,
-                        })
-                      }
-                    >
-                      {collapsed ? "Развернуть" : "Свернуть"}
-                    </button>
-                    <button
-                      type="button"
                       aria-label={`Закрыть лист ${character.name}`}
                       onClick={() => dispatch({ type: "CLOSE", id })}
                     >
                       Закрыть
                     </button>
                   </header>
-                  <div
-                    className="character-sheet-card__body"
-                    hidden={collapsed}
-                    aria-hidden={collapsed}
-                  >
+                  <div className="character-sheet-card__body">
                     <CharacterPanel
                       snapshot={props.snapshot}
                       character={character}
@@ -429,6 +439,11 @@ export function CharacterWorkspace({
                       onReplaceControllers={props.onReplaceCharacterControllers}
                       onRoll={props.onRoll}
                       onUpdateCounters={props.onUpdateCounters}
+                      onArchive={
+                        props.snapshot.me.role === "GM"
+                          ? () => setArchiveTarget(character)
+                          : undefined
+                      }
                     />
                   </div>
                 </article>
@@ -456,12 +471,6 @@ export function CharacterWorkspace({
         onLoad={worldMapActions.onLoadArchivedCharacters}
         onRestore={worldMapActions.onRestoreCharacter}
         onClose={() => setRestoreDialogOpen(false)}
-      />
-      <CampaignClockDialog
-        open={campaignClockOpen}
-        snapshot={props.snapshot}
-        onCommand={props.onCampaignClock}
-        onClose={() => setCampaignClockOpen(false)}
       />
     </main>,
     document.body,
@@ -532,36 +541,65 @@ function CreateCharacterDialog({
       onApply={() => void submit()}
       onClose={onClose}
     >
-      <label className="field">
-        Имя персонажа
-        <FormInput
-          autoFocus
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && name.trim()) void submit();
-          }}
-        />
-      </label>
-      <label className="field">
-        Шаблон (необязательно)
-        <FormSelect
-          value={templateId}
-          onChange={(event) => setTemplateId(event.target.value)}
-        >
-          <option value="">Без шаблона (пустой лист)</option>
-          {characters.map((character) => (
-            <option key={character.id} value={character.id}>
-              {`На основе «${character.name}»`}
-            </option>
-          ))}
-        </FormSelect>
-        <span className="muted">
-          Копируются характеристики, навыки, заклинания, инвентарь и ресурсы.
-          Имя, портрет, владелец и кошелёк не переносятся — новый персонаж
-          полностью независим и остаётся редактируемым.
-        </span>
-      </label>
+      <div className="create-character-dialog">
+        <div className="create-character-dialog__step">
+          <label className="field">
+            <span className="create-character-dialog__label">
+              1. Имя персонажа
+            </span>
+            <FormInput
+              autoFocus
+              value={name}
+              placeholder="Например: Элдрин Ветрокрылый"
+              onChange={(event) => setName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && name.trim()) void submit();
+              }}
+            />
+            <span className="muted">
+              Имя будет отображаться в списке кампании, инициативе и бросках
+              кубиков.
+            </span>
+          </label>
+        </div>
+
+        <div className="create-character-dialog__step">
+          <label className="field">
+            <span className="create-character-dialog__label">
+              2. Стартовый шаблон листа (опционально)
+            </span>
+            <FormSelect
+              value={templateId}
+              onChange={(event) => setTemplateId(event.target.value)}
+            >
+              <option value="">Без шаблона (пустой лист)</option>
+              {characters.map((character) => (
+                <option key={character.id} value={character.id}>
+                  {`На основе «${character.name}»`}
+                </option>
+              ))}
+            </FormSelect>
+          </label>
+
+          <div className="create-character-dialog__callout">
+            <div className="create-character-dialog__callout-title">
+              {templateId
+                ? "Особенности копирования шаблона:"
+                : "Информация о создании:"}
+            </div>
+            <ul className="create-character-dialog__callout-list">
+              <li>
+                Копируются характеристики, навыки, заклинания, инвентарь и
+                ресурсы.
+              </li>
+              <li>
+                Имя, портрет, владелец и кошелёк не переносятся — новый персонаж
+                полностью независим.
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
     </ArkenDialog>
   );
 }
@@ -821,13 +859,13 @@ function CharacterControllerAccess({
           {error}
         </p>
       )}
-      <p id={saveDescriptionId} className="muted" role="status">
+      <span id={saveDescriptionId} className="sr-only">
         {pending
           ? "Сохраняем доступ к персонажу…"
           : dirty
             ? "Изменения доступа ещё не сохранены."
             : "Изменений доступа нет."}
-      </p>
+      </span>
       <Button
         disabled={!dirty || pending}
         aria-describedby={saveDescriptionId}
@@ -840,6 +878,7 @@ function CharacterControllerAccess({
           void (async () => {
             try {
               await onSave(character.id, character.revision, draft);
+              notify({ title: "Доступ к персонажу сохранён", tone: "success" });
             } catch {
               setError(
                 "Не удалось сохранить доступ. Данные обновлены — проверьте список и повторите попытку.",
@@ -867,6 +906,7 @@ export function CharacterPanel({
   onReplaceControllers,
   onRoll,
   onUpdateCounters,
+  onArchive,
 }: {
   snapshot: GameSnapshot;
   character: CharacterDto | undefined;
@@ -877,6 +917,7 @@ export function CharacterPanel({
   onReplaceControllers: Props["onReplaceCharacterControllers"];
   onRoll: Props["onRoll"];
   onUpdateCounters: Props["onUpdateCounters"];
+  onArchive?: () => void;
 }) {
   // The catalog handlers are read here rather than passed in: this panel is
   // the only place that uses them, so threading them through the workspace
@@ -892,12 +933,18 @@ export function CharacterPanel({
     "characteristics",
   );
   const combatRows = statRowsOfGroup(snapshot.campaign.statLayout, "combat");
+  const initiativeRows = combatRows.filter(
+    (row) => row.key === "initiative" || row.key === "reaction",
+  );
   const resourceRows = statResourceRowsFromLayout(snapshot.campaign.statLayout);
   const resourceLabels = resourceCostLabels(snapshot.campaign.statLayout);
   const [countersPending, setCountersPending] = useState(0);
+  const [vitalsTab, setVitalsTab] = useState<
+    "resources" | "stats" | "inventory" | "bio"
+  >("resources");
+  const vitalsTabId = useId();
   const [countersError, setCountersError] = useState("");
   // Undefined preserves each catalog action's legacy advantage setting until the player explicitly overrides it.
-  const [rollMode, setRollMode] = useState<RollMode>();
   const [rollPending, setRollPending] = useState(false);
   const [rollError, setRollError] = useState("");
   const [characterMutationError, setCharacterMutationError] = useState("");
@@ -921,8 +968,20 @@ export function CharacterPanel({
    * не получилось.
    */
   const layout = snapshot.campaign.statLayout;
-  const saveLayout = (next: typeof layout) =>
-    statLayoutActions.onUpdateStatLayout(next, snapshot.campaign.revision);
+  const statLayoutPendingRef = useRef(false);
+  const saveLayout = async (next: typeof layout) => {
+    if (statLayoutPendingRef.current)
+      throw new Error("Дождитесь сохранения предыдущей правки.");
+    statLayoutPendingRef.current = true;
+    try {
+      await statLayoutActions.onUpdateStatLayout(
+        next,
+        snapshot.campaign.revision,
+      );
+    } finally {
+      statLayoutPendingRef.current = false;
+    }
+  };
 
   const renameStatRow = (key: string, label: string) =>
     saveLayout(
@@ -975,6 +1034,42 @@ export function CharacterPanel({
    * видимые соседи, а не соседи по массиву, — иначе нажатие выглядело бы как
    * «ничего не произошло».
    */
+  const reorderStatRow = async (key: string, targetKey: string) => {
+    const group = layout.find((candidate) =>
+      candidate.rows.some((row) => row.key === key),
+    );
+    if (
+      !group ||
+      key === targetKey ||
+      !group.rows.some((row) => row.key === targetKey)
+    )
+      return;
+    const visible = group.rows.filter((row) => row.source !== "RESOURCE");
+    const from = visible.findIndex((row) => row.key === key);
+    const to = visible.findIndex((row) => row.key === targetKey);
+    if (from < 0 || to < 0) return;
+    visible.splice(to, 0, visible.splice(from, 1)[0]!);
+    let cursor = 0;
+    const next = layout.map((candidate) =>
+      candidate.id === group.id
+        ? {
+            ...candidate,
+            rows: candidate.rows.map((row) =>
+              row.source === "RESOURCE" ? row : visible[cursor++]!,
+            ),
+          }
+        : candidate,
+    );
+    setStatLayoutError("");
+    try {
+      await saveLayout(next);
+    } catch (reason) {
+      setStatLayoutError(
+        formatApiError(reason, "Не удалось сохранить порядок строк."),
+      );
+    }
+  };
+
   const moveStatRowBy = async (key: string, direction: "up" | "down") => {
     const next = moveStatRow(
       layout,
@@ -1019,6 +1114,7 @@ export function CharacterPanel({
     "SKILL" | "ABILITY" | null
   >(null);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [portraitEditorOpen, setPortraitEditorOpen] = useState(false);
   const [portraitUpload, setPortraitUpload] = useState<File>();
   const [portraitUploadPending, setPortraitUploadPending] = useState(false);
   const portraitUploadPendingRef = useRef(false);
@@ -1036,6 +1132,9 @@ export function CharacterPanel({
     CharacterDto["resources"]
   >(() => ({ ...(character?.resources ?? {}) }));
   const [newResourceName, setNewResourceName] = useState("");
+  const [editingResourceKey, setEditingResourceKey] = useState<string | null>(
+    null,
+  );
   useEffect(() => {
     if (character && countersPending === 0) {
       // A manual value can start by absorbing an unsent +/- batch. That
@@ -1077,6 +1176,7 @@ export function CharacterPanel({
   useLayoutEffect(() => {
     portraitUploadPendingRef.current = false;
     setPortraitUploadPending(false);
+    setPortraitEditorOpen(false);
   }, [snapshot.me.id, snapshot.me.role, character?.id, editable]);
 
   useLayoutEffect(() => {
@@ -1120,11 +1220,15 @@ export function CharacterPanel({
       : resourcesDraft[newResourceKey]
         ? `Ресурс «${newResourceKey}» уже существует.`
         : undefined;
-  const submitCharacterRoll = async (formula: string, label: string) => {
+  const submitCharacterRoll = async (
+    formula: string,
+    label: string,
+    mode: RollMode = "NORMAL",
+  ) => {
     setRollPending(true);
     setRollError("");
     try {
-      await onRoll(formula, label, "PUBLIC", character.id, rollMode);
+      await onRoll(formula, label, "PUBLIC", character.id, mode);
     } catch (reason) {
       setRollError(
         reason instanceof Error
@@ -1229,7 +1333,8 @@ export function CharacterPanel({
   };
   const saveResources = async (next: CharacterDto["resources"]) => {
     setResourcesDraft(next);
-    if (JSON.stringify(next) === JSON.stringify(character.resources)) return;
+    if (JSON.stringify(next) === JSON.stringify(character.resources))
+      return true;
     setCountersPending((count) => count + 1);
     setCountersError("");
     try {
@@ -1244,12 +1349,15 @@ export function CharacterPanel({
           },
         },
       );
+      return true;
     } catch (reason) {
+      setResourcesDraft(character.resources);
       setCountersError(
         reason instanceof ApiError && reason.code === "CHARACTER_CONFLICT"
           ? "Ресурсы изменены. Повторите действие."
           : "Не удалось сохранить ресурсы.",
       );
+      return false;
     } finally {
       setCountersPending((count) => Math.max(0, count - 1));
     }
@@ -1271,17 +1379,38 @@ export function CharacterPanel({
   };
   const changeWallet = (key: keyof CharacterDto["wallet"], delta: number) => {
     const current = normalizeWallet(walletDraftRef.current);
-    const next = changeWalletValue(current, key, delta);
+    const next =
+      delta === -1
+        ? spendWalletCoin(current, key)
+        : changeWalletValue(current, key, delta);
     const nextValue = next[key];
     const appliedDelta = nextValue - current[key];
-    if (appliedDelta === 0) return;
+    if (
+      Object.keys(current).every(
+        (walletKey) =>
+          next[walletKey as keyof Wallet] ===
+          current[walletKey as keyof Wallet],
+      )
+    )
+      return;
     walletDraftRef.current = next;
     setWalletDraft(next);
     setCountersError("");
 
     const running = walletBatchRef.current;
     if (running) clearTimeout(running.timer);
-    const absolute = walletInputDirtyRef.current || running?.delta === null;
+    // A denomination break changes two or three fields in one PATCH. Do not
+    // replay its numeric delta after a conflict: that could mint coins if a
+    // concurrent edit spent the higher coin first.
+    const denominationBreak = Object.keys(current).some(
+      (walletKey) =>
+        walletKey !== key &&
+        next[walletKey as keyof Wallet] !== current[walletKey as keyof Wallet],
+    );
+    const absolute =
+      walletInputDirtyRef.current ||
+      running?.delta === null ||
+      denominationBreak;
     const combinedDelta = absolute
       ? null
       : mergeWalletDelta(running?.delta ?? {}, key, appliedDelta);
@@ -1315,8 +1444,8 @@ export function CharacterPanel({
     walletBatchRef.current = batch;
   };
   return (
-    <section className="panel-section">
-      {characterMutationError && (
+    <section className="panel-section character-sheet-content">
+      {characterMutationError && !portraitEditorOpen && (
         <p className="field-error" role="alert">
           {characterMutationError}
         </p>
@@ -1327,7 +1456,7 @@ export function CharacterPanel({
         </p>
       )}
       {showCharacterPicker && snapshot.me.role === "GM" && (
-        <label className="field">
+        <label className="field character-sheet-picker">
           Персонаж
           <FormSelect
             value={selectedId}
@@ -1341,344 +1470,589 @@ export function CharacterPanel({
           </FormSelect>
         </label>
       )}
-      <h3 className="character-block-heading">Личность и портрет</h3>
-      <div className="section-heading">
-        <div>
-          <span className="eyebrow">Карточка</span>
-          <h2>{character.name}</h2>
+
+      {/* Hero Header: выразительная шапка персонажа */}
+      <header className="character-hero">
+        <div className="character-hero__main">
+          <button
+            type="button"
+            className="character-hero__avatar"
+            disabled={!editable}
+            aria-label={`Изменить портрет: ${character.name}`}
+            title={editable ? "Изменить портрет" : editPermissionReason}
+            onClick={() => setPortraitEditorOpen(true)}
+          >
+            {portrait ? (
+              <img
+                className="character-hero__avatar-img"
+                src={portrait.url}
+                alt={`Портрет ${character.name}`}
+              />
+            ) : (
+              <div
+                className="character-hero__avatar-placeholder"
+                aria-hidden="true"
+              >
+                {character.name.slice(0, 1).toLocaleUpperCase()}
+              </div>
+            )}
+          </button>
+          <div className="character-hero__info">
+            <div className="inline-fields">
+              <strong className="character-hero__name">{character.name}</strong>
+              <Button disabled={!editable} onClick={() => setRenameOpen(true)}>
+                Переименовать
+              </Button>
+            </div>
+          </div>
         </div>
-        <div className="inline-fields">
-          <Button disabled={!editable} onClick={() => setRenameOpen(true)}>
-            Переименовать
-          </Button>
-          <span className="revision">rev {character.revision}</span>
+
+        <div className="character-hero__actions">
+          {rollError && (
+            <p className="field-error" role="alert">
+              {rollError}
+            </p>
+          )}
+          {onArchive && (
+            <Button
+              className="danger-link"
+              aria-label={`Архивировать персонажа ${character.name}`}
+              title="Архивировать персонажа"
+              onClick={onArchive}
+            >
+              <AppIcon icon={CharacterArchiveIcon} />
+            </Button>
+          )}
         </div>
-      </div>
-      {snapshot.me.role === "GM" && (
-        <CharacterControllerAccess
-          character={character}
-          members={snapshot.members}
-          onSave={onReplaceControllers}
-        />
-      )}
-      <label className="field">
-        Портрет
-        <AssetPicker
-          aria-label="Портрет персонажа"
-          value={character.portraitAssetId ?? null}
-          noneLabel="Без портрета"
-          disabled={!editable}
-          assets={snapshot.assets.filter((asset) => asset.kind === "PORTRAIT")}
-          onChange={(assetId) => {
-            if (!editable) return;
-            void runCharacterMutation(() =>
-              onPatch(character.id, {
-                portraitAssetId: assetId,
-                revision: character.revision,
-              }),
-            );
-          }}
-        />
-      </label>
-      <ImageUploadField
-        label="Загрузить портрет для персонажа"
-        value={portraitUpload}
-        disabled={!editable || portraitUploadPending}
-        onUpdate={(file) => {
-          if (!editable || portraitUploadPendingRef.current) return;
-          setPortraitUpload(file);
-        }}
-      />
-      <p id={portraitUploadDescriptionId} className="muted" role="status">
-        {portraitUploadPending
-          ? "Загружаем и назначаем портрет…"
-          : !editable
-            ? "Портрет доступен только для чтения."
-            : portraitUpload
-              ? "Файл выбран. Загрузите его, чтобы назначить портрет."
-              : "Сначала выберите изображение портрета."}
-      </p>
-      <Button
-        disabled={!editable || !portraitUpload || portraitUploadPending}
-        aria-describedby={portraitUploadDescriptionId}
-        aria-busy={portraitUploadPending}
-        onClick={() => {
-          if (!editable || !portraitUpload || portraitUploadPendingRef.current)
-            return;
-          const uploadEpoch = portraitUploadEpochRef.current;
-          const file = portraitUpload;
-          const targetId = character.id;
-          const targetRevision = character.revision;
-          portraitUploadPendingRef.current = true;
-          setPortraitUploadPending(true);
-          void runCharacterMutation(async () => {
-            const asset = await assetActions.uploadAsset(file, "PORTRAIT");
-            if (portraitUploadEpochRef.current !== uploadEpoch) return;
-            await onPatch(targetId, {
-              portraitAssetId: asset.id,
-              revision: targetRevision,
-            });
-            if (portraitUploadEpochRef.current === uploadEpoch) {
-              portraitUploadPendingRef.current = false;
-              setPortraitUploadPending(false);
-              setPortraitUpload(undefined);
+        <details className="character-hero__backstory">
+          <summary>Предыстория</summary>
+          <FormTextArea
+            aria-label="Предыстория"
+            aria-describedby={!editable ? backstoryDescriptionId : undefined}
+            defaultValue={character.backstory}
+            disabled={!editable}
+            rows={6}
+            onBlur={(event) =>
+              void runCharacterMutation(() =>
+                onPatch(character.id, {
+                  backstory: event.target.value,
+                  revision: character.revision,
+                }),
+              )
             }
-          }).finally(() => {
-            if (portraitUploadEpochRef.current === uploadEpoch) {
-              portraitUploadPendingRef.current = false;
-              setPortraitUploadPending(false);
-            }
-          });
-        }}
+          />
+          {!editable && (
+            <p className="muted" id={backstoryDescriptionId}>
+              {editPermissionReason}
+            </p>
+          )}
+        </details>
+      </header>
+
+      {/* Vital Stats Bar: ключевые показатели прямо под шапкой */}
+      <div
+        className="character-vitals__tabs"
+        role="tablist"
+        aria-label="Ключевые показатели персонажа"
       >
-        {portraitUploadPending ? "Загрузка…" : "Загрузить и назначить"}
-      </Button>
-      <h3 className="character-block-heading">Галерея</h3>
-      <CharacterMediaGallery
-        characterId={character.id}
-        assets={snapshot.assets}
-        characterName={character.name}
-        editable={Boolean(canEditMedia)}
-        isGm={snapshot.me.role === "GM"}
-        onUpload={assetActions.uploadAsset}
-      />
-      <details className="subsection">
-        <summary>Предыстория</summary>
-        <FormTextArea
-          aria-label="Предыстория"
-          aria-describedby={!editable ? backstoryDescriptionId : undefined}
-          defaultValue={character.backstory}
-          disabled={!editable}
-          rows={8}
-          onBlur={(event) =>
-            void runCharacterMutation(() =>
-              onPatch(character.id, {
-                backstory: event.target.value,
-                revision: character.revision,
-              }),
-            )
-          }
-        />
-        {!editable && (
-          <p className="muted" id={backstoryDescriptionId}>
-            {editPermissionReason}
-          </p>
-        )}
-      </details>
-      <h3 className="character-block-heading">Характеристики</h3>
-      <div className="subsection character-roll-controls">
-        <RollModeControl
-          value={rollMode}
-          onChange={setRollMode}
-          disabled={rollPending}
-          label={"Режим броска"}
-        />
-        {rollError && (
-          <p className="field-error" role="alert">
-            {rollError}
-          </p>
-        )}
+        {(["resources", "stats", "inventory", "bio"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            id={`${vitalsTabId}-${tab}-tab`}
+            aria-controls={`${vitalsTabId}-${tab}-panel`}
+            aria-selected={vitalsTab === tab}
+            tabIndex={vitalsTab === tab ? 0 : -1}
+            onClick={() => setVitalsTab(tab)}
+            onKeyDown={(event) => {
+              if (
+                !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)
+              )
+                return;
+              event.preventDefault();
+              const tabs = ["resources", "stats", "inventory", "bio"] as const;
+              const current = tabs.indexOf(vitalsTab);
+              const next =
+                event.key === "Home"
+                  ? tabs[0]
+                  : event.key === "End"
+                    ? tabs[3]
+                    : (tabs[
+                        (current + (event.key === "ArrowLeft" ? 3 : 1)) %
+                          tabs.length
+                      ] ?? tabs[0]);
+              setVitalsTab(next);
+              document.getElementById(`${vitalsTabId}-${next}-tab`)?.focus();
+            }}
+          >
+            {
+              {
+                resources: "Ресурсы",
+                stats: "Показатели",
+                inventory: "Инвентарь",
+                bio: "Личность",
+              }[tab]
+            }
+          </button>
+        ))}
       </div>
-      <div className="character-card-row">
-        <div className="character-card character-card--portrait">
-          <h3 className="character-card__header">Портрет</h3>
-          {portrait ? (
-            <img
-              className="character-portrait"
-              src={portrait.url}
-              alt={`Портрет ${character.name}`}
-            />
-          ) : (
-            <p className="muted">Портрет не назначен.</p>
-          )}
+      <div
+        className="character-vitals"
+        role="tabpanel"
+        id={`${vitalsTabId}-resources-panel`}
+        aria-labelledby={`${vitalsTabId}-resources-tab`}
+        aria-label="Ключевые показатели"
+        hidden={vitalsTab !== "resources"}
+      >
+        <div className="character-vitals__actions">
+          <Button
+            view="outlined"
+            disabled={!editable || countersPending > 0}
+            title="Половина регена выносливости и маны, округление вниз"
+            onClick={() => void runRest("SHORT")}
+          >
+            Короткий отдых
+          </Button>
         </div>
-        <StatLayoutCard
-          title="Характеристики"
-          modifier="stats"
-          rows={characteristicRows}
-          values={character.stats}
-          editable={Boolean(editable)}
-          rollPending={rollPending}
-          canEditLayout={snapshot.me.role === "GM"}
-          onChangeValue={(key, value) => changeStatValue(character, key, value)}
-          onRoll={(formula, label) => void submitCharacterRoll(formula, label)}
-          onRenameRow={renameStatRow}
-          onAddRow={(label) => addStatRow("characteristics", label)}
-          onDeleteRow={deleteStatRow}
-          onMoveRow={moveStatRowBy}
-        />
-        <StatLayoutCard
-          title="Боевые характеристики"
-          modifier="combat"
-          rows={combatRows}
-          values={character.stats}
-          editable={Boolean(editable)}
-          rollPending={rollPending}
-          canEditLayout={snapshot.me.role === "GM"}
-          onChangeValue={(key, value) => changeStatValue(character, key, value)}
-          onRoll={(formula, label) => void submitCharacterRoll(formula, label)}
-          onRenameRow={renameStatRow}
-          onAddRow={(label) => addStatRow("combat", label)}
-          onDeleteRow={deleteStatRow}
-          onMoveRow={moveStatRowBy}
-        />
-        <div className="character-card character-card--skills">
-          <h3 className="character-card__header">Навыки</h3>
-          <div className="character-card__body">
-            {character.skills.length > 0 &&
-              character.skills.map((skill) => (
-                <RollButton
-                  key={skill.key}
-                  name={skill.name}
-                  formula={skill.formula}
-                  disabled={rollPending}
-                  onClick={() =>
-                    void submitCharacterRoll(skill.formula, skill.name)
+        <div className="character-vital-chip character-vital-chip--wallet">
+          <span className="character-vital-chip__label">Кошелёк</span>
+          <span className="character-vital-chip__value character-vital-chip__wallet-values">
+            <AppIcon icon={CoinsIcon} />
+            {(["gold", "silver", "copper"] as const).map((key) => (
+              <label className="character-wallet__coin" key={key}>
+                <span className="character-wallet__coin-label">
+                  {key === "gold"
+                    ? "Золото"
+                    : key === "silver"
+                      ? "Серебро"
+                      : "Медь"}
+                </span>
+                <span className="character-wallet__coin-controls">
+                  <Button
+                    disabled={
+                      !editable || !canSpendWalletCoin(walletDraft, key)
+                    }
+                    aria-label={`Уменьшить: ${WALLET_LABELS[key]}`}
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => changeWallet(key, -1)}
+                  >
+                    <AppIcon icon={DecreaseIcon} />
+                  </Button>
+                  <FormInput
+                    type="number"
+                    min={0}
+                    step={1}
+                    aria-label={`Кошелёк: ${WALLET_LABELS[key].toLowerCase()}`}
+                    value={walletDraft[key]}
+                    disabled={!editable}
+                    onChange={(event) => {
+                      cancelWalletBatch(false);
+                      const next = {
+                        ...walletDraftRef.current,
+                        [key]: normalizeWalletValue(event.target.value),
+                      };
+                      walletDraftRef.current = next;
+                      walletInputDirtyRef.current = true;
+                      setWalletDraft(next);
+                    }}
+                    onBlur={() => void saveWallet(walletDraftRef.current)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
+                  />
+                  <span>
+                    {key === "gold" ? "зм" : key === "silver" ? "см" : "мм"}
+                  </span>
+                  <Button
+                    disabled={!editable}
+                    aria-label={`Увеличить: ${WALLET_LABELS[key]}`}
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => changeWallet(key, 1)}
+                  >
+                    <AppIcon icon={AddIcon} />
+                  </Button>
+                </span>
+              </label>
+            ))}
+          </span>
+        </div>
+        {resourceRows.map(({ key, label }) => {
+          const res = resourcesDraft[key] ?? { current: 0, maximum: 0 };
+          const max = res.maximum ?? res.current;
+          const regenKey = RESOURCE_REGEN_STAT[key];
+          const regenRow = combatRows.find((row) => row.key === regenKey);
+          const regen = regenKey ? (character.stats[regenKey] ?? 0) : 0;
+          const changeResource = (delta: number) => {
+            const next = {
+              ...resourcesDraft,
+              [key]: { ...res, current: Math.max(0, res.current + delta) },
+            };
+            void saveResources(next);
+          };
+          return (
+            <div
+              className="character-vital-chip character-vital-chip--resource"
+              key={key}
+            >
+              <span className="character-vital-chip__label">{label}</span>
+              <span className="character-vital-chip__value character-vital-chip__resource-values">
+                <label className="character-vital-chip__number-field">
+                  <span>Текущее</span>
+                  <FormInput
+                    type="number"
+                    min={0}
+                    aria-label={`${label}: текущее`}
+                    value={res.current}
+                    disabled={!editable}
+                    onChange={(event) =>
+                      setResourcesDraft((current) => ({
+                        ...current,
+                        [key]: {
+                          ...res,
+                          current: Math.max(0, Number(event.target.value)),
+                        },
+                      }))
+                    }
+                    onBlur={() => void saveResources(resourcesDraft)}
+                  />
+                </label>
+                <label className="character-vital-chip__number-field">
+                  <span>Максимум</span>
+                  <FormInput
+                    type="number"
+                    min={0}
+                    aria-label={`${label}: максимум`}
+                    value={max}
+                    disabled={!editable}
+                    onChange={(event) =>
+                      setResourcesDraft((current) => ({
+                        ...current,
+                        [key]: {
+                          ...res,
+                          maximum: Math.max(0, Number(event.target.value)),
+                          recoverable: true,
+                        },
+                      }))
+                    }
+                    onBlur={() => void saveResources(resourcesDraft)}
+                  />
+                </label>
+              </span>
+              <div className="character-vital-chip__controls">
+                <Button
+                  disabled={
+                    !editable || countersPending > 0 || res.current <= 0
                   }
+                  aria-label={`Уменьшить ${label}`}
+                  onClick={() => changeResource(-1)}
+                >
+                  <AppIcon icon={DecreaseIcon} />
+                </Button>
+                <Button
+                  disabled={!editable || countersPending > 0}
+                  aria-label={`Увеличить ${label}`}
+                  onClick={() => changeResource(1)}
+                >
+                  <AppIcon icon={AddIcon} />
+                </Button>
+                {regen > 0 && (
+                  <Button
+                    disabled={
+                      !editable || countersPending > 0 || res.current >= max
+                    }
+                    aria-label={`Восстановить ${regen}: ${label}`}
+                    title={`Восстановить на величину регена (${regen})`}
+                    onClick={() =>
+                      void saveResources({
+                        ...resourcesDraft,
+                        [key]: {
+                          ...res,
+                          current: Math.min(max, res.current + regen),
+                        },
+                      })
+                    }
+                  >
+                    <AppIcon icon={AddIcon} /> {regen}
+                  </Button>
+                )}
+              </div>
+              {regenKey && regenRow && (
+                <label className="character-vital-chip__regen">
+                  <span>Реген</span>
+                  <FormInput
+                    type="number"
+                    aria-label={regenRow.label}
+                    min={0}
+                    defaultValue={regen}
+                    disabled={!editable}
+                    onBlur={(event) =>
+                      changeStatValue(
+                        character,
+                        regenKey,
+                        Number(event.target.value),
+                      )
+                    }
+                  />
+                </label>
+              )}
+              <span className="character-vital-chip__track" aria-hidden="true">
+                <span
+                  style={{
+                    width: `${max > 0 ? Math.min(100, (res.current / max) * 100) : 0}%`,
+                  }}
                 />
-              ))}
-            {skillEntries.length ? (
-              skillEntries.map((entry) => (
-                <div className="character-card__row" key={entry.id}>
-                  <CharacterActionCard
-                    entry={entry}
-                    disabled={!editable}
-                    onAction={(input) =>
-                      catalogActions.onRollEntry(character.id, entry.id, {
-                        ...input,
-                        ...(rollMode ? { rollMode } : {}),
-                      })
-                    }
+                {max > 0 && res.current > max && (
+                  <span
+                    className="character-vital-chip__excess"
+                    style={{
+                      width: `${Math.min(100, (((res.current - max) % max || max) / max) * 100)}%`,
+                    }}
                   />
-                  {entry.data.uses && (
-                    <Button
-                      disabled={!editable}
-                      onClick={() =>
-                        catalogActions.onRechargeEntry(
-                          character.id,
-                          entry.id,
-                          entry.revision,
-                        )
-                      }
-                    >
-                      Перезарядить
-                    </Button>
-                  )}
-                  {snapshot.me.role === "GM" && (
-                    <div className="inline-fields">
-                      <Button onClick={() => setEntryEditor(entry)}>
-                        Редактировать
-                      </Button>
-                      <Button
-                        className="danger-link"
-                        onClick={() =>
-                          void catalogActions.onDeleteCharacterEntry(
-                            character.id,
-                            entry.id,
-                            entry.revision,
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div
+        className="character-sheet-stat-panel"
+        role="tabpanel"
+        id={`${vitalsTabId}-stats-panel`}
+        aria-labelledby={`${vitalsTabId}-stats-tab`}
+        hidden={vitalsTab !== "stats"}
+      >
+        <div className="character-sheet-stat-grid">
+          {/* Секция 1: Характеристики и боевые параметры */}
+          <div
+            className="character-section character-section--stats"
+            data-character-section="stats"
+          >
+            <div className="character-card-row">
+              <StatLayoutCard
+                title="Характеристики"
+                modifier="stats"
+                rows={characteristicRows}
+                values={character.stats}
+                editable={Boolean(editable)}
+                rollPending={rollPending}
+                canEditLayout={snapshot.me.role === "GM"}
+                onChangeValue={(key, value) =>
+                  changeStatValue(character, key, value)
+                }
+                onRoll={(formula, label, mode) =>
+                  void submitCharacterRoll(formula, label, mode)
+                }
+                onRenameRow={renameStatRow}
+                onAddRow={(label) => addStatRow("characteristics", label)}
+                onDeleteRow={deleteStatRow}
+                onMoveRow={moveStatRowBy}
+                onReorderRow={reorderStatRow}
+              />
+            </div>
+          </div>
+          <div
+            className="character-section character-section--combat"
+            data-character-section="combat"
+          >
+            <div className="character-card-row">
+              <StatLayoutCard
+                title="Боевые характеристики"
+                modifier="combat"
+                rows={[
+                  ...initiativeRows,
+                  ...combatRows.filter(
+                    (row) =>
+                      !isSystemRegenStatKey(row.key) &&
+                      row.key !== "initiative" &&
+                      row.key !== "reaction",
+                  ),
+                ]}
+                values={character.stats}
+                editable={Boolean(editable)}
+                rollPending={rollPending}
+                canEditLayout={snapshot.me.role === "GM"}
+                onChangeValue={(key, value) =>
+                  changeStatValue(character, key, value)
+                }
+                onRoll={(formula, label, mode) =>
+                  void submitCharacterRoll(formula, label, mode)
+                }
+                onRenameRow={renameStatRow}
+                onAddRow={(label) => addStatRow("combat", label)}
+                onDeleteRow={deleteStatRow}
+                onMoveRow={moveStatRowBy}
+                onReorderRow={reorderStatRow}
+              />
+              <div className="character-card character-card--skills">
+                <h3 className="character-card__header">Навыки</h3>
+                <div className="character-card__body">
+                  {character.skills.length > 0 &&
+                    character.skills.map((skill) => (
+                      <RollButton
+                        key={skill.key}
+                        name={skill.name}
+                        formula={skill.formula}
+                        disabled={rollPending}
+                        onClick={(event) =>
+                          void submitCharacterRoll(
+                            skill.formula,
+                            skill.name,
+                            rollModeFromEvent(event.nativeEvent),
                           )
                         }
-                      >
-                        Удалить
-                      </Button>
-                    </div>
-                  )}
+                      />
+                    ))}
+                  {skillEntries.length ? (
+                    skillEntries.map((entry) => (
+                      <div className="character-card__row" key={entry.id}>
+                        <CharacterActionCard
+                          entry={entry}
+                          disabled={!editable}
+                          onAction={(input) =>
+                            catalogActions.onRollEntry(character.id, entry.id, {
+                              ...input,
+                            })
+                          }
+                        />
+                        {entry.data.uses && (
+                          <Button
+                            disabled={!editable}
+                            onClick={() =>
+                              catalogActions.onRechargeEntry(
+                                character.id,
+                                entry.id,
+                                entry.revision,
+                              )
+                            }
+                          >
+                            Перезарядить
+                          </Button>
+                        )}
+                        {editable && (
+                          <div className="inline-fields">
+                            <Button onClick={() => setEntryEditor(entry)}>
+                              Редактировать
+                            </Button>
+                            <Button
+                              className="danger-link"
+                              onClick={() =>
+                                void catalogActions.onDeleteCharacterEntry(
+                                  character.id,
+                                  entry.id,
+                                  entry.revision,
+                                )
+                              }
+                            >
+                              Удалить
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : character.skills.length === 0 ? (
+                    <p className="muted">Навыки ещё не добавлены.</p>
+                  ) : null}
                 </div>
-              ))
-            ) : character.skills.length === 0 ? (
-              <p className="muted">Навыки ещё не добавлены.</p>
-            ) : null}
-          </div>
-          {snapshot.me.role === "GM" && (
-            <div className="character-card__add">
-              <Button onClick={() => setCatalogPicker("SKILL")}>
-                + Добавить навык…
-              </Button>
-            </div>
-          )}
-        </div>
-        <div className="character-card character-card--abilities">
-          <h3 className="character-card__header">Способности и заклинания</h3>
-          <div className="character-card__body">
-            {character.spells.length > 0 &&
-              character.spells.map((spell) => (
-                <div className="plain-row" key={spell.key}>
-                  <strong>{spell.name}</strong>
-                  <p>{spell.description}</p>
-                  {spell.formula && (
-                    <Button
-                      disabled={rollPending}
-                      onClick={() =>
-                        void submitCharacterRoll(spell.formula!, spell.name)
-                      }
-                    >
-                      Бросить {humanizeFormula(spell.formula, statLabels)}
+                {editable && (
+                  <div className="character-card__add">
+                    <Button onClick={() => setCatalogPicker("SKILL")}>
+                      + Добавить навык…
                     </Button>
-                  )}
+                  </div>
+                )}
+              </div>
+              <div className="character-card character-card--abilities">
+                <h3 className="character-card__header">
+                  Способности и заклинания
+                </h3>
+                <div className="character-card__body">
+                  {character.spells.length > 0 &&
+                    character.spells.map((spell) => (
+                      <div className="plain-row" key={spell.key}>
+                        <strong>{spell.name}</strong>
+                        <p>{spell.description}</p>
+                        {spell.formula && (
+                          <Button
+                            disabled={rollPending}
+                            onClick={(event) =>
+                              void submitCharacterRoll(
+                                spell.formula!,
+                                spell.name,
+                                rollModeFromEvent(event.nativeEvent),
+                              )
+                            }
+                          >
+                            Бросить {humanizeFormula(spell.formula, statLabels)}
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  {abilityEntries.length ? (
+                    abilityEntries.map((entry) => (
+                      <div className="character-card__row" key={entry.id}>
+                        <CharacterActionCard
+                          entry={entry}
+                          disabled={!editable}
+                          onAction={(input) =>
+                            catalogActions.onRollEntry(character.id, entry.id, {
+                              ...input,
+                            })
+                          }
+                        />
+                        {entry.data.uses && (
+                          <Button
+                            disabled={!editable}
+                            onClick={() =>
+                              catalogActions.onRechargeEntry(
+                                character.id,
+                                entry.id,
+                                entry.revision,
+                              )
+                            }
+                          >
+                            Перезарядить
+                          </Button>
+                        )}
+                        {editable && (
+                          <div className="inline-fields">
+                            <Button onClick={() => setEntryEditor(entry)}>
+                              Редактировать
+                            </Button>
+                            <Button
+                              className="danger-link"
+                              onClick={() =>
+                                void catalogActions.onDeleteCharacterEntry(
+                                  character.id,
+                                  entry.id,
+                                  entry.revision,
+                                )
+                              }
+                            >
+                              Удалить
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : character.spells.length === 0 ? (
+                    <p className="muted">Способности ещё не добавлены.</p>
+                  ) : null}
                 </div>
-              ))}
-            {abilityEntries.length ? (
-              abilityEntries.map((entry) => (
-                <div className="character-card__row" key={entry.id}>
-                  <CharacterActionCard
-                    entry={entry}
-                    disabled={!editable}
-                    onAction={(input) =>
-                      catalogActions.onRollEntry(character.id, entry.id, {
-                        ...input,
-                        ...(rollMode ? { rollMode } : {}),
-                      })
-                    }
-                  />
-                  {entry.data.uses && (
-                    <Button
-                      disabled={!editable}
-                      onClick={() =>
-                        catalogActions.onRechargeEntry(
-                          character.id,
-                          entry.id,
-                          entry.revision,
-                        )
-                      }
-                    >
-                      Перезарядить
+                {editable && (
+                  <div className="character-card__add">
+                    <Button onClick={() => setCatalogPicker("ABILITY")}>
+                      + Добавить способность…
                     </Button>
-                  )}
-                  {snapshot.me.role === "GM" && (
-                    <div className="inline-fields">
-                      <Button onClick={() => setEntryEditor(entry)}>
-                        Редактировать
-                      </Button>
-                      <Button
-                        className="danger-link"
-                        onClick={() =>
-                          void catalogActions.onDeleteCharacterEntry(
-                            character.id,
-                            entry.id,
-                            entry.revision,
-                          )
-                        }
-                      >
-                        Удалить
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ))
-            ) : character.spells.length === 0 ? (
-              <p className="muted">Способности ещё не добавлены.</p>
-            ) : null}
-          </div>
-          {snapshot.me.role === "GM" && (
-            <div className="character-card__add">
-              <Button onClick={() => setCatalogPicker("ABILITY")}>
-                + Добавить способность…
-              </Button>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
-      {snapshot.me.role === "GM" && catalogPicker && (
+
+      {editable && catalogPicker && (
         <CatalogEntryPicker
           statLabels={statLabels}
           resourceLabels={resourceLabels}
@@ -1696,6 +2070,7 @@ export function CharacterPanel({
           onCreate={(input) => catalogActions.onCreateCatalogEntry(input)}
         />
       )}
+
       {entryEditor && (
         <ArkenDialog
           open
@@ -1723,327 +2098,531 @@ export function CharacterPanel({
           />
         </ArkenDialog>
       )}
-      <h3 className="character-block-heading">Инвентарь и снаряжение</h3>
-      {/* UIX-532: ревизии в `key` здесь больше нет — она пересоздавала поле и
-          роняла фокус посреди набора (UIX-325). Чужая правка доносится до
-          живого элемента, кроме поля, в котором сейчас печатают. */}
-      <label className="field">
-        Инвентарь (один предмет на строку)
-        <FormTextArea
-          controlRef={inventoryRef}
-          defaultValue={character.inventory.join("\n")}
-          disabled={!editable}
-          rows={5}
-          onBlur={(event) =>
-            void runCharacterMutation(() =>
-              onPatch(character.id, {
-                inventory: event.target.value
-                  .split("\n")
-                  .map((item) => item.trim())
-                  .filter(Boolean),
-                revision: character.revision,
-              }),
-            )
-          }
-        />
-      </label>
-      <h3 className="character-block-heading">Ресурсы и кошелёк</h3>
-      <div className="character-power-controls">
-        {/* UIX-424, шаг 8: подписи ресурсов — из раскладки кампании. Здесь были
-         * выписаны «Физическая сила» и «Магическая сила» — имена, от которых
-         * мастер отказался ещё на этапе решений, но карточка о них не знала.
-         * Ключи остались прежними: переименование — это подписи. */}
-        {resourceRows.map(({ key, label }) => {
-          const resource = resourcesDraft[key] ?? { current: 0, maximum: 0 };
-          const maximum = resource.maximum ?? resource.current;
-          return (
-            <fieldset className="resource-card" key={key} disabled={!editable}>
-              <legend>{label}</legend>
-              <label>
-                Текущее
-                <FormInput
-                  type="number"
-                  min={0}
-                  value={resource.current}
-                  onChange={(event) =>
-                    setResourcesDraft((current) => ({
-                      ...current,
-                      [key]: {
-                        ...resource,
-                        current: Math.max(0, Number(event.target.value)),
-                      },
-                    }))
-                  }
-                  onBlur={() => void saveResources(resourcesDraft)}
-                />
-              </label>
-              <label>
-                Максимум
-                <FormInput
-                  type="number"
-                  min={0}
-                  value={maximum}
-                  onChange={(event) => {
-                    const nextMaximum = Math.max(0, Number(event.target.value));
-                    setResourcesDraft((current) => ({
-                      ...current,
-                      [key]: {
-                        ...resource,
-                        maximum: nextMaximum,
-                        current: Math.min(resource.current, nextMaximum),
-                        recoverable: true,
-                      },
-                    }));
-                  }}
-                  onBlur={() => void saveResources(resourcesDraft)}
-                />
-              </label>
-            </fieldset>
-          );
-        })}
-        <div className="inline-fields character-rest-controls">
-          {/* UIX-425: «Перевести дух» убрано — это был тот же короткий отдых.
-           * Подпись «Короткий отдых (+25%)» тоже обещала механику, которой
-           * больше нет: система восстанавливает на величину регена. */}
-          <Button
-            disabled={!editable || countersPending > 0}
-            title="Половина регена выносливости и маны, округление вниз"
-            onClick={() => void runRest("SHORT")}
-          >
-            Короткий отдых
-          </Button>
-        </div>
-      </div>
-      <div className="subsection character-resource-editor">
-        <h3>Дополнительные ресурсы</h3>
-        {Object.entries(resourcesDraft)
-          .filter(([key]) => key !== "physicalPower" && key !== "magicPower")
-          .map(([key, resource]) => (
-            <fieldset className="resource-card" key={key} disabled={!editable}>
-              <legend>{key}</legend>
-              <label>
-                Название
-                <FormInput
-                  defaultValue={key}
-                  required
-                  onBlur={(event) => {
-                    const nextKey = event.target.value.trim();
-                    if (
-                      !nextKey ||
-                      nextKey === key ||
-                      resourcesDraft[nextKey]
-                    ) {
-                      event.target.value = key;
-                      return;
-                    }
-                    const { [key]: moved, ...rest } = resourcesDraft;
-                    void saveResources({ ...rest, [nextKey]: moved! });
-                  }}
-                />
-              </label>
-              <label>
-                Описание
-                <FormInput
-                  value={resource.description ?? ""}
-                  onChange={(event) =>
-                    setResourcesDraft((current) => ({
-                      ...current,
-                      [key]: { ...resource, description: event.target.value },
-                    }))
-                  }
-                  onBlur={() => void saveResources(resourcesDraft)}
-                />
-              </label>
-              <label>
-                Текущее
-                <FormInput
-                  type="number"
-                  min={0}
-                  value={resource.current}
-                  onChange={(event) =>
-                    setResourcesDraft((current) => ({
-                      ...current,
-                      [key]: {
-                        ...resource,
-                        current: Math.max(0, Number(event.target.value)),
-                      },
-                    }))
-                  }
-                  onBlur={() => void saveResources(resourcesDraft)}
-                />
-              </label>
-              <label>
-                Максимум
-                <FormInput
-                  type="number"
-                  min={0}
-                  value={resource.maximum ?? resource.current}
-                  onChange={(event) => {
-                    const maximum = Math.max(0, Number(event.target.value));
-                    setResourcesDraft((current) => ({
-                      ...current,
-                      [key]: {
-                        ...resource,
-                        maximum,
-                        current: Math.min(resource.current, maximum),
-                      },
-                    }));
-                  }}
-                  onBlur={() => void saveResources(resourcesDraft)}
-                />
-              </label>
-              <label>
-                Изображение
-                <AssetPicker
-                  aria-label={`Изображение ресурса ${key}`}
-                  value={resource.imageAssetId ?? null}
-                  assets={snapshot.assets.filter((asset) =>
-                    asset.mimeType.startsWith("image/"),
-                  )}
-                  onChange={(assetId) => {
-                    const next = {
-                      ...resourcesDraft,
-                      [key]: {
-                        ...resource,
-                        imageAssetId: assetId,
-                      },
-                    };
-                    void saveResources(next);
-                  }}
-                />
-              </label>
-              <label className="compact-check">
-                <input
-                  type="checkbox"
-                  checked={resource.recoverable !== false}
-                  onChange={(event) =>
-                    void saveResources({
-                      ...resourcesDraft,
-                      [key]: { ...resource, recoverable: event.target.checked },
-                    })
-                  }
-                />
-                Восполнять при отдыхе
-              </label>
-              <Button
-                className="danger-link"
-                onClick={() => {
-                  const { [key]: _removed, ...rest } = resourcesDraft;
-                  void saveResources(rest);
-                }}
+
+      {/* Секция 2: Ресурсы и кошелёк */}
+      <div
+        className="character-section character-section--resources"
+        data-character-section="resources"
+        hidden={vitalsTab !== "resources"}
+      >
+        <h3 className="character-block-heading">Дополнительные ресурсы</h3>
+        <div className="subsection character-resource-editor">
+          {Object.entries(resourcesDraft)
+            .filter(([key]) => key !== "physicalPower" && key !== "magicPower")
+            .map(([key, resource]) => (
+              <fieldset
+                className="resource-card"
+                key={key}
+                disabled={!editable}
               >
-                Удалить
-              </Button>
-            </fieldset>
-          ))}
-        <div className="inline-fields">
-          <FormInput
-            aria-label="Название нового ресурса"
-            aria-invalid={
-              editable && newResourceKey && resourcesDraft[newResourceKey]
-                ? true
-                : undefined
-            }
-            aria-describedby={
-              newResourceReason ? newResourceDescriptionId : undefined
-            }
-            value={newResourceName}
-            placeholder="Новый ресурс"
-            onChange={(event) => setNewResourceName(event.target.value)}
-          />
-          <Button
-            aria-describedby={
-              newResourceReason ? newResourceDescriptionId : undefined
-            }
-            disabled={
-              !editable ||
-              !newResourceName.trim() ||
-              Boolean(resourcesDraft[newResourceName.trim()])
-            }
-            onClick={() => {
-              const key = newResourceName.trim();
-              if (!key) return;
-              setNewResourceName("");
-              void saveResources({
-                ...resourcesDraft,
-                [key]: { current: 0, maximum: 0, recoverable: true },
-              });
-            }}
-          >
-            Добавить
-          </Button>
-        </div>
-        {newResourceReason && (
-          <p className="muted" id={newResourceDescriptionId}>
-            {newResourceReason}
-          </p>
-        )}
-      </div>
-      <label className="field">
-        Кошелёк (1 золото = 10 серебра; 1 серебро = 10 меди; значения не
-        нормализуются)
-        {WALLET_KEYS.map((key) => (
-          <span className="inline-fields" key={key}>
-            <b>{WALLET_LABELS[key]}</b>
-            <Button
-              disabled={!editable || walletDraft[key] === 0}
-              aria-label={`Уменьшить: ${WALLET_LABELS[key]}`}
-              onPointerDown={(event) => event.preventDefault()}
-              onClick={() => changeWallet(key, -1)}
-            >
-              <AppIcon icon={DecreaseIcon} />
-            </Button>
+                <legend>
+                  {editingResourceKey === key ? "Создание нового ресурса" : key}
+                </legend>
+                {editingResourceKey === key ? (
+                  <div className="resource-card__extra-fields">
+                    <label className="field">
+                      <span>Название</span>
+                      <FormInput
+                        defaultValue={key}
+                        required
+                        onBlur={(event) => {
+                          const nextKey = event.target.value.trim();
+                          if (
+                            !nextKey ||
+                            nextKey === key ||
+                            resourcesDraft[nextKey]
+                          ) {
+                            event.target.value = key;
+                            return;
+                          }
+                          const { [key]: moved, ...rest } = resourcesDraft;
+                          void saveResources({ ...rest, [nextKey]: moved! });
+                        }}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Описание</span>
+                      <FormInput
+                        value={resource.description ?? ""}
+                        onChange={(event) =>
+                          setResourcesDraft((current) => ({
+                            ...current,
+                            [key]: {
+                              ...resource,
+                              description: event.target.value,
+                            },
+                          }))
+                        }
+                        onBlur={() => void saveResources(resourcesDraft)}
+                      />
+                    </label>
+                    <div className="resource-card__inputs">
+                      <Button
+                        aria-label={`Уменьшить ${key}`}
+                        disabled={
+                          !editable ||
+                          countersPending > 0 ||
+                          resource.current <= 0
+                        }
+                        onClick={() =>
+                          void saveResources({
+                            ...resourcesDraft,
+                            [key]: {
+                              ...resource,
+                              current: resource.current - 1,
+                            },
+                          })
+                        }
+                      >
+                        <AppIcon icon={DecreaseIcon} />
+                      </Button>
+                      <label className="field">
+                        <span>Текущее</span>
+                        <FormInput
+                          type="number"
+                          min={0}
+                          value={resource.current}
+                          onChange={(event) =>
+                            setResourcesDraft((current) => ({
+                              ...current,
+                              [key]: {
+                                ...resource,
+                                current: Math.max(
+                                  0,
+                                  Number(event.target.value),
+                                ),
+                              },
+                            }))
+                          }
+                          onBlur={() => void saveResources(resourcesDraft)}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Максимум</span>
+                        <FormInput
+                          type="number"
+                          min={0}
+                          value={resource.maximum ?? resource.current}
+                          onChange={(event) => {
+                            const maximum = Math.max(
+                              0,
+                              Number(event.target.value),
+                            );
+                            setResourcesDraft((current) => ({
+                              ...current,
+                              [key]: {
+                                ...resource,
+                                maximum: maximum,
+                                current: resource.current,
+                              },
+                            }));
+                          }}
+                          onBlur={() => void saveResources(resourcesDraft)}
+                        />
+                      </label>
+                      <Button
+                        aria-label={`Увеличить ${key}`}
+                        disabled={!editable || countersPending > 0}
+                        onClick={() =>
+                          void saveResources({
+                            ...resourcesDraft,
+                            [key]: {
+                              ...resource,
+                              current: resource.current + 1,
+                            },
+                          })
+                        }
+                      >
+                        <AppIcon icon={AddIcon} />
+                      </Button>
+                    </div>
+                    <div className="field">
+                      <span>Изображение</span>
+                      <AssetPicker
+                        aria-label={`Изображение ресурса ${key}`}
+                        value={resource.imageAssetId ?? null}
+                        onUpload={async (file) =>
+                          (await assetActions.uploadAsset(file, "IMAGE")).id
+                        }
+                        assets={snapshot.assets.filter((asset) =>
+                          asset.mimeType.startsWith("image/"),
+                        )}
+                        onChange={(assetId) => {
+                          const next = {
+                            ...resourcesDraft,
+                            [key]: {
+                              ...resource,
+                              imageAssetId: assetId,
+                            },
+                          };
+                          void saveResources(next);
+                        }}
+                      />
+                    </div>
+                    <label className="compact-check">
+                      <input
+                        type="checkbox"
+                        checked={resource.recoverable !== false}
+                        onChange={(event) =>
+                          void saveResources({
+                            ...resourcesDraft,
+                            [key]: {
+                              ...resource,
+                              recoverable: event.target.checked,
+                            },
+                          })
+                        }
+                      />
+                      Восполнять при отдыхе
+                    </label>
+                    <label className="field">
+                      <span>Сколько восполнять за длинный отдых</span>
+                      <FormInput
+                        type="number"
+                        min={0}
+                        value={resource.restAmount ?? 0}
+                        onChange={(event) =>
+                          setResourcesDraft((current) => ({
+                            ...current,
+                            [key]: {
+                              ...resource,
+                              restAmount: Math.max(
+                                0,
+                                Number(event.target.value),
+                              ),
+                            },
+                          }))
+                        }
+                      />
+                    </label>
+                    <Button
+                      disabled={countersPending > 0}
+                      onClick={async () => {
+                        if (await saveResources(resourcesDraft))
+                          setEditingResourceKey(null);
+                      }}
+                    >
+                      Сохранить
+                    </Button>
+                    <Button
+                      className="danger-link"
+                      onClick={() => {
+                        const { [key]: _removed, ...rest } = resourcesDraft;
+                        void saveResources(rest);
+                      }}
+                    >
+                      Удалить
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="resource-card__summary">
+                    <span className="resource-card__summary-value">
+                      {resource.current} /{" "}
+                      {resource.maximum ?? resource.current}
+                    </span>
+                    <Button
+                      disabled={
+                        !editable ||
+                        resource.current <= 0 ||
+                        countersPending > 0
+                      }
+                      aria-label={`Уменьшить ${key}`}
+                      onClick={() =>
+                        void saveResources({
+                          ...resourcesDraft,
+                          [key]: { ...resource, current: resource.current - 1 },
+                        })
+                      }
+                    >
+                      <AppIcon icon={DecreaseIcon} />
+                    </Button>
+                    <Button
+                      disabled={!editable || countersPending > 0}
+                      aria-label={`Увеличить ${key}`}
+                      onClick={() =>
+                        void saveResources({
+                          ...resourcesDraft,
+                          [key]: { ...resource, current: resource.current + 1 },
+                        })
+                      }
+                    >
+                      <AppIcon icon={AddIcon} />
+                    </Button>
+                    <div
+                      className="resource-bar"
+                      role="progressbar"
+                      aria-label={`Уровень: ${key}`}
+                      aria-valuenow={resource.current}
+                      aria-valuemin={0}
+                      aria-valuemax={Math.max(
+                        resource.maximum ?? resource.current,
+                        resource.current,
+                      )}
+                    >
+                      <div
+                        className="resource-bar__fill resource-bar__fill--default"
+                        style={{
+                          width: `${Math.min(100, (resource.current / Math.max(1, resource.maximum ?? resource.current)) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <Button
+                      disabled={
+                        !editable ||
+                        countersPending > 0 ||
+                        resource.recoverable === false ||
+                        (resource.restAmount ?? 0) <= 0 ||
+                        resource.current >=
+                          (resource.maximum ?? resource.current)
+                      }
+                      aria-label={`Восстановить ${resource.restAmount ?? 0}: ${key}`}
+                      onClick={() =>
+                        void saveResources({
+                          ...resourcesDraft,
+                          [key]: {
+                            ...resource,
+                            current: Math.min(
+                              resource.maximum ?? resource.current,
+                              resource.current + (resource.restAmount ?? 0),
+                            ),
+                          },
+                        })
+                      }
+                    >
+                      <AppIcon icon={AddIcon} /> {resource.restAmount ?? 0}
+                    </Button>
+                    <Button
+                      disabled={!editable}
+                      onClick={() => setEditingResourceKey(key)}
+                    >
+                      Настроить
+                    </Button>
+                  </div>
+                )}
+              </fieldset>
+            ))}
+          <div className="inline-fields">
             <FormInput
-              type="number"
-              min={0}
-              value={walletDraft[key]}
-              disabled={!editable}
-              onChange={(event) => {
-                // Manual input chooses an absolute target. It absorbs any
-                // visible but unsent +/- batch instead of applying it twice.
-                cancelWalletBatch(false);
-                const next = {
-                  ...walletDraftRef.current,
-                  [key]: normalizeWalletValue(event.target.value),
-                };
-                walletDraftRef.current = next;
-                walletInputDirtyRef.current = true;
-                setWalletDraft(next);
-              }}
-              onBlur={() => void saveWallet(walletDraft)}
+              aria-label="Название нового ресурса"
+              aria-invalid={
+                editable && newResourceKey && resourcesDraft[newResourceKey]
+                  ? true
+                  : undefined
+              }
+              aria-describedby={
+                newResourceReason ? newResourceDescriptionId : undefined
+              }
+              value={newResourceName}
+              placeholder="Новый ресурс"
+              onChange={(event) => setNewResourceName(event.target.value)}
             />
             <Button
-              disabled={!editable}
-              onPointerDown={(event) => event.preventDefault()}
-              onClick={() => changeWallet(key, 1)}
-              aria-label={`Увеличить: ${WALLET_LABELS[key]}`}
+              aria-describedby={
+                newResourceReason ? newResourceDescriptionId : undefined
+              }
+              disabled={
+                !editable ||
+                !newResourceName.trim() ||
+                Boolean(resourcesDraft[newResourceName.trim()])
+              }
+              onClick={() => {
+                const key = newResourceName.trim();
+                if (!key) return;
+                setNewResourceName("");
+                setEditingResourceKey(key);
+                void saveResources({
+                  ...resourcesDraft,
+                  [key]: { current: 0, maximum: 0, recoverable: true },
+                });
+              }}
             >
-              <AppIcon icon={AddIcon} />
+              Добавить
             </Button>
-          </span>
-        ))}
+          </div>
+          {newResourceReason && (
+            <p className="muted" id={newResourceDescriptionId}>
+              {newResourceReason}
+            </p>
+          )}
+        </div>
+
         {countersPending > 0 && <span className="muted">Сохраняем…</span>}
         {countersError && (
           <span className="field-error" role="alert">
             {countersError}
           </span>
         )}
-      </label>
-      <h3 className="character-block-heading">Заметки</h3>
-      <label className="field">
-        Заметки
-        <FormTextArea
-          defaultValue={character.notes}
-          disabled={!editable}
-          rows={7}
-          onBlur={(event) =>
-            onPatch(character.id, {
-              notes: event.target.value,
-              revision: character.revision,
-            })
-          }
+      </div>
+
+      {/* Секция 3: Инвентарь и снаряжение */}
+      <div
+        className="character-section character-section--inventory"
+        data-character-section="inventory"
+        role="tabpanel"
+        id={`${vitalsTabId}-inventory-panel`}
+        aria-labelledby={`${vitalsTabId}-inventory-tab`}
+        hidden={vitalsTab !== "inventory"}
+      >
+        <h3 className="character-block-heading">Инвентарь и снаряжение</h3>
+        <label className="field">
+          Инвентарь (один предмет на строку)
+          <FormTextArea
+            controlRef={inventoryRef}
+            defaultValue={character.inventory.join("\n")}
+            disabled={!editable}
+            rows={5}
+            onBlur={(event) =>
+              void runCharacterMutation(() =>
+                onPatch(character.id, {
+                  inventory: event.target.value
+                    .split("\n")
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+                  revision: character.revision,
+                }),
+              )
+            }
+          />
+        </label>
+        <h3 className="character-block-heading">Заметки</h3>
+        <label className="field">
+          Заметки
+          <FormTextArea
+            defaultValue={character.notes}
+            disabled={!editable}
+            rows={6}
+            onBlur={(event) =>
+              onPatch(character.id, {
+                notes: event.target.value,
+                revision: character.revision,
+              })
+            }
+          />
+        </label>
+      </div>
+
+      {/* Секция 4: Личность, медиа и доступ */}
+      <div
+        className="character-section character-section--bio"
+        data-character-section="bio"
+        role="tabpanel"
+        id={`${vitalsTabId}-bio-panel`}
+        aria-labelledby={`${vitalsTabId}-bio-tab`}
+        hidden={vitalsTab !== "bio"}
+      >
+        {snapshot.me.role === "GM" && (
+          <CharacterControllerAccess
+            character={character}
+            members={snapshot.members}
+            onSave={onReplaceControllers}
+          />
+        )}
+        <ArkenDialog
+          open={portraitEditorOpen}
+          title={`Портрет: ${character.name}`}
+          footer={false}
+          onClose={() => setPortraitEditorOpen(false)}
+        >
+          <div className="character-portrait-manager">
+            {characterMutationError && (
+              <p className="field-error" role="alert">
+                {characterMutationError}
+              </p>
+            )}
+            <div className="field">
+              <span>Портрет</span>
+              <AssetPicker
+                aria-label="Портрет персонажа"
+                value={character.portraitAssetId ?? null}
+                noneLabel="Без портрета"
+                disabled={!editable}
+                assets={snapshot.assets.filter(
+                  (asset) => asset.kind === "PORTRAIT",
+                )}
+                onChange={(assetId) => {
+                  if (!editable) return;
+                  void runCharacterMutation(() =>
+                    onPatch(character.id, {
+                      portraitAssetId: assetId,
+                      revision: character.revision,
+                    }),
+                  );
+                }}
+              />
+            </div>
+            <ImageUploadField
+              label="Загрузить портрет для персонажа"
+              value={portraitUpload}
+              disabled={!editable || portraitUploadPending}
+              onUpdate={(file) => {
+                if (!editable || portraitUploadPendingRef.current) return;
+                setPortraitUpload(file);
+              }}
+            />
+            <p id={portraitUploadDescriptionId} className="muted" role="status">
+              {portraitUploadPending
+                ? "Загружаем и назначаем портрет…"
+                : !editable
+                  ? "Портрет доступен только для чтения."
+                  : portraitUpload
+                    ? "Файл выбран. Загрузите его, чтобы назначить портрет."
+                    : "Сначала выберите изображение портрета."}
+            </p>
+            <Button
+              disabled={!editable || !portraitUpload || portraitUploadPending}
+              aria-describedby={portraitUploadDescriptionId}
+              aria-busy={portraitUploadPending}
+              onClick={() => {
+                if (
+                  !editable ||
+                  !portraitUpload ||
+                  portraitUploadPendingRef.current
+                )
+                  return;
+                const uploadEpoch = portraitUploadEpochRef.current;
+                const file = portraitUpload;
+                const targetId = character.id;
+                const targetRevision = character.revision;
+                portraitUploadPendingRef.current = true;
+                setPortraitUploadPending(true);
+                void runCharacterMutation(async () => {
+                  const asset = await assetActions.uploadAsset(
+                    file,
+                    "PORTRAIT",
+                  );
+                  if (portraitUploadEpochRef.current !== uploadEpoch) return;
+                  await onPatch(targetId, {
+                    portraitAssetId: asset.id,
+                    revision: targetRevision,
+                  });
+                  if (portraitUploadEpochRef.current === uploadEpoch) {
+                    portraitUploadPendingRef.current = false;
+                    setPortraitUploadPending(false);
+                    setPortraitUpload(undefined);
+                  }
+                }).finally(() => {
+                  if (portraitUploadEpochRef.current === uploadEpoch) {
+                    portraitUploadPendingRef.current = false;
+                    setPortraitUploadPending(false);
+                  }
+                });
+              }}
+            >
+              {portraitUploadPending ? "Загрузка…" : "Загрузить и назначить"}
+            </Button>
+          </div>
+        </ArkenDialog>
+        <h3 className="character-block-heading">Галерея</h3>
+        <CharacterMediaGallery
+          characterId={character.id}
+          assets={snapshot.assets}
+          characterName={character.name}
+          editable={Boolean(canEditMedia)}
+          isGm={snapshot.me.role === "GM"}
+          onUpload={assetActions.uploadAsset}
         />
-      </label>
+      </div>
+
       <TextPromptDialog
         open={renameOpen}
         title="Переименовать персонажа"

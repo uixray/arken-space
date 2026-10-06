@@ -85,14 +85,20 @@ describe("canonical map object selection", () => {
     ).toBe(false);
   });
 
-  it("allows a controlled player token through fog but requires fog for owner-only tokens and drawings", () => {
+  it("allows a controlled player token and own drawing through fog but requires fog for owner-only tokens", () => {
     const hidden = { ...context, fogReveals: [] };
     expect(canSelectToken(token(), hidden)).toBe(true);
     expect(canSelectToken(token({ controllerMembershipIds: [] }), hidden)).toBe(
       false,
     );
-    expect(canSelectDrawing(drawing(), hidden)).toBe(false);
+    expect(canSelectDrawing(drawing(), hidden)).toBe(true);
     expect(canSelectDrawing(drawing(), context)).toBe(true);
+    expect(
+      canSelectDrawing(drawing({ authorMembershipId: "other" }), hidden),
+    ).toBe(false);
+    expect(
+      canSelectDrawing(drawing({ x: 45, points: [0, 0, 20, 20] }), context),
+    ).toBe(true);
   });
 
   it("rejects objects wholly outside the world and accepts intersecting objects", () => {

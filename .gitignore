@@ -11,6 +11,8 @@ test-results/
 *.local
 *.log
 .DS_Store
+.data/
+cookies.txt
 media/
 backups/
 apps/server/uploads/

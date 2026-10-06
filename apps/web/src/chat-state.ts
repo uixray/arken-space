@@ -124,7 +124,11 @@ export function appendChatMessage(
   );
   return {
     ...snapshot,
-    snapshotVersion: Math.max(snapshot.snapshotVersion, sequence),
+    // LOCAL-505: Chat messages must NOT mutate snapshotVersion.
+    // snapshotVersion tracks the authoritative game/canvas entity sequence
+    // (max(gameEvents.sequence)). Inflating snapshotVersion from chat sequences
+    // causes reconcileGameSnapshot to discard subsequent canvas snapshots (e.g.
+    // GM token placements), breaking realtime sync until full page reload (F5).
     messages,
     chatThreadStates,
   };

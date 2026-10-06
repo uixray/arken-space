@@ -16,6 +16,11 @@ const portraitUrl = `/api/assets/${assetId}/content`;
 const stackAlphaId = "75f46186-2ebc-4cf8-bce7-870097305a6b";
 const stackBetaId = "85f46186-2ebc-4cf8-bce7-870097305a6b";
 
+// The object-list trigger is a map-toolbar shortcut; the list it controls
+// remains inside the map viewport. Keep these two locator scopes distinct.
+const objectListTrigger = (page: Page) =>
+  page.getByRole("button", { name: "Объекты карты", exact: true });
+
 const snapshot = {
   campaign: {
     id: "b4c34840-cb11-4a07-884d-680ae85c48db",
@@ -240,6 +245,17 @@ for (const role of ["GM", "PLAYER"] as const) {
         ).toBeLessThanOrEqual(1);
         await select.focus();
         const glyphs: string[] = [];
+        if (label === tokenName) {
+          // Tokens now expose a dedicated focus-on-map action between the
+          // selection row and duplicate/delete actions.
+          const locate = list.getByRole("button", {
+            name: `Показать на карте: ${label}`,
+            exact: true,
+          });
+          await page.keyboard.press("Tab");
+          await expect(locate).toBeFocused();
+          await expect(locate).toBeEnabled();
+        }
         for (const action of ["Дублировать", "Удалить"]) {
           const control = list.getByRole("button", {
             name: `${action}: ${label}`,
@@ -455,7 +471,7 @@ test("UIX-471 GM changes condition sets through the token menu and keeps server 
   const openMenu = async () => {
     if (await page.getByRole("group", { name: "Состояния токена" }).isVisible())
       return;
-    const trigger = map.locator(".map-object-list-trigger");
+    const trigger = objectListTrigger(page);
     await trigger.click();
     await map
       .locator(".map-object-list")
@@ -508,7 +524,7 @@ async function selectTokenAndResizeFromObservableHandle(
   delta = 48,
 ) {
   const map = page.locator(".map-viewport");
-  const trigger = map.locator(".map-object-list-trigger");
+  const trigger = objectListTrigger(page);
   await trigger.click();
   await map
     .locator(".map-object-list")
@@ -742,7 +758,7 @@ test("GM stack semantics follow authoritative movement and deletion", async ({
 
   await page.goto("/");
   const map = page.locator(".map-viewport");
-  await map.locator(".map-object-list-trigger").click();
+  await objectListTrigger(page).click();
   const objectList = map.locator(".map-object-list");
   await expect(
     objectList.getByRole("button", {
@@ -771,7 +787,7 @@ test("GM stack semantics follow authoritative movement and deletion", async ({
     targets: [{ targetType: "TOKEN", targetId: stackAlphaId, revision: 0 }],
   });
   await page.reload();
-  await map.locator(".map-object-list-trigger").click();
+  await objectListTrigger(page).click();
   await expect(
     objectList.getByRole("button", { name: "Alpha", exact: true }),
   ).toBeVisible();
@@ -805,7 +821,7 @@ test("GM stack semantics follow authoritative movement and deletion", async ({
   expect(deleteRequests[0].body.actionId).toMatch(/^[0-9a-f-]{36}$/i);
 
   await page.reload();
-  await map.locator(".map-object-list-trigger").click();
+  await objectListTrigger(page).click();
   await expect(
     objectList.getByRole("button", { name: "Beta", exact: true }),
   ).toBeVisible();
@@ -853,7 +869,7 @@ test("a loaded portrait stays available through authoritative keyboard movement"
       attributeFilter: ["data-token-image-states"],
     });
   });
-  await map.locator(".map-object-list-trigger").click();
+  await objectListTrigger(page).click();
   await page
     .getByRole("button", { name: "Selected token", exact: true })
     .click();
@@ -1236,7 +1252,9 @@ for (const role of ["GM", "PLAYER"] as const) {
       });
       await page.goto("/");
       const map = page.locator(".map-viewport");
-      await map.getByRole("button", { name: "Вписать", exact: true }).click();
+      await map
+        .getByRole("button", { name: "Вписать карту", exact: true })
+        .click();
       const zoom = map.locator(".map-scale");
       const slider = zoom.getByRole("slider", { name: "Масштаб карты" });
       const percentage = async () =>
@@ -1263,14 +1281,16 @@ for (const role of ["GM", "PLAYER"] as const) {
       await page.keyboard.press("End");
       await expect(slider).toHaveValue("3");
       await expect(zoom).toContainText("300%");
-      await zoom.getByRole("button", { name: "Вписать", exact: true }).click();
+      await zoom
+        .getByRole("button", { name: "Вписать карту", exact: true })
+        .click();
       await expect
         .poll(async () => Number(await slider.inputValue()))
         .toBe(initialScale);
       await expect.poll(percentage).toBe(initialPercentage);
       const baseline = await zoomBounds(page);
       await expectStableSelectionChrome(page, baseline);
-      const trigger = map.locator(".map-object-list-trigger");
+      const trigger = objectListTrigger(page);
       const objectList = map.getByRole("region", {
         name: "Объекты карты",
         exact: true,
@@ -1451,13 +1471,20 @@ for (const role of ["GM", "PLAYER"] as const) {
           actionBounds.y + actionBounds.height,
         ),
       };
-      // Exercise the contested pixels, not an unobstructed corner of the row.
-      expect(overlap.right).toBeGreaterThan(overlap.left);
-      expect(overlap.bottom).toBeGreaterThan(overlap.top);
-      const hitPoint = {
-        x: (overlap.left + overlap.right) / 2,
-        y: (overlap.top + overlap.bottom) / 2,
-      };
+      // When the two controls overlap, probe the contested pixels. The
+      // current layout may separate them entirely; that is also safe, so
+      // probe the object's centre instead of requiring an overlap.
+      const intersects =
+        overlap.right > overlap.left && overlap.bottom > overlap.top;
+      const hitPoint = intersects
+        ? {
+            x: (overlap.left + overlap.right) / 2,
+            y: (overlap.top + overlap.bottom) / 2,
+          }
+        : {
+            x: objectBounds.x + objectBounds.width / 2,
+            y: objectBounds.y + objectBounds.height / 2,
+          };
       expect(
         await firstObject.evaluate(
           (node, point) =>
@@ -1541,7 +1568,7 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
   await page.goto("/");
   const map = page.locator(".map-viewport");
   const zoomBaseline = await zoomBounds(page);
-  const trigger = map.locator(".map-object-list-trigger");
+  const trigger = objectListTrigger(page);
   await trigger.click();
   await map
     .getByRole("button", { name: "Selected token", exact: true })
@@ -1652,16 +1679,19 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
   await expect(contextMenu).toHaveCount(0);
   await expect(map).toBeFocused();
 
-  // Outside-pointer dismissal must not steal focus from the clicked control.
+  // Outside-pointer dismissal must hand focus to the opened object list,
+  // whose Escape action returns it to the clicked toolbar control.
   await page.mouse.click(contextPoint.x, contextPoint.y, { button: "right" });
   await expect(contextMenu).toBeVisible();
   await trigger.click();
   await expect(contextMenu).toHaveCount(0);
-  await expect(trigger).toBeFocused();
-  await trigger.press("Escape");
+  const focusedObject = map.locator(".map-object-list button").first();
+  await expect(focusedObject).toBeFocused();
+  await focusedObject.press("Escape");
   await expect(
     map.getByRole("region", { name: "Объекты карты", exact: true }),
   ).toHaveCount(0);
+  await expect(trigger).toBeFocused();
   await expect(
     page.getByRole("button", { name: "Удалить выбранное" }),
   ).toBeVisible();
@@ -1920,7 +1950,7 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
   });
   await page.goto("/");
   const map = page.locator(".map-viewport");
-  const trigger = map.locator(".map-object-list-trigger");
+  const trigger = objectListTrigger(page);
   await trigger.click();
   await map.getByRole("button", { name: "Owned token", exact: true }).click();
   await trigger.click();
@@ -2037,7 +2067,9 @@ for (const width of [1280, 390]) {
     await page.goto("/");
     const map = page.locator(".map-viewport");
     const zoom = map.locator(".map-scale");
-    await zoom.getByRole("button", { name: "Вписать", exact: true }).click();
+    await zoom
+      .getByRole("button", { name: "Вписать карту", exact: true })
+      .click();
     const slider = zoom.getByRole("slider", { name: "Масштаб карты" });
     await slider.focus();
     await page.keyboard.press("Home");
@@ -2045,7 +2077,7 @@ for (const width of [1280, 390]) {
     for (let step = 0; step < 15; step += 1)
       await page.keyboard.press("ArrowUp");
     await expect(slider).toHaveValue("1");
-    const trigger = map.locator(".map-object-list-trigger");
+    const trigger = objectListTrigger(page);
     await trigger.click();
     await map
       .getByRole("button", { name: "Selected token", exact: true })
@@ -2090,7 +2122,24 @@ for (const width of [1280, 390]) {
     // accidentally hitting its duplicate/delete row.
     await trigger.click();
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
-    await page.mouse.click(box.x + 20, box.y + box.height - 30);
+    const outsideMapPoint = await map.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      for (const y of [0.7, 0.5, 0.3])
+        for (const x of [0.7, 0.5, 0.3]) {
+          const point = {
+            x: rect.x + rect.width * x,
+            y: rect.y + rect.height * y,
+          };
+          if (
+            document
+              .elementFromPoint(point.x, point.y)
+              ?.closest(".konvajs-content")
+          )
+            return point;
+        }
+      throw new Error("No exposed map point outside transient controls");
+    });
+    await page.mouse.click(outsideMapPoint.x, outsideMapPoint.y);
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
     await plus.click();
     await expect(slider).toHaveValue("1.2");
@@ -2276,7 +2325,7 @@ test("UIX-621 rapid conditions render before delayed server confirmation and sta
   });
   await page.goto("/");
   const map = page.locator(".map-viewport");
-  const trigger = map.locator(".map-object-list-trigger");
+  const trigger = objectListTrigger(page);
   await trigger.click();
   await map
     .getByRole("button", { name: "Selected token", exact: true })
@@ -2352,15 +2401,11 @@ for (const tool of ["PAN", "DRAW"] as const) {
     });
     await page.goto("/");
     const map = page.locator(".map-viewport");
-    await map
-      .getByRole("button", { name: "Объекты карты", exact: true })
-      .click();
+    await objectListTrigger(page).click();
     await map
       .getByRole("button", { name: "Selected token", exact: true })
       .click();
-    await map
-      .getByRole("button", { name: "Объекты карты", exact: true })
-      .click();
+    await objectListTrigger(page).click();
     const bounds = (await map.boundingBox())!;
     const scale = Number(
       await map.getByRole("slider", { name: "Масштаб карты" }).inputValue(),
@@ -2489,7 +2534,8 @@ for (const shifted of [true, false]) {
       for (const [index, mode] of ["enter", "double", "jitter"].entries()) {
         const double = mode !== "enter";
         await vertices(double, mode === "jitter");
-        if (!double) await map.press("Enter");
+        // Real users finish from canvas focus, without programmatically focusing the map.
+        if (!double) await page.keyboard.press("Enter");
         await expect.poll(() => writes.length).toBe(index + 1);
         const write = writes.at(-1)!;
         expect(write).toMatchObject({
@@ -2846,9 +2892,7 @@ for (const role of ["GM", "PLAYER"] as const) {
     await expect(
       page.getByRole("button", { name: "Удалить выбранное" }),
     ).toHaveCount(0);
-    await map
-      .getByRole("button", { name: "Объекты карты", exact: true })
-      .click();
+    await objectListTrigger(page).click();
     await expect(
       page
         .getByRole("region", { name: "Объекты карты", exact: true })
@@ -2889,10 +2933,7 @@ test("UIX-644 token menu remains reachable across viewport resize", async ({
   });
   await page.goto("/");
   const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
-  const trigger = map.getByRole("button", {
-    name: "Объекты карты",
-    exact: true,
-  });
+  const trigger = objectListTrigger(page);
   await trigger.click();
   await map
     .getByRole("button", { name: "Selected token", exact: true })
@@ -3048,9 +3089,7 @@ for (const width of [1280, 390]) {
     });
     await page.goto("/");
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
-    await map
-      .getByRole("button", { name: "Объекты карты", exact: true })
-      .click();
+    await objectListTrigger(page).click();
     await map
       .getByRole("button", { name: "Selected token", exact: true })
       .click();
@@ -3217,10 +3256,7 @@ for (const width of [1280, 390]) {
     });
     await page.goto("/");
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
-    const trigger = map.getByRole("button", {
-      name: "Объекты карты",
-      exact: true,
-    });
+    const trigger = objectListTrigger(page);
     const menu = map.getByRole("menu");
     const dialog = page.getByRole("dialog", {
       name: "Убрать токен с карты?",
@@ -3321,9 +3357,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       const map = page.getByRole("region", {
         name: "Интерактивная карта сцены",
       });
-      await map
-        .getByRole("button", { name: "Объекты карты", exact: true })
-        .click();
+      await objectListTrigger(page).click();
       await map
         .getByRole("button", { name: "Selected token", exact: true })
         .click();
@@ -3442,10 +3476,7 @@ for (const change of ["revision", "locked", "revoked", "removed"] as const) {
     await page.goto("/");
     await expect.poll(() => Boolean(publish)).toBe(true);
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
-    const trigger = map.getByRole("button", {
-      name: "Объекты карты",
-      exact: true,
-    });
+    const trigger = objectListTrigger(page);
     const select = async (name: string) => {
       await trigger.click();
       await map.getByRole("button", { name, exact: true }).click();
@@ -3586,7 +3617,9 @@ for (const change of [
     await expect.poll(() => Boolean(publish)).toBe(true);
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
     const selectBoth = async () => {
-      await page.getByRole("button", { name: "Вписать", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Вписать карту", exact: true })
+        .click();
       const box = (await map.boundingBox())!;
       const fitted = fitRect({ x: 0, y: 0, width: 1600, height: 1000 }, box);
       const point = (x: number, y: number) => ({
@@ -3743,9 +3776,7 @@ for (const width of [1280, 390]) {
     await page.goto("/");
     await expect.poll(() => Boolean(publish)).toBe(true);
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
-    await map
-      .getByRole("button", { name: "Объекты карты", exact: true })
-      .click();
+    await objectListTrigger(page).click();
     await map
       .getByRole("button", { name: "Selected token", exact: true })
       .click();
@@ -3858,9 +3889,7 @@ for (const width of [1280, 390]) {
       const map = page.getByRole("region", {
         name: "Интерактивная карта сцены",
       });
-      await map
-        .getByRole("button", { name: "Объекты карты", exact: true })
-        .click();
+      await objectListTrigger(page).click();
       await map
         .getByRole("button", { name: "Selected token", exact: true })
         .click();
@@ -3987,9 +4016,7 @@ for (const scenario of [
     });
     await page.goto("/");
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
-    await map
-      .getByRole("button", { name: "Объекты карты", exact: true })
-      .click();
+    await objectListTrigger(page).click();
     const selected = map.getByRole("button", {
       name: "Selected token",
       exact: true,
@@ -4148,7 +4175,9 @@ for (const role of ["GM", "PLAYER"] as const) {
       page.getByRole("region", { name: "Интерактивная карта сцены" }),
     ).toBeVisible();
     await expect.poll(() => Boolean(publish)).toBe(true);
-    await page.getByRole("button", { name: "Вписать", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Вписать карту", exact: true })
+      .click();
     const stage = page.locator(".konvajs-content");
     const stageHandle = await stage.elementHandle();
     const bounds = (await stage.boundingBox())!;

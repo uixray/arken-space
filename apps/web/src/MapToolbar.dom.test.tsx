@@ -112,6 +112,19 @@ describe("MapToolbar — панель инструментов карты (UIX-4
   beforeEach(() => {
     writeToolbarCollapsed(window.localStorage, "m1", false);
   });
+  it("keeps pause below shortcuts, outside scrolling tools", () => {
+    const { container } = renderComponent(
+      <MapToolbar
+        {...createDefaultProps({ pauseControl: <button>Pause</button> })}
+      />,
+    );
+    const toolbar = container.querySelector(".map-toolbar")!;
+    expect(toolbar.lastElementChild).toHaveClass("map-toolbar__pause");
+    expect(toolbar.lastElementChild).toContainElement(
+      screen.getByRole("button", { name: "Pause" }),
+    );
+  });
+
   it("рендерит инструменты для роли PLAYER: без тумана и боевой зоны", () => {
     const playerSnapshot = createMockSnapshot("PLAYER");
     const props = createDefaultProps({
@@ -209,6 +222,24 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     expect(collapseButton).toHaveAttribute("aria-expanded", "false");
     expect(container.querySelector(".map-toolbar")).toHaveClass("is-collapsed");
     expect(revealPolygon?.innerHTML).not.toBe(coverPolygon?.innerHTML);
+  });
+
+  it("снимает фокус с инструмента по Escape, не отменяя клавишу", async () => {
+    const props = createDefaultProps();
+    renderComponent(<MapToolbar {...props} />);
+    const fog = screen.getByRole("button", { name: "Открыть туман" });
+    fog.focus();
+    expect(fog).toHaveFocus();
+
+    const escape = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    fog.dispatchEvent(escape);
+
+    expect(fog).not.toHaveFocus();
+    expect(escape.defaultPrevented).toBe(false);
   });
 
   it("не возвращает боевые кнопки при сохранённом активном столкновении", () => {

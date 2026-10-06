@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import type { StickerPackDto } from "@arken/contracts";
-import { Popup } from "@gravity-ui/uikit";
+import { Popup } from "./design-system/Popup";
 import { Button } from "./design-system/Button";
 import { api } from "./api";
 import { filterStickerPacks } from "./sticker-picker-state";
@@ -171,7 +171,13 @@ export function StickerPicker({
       </Button>
       <Popup
         open={open && !disabled}
-        anchorElement={anchor}
+        // Anchor above the entire composer, not its bottom-aligned icon:
+        // otherwise the panel can cover the textarea and block outside clicks.
+        anchorElement={
+          iconOnly
+            ? (anchor?.closest<HTMLElement>(".chat-compose") ?? anchor)
+            : anchor
+        }
         className={popupClassName}
         placement={["top-end", "bottom-end"]}
         strategy="fixed"
@@ -259,7 +265,6 @@ export function StickerPicker({
                 }}
               >
                 <img src={sticker.url} alt="" loading="lazy" />
-                <span>{sticker.name}</span>
               </button>
             ))}
           </div>

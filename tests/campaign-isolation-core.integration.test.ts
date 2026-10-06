@@ -715,7 +715,7 @@ const probes: readonly Probe[] = [
     request: () => ({
       method: "POST",
       url: `/api/player-access/${ids.foreignPlayerAccess}/rotate`,
-      payload: { actionId: actionId() },
+      payload: { actionId: actionId(), revision: 0 },
     }),
     status: 404,
     error: "PLAYER_ACCESS_NOT_FOUND",

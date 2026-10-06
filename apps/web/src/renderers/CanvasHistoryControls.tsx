@@ -1,3 +1,4 @@
+import { ToolbarButton } from "../ui/ToolbarTooltip";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GameSnapshot } from "@arken/contracts";
 import { api } from "../api";
@@ -103,7 +104,7 @@ export function CanvasHistoryControls({
 
   return (
     <>
-      <button
+      <ToolbarButton
         className="map-tool"
         data-tool="UNDO"
         aria-label={undoLabel}
@@ -112,8 +113,9 @@ export function CanvasHistoryControls({
         onClick={() => void act("undo")}
       >
         <AppIcon icon={UndoIcon} />
-      </button>
-      <button
+        <span className="map-tool__label">Отменить</span>
+      </ToolbarButton>
+      <ToolbarButton
         className="map-tool"
         data-tool="REDO"
         aria-label={redoLabel}
@@ -122,7 +124,8 @@ export function CanvasHistoryControls({
         onClick={() => void act("redo")}
       >
         <AppIcon icon={RedoIcon} />
-      </button>
+        <span className="map-tool__label">Повторить</span>
+      </ToolbarButton>
     </>
   );
 }

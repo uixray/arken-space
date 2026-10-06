@@ -15,6 +15,7 @@ import {
 } from "drizzle-orm";
 import { z } from "zod";
 import { canonicalizeFogGeometry, FogGeometryError } from "./fog-geometry.js";
+import { registerPublicRoadmapVoteRoutes } from "./roadmap-votes.js";
 import {
   activateSceneSchema,
   actionIdSchema,
@@ -67,6 +68,7 @@ import {
   gmLoginSchema,
   inviteClaimSchema,
   rotatePlayerAccessSchema,
+  revokePlayerAccessSchema,
   rotateGmAccessSchema,
   replaceTokenControllersSchema,
   replaceCharacterControllersSchema,
@@ -450,6 +452,7 @@ type Resources = Record<
     description?: string;
     imageAssetId?: string | null;
     recoverable?: boolean;
+    restAmount?: number;
   }
 >;
 
@@ -486,7 +489,15 @@ function formatResourceChanges(
     ...new Set([...Object.keys(before), ...Object.keys(after)]),
   ].sort();
   const changes = keys
-    .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
+    // The counter journal describes numerical changes only. Clients may
+    // normalize optional image/recovery metadata while editing another
+    // counter; comparing the whole JSON object would emit a phantom 0 → 0
+    // card for every unchanged custom resource.
+    .filter(
+      (key) =>
+        before[key]?.current !== after[key]?.current ||
+        before[key]?.maximum !== after[key]?.maximum,
+    )
     .map((key) => {
       const label = labels.get(key) ?? key;
       if (!before[key])
@@ -509,9 +520,8 @@ function formatResourceChanges(
  * длинный отдых давал +20 вместо +9 — ограничение ресурса в игре фактически
  * не работало.
  *
- * Ресурс без строки регена отдыхом не восстанавливается: «на величину регена»
- * у неизвестного ресурса величины не имеет. Такие ресурсы правятся вручную
- * счётчиками рядом с бросками.
+ * Для пользовательского ресурса величина задаётся restAmount; без неё и без
+ * системной строки регена отдых ничего не восстанавливает.
  */
 function applyCharacterRest(
   resources: Resources,
@@ -523,7 +533,8 @@ function applyCharacterRest(
       if (resource.recoverable === false) return [key, resource];
 
       const regenStat = RESOURCE_REGEN_STAT[key];
-      const regen = regenStat ? (stats[regenStat] ?? 0) : 0;
+      const regen =
+        resource.restAmount ?? (regenStat ? (stats[regenStat] ?? 0) : 0);
       if (regen <= 0) return [key, resource];
 
       const maximum = resource.maximum ?? resource.current;
@@ -533,7 +544,11 @@ function applyCharacterRest(
         key,
         {
           ...resource,
-          current: Math.min(maximum, resource.current + gain),
+          // Temporary points above maximum are not reduced by a rest.
+          current: Math.max(
+            resource.current,
+            Math.min(maximum, resource.current + gain),
+          ),
           maximum,
         },
       ];
@@ -723,6 +738,7 @@ function playerAccessDto(
     membershipId: grant.membershipId,
     characterId,
     label: grant.label,
+    revision: grant.revision,
     revokedAt: grant.revokedAt?.toISOString() ?? null,
     createdAt: grant.createdAt.toISOString(),
     updatedAt: grant.updatedAt.toISOString(),
@@ -773,10 +789,18 @@ async function createPlayerAccess(
               tokenHash: hashToken(token),
               revokedAt: null,
               updatedAt: new Date(),
+              revision: sql`${playerAccessGrants.revision} + 1`,
             })
-            .where(eq(playerAccessGrants.id, existing.id))
+            .where(
+              and(
+                eq(playerAccessGrants.id, existing.id),
+                eq(playerAccessGrants.campaignId, campaignId),
+                eq(playerAccessGrants.revision, existing.revision),
+                sql`${playerAccessGrants.revokedAt} is not null`,
+              ),
+            )
             .returning();
-          if (!reactivated) throw new Error("ACCESS_GRANT_CREATE_FAILED");
+          if (!reactivated) throw new Error("PLAYER_ACCESS_CONFLICT");
           await tx
             .delete(sessions)
             .where(eq(sessions.membershipId, existing.membershipId));
@@ -902,6 +926,7 @@ export function registerRoutes(
   db: Database,
   io: RealtimeServer,
 ) {
+  registerPublicRoadmapVoteRoutes(app, db);
   const canvasTx = (campaignId: string) =>
     campaignCanvasDatabase(db, campaignId);
   registerWorldMapRoutes(app, db, (campaignId) =>
@@ -1443,8 +1468,6 @@ export function registerRoutes(
   app.post("/api/characters", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    if (auth.role !== "GM")
-      return reply.code(403).send({ error: "GM_REQUIRED" });
     const body = createCharacterSchema.parse(request.body);
     const duplicate = await findAction(db, auth.campaignId, body.actionId);
     if (duplicate) return reply.code(200).send({ duplicate: true });
@@ -1454,11 +1477,13 @@ export function registerRoutes(
     // the moment it is created — never a live-linked clone of its source.
     const starter = createStarterCharacter();
     const template = body.template ?? {};
+    const ownerMembershipId = auth.role === "PLAYER" ? auth.membershipId : null;
     const character = await db.transaction(async (tx) => {
       const [created] = await tx
         .insert(characters)
         .values({
           campaignId: auth.campaignId,
+          ownerMembershipId,
           name: body.name,
           stats: { ...starter.stats, ...template.stats },
           skills: template.skills ?? starter.skills,
@@ -1605,6 +1630,9 @@ export function registerRoutes(
             "inventory",
             "notes",
             "resources",
+            "skills",
+            "spells",
+            "wallet",
           ].includes(key),
       )
     )
@@ -2119,24 +2147,12 @@ export function registerRoutes(
   app.post("/api/characters/:id/catalog", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    if (auth.role !== "GM")
-      return reply.code(403).send({ error: "GM_REQUIRED" });
     const characterId = z
       .object({ id: z.string().uuid() })
       .parse(request.params).id;
     const body = assignCatalogEntrySchema.parse(request.body);
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(200).send({ duplicate: true });
-    const [source] = await db
-      .select()
-      .from(catalogEntries)
-      .where(
-        and(
-          eq(catalogEntries.id, body.catalogEntryId),
-          eq(catalogEntries.campaignId, auth.campaignId),
-        ),
-      )
-      .limit(1);
     const [character] = await db
       .select()
       .from(characters)
@@ -2147,7 +2163,21 @@ export function registerRoutes(
         ),
       )
       .limit(1);
-    if (!source || !character)
+    if (!character)
+      return reply.code(404).send({ error: "ASSIGNMENT_SOURCE_NOT_FOUND" });
+    if (!(await canAccessCharacter(db, auth, character)))
+      return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
+    const [source] = await db
+      .select()
+      .from(catalogEntries)
+      .where(
+        and(
+          eq(catalogEntries.id, body.catalogEntryId),
+          eq(catalogEntries.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!source)
       return reply.code(404).send({ error: "ASSIGNMENT_SOURCE_NOT_FOUND" });
     const [existingAssignment] = await db
       .select({ id: characterCatalogEntries.id })
@@ -2206,8 +2236,6 @@ export function registerRoutes(
     async (request, reply) => {
       const auth = await requireAuth(request, reply, db);
       if (!auth) return;
-      if (auth.role !== "GM")
-        return reply.code(403).send({ error: "GM_REQUIRED" });
       const params = z
         .object({ characterId: z.string().uuid(), id: z.string().uuid() })
         .parse(request.params);
@@ -2217,7 +2245,7 @@ export function registerRoutes(
       if (await findAction(db, auth.campaignId, body.actionId))
         return reply.code(200).send({ duplicate: true });
       const [current] = await db
-        .select({ entry: characterCatalogEntries })
+        .select({ entry: characterCatalogEntries, character: characters })
         .from(characterCatalogEntries)
         .innerJoin(
           characters,
@@ -2233,6 +2261,8 @@ export function registerRoutes(
         .limit(1);
       if (!current)
         return reply.code(404).send({ error: "CHARACTER_ENTRY_NOT_FOUND" });
+      if (!(await canAccessCharacter(db, auth, current.character)))
+        return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
       if (
         body.revision !== undefined &&
         body.revision !== current.entry.revision
@@ -2278,8 +2308,6 @@ export function registerRoutes(
     async (request, reply) => {
       const auth = await requireAuth(request, reply, db);
       if (!auth) return;
-      if (auth.role !== "GM")
-        return reply.code(403).send({ error: "GM_REQUIRED" });
       const params = z
         .object({ characterId: z.string().uuid(), id: z.string().uuid() })
         .parse(request.params);
@@ -2287,7 +2315,7 @@ export function registerRoutes(
       if (await findAction(db, auth.campaignId, body.actionId))
         return reply.code(200).send({ ok: true, duplicate: true });
       const [current] = await db
-        .select({ entry: characterCatalogEntries })
+        .select({ entry: characterCatalogEntries, character: characters })
         .from(characterCatalogEntries)
         .innerJoin(
           characters,
@@ -2303,6 +2331,8 @@ export function registerRoutes(
         .limit(1);
       if (!current)
         return reply.code(404).send({ error: "CHARACTER_ENTRY_NOT_FOUND" });
+      if (!(await canAccessCharacter(db, auth, current.character)))
+        return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
       if (current.entry.revision !== body.revision)
         return reply.code(409).send({ error: "CHARACTER_ENTRY_CONFLICT" });
       const deleted = await db.transaction(async (tx) => {
@@ -2357,6 +2387,8 @@ export function registerRoutes(
     } catch (error) {
       if (errorMessage(error).includes("CHARACTER_NOT_FOUND"))
         return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
+      if (errorMessage(error).includes("PLAYER_ACCESS_CONFLICT"))
+        return reply.code(409).send({ error: "PLAYER_ACCESS_CONFLICT" });
       throw error;
     }
     return reply.code(access.created ? 201 : 200).send({
@@ -2393,7 +2425,7 @@ export function registerRoutes(
     if (auth.role !== "GM")
       return reply.code(403).send({ error: "GM_REQUIRED" });
     const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
-    const body = rotatePlayerAccessSchema.parse(request.body);
+    const body = revokePlayerAccessSchema.parse(request.body);
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(409).send({ error: "ACTION_ALREADY_APPLIED" });
     const [grant] = await db
@@ -2409,10 +2441,14 @@ export function registerRoutes(
       .limit(1);
     if (!grant)
       return reply.code(404).send({ error: "PLAYER_ACCESS_NOT_FOUND" });
-    await db.transaction(async (tx) => {
+    const revoked = await db.transaction(async (tx) => {
       const [revoked] = await tx
         .update(playerAccessGrants)
-        .set({ revokedAt: new Date(), updatedAt: new Date() })
+        .set({
+          revokedAt: new Date(),
+          updatedAt: new Date(),
+          revision: sql`${playerAccessGrants.revision} + 1`,
+        })
         .where(
           and(
             eq(playerAccessGrants.id, grant.id),
@@ -2421,7 +2457,7 @@ export function registerRoutes(
           ),
         )
         .returning();
-      if (!revoked) throw new Error("PLAYER_ACCESS_CONFLICT");
+      if (!revoked) return false;
       await tx
         .delete(sessions)
         .where(eq(sessions.membershipId, grant.membershipId));
@@ -2433,7 +2469,10 @@ export function registerRoutes(
         entityType: "player_access",
         entityId: grant.id,
       });
+      return true;
     });
+    if (!revoked)
+      return reply.code(409).send({ error: "PLAYER_ACCESS_CONFLICT" });
     io.in(memberRoom(grant.membershipId)).disconnectSockets(true);
     return { ok: true };
   });
@@ -2461,19 +2500,24 @@ export function registerRoutes(
     if (!grant)
       return reply.code(404).send({ error: "PLAYER_ACCESS_NOT_FOUND" });
     const token = randomToken();
-    await db.transaction(async (tx) => {
+    const rotated = await db.transaction(async (tx) => {
       const [rotated] = await tx
         .update(playerAccessGrants)
-        .set({ tokenHash: hashToken(token), updatedAt: new Date() })
+        .set({
+          tokenHash: hashToken(token),
+          updatedAt: new Date(),
+          revision: sql`${playerAccessGrants.revision} + 1`,
+        })
         .where(
           and(
             eq(playerAccessGrants.id, grant.id),
+            eq(playerAccessGrants.campaignId, auth.campaignId),
+            eq(playerAccessGrants.revision, body.revision),
             isNull(playerAccessGrants.revokedAt),
-            eq(playerAccessGrants.tokenHash, grant.tokenHash),
           ),
         )
         .returning();
-      if (!rotated) throw new Error("PLAYER_ACCESS_CONFLICT");
+      if (!rotated) return null;
       await tx
         .delete(sessions)
         .where(eq(sessions.membershipId, grant.membershipId));
@@ -2485,13 +2529,13 @@ export function registerRoutes(
         entityType: "player_access",
         entityId: grant.id,
       });
+      return rotated;
     });
+    if (!rotated)
+      return reply.code(409).send({ error: "PLAYER_ACCESS_CONFLICT" });
     io.in(memberRoom(grant.membershipId)).disconnectSockets(true);
     return {
-      grant: playerAccessDto(
-        { ...grant, tokenHash: hashToken(token), updatedAt: new Date() },
-        null,
-      ),
+      grant: playerAccessDto(rotated, null),
       created: false,
       url: `${env.PUBLIC_URL}/join/${token}`,
     };
@@ -7824,111 +7868,147 @@ export function registerRoutes(
     ]
       .filter(Boolean)
       .join("; ");
-    if (!changes) return reply.code(400).send({ error: "NO_COUNTER_CHANGES" });
+    if (!changes && !body.rest)
+      return reply.code(400).send({ error: "NO_COUNTER_CHANGES" });
+    const changeDescription =
+      changes || (body.rest === "SHORT" ? "короткий отдых" : "долгий отдых");
     const tableThread = await ensureStreamThread(db, auth.campaignId, "TABLE");
     const walletOnly = Boolean(body.wallet) && !nextResources && !body.rest;
     const walletBefore = normalizeCharacterWallet(character!.wallet);
-    const result = await db.transaction(async (tx) => {
-      const [updated] = await tx
-        .update(characters)
-        .set({
-          ...(body.wallet ? { wallet: body.wallet } : {}),
-          ...(nextResources ? { resources: nextResources } : {}),
-          revision: character!.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(characters.id, id),
-            eq(characters.revision, character!.revision),
-          ),
-        )
-        .returning();
-      if (!updated) return null;
-      const now = new Date();
-      const walletData: WalletAuditSystemData | null =
-        walletOnly && body.wallet
-          ? {
-              type: "WALLET_AUDIT",
-              before: walletBefore,
-              after: body.wallet,
-              lastAt: now.toISOString(),
-              operationCount: 1,
-            }
-          : null;
-      const [latestMessage] = walletData
-        ? await tx
-            .select()
-            .from(chatMessages)
-            .where(eq(chatMessages.threadId, tableThread.id))
-            .orderBy(desc(chatMessages.sequence))
-            .limit(1)
-            .for("update")
-        : [];
-      const latestWalletData = latestMessage?.systemData;
-      const lastAt = isWalletAuditSystemData(latestWalletData)
-        ? Date.parse(latestWalletData.lastAt)
-        : Number.NaN;
-      const elapsed = now.getTime() - lastAt;
-      const canAggregate =
-        latestMessage?.kind === "SYSTEM" &&
-        latestMessage.visibility === "PUBLIC" &&
-        latestMessage.membershipId === auth.membershipId &&
-        latestMessage.characterId === id &&
-        isWalletAuditSystemData(latestWalletData) &&
-        elapsed >= 0 &&
-        elapsed <= WALLET_AUDIT_BURST_MS;
-      const aggregateData: WalletAuditSystemData | null =
-        canAggregate && body.wallet
-          ? {
-              ...latestWalletData,
-              after: body.wallet,
-              lastAt: now.toISOString(),
-              operationCount: latestWalletData.operationCount + 1,
-            }
-          : null;
-      const [message] =
-        aggregateData && latestMessage
+    const result = await db
+      .transaction(async (tx) => {
+        const [updated] = await tx
+          .update(characters)
+          .set({
+            ...(body.wallet ? { wallet: body.wallet } : {}),
+            ...(nextResources ? { resources: nextResources } : {}),
+            revision: character!.revision + 1,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(characters.id, id),
+              eq(characters.revision, character!.revision),
+            ),
+          )
+          .returning();
+        if (!updated) return null;
+        if (body.rest) {
+          const [clock] = await tx
+            .select({
+              day: campaigns.day,
+              battleCounter: campaigns.battleCounter,
+            })
+            .from(campaigns)
+            .where(eq(campaigns.id, auth.campaignId))
+            .limit(1);
+          if (!clock) throw new Error("CAMPAIGN_NOT_FOUND");
+          const recharged = await rechargeCampaignCatalogEntries(
+            tx,
+            auth.campaignId,
+            {
+              trigger: body.rest === "SHORT" ? "SHORT_REST" : "LONG_REST",
+              day: clock.day,
+              battleCounter: clock.battleCounter,
+              characterId: id,
+            },
+          );
+          // A rest with neither resource recovery nor a recharged ability is a
+          // no-op. Abort the transaction so it cannot bump revision or journal it.
+          if (!changes && recharged === 0)
+            throw new Error("NO_COUNTER_CHANGES");
+        }
+        const now = new Date();
+        const walletData: WalletAuditSystemData | null =
+          walletOnly && body.wallet
+            ? {
+                type: "WALLET_AUDIT",
+                before: walletBefore,
+                after: body.wallet,
+                lastAt: now.toISOString(),
+                operationCount: 1,
+              }
+            : null;
+        const [latestMessage] = walletData
           ? await tx
-              .update(chatMessages)
-              .set({
-                body: `${character!.name} \u2014 ${formatWalletChanges(
-                  aggregateData.before,
-                  aggregateData.after,
-                )}`,
-                systemData: aggregateData,
-              })
-              .where(eq(chatMessages.id, latestMessage.id))
-              .returning()
-          : await tx
-              .insert(chatMessages)
-              .values({
-                campaignId: auth.campaignId,
-                membershipId: auth.membershipId,
-                characterId: id,
-                kind: "SYSTEM",
-                threadId: tableThread.id,
-                visibility: "PUBLIC",
-                body: `${character!.name} \u2014 ${changes}`,
-                systemData: walletData,
-              })
-              .returning();
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        membershipId: auth.membershipId,
-        type: "character.counters",
-        entityType: "character",
-        entityId: id,
-        entityRevision: updated.revision,
-        payload: {
-          wallet: body.wallet,
-          resources: nextResources,
-          rest: body.rest,
-        },
+              .select()
+              .from(chatMessages)
+              .where(eq(chatMessages.threadId, tableThread.id))
+              .orderBy(desc(chatMessages.sequence))
+              .limit(1)
+              .for("update")
+          : [];
+        const latestWalletData = latestMessage?.systemData;
+        const lastAt = isWalletAuditSystemData(latestWalletData)
+          ? Date.parse(latestWalletData.lastAt)
+          : Number.NaN;
+        const elapsed = now.getTime() - lastAt;
+        const canAggregate =
+          latestMessage?.kind === "SYSTEM" &&
+          latestMessage.visibility === "PUBLIC" &&
+          latestMessage.membershipId === auth.membershipId &&
+          latestMessage.characterId === id &&
+          isWalletAuditSystemData(latestWalletData) &&
+          elapsed >= 0 &&
+          elapsed <= WALLET_AUDIT_BURST_MS;
+        const aggregateData: WalletAuditSystemData | null =
+          canAggregate && body.wallet
+            ? {
+                ...latestWalletData,
+                after: body.wallet,
+                lastAt: now.toISOString(),
+                operationCount: latestWalletData.operationCount + 1,
+              }
+            : null;
+        const [message] =
+          aggregateData && latestMessage
+            ? await tx
+                .update(chatMessages)
+                .set({
+                  body: `${character!.name} \u2014 ${formatWalletChanges(
+                    aggregateData.before,
+                    aggregateData.after,
+                  )}`,
+                  systemData: aggregateData,
+                })
+                .where(eq(chatMessages.id, latestMessage.id))
+                .returning()
+            : await tx
+                .insert(chatMessages)
+                .values({
+                  campaignId: auth.campaignId,
+                  membershipId: auth.membershipId,
+                  characterId: id,
+                  kind: "SYSTEM",
+                  threadId: tableThread.id,
+                  visibility: "PUBLIC",
+                  body: `${character!.name} \u2014 ${changeDescription}`,
+                  systemData: walletData,
+                })
+                .returning();
+        await tx.insert(gameEvents).values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: "character.counters",
+          entityType: "character",
+          entityId: id,
+          entityRevision: updated.revision,
+          payload: {
+            wallet: body.wallet,
+            resources: nextResources,
+            rest: body.rest,
+          },
+        });
+        return { updated, message };
+      })
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.message === "NO_COUNTER_CHANGES")
+          return "NO_COUNTER_CHANGES" as const;
+        throw error;
       });
-      return { updated, message };
-    });
+    if (result === "NO_COUNTER_CHANGES")
+      return reply.code(400).send({ error: "NO_COUNTER_CHANGES" });
     if (!result) {
       const racedAction = await findAction(db, auth.campaignId, body.actionId);
       if (racedAction) return sendReplay(racedAction);

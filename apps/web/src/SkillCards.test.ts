@@ -1,7 +1,13 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { parseSkillCard, SkillChatCard, type SkillCard } from "./SkillCards";
+import type { CharacterCatalogEntryDto } from "@arken/contracts";
+import {
+  CharacterActionCard,
+  parseSkillCard,
+  SkillChatCard,
+  type SkillCard,
+} from "./SkillCards";
 import { CampaignStatLabelsProvider } from "./campaign-stat-labels-context";
 
 function renderCard(card: SkillCard) {
@@ -145,6 +151,26 @@ describe("SkillChatCard (UIX-389 formula humanization)", () => {
     expect(html).not.toContain("agility");
   });
 
+  it("shows the resolved value instead of an internal modifier placeholder", () => {
+    const html = renderCard({
+      ...baseCard,
+      action: { ...baseCard.action!, formula: "2d6 + modifier_0" },
+      result: { total: 20, breakdown: "2d6 +17" },
+    });
+    expect(html).toContain("2d6 +17");
+    expect(html).not.toContain("modifier_0");
+  });
+
+  it("uses a human-readable fallback when an old result has no breakdown", () => {
+    const html = renderCard({
+      ...baseCard,
+      action: { ...baseCard.action!, formula: "2d6 + modifier_0" },
+      result: { total: 20, breakdown: "" },
+    });
+    expect(html).toContain("2d6 + модификатор");
+    expect(html).not.toContain("modifier_0");
+  });
+
   it("renders an empty formula without throwing when there is no action", () => {
     const html = renderToStaticMarkup(
       createElement(SkillChatCard, {
@@ -153,4 +179,42 @@ describe("SkillChatCard (UIX-389 formula humanization)", () => {
     );
     expect(html).toContain("Flame Lash");
   });
+});
+
+it("localizes a character ability formula without changing its stored action", () => {
+  const entry = {
+    id: "ability-1",
+    kind: "ABILITY",
+    name: "Огненная стрела",
+    description: "",
+    revision: 1,
+    data: {
+      rollActions: [
+        {
+          id: "damage",
+          label: "Урон огнем",
+          dice: "2d6 + agility",
+        },
+      ],
+    },
+  } as unknown as CharacterCatalogEntryDto;
+  const html = renderToStaticMarkup(
+    createElement(CampaignStatLabelsProvider, {
+      layout: [
+        {
+          id: "characteristics",
+          label: "Характеристики",
+          rows: [{ key: "agility", label: "Ловкость", source: "STAT" }],
+        },
+      ],
+      children: createElement(CharacterActionCard, {
+        entry,
+        disabled: false,
+        onAction: async () => undefined,
+      }),
+    }),
+  );
+  expect(html).toContain("2d6 + Ловкость");
+  expect(html).not.toContain("2d6 + agility");
+  expect(entry.data.rollActions?.[0]?.dice).toBe("2d6 + agility");
 });

@@ -1,5 +1,6 @@
 import { type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
+import { openWorkspaceSection } from "./workspace-nav-helper";
 import type {
   GameSnapshot,
   StoryPostAdminDto,
@@ -196,11 +197,9 @@ async function mockApp(
 }
 
 async function openStory(page: Page) {
-  await expect(page.locator("#chat-tab-story")).toBeAttached();
-  if (await page.locator("#compact-nav-journal").isVisible()) {
-    await page.locator("#compact-nav-journal").click();
-  }
-  await page.locator("#chat-tab-story").click();
+  await expect(page.locator("#chat-tab-story")).toHaveCount(0);
+  await openWorkspaceSection(page, "Сюжет");
+  await expect(page.getByRole("dialog", { name: "Сюжет" })).toBeVisible();
   await expect(page.locator(".story-channel")).toBeVisible();
 }
 
@@ -313,7 +312,7 @@ test("GM drafts, publishes, corrects and archives a story post through refreshed
   await body.focus();
   await page.keyboard.press("Enter");
 
-  const post = page.locator(".story-post").first();
+  const post = page.locator(".story-channel .story-post").first();
   await expect(post).toContainText("Arrival at Ravenford");
   await expect(post).toHaveAttribute("data-story-lifecycle", "DRAFT");
   await expect(post.getByText("GM-only preparation note")).toBeVisible();
@@ -362,10 +361,7 @@ test("player sees only safe published story cards in the unified activity feed",
 
   await page.goto("/");
   await expect(page.locator("#chat-tab-story")).toHaveCount(0);
-  await expect(page.locator("#chat-tab-activity")).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(page.locator("#chat-panel-activity")).toBeVisible();
   await expect(page.locator(".story-post")).toHaveCount(1);
   await expect(page.locator(".story-post")).toContainText(
     "A public chronicle entry.",
@@ -376,7 +372,7 @@ test("player sees only safe published story cards in the unified activity feed",
   await expect(page.locator(".story-post__actions")).toHaveCount(0);
 });
 
-test("STORY tab loads older pages, exposes a tabpanel and marks legacy history read", async ({
+test("Story workspace loads older pages and marks legacy history read", async ({
   page,
 }) => {
   const snapshot = snapshotFor("GM");
@@ -447,16 +443,15 @@ test("STORY tab loads older pages, exposes a tabpanel and marks legacy history r
 
   await page.goto("/");
   await openStory(page);
-  await expect(page.locator("#chat-panel-story")).toHaveAttribute(
-    "role",
-    "tabpanel",
-  );
-  await expect(page.locator("#chat-panel-story")).toHaveAttribute(
-    "aria-labelledby",
-    "chat-tab-story",
-  );
-  await expect(page.getByText("Legacy chronicle entry")).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Сюжет кампании" }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".story-channel").getByText("Legacy chronicle entry"),
+  ).toBeVisible();
   await expect.poll(() => markedSequence).toBe(9);
   await page.locator(".story-channel__load-more").click();
-  await expect(page.getByText("Older page")).toBeVisible();
+  await expect(
+    page.locator(".story-channel").getByText("Older page"),
+  ).toBeVisible();
 });

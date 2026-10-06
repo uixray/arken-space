@@ -235,6 +235,17 @@ describe.each(["activity", "chat"] as const)(
       expect(input()).toHaveValue("/");
     });
 
+    it("closes suggestions when Tab leaves a focused option", async () => {
+      mount(surface);
+      const user = userEvent.setup();
+      await user.click(trigger());
+      await user.keyboard("{ArrowDown}");
+      expect(screen.getAllByRole("option")[0]).toHaveFocus();
+      await user.keyboard("{Tab}");
+      expect(popup()).not.toBeInTheDocument();
+      expect(input()).not.toHaveFocus();
+    });
+
     it.each(["{Enter}", " "])(
       "navigates real options and executes %s exactly once",
       async (activation) => {
@@ -348,12 +359,8 @@ describe.each(["activity", "chat"] as const)(
       await user.click(trigger());
       await user.keyboard("{ArrowDown}");
       const options = screen.getAllByRole("option");
-      expect(fireEvent.keyDown(options[0]!, { key: "Tab" })).toBe(true);
       expect(options.every((option) => option.tabIndex === -1)).toBe(true);
-      await user.tab();
-      expect(
-        screen.getByRole("button", { name: "Вне composer" }),
-      ).toHaveFocus();
+      expect(fireEvent.keyDown(options[0]!, { key: "Tab" })).toBe(true);
       expect(popup()).not.toBeInTheDocument();
     });
 

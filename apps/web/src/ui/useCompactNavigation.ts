@@ -8,7 +8,7 @@ import {
 
 // Matches mobile-foundation.css; 1024 is the first measured two-column fit.
 export const COMPACT_LAYOUT_QUERY = "(max-width: 1023px)";
-export type CompactSurface = "map" | "journal" | "character";
+export type CompactSurface = "map" | "journal" | "character" | "menu";
 
 const journalPopupOwners = new Set<HTMLElement>();
 const journalPopupListeners = new Set<
@@ -40,6 +40,7 @@ const roots: Record<CompactSurface, string> = {
   map: "main-content",
   journal: "activity-sidebar",
   character: "character-workspace",
+  menu: "compact-menu-view",
 };
 const subscribe = (changed: () => void) => {
   const query = window.matchMedia(COMPACT_LAYOUT_QUERY);

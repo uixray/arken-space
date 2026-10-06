@@ -1,13 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import type { CharacterCatalogEntryDto } from "@arken/contracts";
 import type { DiceCritical } from "./dice-critical";
 import { humanizeFormula } from "./formula-display";
 import { useCampaignStatLabels } from "./campaign-stat-labels-context";
-
-type RollAction = NonNullable<
-  CharacterCatalogEntryDto["data"]["rollActions"]
->[number];
 
 export type SkillCard = {
   version: 1;
@@ -150,10 +146,16 @@ export function parseSkillCard(dice: unknown): SkillCard | null {
   };
 }
 
-function actionFormula(action: RollAction) {
-  return action.modifiers.length
-    ? `${action.dice} + модификаторы`
-    : action.dice;
+function actionFormula(action: {
+  dice?: string;
+  modifiers?: readonly unknown[];
+  formula?: string;
+}) {
+  if (action.formula) return action.formula;
+  if (Array.isArray(action.modifiers) && action.modifiers.length > 0) {
+    return `${action.dice ?? ""} + модификаторы`.trim();
+  }
+  return action.dice ?? "—";
 }
 
 export function CharacterActionCard({
@@ -169,15 +171,35 @@ export function CharacterActionCard({
     entryRevision: number;
   }) => Promise<void>;
 }) {
+  const statLabels = useCampaignStatLabels();
   const [expanded, setExpanded] = useState(false);
   const [pending, setPending] = useState<"EXECUTE" | "SHARE" | null>(null);
   const [error, setError] = useState("");
   const detailsId = useId();
   const toggleRef = useRef<HTMLButtonElement>(null);
   const actions = [...(entry.data.rollActions ?? [])].sort(
-    (a, b) => a.order - b.order,
+    (a, b) =>
+      ((a as { order?: number }).order ?? 0) -
+      ((b as { order?: number }).order ?? 0),
   );
-  const uses = entry.data.uses;
+  const rawUses = entry.data.uses as
+    | {
+        current?: number;
+        max?: number;
+        maximum?: number;
+        recharge?: string;
+        rechargeRate?: string;
+        progressText?: string;
+      }
+    | undefined;
+  const uses = rawUses
+    ? {
+        current: rawUses.current ?? 0,
+        max: rawUses.max ?? rawUses.maximum ?? 0,
+        recharge: rawUses.recharge ?? rawUses.rechargeRate ?? "",
+        progressText: rawUses.progressText ?? "",
+      }
+    : undefined;
   const exhausted = Boolean(uses && uses.current < 1);
 
   async function submit(mode: "EXECUTE" | "SHARE", rollActionId?: string) {
@@ -223,7 +245,7 @@ export function CharacterActionCard({
         <div className="character-action-card__action" key={action.id}>
           <span>
             <b>{action.label}</b>
-            <code>{actionFormula(action)}</code>
+            <code>{humanizeFormula(actionFormula(action), statLabels)}</code>
           </span>
           <button
             type="button"
@@ -292,25 +314,29 @@ export function SkillChatCard({
   card,
   sourceRemoved = false,
   critical = null,
+  outcomeFrame = null,
 }: {
   card: SkillCard;
   sourceRemoved?: boolean;
   critical?: DiceCritical | null;
+  outcomeFrame?: ReactNode;
 }) {
   const statLabels = useCampaignStatLabels();
-  const [expanded, setExpanded] = useState(false);
-  const detailsId = useId();
-  const toggleRef = useRef<HTMLButtonElement>(null);
+  const actionFormula = card.action?.formula ?? "";
+  const hasInternalModifier = /\bmodifier_\d+\b/.test(actionFormula);
+  const visibleFormula = humanizeFormula(
+    hasInternalModifier
+      ? card.result?.breakdown &&
+        !/\bmodifier_\d+\b/.test(card.result.breakdown)
+        ? card.result.breakdown
+        : actionFormula.replace(/\bmodifier_\d+\b/g, "модификатор")
+      : actionFormula,
+    statLabels,
+  );
   return (
     <section
       className={`skill-chat-card${critical ? ` roll-result--critical-${critical.kind}` : ""}`}
       aria-label={`${card.entry.kind === "SKILL" ? "Навык" : "Способность"}: ${card.entry.name}`}
-      onKeyDown={(event) => {
-        if (event.key !== "Escape" || !expanded) return;
-        event.preventDefault();
-        setExpanded(false);
-        requestAnimationFrame(() => toggleRef.current?.focus());
-      }}
     >
       <div className="skill-chat-card__heading">
         <span className="eyebrow">
@@ -327,15 +353,14 @@ export function SkillChatCard({
       ) : (
         <div className="skill-chat-card__result">
           {card.result && (
-            <strong aria-label="Итог броска">{card.result.total}</strong>
+            <div className="roll-total-wrap">
+              {outcomeFrame}
+              <strong aria-label="Итог броска">{card.result.total}</strong>
+            </div>
           )}
           <span>
             <b>{card.action?.label}</b>
-            <code>
-              {card.action?.formula
-                ? humanizeFormula(card.action.formula, statLabels)
-                : ""}
-            </code>
+            <code>{visibleFormula}</code>
             {critical && (
               <span className="roll-critical-label">{critical.label}</span>
             )}
@@ -348,20 +373,7 @@ export function SkillChatCard({
           {card.uses.recharge ? ` · ${card.uses.recharge}` : ""}
         </p>
       )}
-      <button
-        ref={toggleRef}
-        type="button"
-        aria-expanded={expanded}
-        aria-controls={detailsId}
-        onClick={() => setExpanded((current) => !current)}
-      >
-        {expanded ? "Свернуть детали" : "Детали"}
-      </button>
-      <div
-        id={detailsId}
-        hidden={!expanded}
-        className="skill-chat-card__details"
-      >
+      <div className="skill-chat-card__details">
         {card.entry.description && <p>{card.entry.description}</p>}
         {card.action?.modifiers.length ? (
           <p>Модификаторы: {card.action.modifiers.join(", ")}</p>

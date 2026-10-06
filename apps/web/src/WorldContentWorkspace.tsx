@@ -11,6 +11,7 @@ import { Button } from "./design-system/Button";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 import { AssetPicker } from "./ui/AssetPicker";
+import type { AssetActions } from "./use-asset-actions";
 import { ApiError, formatApiError } from "./api";
 import { WORLD_EDITOR_TITLE } from "./world-workspace-labels";
 import { AppIcon } from "./ui/AppIcon";
@@ -51,11 +52,9 @@ const safeError = "Не удалось выполнить операцию. По
  * `OperatorFeedbackWorkspace`'s self-contained fetch pattern, not
  * `WorldMapsWorkspace`'s snapshot-driven one).
  *
- * `assets` (from `snapshot.assets`) is used only to let the GM pick an
- * *already-uploaded* asset for the cover image and gallery — there is no
- * world-content-specific upload endpoint yet (see the module doc comment on
- * `world-content-routes.ts`: `assetId` has no FK, by design). A proper asset
- * picker/uploader for World Content is a gap flagged for a follow-up task.
+ * `assets` comes from `snapshot.assets`; cover and gallery pickers can upload
+ * through the shared asset endpoint and select the new image immediately.
+ * World Content still has no dedicated upload endpoint (its assetId has no FK).
  *
  * UIX-395: memoized — the entity list/detail/relations/media all self-fetch
  * (see above); `assets` is the only prop sourced from `GameSnapshot`
@@ -70,10 +69,12 @@ const safeError = "Не удалось выполнить операцию. По
 export const WorldContentWorkspace = memo(function WorldContentWorkspace({
   open,
   assets,
+  onUpload,
   onClose,
 }: {
   open: boolean;
   assets: AssetDto[];
+  onUpload?: AssetActions["uploadAsset"];
   onClose: () => void;
 }) {
   const [items, setItems] = useState<WorldContentDto[]>([]);
@@ -271,6 +272,7 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
               entity={selected}
               allEntities={items}
               assets={assets}
+              onUpload={onUpload}
               onSaved={applyUpdated}
               onConflict={() => void refetchSelected(selected.id)}
             />
@@ -471,12 +473,14 @@ function EntityDetail({
   entity,
   allEntities,
   assets,
+  onUpload,
   onSaved,
   onConflict,
 }: {
   entity: WorldContentDto;
   allEntities: WorldContentDto[];
   assets: AssetDto[];
+  onUpload?: AssetActions["uploadAsset"];
   onSaved: (updated: WorldContentDto) => void;
   onConflict: () => void;
 }) {
@@ -656,17 +660,22 @@ function EntityDetail({
           onChange={(event) => setTags(event.target.value)}
         />
       </label>
-      <label className="field">
-        Обложка
+      <div className="field">
+        <span>Обложка</span>
         <AssetPicker
           aria-label="Обложка"
           value={coverAssetId || null}
+          onUpload={
+            onUpload
+              ? async (file) => (await onUpload(file, "IMAGE")).id
+              : undefined
+          }
           noneLabel="Без обложки"
           disabled={busy}
           assets={assets.filter((asset) => asset.mimeType.startsWith("image/"))}
           onChange={(assetId) => setCoverAssetId(assetId ?? "")}
         />
-      </label>
+      </div>
       <label className="field">
         Краткое описание
         <FormTextArea
@@ -705,7 +714,7 @@ function EntityDetail({
         Сохранить
       </Button>
       <RelationsSection entity={entity} allEntities={allEntities} />
-      <MediaSection entity={entity} assets={assets} />
+      <MediaSection entity={entity} assets={assets} onUpload={onUpload} />
     </div>
   );
 }
@@ -855,9 +864,11 @@ function RelationsSection({
 function MediaSection({
   entity,
   assets,
+  onUpload,
 }: {
   entity: WorldContentDto;
   assets: AssetDto[];
+  onUpload?: AssetActions["uploadAsset"];
 }) {
   const [items, setItems] = useState<WorldContentMediaDto[]>([]);
   const [assetId, setAssetId] = useState("");
@@ -997,6 +1008,11 @@ function MediaSection({
         <AssetPicker
           aria-label="Файл для прикрепления к галерее"
           value={assetId || null}
+          onUpload={
+            onUpload
+              ? async (file) => (await onUpload(file, "IMAGE")).id
+              : undefined
+          }
           noneLabel="Выберите файл…"
           disabled={busy}
           assets={assets.filter((asset) => asset.mimeType.startsWith("image/"))}

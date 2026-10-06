@@ -29,6 +29,10 @@ import { CharacterPanel } from "./CharacterWorkspace";
 // controls, dialog shell, file-upload leaf and self-fetching gallery are
 // replaced. No mock receives a role or computes ownership.
 vi.mock("@gravity-ui/uikit", () => ({
+  Toaster: class {
+    add = vi.fn();
+    remove = vi.fn();
+  },
   Button: ({
     children,
     disabled,
@@ -291,7 +295,15 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function renderPanel(snapshot: GameSnapshot, character: CharacterDto) {
+function renderPanel(
+  snapshot: GameSnapshot,
+  character: CharacterDto,
+  overrides?: {
+    onDeleteCharacterEntry?: CampaignActions["catalog"]["onDeleteCharacterEntry"];
+    onUpdateCharacterEntry?: CampaignActions["catalog"]["onUpdateCharacterEntry"];
+    onAssignCatalogEntry?: CampaignActions["catalog"]["onAssignCatalogEntry"];
+  },
+) {
   const onPatch = vi.fn<PanelProps["onPatch"]>().mockResolvedValue(undefined);
   const onUpdateCounters =
     vi.fn<PanelProps["onUpdateCounters"]>(unexpectedAction);
@@ -301,6 +313,21 @@ function renderPanel(snapshot: GameSnapshot, character: CharacterDto) {
   const uploadAsset = vi
     .fn<CampaignActions["asset"]["uploadAsset"]>()
     .mockResolvedValue(portraitAsset);
+  const onDeleteCharacterEntry =
+    overrides?.onDeleteCharacterEntry ??
+    vi
+      .fn<CampaignActions["catalog"]["onDeleteCharacterEntry"]>()
+      .mockResolvedValue(undefined);
+  const onUpdateCharacterEntry =
+    overrides?.onUpdateCharacterEntry ??
+    vi
+      .fn<CampaignActions["catalog"]["onUpdateCharacterEntry"]>()
+      .mockResolvedValue(undefined);
+  const onAssignCatalogEntry =
+    overrides?.onAssignCatalogEntry ??
+    vi
+      .fn<CampaignActions["catalog"]["onAssignCatalogEntry"]>()
+      .mockResolvedValue(undefined);
   const decoy = makeCharacter({
     id: "another-character",
     name: "Не редактируется",
@@ -311,6 +338,12 @@ function renderPanel(snapshot: GameSnapshot, character: CharacterDto) {
       value={{
         ...actions,
         asset: { ...actions.asset, uploadAsset },
+        catalog: {
+          ...actions.catalog,
+          onDeleteCharacterEntry,
+          onUpdateCharacterEntry,
+          onAssignCatalogEntry,
+        },
       }}
     >
       <CharacterPanel
@@ -337,6 +370,9 @@ function renderPanel(snapshot: GameSnapshot, character: CharacterDto) {
     onReplaceControllers,
     onRoll,
     uploadAsset,
+    onDeleteCharacterEntry,
+    onUpdateCharacterEntry,
+    onAssignCatalogEntry,
     rerender: rendered.rerender,
     rerenderPanel: (nextSnapshot: GameSnapshot, nextCharacter: CharacterDto) =>
       rendered.rerender(panel(nextSnapshot, nextCharacter)),
@@ -355,6 +391,12 @@ async function openBackstory(user: ReturnType<typeof userEvent.setup>) {
   }
   await user.click(summary);
   return within(details).getByRole("textbox");
+}
+
+async function openPortraitEditor(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("tab", { name: "Личность" }));
+  await user.click(screen.getByRole("button", { name: /^Изменить портрет:/ }));
+  return screen.getByRole("dialog", { name: /^Портрет:/ });
 }
 
 async function expectAllowedBackstory(
@@ -384,6 +426,7 @@ async function expectAllowedBackstory(
   expect(calls.onUpdateCounters).not.toHaveBeenCalled();
   expect(calls.onReplaceControllers).not.toHaveBeenCalled();
   expect(calls.onRoll).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("tab", { name: "Личность" }));
   const media = screen.getByRole("button", { name: "Gallery edit permission" });
   if (mediaEditable) expect(media).toBeEnabled();
   else expect(media).toBeDisabled();
@@ -427,6 +470,7 @@ describe("CharacterPanel backstory role and mutation wiring", () => {
     expect(calls.onUpdateCounters).not.toHaveBeenCalled();
     expect(calls.onReplaceControllers).not.toHaveBeenCalled();
     expect(calls.onRoll).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("tab", { name: "Личность" }));
     expect(
       screen.getByRole("button", { name: "Gallery edit permission" }),
     ).toBeDisabled();
@@ -461,6 +505,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
         });
       });
 
+      await openPortraitEditor(user);
       await user.click(
         screen.getByRole("button", { name: portraitAsset.name }),
       );
@@ -505,19 +550,14 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     const calls = renderPanel(playerSnapshot(), makeCharacter());
     const user = userEvent.setup();
     const rename = screen.getByRole("button", { name: "Переименовать" });
-    const picker = screen.getByRole("button", { name: portraitAsset.name });
-    const upload = screen.getByLabelText("Upload portrait file");
-    expect(rename, "UIX414_IDENTITY_RENAME_DISABLED").toBeDisabled();
-    expect(picker, "UIX414_IDENTITY_PICK_DISABLED").toBeDisabled();
-    expect(upload, "UIX414_IDENTITY_UPLOAD_DISABLED").toBeDisabled();
-    await user.click(rename);
-    await user.click(picker);
-    await user.upload(upload, new File(["portrait"], "portrait.png"));
-    const assign = screen.getByRole("button", {
-      name: "Загрузить и назначить",
+    const portraitTrigger = screen.getByRole("button", {
+      name: /^Изменить портрет:/,
     });
-    expect(assign).toBeDisabled();
-    await user.click(assign);
+    expect(rename, "UIX414_IDENTITY_RENAME_DISABLED").toBeDisabled();
+    expect(portraitTrigger, "UIX414_IDENTITY_PICK_DISABLED").toBeDisabled();
+    await user.click(rename);
+    await user.click(portraitTrigger);
+    expect(screen.queryByRole("dialog", { name: /^Портрет:/ })).toBeNull();
     expect(
       calls.onPatch,
       "UIX414_IDENTITY_UNRELATED_PATCH_0",
@@ -569,6 +609,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     const character = makeCharacter({ ownerMembershipId: snapshot.me.id });
     const calls = renderPanel(snapshot, character);
     const user = userEvent.setup();
+    await openPortraitEditor(user);
     await user.upload(
       screen.getByLabelText("Upload portrait file"),
       new File(["portrait"], "portrait.png", { type: "image/png" }),
@@ -578,14 +619,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
       ...character,
       ownerMembershipId: "someone-else",
     });
-    const assign = screen.getByRole("button", {
-      name: "Загрузить и назначить",
-    });
-    expect(
-      assign,
-      "UIX414_PORTRAIT_SELECTED_REVOKED_ASSIGN_DISABLED",
-    ).toBeDisabled();
-    await user.click(assign);
+    expect(screen.queryByRole("dialog", { name: /^Портрет:/ })).toBeNull();
     expect(
       calls.uploadAsset,
       "UIX414_PORTRAIT_SELECTED_REVOKED_UPLOAD_0",
@@ -599,6 +633,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     const upload = deferred<AssetDto>();
     calls.uploadAsset.mockReturnValueOnce(upload.promise);
     const user = userEvent.setup();
+    await openPortraitEditor(user);
     const file = new File(["portrait"], "portrait.png", {
       type: "image/png",
     });
@@ -634,6 +669,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     const upload = deferred<AssetDto>();
     calls.uploadAsset.mockReturnValueOnce(upload.promise);
     const user = userEvent.setup();
+    await openPortraitEditor(user);
     await user.upload(
       screen.getByLabelText("Upload portrait file"),
       new File(["portrait"], "portrait.png", { type: "image/png" }),
@@ -666,6 +702,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     const upload = deferred<AssetDto>();
     calls.uploadAsset.mockReturnValueOnce(upload.promise);
     const user = userEvent.setup();
+    await openPortraitEditor(user);
     await user.upload(
       screen.getByLabelText("Upload portrait file"),
       new File(["portrait"], "portrait.png", { type: "image/png" }),
@@ -703,6 +740,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     const upload = deferred<AssetDto>();
     calls.uploadAsset.mockReturnValueOnce(upload.promise);
     const user = userEvent.setup();
+    await openPortraitEditor(user);
     await user.upload(
       screen.getByLabelText("Upload portrait file"),
       new File(["portrait"], "portrait.png", { type: "image/png" }),
@@ -736,5 +774,112 @@ describe("CharacterPanel identity and portrait role wiring", () => {
       calls.onPatch,
       "UIX414_PORTRAIT_PENDING_ACTOR_CHANGE_PATCH_0",
     ).not.toHaveBeenCalled();
+  });
+
+  it("lets an owning PLAYER see add/edit/delete buttons for skills and abilities and delete an entry", async () => {
+    const snapshot = playerSnapshot();
+    const entry: CharacterDto["entries"][number] = {
+      id: "entry-skill-1",
+      sourceCatalogEntryId: null,
+      kind: "SKILL",
+      name: "Акробатика",
+      description: "Тестовый навык",
+      data: { formula: "1d20" },
+      revision: 3,
+    };
+    const character = makeCharacter({
+      ownerMembershipId: snapshot.me.id,
+      controllerMembershipIds: [],
+      entries: [entry],
+    });
+    const calls = renderPanel(snapshot, character);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("tab", { name: "Показатели" }));
+
+    expect(
+      screen.getByRole("button", { name: "+ Добавить навык…" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "+ Добавить способность…" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Редактировать" }),
+    ).toBeInTheDocument();
+
+    const deleteBtn = screen.getByRole("button", { name: "Удалить" });
+    expect(deleteBtn).toBeInTheDocument();
+    await user.click(deleteBtn);
+    expect(calls.onDeleteCharacterEntry).toHaveBeenCalledWith(
+      character.id,
+      entry.id,
+      entry.revision,
+    );
+  });
+
+  it("lets a delegated PLAYER see add/edit/delete buttons for skills and abilities", async () => {
+    const snapshot = playerSnapshot();
+    const entry: CharacterDto["entries"][number] = {
+      id: "entry-ability-1",
+      sourceCatalogEntryId: null,
+      kind: "ABILITY",
+      name: "Огненный шар",
+      description: "Тестовая способность",
+      data: { formula: "8d6" },
+      revision: 2,
+    };
+    const character = makeCharacter({
+      ownerMembershipId: "other-player",
+      controllerMembershipIds: [snapshot.me.id],
+      entries: [entry],
+    });
+    renderPanel(snapshot, character);
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("tab", { name: "Показатели" }));
+
+    expect(
+      screen.getByRole("button", { name: "+ Добавить навык…" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "+ Добавить способность…" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Редактировать" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Удалить" })).toBeInTheDocument();
+  });
+
+  it("hides add/edit/delete buttons for skills and abilities for an unrelated player", async () => {
+    const snapshot = playerSnapshot();
+    const entry: CharacterDto["entries"][number] = {
+      id: "entry-skill-1",
+      sourceCatalogEntryId: null,
+      kind: "SKILL",
+      name: "Акробатика",
+      description: "Тестовый навык",
+      data: { formula: "1d20" },
+      revision: 1,
+    };
+    const character = makeCharacter({
+      ownerMembershipId: "other-player",
+      controllerMembershipIds: [],
+      entries: [entry],
+    });
+    renderPanel(snapshot, character);
+
+    expect(
+      screen.queryByRole("button", { name: "+ Добавить навык…" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "+ Добавить способность…" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Редактировать" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Удалить" }),
+    ).not.toBeInTheDocument();
   });
 });

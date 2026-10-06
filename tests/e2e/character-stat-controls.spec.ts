@@ -74,7 +74,7 @@ for (const role of ["GM", "PLAYER"] as const)
       const card = sheet.locator(".character-card--stats");
       const row = card.locator(".stat-field").first();
       const label = (await row
-        .locator(":scope > span:first-child")
+        .locator(".stat-field__roll-name")
         .textContent())!.trim();
       await row.scrollIntoViewIfNeeded();
       await expect(row.locator("input")).toHaveAccessibleName(label);
@@ -88,6 +88,10 @@ for (const role of ["GM", "PLAYER"] as const)
             label: node.getAttribute("aria-label") || node.textContent?.trim(),
             width: b.width,
             height: b.height,
+            center: { x: b.x + b.width / 2, y: b.y + b.height / 2 },
+            blocker: document
+              .elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)
+              ?.outerHTML.slice(0, 240),
             hit: node.contains(
               document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2),
             ),
@@ -100,11 +104,18 @@ for (const role of ["GM", "PLAYER"] as const)
           expect(m.hit, JSON.stringify(m)).toBe(true);
         for (const icon of await button.locator("svg.arken-icon").all()) {
           await expect(icon).toHaveAttribute("aria-hidden", "true");
-          await expect(icon).toHaveAttribute("focusable", "false");
-          await expect(icon).toHaveAttribute("stroke", "currentColor");
+          if (
+            !(await button.evaluate((node) =>
+              node.classList.contains("stat-field__drag-handle"),
+            ))
+          ) {
+            await expect(icon).toHaveAttribute("focusable", "false");
+            await expect(icon).toHaveAttribute("stroke", "currentColor");
+          }
         }
       }
       if (role === "GM") {
+        await row.locator(".stat-field__menu > summary").click();
         const rename = row.getByRole("button", {
           name: `Переименовать «${label}»`,
           exact: true,

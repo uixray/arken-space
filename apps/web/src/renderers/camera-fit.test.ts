@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CAMERA_MAX_SCALE,
   CAMERA_MIN_SCALE,
+  centerRectAtScale,
   fitRect,
   type CameraFitRect,
 } from "./camera-fit";
@@ -88,5 +89,20 @@ describe("fitRect", () => {
     const screenCenterY = result.position.y + centerY * result.scale;
     expect(screenCenterX).toBeCloseTo(viewport.width / 2, 6);
     expect(screenCenterY).toBeCloseTo(viewport.height / 2, 6);
+  });
+});
+
+describe("centerRectAtScale", () => {
+  it("centers a token at the current zoom without changing scale", () => {
+    const viewport = { width: 1069, height: 918 };
+    const token = { x: 340, y: 510, width: 64, height: 64 };
+    const scale = 1.5;
+    const position = centerRectAtScale(token, viewport, scale);
+    expect(position.x + (token.x + token.width / 2) * scale).toBe(
+      viewport.width / 2,
+    );
+    expect(position.y + (token.y + token.height / 2) * scale).toBe(
+      viewport.height / 2,
+    );
   });
 });

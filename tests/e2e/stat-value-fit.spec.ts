@@ -18,7 +18,7 @@ import { expect, test } from "./campaign-fixture";
  * Тест браузерный по необходимости: обрезание — это `scrollWidth` против
  * `clientWidth`, то есть измеренная раскладка, которой в jsdom нет.
  */
-const FIELD = ".stat-field";
+const FIELD = ".character-card--stats .stat-field";
 
 /** Крайние значения диапазона характеристики (`STAT_VALUE_RANGE`) и ноль. */
 const VALUES = ["-20", "-2", "-1", "0", "20"] as const;
@@ -43,7 +43,7 @@ const worstOverflow = (page: Page) =>
     let label = 0;
     for (const row of document.querySelectorAll(field)) {
       const input = row.querySelector("input");
-      const caption = row.firstElementChild;
+      const caption = row.querySelector(".stat-field__roll-name");
       if (input) value = Math.max(value, input.scrollWidth - input.clientWidth);
       if (caption)
         label = Math.max(label, caption.scrollWidth - caption.clientWidth);

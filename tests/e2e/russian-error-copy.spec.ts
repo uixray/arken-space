@@ -459,16 +459,14 @@ for (const width of [1280, 390]) {
       const music = page.locator("section.music-topbar");
       await expect(music).toBeVisible();
       await expect.poll(() => fixture.socketConnections).toBeGreaterThan(0);
-      await music.getByLabel("Меню музыки", { exact: true }).click();
+      await music.getByLabel("Плейлист", { exact: true }).click();
       await music
         .getByRole("button", { name: audioAsset.name, exact: true })
         .click();
       await expect.poll(() => fixture.commands.length).toBe(1);
       // Selection closes its menu: keyboard focus must not remain on the
       // now-hidden track, even while its server acknowledgement is pending.
-      await expect(
-        music.getByLabel("Меню музыки", { exact: true }),
-      ).toBeFocused();
+      await expect(music.getByLabel("Плейлист", { exact: true })).toBeFocused();
       expect(fixture.acknowledgementsSent).toBe(0);
       if (width === 390) {
         await page.setViewportSize({ width, height: 900 });

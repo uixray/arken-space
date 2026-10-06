@@ -614,10 +614,9 @@ for (const layout of [
           1,
         );
         expect(before.quickRolls!.expanded).toBe("true");
-        expect(
-          Math.abs(before.clientHeight - 292),
-          "calibrated list matches the measured292px start",
-        ).toBeLessThanOrEqual(1);
+        // Removing the GM's redundant tab row gives the log more initial
+        // space. The regression precondition is a real shrink beyond the
+        // follow threshold, not the former 292px layout constant.
         for (const image of before.storyImages) {
           expect(
             image.bottom,
@@ -665,9 +664,8 @@ for (const layout of [
         ).toBeLessThanOrEqual(2);
       }
       const afterResize = await assertFollowing("resize-settled");
-      if (historyAfterMedia) {
-        expect(Math.abs(afterResize.clientHeight - 160)).toBeLessThanOrEqual(1);
-      }
+      if (historyAfterMedia)
+        expect(afterResize.clientHeight).toBeGreaterThanOrEqual(160);
       expect(
         before.clientHeight - afterResize.clientHeight,
         "fixture must actually shrink the visible list beyond the follow threshold",

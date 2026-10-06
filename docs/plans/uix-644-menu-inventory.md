@@ -1,5 +1,12 @@
 # UIX-644 — реестр меню, popup и picker
 
+## 2026-10-03 — персональная тема больше не открывает popup
+
+`PlayerThemeSettings.tsx` теперь показывает варианты радиокнопками в потоке.
+Его прежний `FormSelect` удалён из статического индекса; остальные записи и
+исторические результаты проверок ниже не менялись. Текущий индекс:
+**43 groups / 80 occurrences** (до этой замены: 44 / 81).
+
 ## 2026-09-19 — два новых места выбора персональной темы
 
 Текущий static index расширен до **39 groups / 78 occurrences**. Исторические
@@ -115,6 +122,12 @@ runtime PASS. Детальное evidence ведётся в `uix-644-runtime-cov
 | `sidebar/TokenPalette.tsx:138` (1)                     | GM/PLAYER «Изображение токена» для доступного определения внутри workspace палитры; W. Не путать с доступной только GM кнопкой открытия редактора.                                                         | E1: hit-test workspace normal/cap.                                                                                                   |
 | `TokenPalette.tsx:441` (1)                             | GM, редактор токена из палитры; M.                                                                                                                                                                         | E1: модальное окно токена на настольном/узком экране.                                                                                |
 | `ui/SceneManagerDialog.tsx:220` (1)                    | GM, модальное окно SceneEditor из workspace менеджера сцен; выбор карты M; ниже вложенная загрузка изображения/выбор цвета.                                                                                | E1, E2; не все одновременно открытые вложенные владельцы.                                                                            |
+
+## UIX-674 source-inventory delta — 2026-10-06
+
+- Six `PlayerRequestsWorkspace` native selects became `FormSelect` popup controls. The native-select evidence below is historical and does not establish popup keyboard/dismissal acceptance on the new revision; the runtime ledger marks this bucket BLOCKED pending current-revision browser checks.
+- `QuickRollPanel` gained one portal `Tooltip.Popup`, visually checked for opacity/layering on the local stand. Full hover/focus/escape and viewport lifecycle remains BLOCKED in the runtime ledger.
+- Earlier totals and native-control row numbers in this inventory describe the pre-UIX-674 source snapshot; the machine-readable source index has been updated to the current source buckets.
 
 ## D. Нативные select и Gravity без общей обёртки
 
@@ -1225,3 +1238,16 @@ PASS. Overall UIX-644 acceptance stays **INCOMPLETE**. No source/tests, browser
 runs, Linear state, deployment or protected untracked selection-recovery file
 changed. Next: headed Firefox native-popup acceptance; observer work waits for
 new failing evidence rather than another blind replay.
+
+## 2026-10-05 — UIX-674 static inventory delta
+
+The current AST registry has **35 files / 45 file-kind buckets / 82 JSX
+occurrences**. This is a source-inventory update only, not a new runtime overlay
+acceptance claim. The preceding counts and pass/fail ledger describe their
+historical snapshots and must not be silently carried forward to these sites.
+
+| Changed site                 | Current behavior and owner                                                                                                                                                                                                                   | Runtime evidence                                                                                                                                               |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ScenePicker.tsx`            | The scene dropdown remains a topbar `details` overlay with the existing dismissible-details lifecycle. The inner selector changed from `role=listbox` to `role=menu`; each scene is `menuitemradio`, with a separate `menuitem` edit action. | UIX-674 scene-picker DOM tests cover selection/edit semantics; full popup placement, focus, and cross-owner arbitration are not proved by the static registry. |
+| `sidebar/StatLayoutCard.tsx` | A new row-actions `details` menu is rendered for editable stat layouts in the character sheet and campaign setup. It is a local in-flow menu, not an `ArkenDialog` modal or Gravity portal.                                                  | UIX-674 targeted stat tests cover action behavior; edge placement, Escape/outside dismissal, and nested-owner interactions remain unverified.                  |
+| `ui/ToolbarTooltip.tsx`      | Shared map-toolbar tooltip uses a Base UI `Tooltip.Popup` portal, hover/focus trigger, and viewport-limited 280 px content. This is a tooltip, not a select/menu.                                                                            | UIX-674 targeted toolbar tests and browser visual checks are scoped evidence; the full UIX-644 cross-overlay lifecycle is not implied.                         |

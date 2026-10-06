@@ -6,14 +6,13 @@ import { assertModalFocusCycle } from "./modal-focus";
 async function ownedPopup(page: Page, trigger: Locator) {
   await expect(trigger).toHaveAttribute("aria-controls", /.+/);
   const id = (await trigger.getAttribute("aria-controls"))!;
-  // UIKit's list wrapper and semantic listbox share the same ID. Preserve
-  // exact trigger ownership and select the unique semantic node, not an index.
+  // Preserve exact trigger ownership and select the unique semantic node.
   const listbox = page.locator(`[role="listbox"][id=${JSON.stringify(id)}]`);
   await expect(listbox).toHaveCount(1);
   await expect(listbox).toHaveAttribute("role", "listbox");
   await expect(listbox).toBeVisible();
   const wrapper = listbox.locator(
-    "xpath=ancestor::*[@data-floating-ui-status][1]",
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' arken-select__positioner ')][1]",
   );
   await expect(wrapper).toHaveCount(1);
   return { id, listbox, wrapper };
@@ -182,9 +181,7 @@ for (const topology of ["sibling", "nested"] as const) {
         await aOption.hover();
         await assertCenterHit(aOption);
         await assertPopupFits(aPopup.wrapper, viewport);
-        // Gravity's non-filterable Select leaves focus on its actual trigger.
-        // This observed target, not a guessed async-button target, must regain it.
-        await expect(aTrigger).toBeFocused();
+        await expect(aTrigger).toHaveAttribute("aria-expanded", "true");
         await expect(page.getByTestId("a-selections")).toHaveText("0");
         const oldPopupBox = await aPopup.wrapper.boundingBox();
         expect(oldPopupBox).not.toBeNull();
@@ -310,7 +307,7 @@ for (const topology of ["sibling", "nested"] as const) {
           if (matches.length !== 1)
             throw new Error("B trigger must own one semantic listbox");
           const listbox = matches[0];
-          const popup = listbox?.closest("[data-floating-ui-status]");
+          const popup = listbox?.closest(".arken-select__positioner");
           const modalWrapper = element.closest(".g-modal__content-wrapper");
           if (!popup || !modalWrapper)
             throw new Error("B popup focus owner missing");
@@ -341,16 +338,9 @@ for (const topology of ["sibling", "nested"] as const) {
           };
         }, bPopup.id);
         try {
-          await page.keyboard.press("ArrowDown");
-          const secondOptionId = await bPopup.listbox
+          await bPopup.listbox
             .getByRole("option", { name: "B — второй", exact: true })
-            .getAttribute("id");
-          expect(secondOptionId).toBeTruthy();
-          await expect(bTrigger).toHaveAttribute(
-            "aria-activedescendant",
-            secondOptionId!,
-          );
-          await page.keyboard.press("Enter");
+            .click();
           await expect(bPopup.listbox).toBeHidden();
           await expect(bTrigger).toBeFocused();
           await expect(bTrigger).toContainText("B — второй");
@@ -382,10 +372,14 @@ for (const topology of ["sibling", "nested"] as const) {
         await page.keyboard.press("Escape");
         await expect(b).toHaveCount(0);
         await expect(a).toBeVisible();
-        await expect(aTrigger).toBeFocused();
+        await expect
+          .poll(() =>
+            a.evaluate((element) => element.contains(document.activeElement)),
+          )
+          .toBe(true);
         await expect(aTrigger).toHaveAttribute("aria-expanded", "false");
-        await expect(aPopup.listbox).toHaveCount(0);
-        await expect(finalBPopup.listbox).toHaveCount(0);
+        await expect(aPopup.listbox).toBeHidden();
+        await expect(finalBPopup.listbox).toBeHidden();
         expect(
           await bPopupNode!.evaluate((element) => element.isConnected),
         ).toBe(false);

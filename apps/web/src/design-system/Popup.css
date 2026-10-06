@@ -1,0 +1,18 @@
+/* ==========================================================================
+   Arken Space Standalone Popup Component (Warm Tabletop)
+   Tokens: --color-surface, --color-border, --radius-md
+   ========================================================================== */
+
+.arken-popup__positioner {
+  z-index: 2200;
+  outline: none;
+}
+
+.arken-popup__content {
+  box-sizing: border-box;
+  background-color: var(--color-surface, #20201d);
+  border: 1px solid var(--color-border, #47443b);
+  border-radius: var(--radius-md, 6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  outline: none;
+}

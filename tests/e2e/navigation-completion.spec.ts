@@ -124,7 +124,7 @@ test("UIX-416 header omits campaign name while GM rename remains in session menu
   await expect(page.locator(".brand")).not.toContainText(current.campaign.name);
   const [brandBox, productBox] = await Promise.all([
     page.locator(".brand").boundingBox(),
-    page.locator(".brand strong").boundingBox(),
+    page.locator(".brand__mark").boundingBox(),
   ]);
   expect(brandBox).not.toBeNull();
   expect(productBox).not.toBeNull();
@@ -172,11 +172,11 @@ for (const role of ["GM", "PLAYER"] as const) {
         ":scope > button[data-workspace='tokens'][aria-pressed='true'], summary[data-active-workspace='tokens']",
       ),
     ).toHaveCount(1);
-    // Font metrics can place PLAYER tokens in either location at 1024px.
-    // GM must still exercise the overflow keyboard contract.
-    if (role === "GM" || (await directActive.count()) === 0) {
+    // Font metrics and the current section set can place tokens in either
+    // location at 1024px; both must keep their active state and keyboard path.
+    if ((await directActive.count()) === 0) {
       await expect(more).toHaveAttribute("data-active-workspace", "tokens");
-      await expect(more).toContainText("Токены");
+      await expect(more).toHaveAttribute("title", "Открыт раздел: Токены");
       await more.focus();
       await page.keyboard.press("Enter");
       const option = nav.locator(
@@ -190,6 +190,23 @@ for (const role of ["GM", "PLAYER"] as const) {
     } else {
       await expect(directActive).toBeVisible();
       await expect(directActive).toHaveAttribute("aria-pressed", "true");
+      if ((await more.count()) === 0) {
+        // splitWorkspaceNav intentionally omits More when every item fits.
+        // Verify the complete PLAYER set remains present and keyboard-operable.
+        await expect(nav.locator(":scope > button")).toHaveCount(3);
+        await directActive.focus();
+        await page.keyboard.press("Enter");
+        await expect(directActive).toBeFocused();
+        await expect(directActive).toHaveAttribute("aria-pressed", "true");
+      } else {
+        await more.focus();
+        await page.keyboard.press("Enter");
+        await expect(
+          nav.locator(".workspace-nav__menu button").first(),
+        ).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(more).toBeFocused();
+      }
     }
     await page.setViewportSize({ width: 2000, height: 900 });
     await expect(

@@ -111,6 +111,43 @@ describe("character mutation reconciliation", () => {
         .characters[0]?.wallet.gold,
     ).toBe(3);
   });
+
+  it("LOCAL-505: accepts newly placed tokens via realtime snapshot even after chat activity", () => {
+    const current = snapshotWithCharacter(character);
+    const newPlacedToken = {
+      id: "token-gm-1",
+      definitionId: "def-1",
+      definitionRevision: 1,
+      sceneId: "scene-1",
+      characterId: null,
+      assetId: null,
+      name: "Goblin",
+      x: 100,
+      y: 100,
+      width: 64,
+      height: 64,
+      rotation: 0,
+      visible: true,
+      locked: false,
+      baseColor: "#b5623e",
+      frameColor: null,
+      layer: "PLAYER" as const,
+      conditions: [],
+      revision: 1,
+      ownerMembershipId: null,
+      z: 0,
+      levelId: null,
+      controllerMembershipIds: [],
+    };
+    const incomingWithToken = {
+      ...current,
+      tokens: [newPlacedToken],
+      snapshotVersion: current.snapshotVersion + 1,
+    };
+
+    const reconciled = reconcileGameSnapshot(current, incomingWithToken);
+    expect(reconciled.tokens).toEqual([newPlacedToken]);
+  });
 });
 
 function snapshotWithCharacter(nextCharacter: CharacterDto): GameSnapshot {
