@@ -13,7 +13,7 @@
   min-width: 44px;
   min-height: 44px;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: max(12px, 0.82rem);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -82,7 +82,7 @@
 }
 .roadmap-vote-note {
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: max(12px, 0.82rem);
 }
 
 @media (max-width: 760px) {
@@ -97,7 +97,7 @@
 
   .landing-section-nav a {
     min-height: 44px;
-    font-size: 0.78rem;
+    font-size: max(12px, 0.78rem);
   }
 }
 

@@ -115,89 +115,93 @@ export function PalettePanel(props: Props) {
                   </span>
                 )}
               </Button>
-              <strong className="palette-card__title">{definition.name}</strong>
-              {(() => {
-                /**
-                 * UIX-400: маркер расхождения, а не требование его устранить.
-                 *
-                 * Расхождение — нормальное состояние для «Тейн верхом», и
-                 * диалог с мастером здесь был бы навязчивым. Но у пяти
-                 * определений на боевых данных оно есть, и одно из них
-                 * («Хорист» у «Могучего Тэйна») — настоящая ошибка, которую
-                 * иначе нечем починить.
-                 */
-                const character = props.snapshot.characters.find(
-                  (item) => item.id === definition.characterId,
-                );
-                if (!character || !definition.ownName) return null;
-                if (definition.ownName === character.name) return null;
-                return (
-                  <p className="palette-card__mismatch">
-                    <span>Персонаж: {character.name}</span>
+              <div className="palette-card__details">
+                <strong className="palette-card__title">
+                  {definition.name}
+                </strong>
+                {(() => {
+                  /**
+                   * UIX-400: маркер расхождения, а не требование его устранить.
+                   *
+                   * Расхождение — нормальное состояние для «Тейн верхом», и
+                   * диалог с мастером здесь был бы навязчивым. Но у пяти
+                   * определений на боевых данных оно есть, и одно из них
+                   * («Хорист» у «Могучего Тэйна») — настоящая ошибка, которую
+                   * иначе нечем починить.
+                   */
+                  const character = props.snapshot.characters.find(
+                    (item) => item.id === definition.characterId,
+                  );
+                  if (!character || !definition.ownName) return null;
+                  if (definition.ownName === character.name) return null;
+                  return (
+                    <p className="palette-card__mismatch">
+                      <span>Персонаж: {character.name}</span>
+                      <Button
+                        size="s"
+                        view="flat"
+                        title="Токен станет зваться как персонаж и будет переименовываться вместе с ним"
+                        onClick={() =>
+                          void tokenActions.onPatchTokenDefinition(
+                            definition.id,
+                            definition.revision,
+                            { name: null },
+                          )
+                        }
+                      >
+                        Назвать по персонажу
+                      </Button>
+                    </p>
+                  );
+                })()}
+                <FormSelect
+                  aria-label={`Изображение токена ${definition.name}`}
+                  value={definition.defaultAssetId ?? ""}
+                  onChange={(event) =>
+                    void tokenActions.onPatchTokenDefinition(
+                      definition.id,
+                      definition.revision,
+                      { defaultAssetId: event.target.value || null },
+                    )
+                  }
+                >
+                  <option value="">Без изображения</option>
+                  {props.snapshot.assets
+                    .filter((item) => item.kind === "TOKEN")
+                    .map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                </FormSelect>
+                {props.snapshot.me.role !== "GM" && (
+                  <TokenImageAssignment
+                    definition={definition}
+                    onUpload={assetActions.uploadAsset}
+                    onPatch={tokenActions.onPatchTokenDefinition}
+                  />
+                )}
+                {props.snapshot.me.role === "GM" && (
+                  <div className="inline-fields">
                     <Button
-                      size="s"
-                      view="flat"
-                      title="Токен станет зваться как персонаж и будет переименовываться вместе с ним"
-                      onClick={() =>
-                        void tokenActions.onPatchTokenDefinition(
-                          definition.id,
-                          definition.revision,
-                          { name: null },
-                        )
-                      }
+                      onClick={() => {
+                        setEditorNotice("");
+                        setEditor(definition);
+                      }}
                     >
-                      Назвать по персонажу
+                      Настроить
                     </Button>
-                  </p>
-                );
-              })()}
-              <FormSelect
-                aria-label={`Изображение токена ${definition.name}`}
-                value={definition.defaultAssetId ?? ""}
-                onChange={(event) =>
-                  void tokenActions.onPatchTokenDefinition(
-                    definition.id,
-                    definition.revision,
-                    { defaultAssetId: event.target.value || null },
-                  )
-                }
-              >
-                <option value="">Без изображения</option>
-                {props.snapshot.assets
-                  .filter((item) => item.kind === "TOKEN")
-                  .map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-              </FormSelect>
-              {props.snapshot.me.role !== "GM" && (
-                <TokenImageAssignment
-                  definition={definition}
-                  onUpload={assetActions.uploadAsset}
-                  onPatch={tokenActions.onPatchTokenDefinition}
-                />
-              )}
-              {props.snapshot.me.role === "GM" && (
-                <div className="inline-fields">
-                  <Button
-                    onClick={() => {
-                      setEditorNotice("");
-                      setEditor(definition);
-                    }}
-                  >
-                    Настроить
-                  </Button>
-                  <Button
-                    className="danger-link"
-                    view="flat-danger"
-                    size="s"
-                    onClick={() => setDeleteDefinition(definition)}
-                  >
-                    Удалить определение и все размещения
-                  </Button>
-                </div>
-              )}
+                    <Button
+                      className="danger-link"
+                      view="flat-danger"
+                      size="s"
+                      onClick={() => setDeleteDefinition(definition)}
+                    >
+                      Удалить определение и все размещения
+                    </Button>
+                  </div>
+                )}
+              </div>
             </article>
           );
         })}
@@ -645,8 +649,8 @@ export function TokenDefinitionEditor({
               ))}
             </FormSelect>
           </label>
-          <label>
-            Изображение из файлов
+          <div>
+            <span>Изображение из файлов</span>
             <AssetPicker
               aria-label="Изображение токена из файлов"
               value={assetId || null}
@@ -675,7 +679,7 @@ export function TokenDefinitionEditor({
                 onSelect: onOpenMedia,
               }}
             />
-          </label>
+          </div>
           <TokenImageGenerator
             imageAssets={tokenGeneratorSources(
               mergeAssets(snapshot.assets, uploadedSource),

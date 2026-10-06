@@ -4,6 +4,18 @@ import { RollModeControl, type RollMode } from "../RollModeControl";
 import { ROLL_MODIFIER_HINT, rollModeFromEvent } from "../roll-modifier-keys";
 import { AppIcon } from "../ui/AppIcon";
 import { SecretRollIcon } from "../ui/icons";
+import { useRepeatRoll } from "./use-repeat-roll";
+
+const pureRollNames: Record<number, string> = {
+  2: "чеканной монеты",
+  4: "калтропа",
+  6: "куба",
+  8: "бриллианта",
+  10: "десятки",
+  12: "дюжины",
+  20: "двадцатки",
+  100: "стогранника",
+};
 
 /**
  * UIX-504: компактная строка костей и режимов. Это более позднее решение,
@@ -43,11 +55,15 @@ export function DiceTrayPanel({
   };
   const [pendingRolls, setPendingRolls] = useState(0);
   const [rollError, setRollError] = useState("");
-  const sendRoll: typeof onRoll = async (...args) => {
+  const { onRollClick, popover } = useRepeatRoll();
+  const sendRolls = async (
+    count: number,
+    ...args: Parameters<typeof onRoll>
+  ) => {
     setPendingRolls((count) => count + 1);
     setRollError("");
     try {
-      await onRoll(...args);
+      for (let index = 0; index < count; index += 1) await onRoll(...args);
     } catch (error) {
       setRollError(
         error instanceof Error ? error.message : "Не удалось отправить бросок",
@@ -68,7 +84,7 @@ export function DiceTrayPanel({
           className="dice-tray-panel__toolbar"
           aria-label="Кости и режим броска"
         >
-          {[2, 4, 6, 8, 10, 12, 20].map((sides) => (
+          {[2, 4, 6, 8, 10, 12, 20, 100].map((sides) => (
             <button
               key={sides}
               type="button"
@@ -78,18 +94,19 @@ export function DiceTrayPanel({
                   event.nativeEvent,
                   rollModeRef.current,
                 );
-                // The mode is a one-shot modifier. Consume it at dispatch, not
-                // after the asynchronous response (rapid clicks must not reuse it).
-                selectRollMode("NORMAL");
-                void sendRoll(
-                  `1d${sides}`,
-                  `d${sides}`,
-                  visibility,
-                  characterId,
-                  // UIX-456: зажатая клавиша перекрывает переключатель на
-                  // один бросок и не трогает выставленный режим.
-                  mode,
-                );
+                onRollClick(event, (count) => {
+                  // The mode is a one-shot modifier. Consume it only when
+                  // the delayed single or chosen batch actually dispatches.
+                  selectRollMode("NORMAL");
+                  void sendRolls(
+                    count,
+                    `1d${sides}`,
+                    `Чистый бросок ${pureRollNames[sides]}`,
+                    visibility,
+                    characterId,
+                    mode,
+                  );
+                });
               }}
             >
               d{sides}
@@ -120,6 +137,7 @@ export function DiceTrayPanel({
       </div>
 
       {rollError && <p role="alert">{rollError}</p>}
+      {popover}
     </section>
   );
 }

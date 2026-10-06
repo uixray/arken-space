@@ -358,13 +358,13 @@
     },
     {
       "file": "apps/web/src/PlayerRequestsWorkspace.tsx",
-      "kind": "tag:select",
+      "kind": "tag:FormSelect",
       "count": 6,
-      "status": "PASS",
+      "status": "BLOCKED",
       "classification": "reachable",
-      "scope": "Six native controls through existing PLAYER compact draft/submit and GM filter/reopen: current production web bundle with real isolated API/PG, four Chrome/Firefox cases. Native values/keys, not OS popup visuals.",
+      "scope": "Six controls migrated from native select to FormSelect in UIX-674. Prior native browser evidence no longer proves the new popup lifecycle; local screenshot only confirms arrow inset/open state.",
       "evidence": ["requestsCurrent", "requestsBuilt"],
-      "next": "Native OS popup visual/physical-device matrix, CI PostgreSQL17 and production bundle remain separate; no full menu acceptance claim."
+      "next": "Run current-revision keyboard, dismissal, focus return and narrow viewport FormSelect lifecycle before marking PASS."
     },
     {
       "file": "apps/web/src/ScenePicker.tsx",
@@ -707,6 +707,16 @@
         "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#уточнение-достижимости--2026-09-17",
         "reactivationCriterion": "Re-open if InitiativePanel gains a production import or caller."
       }
+    },
+    {
+      "file": "apps/web/src/sidebar/QuickRollPanel.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "Quick-roll tooltip migrated to a portal popup in UIX-674; local visual check confirms opacity and layering, not full interaction and viewport lifecycle.",
+      "evidence": [],
+      "next": "Verify hover/focus, escape and clipping on current built revision across compact and desktop widths."
     },
     {
       "file": "apps/web/src/sidebar/ResourceCounters.tsx",

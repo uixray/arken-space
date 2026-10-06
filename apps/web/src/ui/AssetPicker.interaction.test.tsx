@@ -33,6 +33,24 @@ function asset(overrides: Partial<AssetDto> = {}): AssetDto {
 }
 
 describe("AssetPicker interaction", () => {
+  it("uploads a new image from the picker and selects it", async () => {
+    const user = userEvent.setup();
+    const onUpload = vi.fn().mockResolvedValue("new-asset");
+    const onChange = vi.fn();
+    renderComponent(
+      <AssetPicker
+        assets={[]}
+        value={null}
+        onChange={onChange}
+        onUpload={onUpload}
+      />,
+    );
+    const file = new File(["image"], "new.png", { type: "image/png" });
+    await user.upload(screen.getByLabelText("Новое изображение"), file);
+    expect(onUpload).toHaveBeenCalledExactlyOnceWith(file);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("new-asset");
+  });
+
   it("distinguishes an external crop selection from choosing no image", async () => {
     const onChange = vi.fn();
     const { rerender } = renderComponent(

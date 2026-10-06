@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderComponent, screen, userEvent } from "../test-support/render";
 import { CursorPresenceMenu } from "./CursorPresenceMenu";
@@ -40,6 +40,30 @@ vi.mock("@gravity-ui/uikit", () => ({
  * setting that changes nothing they can observe.
  */
 describe("cursor presence control", () => {
+  it("shows a visible off state after a player clicks the toggle", async () => {
+    function StatefulPlayer() {
+      const [preference, setPreference] = useState(
+        cursorPreferenceDefault("PLAYER"),
+      );
+      return (
+        <CursorPresenceMenu
+          preference={preference}
+          role="PLAYER"
+          onChange={setPreference}
+        />
+      );
+    }
+    renderComponent(<StatefulPlayer />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Скрыть курсоры остальных" }),
+    );
+    const hidden = screen.getByRole("button", {
+      name: "Показывать курсоры остальных",
+    });
+    expect(hidden).toHaveAttribute("aria-pressed", "false");
+    expect(hidden).toHaveTextContent("Курсоры скрыты");
+  });
+
   it("gives a player one toggle and no menu", async () => {
     const onChange = vi.fn();
     renderComponent(

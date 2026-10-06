@@ -2180,6 +2180,7 @@ export const characterCountersCommandSchema = z
           description: z.string().max(2000).optional(),
           imageAssetId: z.string().uuid().nullable().optional(),
           recoverable: z.boolean().optional(),
+          restAmount: z.number().finite().nonnegative().optional(),
         }),
       )
       .optional(),
@@ -2339,6 +2340,7 @@ export interface CharacterDto {
       description?: string;
       imageAssetId?: string | null;
       recoverable?: boolean;
+      restAmount?: number;
     }
   >;
   wallet: z.infer<typeof walletSchema>;

@@ -22,6 +22,7 @@ import type {
   TokenDto,
 } from "@arken/contracts";
 import { api, ApiError } from "./api";
+import { mergeTokenPlacementUpdate } from "./token-projection";
 import { AuthGate } from "./AuthGate";
 import { useGameSocketSubscriptions } from "./use-game-socket-subscriptions";
 import { Sidebar } from "./Sidebar";
@@ -1046,10 +1047,6 @@ export function App() {
     if (!view) return undefined;
     const broadcast =
       view.scenes.find((scene) => scene.active) ?? view.scenes[0];
-    // The GM can look at a scene other than the broadcast one; players always
-    // see whatever is being broadcast. `!previewSnapshot` short-circuits
-    // first, so reading the role off `view` matches the original behaviour of
-    // reading it off `snapshot`.
     return !previewSnapshot && view.me.role === "GM" && viewedSceneId
       ? (view.scenes.find((scene) => scene.id === viewedSceneId) ?? broadcast)
       : broadcast;
@@ -1180,7 +1177,6 @@ export function App() {
     ? (viewSnapshot.scenes.find((scene) => scene.active) ??
       viewSnapshot.scenes[0])
     : undefined;
-  // Derived above the guards so a hook can read it; see `activeSceneValue`.
   const activeScene = activeSceneValue;
   const activeTokens = useMemo(
     () =>
@@ -1423,22 +1419,27 @@ export function App() {
       const actionId = crypto.randomUUID();
       try {
         const updated = await runResult(() =>
-          api<TokenDto>(`/api/tokens/${tokenId}/size`, {
-            method: "PATCH",
-            headers: { "x-action-id": actionId },
-            body: JSON.stringify({
-              actionId,
-              revision,
-              ...size,
-            }),
-          }),
+          api<Partial<TokenDto> & Pick<TokenDto, "id">>(
+            `/api/tokens/${tokenId}/size`,
+            {
+              method: "PATCH",
+              headers: { "x-action-id": actionId },
+              body: JSON.stringify({
+                actionId,
+                revision,
+                ...size,
+              }),
+            },
+          ),
         );
         setSnapshot((current) =>
           current
             ? {
                 ...current,
                 tokens: current.tokens.map((token) =>
-                  token.id === updated.id ? updated : token,
+                  token.id === updated.id
+                    ? mergeTokenPlacementUpdate(token, updated)
+                    : token,
                 ),
               }
             : current,
@@ -1794,7 +1795,12 @@ export function App() {
     [assetActions],
   );
 
-  if (authRequired) return <AuthGate onAuthenticated={load} />;
+  const loadAfterHome = () => {
+    window.history.replaceState(null, "", "/");
+    void load();
+  };
+  if (authRequired || new URLSearchParams(window.location.search).has("home"))
+    return <AuthGate onAuthenticated={loadAfterHome} />;
 
   if (!snapshot || !viewSnapshot)
     return (

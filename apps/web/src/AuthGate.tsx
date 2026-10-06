@@ -165,6 +165,9 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
           <span className="landing-badge">Ранний доступ</span>
         </div>
         <nav className="landing-section-nav" aria-label="Разделы страницы">
+          {new URLSearchParams(window.location.search).has("home") && (
+            <a href="/">Вернуться в игру</a>
+          )}
           <a href="#capabilities-title">Возможности</a>
           <a href="#guide-title">Как играть</a>
           <a href="#roadmap-title">Планы</a>

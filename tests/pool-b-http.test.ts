@@ -1987,7 +1987,9 @@ describe("Pool B HTTP boundaries", () => {
       .update(schema.characters)
       .set({
         resources: {
-          legacyCharge: { current: 2, maximum: 3 },
+          // Updating metadata on an unchanged custom resource must not add
+          // a phantom 0 → 0 card to the numerical counter journal.
+          legacyCharge: { current: 2, maximum: 3, description: "Charges" },
           physicalPower: { current: 7, maximum: 10 },
         },
       })

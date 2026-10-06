@@ -452,6 +452,7 @@ type Resources = Record<
     description?: string;
     imageAssetId?: string | null;
     recoverable?: boolean;
+    restAmount?: number;
   }
 >;
 
@@ -488,7 +489,15 @@ function formatResourceChanges(
     ...new Set([...Object.keys(before), ...Object.keys(after)]),
   ].sort();
   const changes = keys
-    .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
+    // The counter journal describes numerical changes only. Clients may
+    // normalize optional image/recovery metadata while editing another
+    // counter; comparing the whole JSON object would emit a phantom 0 → 0
+    // card for every unchanged custom resource.
+    .filter(
+      (key) =>
+        before[key]?.current !== after[key]?.current ||
+        before[key]?.maximum !== after[key]?.maximum,
+    )
     .map((key) => {
       const label = labels.get(key) ?? key;
       if (!before[key])
@@ -511,9 +520,8 @@ function formatResourceChanges(
  * длинный отдых давал +20 вместо +9 — ограничение ресурса в игре фактически
  * не работало.
  *
- * Ресурс без строки регена отдыхом не восстанавливается: «на величину регена»
- * у неизвестного ресурса величины не имеет. Такие ресурсы правятся вручную
- * счётчиками рядом с бросками.
+ * Для пользовательского ресурса величина задаётся restAmount; без неё и без
+ * системной строки регена отдых ничего не восстанавливает.
  */
 function applyCharacterRest(
   resources: Resources,
@@ -525,7 +533,8 @@ function applyCharacterRest(
       if (resource.recoverable === false) return [key, resource];
 
       const regenStat = RESOURCE_REGEN_STAT[key];
-      const regen = regenStat ? (stats[regenStat] ?? 0) : 0;
+      const regen =
+        resource.restAmount ?? (regenStat ? (stats[regenStat] ?? 0) : 0);
       if (regen <= 0) return [key, resource];
 
       const maximum = resource.maximum ?? resource.current;

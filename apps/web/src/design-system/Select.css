@@ -128,6 +128,7 @@
   color: var(--color-text-muted, #9e9a8f);
   transition: transform 0.15s ease;
   flex-shrink: 0;
+  margin-inline-end: 6px;
 }
 
 .arken-select[data-popup-open] .arken-select__icon,
@@ -153,10 +154,10 @@
 .arken-select[data-popup-open]:not(.arken-select--disabled):not(:disabled),
 .g-select:focus-visible:not(.g-select_disabled):not(:disabled),
 .g-select[aria-expanded="true"]:not(.g-select_disabled):not(:disabled) {
-  border-color: var(--color-accent, #c46f49);
-  outline: var(--focus-ring-width, 2px) solid var(--color-focus, #c46f49);
-  outline-offset: var(--focus-ring-offset, 1px);
-  box-shadow: 0 0 0 1px var(--color-accent, #c46f49);
+  border-color: var(--color-focus, #c46f49);
+  border-width: 2px;
+  outline: none;
+  box-shadow: none;
 }
 
 /* Invalid / Error */
@@ -171,8 +172,8 @@
 .arken-select[aria-invalid="true"]:focus-visible,
 .g-select[data-invalid="true"]:focus-visible,
 .g-select[aria-invalid="true"]:focus-visible {
-  outline-color: var(--color-danger, #da6b61) !important;
-  box-shadow: 0 0 0 1px var(--color-danger, #da6b61) !important;
+  border-color: var(--color-danger, #da6b61) !important;
+  box-shadow: none !important;
 }
 
 /* Disabled */

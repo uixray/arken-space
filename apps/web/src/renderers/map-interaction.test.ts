@@ -246,18 +246,12 @@ describe("mapInteractionReducer", () => {
   });
 
   it("requires a validated ref and preserves its revision in the delete command", () => {
-    const requested = reduce({ type: "request-delete", ref: validatedToken });
-    expect(
-      mapInteractionReducer(requested, { type: "cancel-delete" }).commands,
-    ).toEqual([]);
-    const confirmed = mapInteractionReducer(requested, {
-      type: "confirm-delete",
-    });
-    expect(confirmed).toMatchObject({
+    const deleted = reduce({ type: "request-delete", ref: validatedToken });
+    expect(deleted).toMatchObject({
       deleteRequestedFor: null,
       selectedObject: null,
     });
-    expect(confirmed.commands).toEqual([
+    expect(deleted.commands).toEqual([
       { id: 1, type: "delete-object", ref: validatedToken },
     ]);
   });
@@ -276,12 +270,12 @@ describe("mapInteractionReducer", () => {
     ]);
   });
 
-  it("у токена подтверждение остаётся", () => {
-    // Токен несёт персонажа, права и владельца: его удаление — не штрих, а
-    // изменение расстановки.
-    const requested = reduce({ type: "request-delete", ref: validatedToken });
-    expect(requested.deleteRequestedFor).toEqual(validatedToken);
-    expect(requested.commands).toEqual([]);
+  it("удаляет токен без подтверждения, сохраняя возможность отмены", () => {
+    const deleted = reduce({ type: "request-delete", ref: validatedToken });
+    expect(deleted.deleteRequestedFor).toBeNull();
+    expect(deleted.commands).toEqual([
+      { id: 1, type: "delete-object", ref: validatedToken },
+    ]);
   });
 
   it("closes only the top layer on each Escape", () => {

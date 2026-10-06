@@ -59,6 +59,15 @@ html[data-player-theme]:not([data-player-theme="classic-v1"])
   ) {
   background-color: var(--surface-panel-floating);
 }
+/* The floating object-list trigger needs an opaque plane outside the toolbar,
+ * but inside its shortcuts group it is a regular tool button. Do not let the
+ * floating-panel bridge give this one control a different idle background. */
+html[data-player-theme]:not([data-player-theme="classic-v1"])
+  .map-toolbar
+  .toolbar-shortcuts
+  .map-object-list-trigger[aria-expanded="false"] {
+  background-color: var(--surface-2);
+}
 
 /* The fixed game outcome colors remain on borders in every theme. On the
  * opaque light roll-card surface those hues are not readable as small text,

@@ -293,14 +293,14 @@ describe("character action feedback", () => {
     });
     const resourcesTab = within(tabs).getByRole("tab", { name: "Ресурсы" });
     const initiativeTab = within(tabs).getByRole("tab", {
-      name: "Инициатива и реакция",
+      name: "Показатели",
     });
     expect(resourcesTab).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(resourcesTab, { key: "ArrowRight" });
     expect(initiativeTab).toHaveAttribute("aria-selected", "true");
     expect(initiativeTab).toHaveFocus();
     const panel = screen.getByRole("tabpanel", {
-      name: "Инициатива и реакция",
+      name: "Показатели",
     });
     expect(
       within(panel).getByRole("spinbutton", { name: "Инициатива" }),
@@ -349,7 +349,7 @@ describe("character action feedback", () => {
       ),
     );
   });
-  it("shows custom resources beside the vital wallet from character data", async () => {
+  it("shows custom resources in the single resources tab", async () => {
     const save = vi.fn(async () => {});
     renderComponent(
       view(
@@ -360,24 +360,21 @@ describe("character action feedback", () => {
       ),
     );
     await galleryLoaded();
-    const vitals = within(screen.getByLabelText("Ключевые показатели"));
-    const input = vitals.getByRole("spinbutton", { name: "Ярость: текущее" });
+    expect(
+      screen.getByRole("progressbar", { name: "Уровень: Ярость" }),
+    ).toHaveAttribute("aria-valuenow", "3");
+    fireEvent.click(screen.getByRole("button", { name: "Настроить" }));
+    const input = screen.getByRole("spinbutton", { name: "Текущее" });
     expect(input).toHaveValue(3);
     fireEvent.change(input, { target: { value: "4" } });
     fireEvent.blur(input);
     await waitFor(() => expect(save).toHaveBeenCalled());
   });
-  it("navigates to sections in its own character sheet", async () => {
+  it("shows inventory and notes in their own tab", async () => {
     renderComponent(view(snapshot()));
     await galleryLoaded();
-    const nav = within(
-      screen.getByRole("navigation", { name: "Разделы персонажа Персонаж A" }),
-    );
-    fireEvent.click(nav.getByRole("button", { name: "Инвентарь" }));
-    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledWith({
-      behavior: "smooth",
-      block: "start",
-    });
+    fireEvent.click(screen.getByRole("tab", { name: "Инвентарь" }));
+    expect(screen.getByRole("tabpanel", { name: "Инвентарь" })).toBeVisible();
   });
   it("edits coins in the vital wallet and saves on blur or Enter", async () => {
     const update = vi.fn(async () => undefined);
@@ -428,6 +425,7 @@ describe("character action feedback", () => {
   it("explains empty players and unchanged access", async () => {
     renderComponent(view(gmSnapshot({ characters: [character()] })));
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Личность" }));
     const access = within(
       screen.getByRole("group", { name: "Доступ к персонажу" }),
     );
@@ -449,6 +447,7 @@ describe("character action feedback", () => {
       view(state, { onReplaceControllers: save }),
     );
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Личность" }));
     const button = screen.getByRole("button", { name: "Сохранить доступ" });
     const descriptionId = button.getAttribute("aria-describedby");
     expect(button).toHaveAccessibleDescription("Изменений доступа нет.");
@@ -499,6 +498,7 @@ describe("character action feedback", () => {
     );
     renderComponent(view(snapshot(), { onReplaceControllers: save }));
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Личность" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Другой игрок" }));
     fireEvent.click(screen.getByRole("button", { name: "Сохранить доступ" }));
     await act(async () => pending.reject(new Error("conflict")));
@@ -522,6 +522,7 @@ describe("character action feedback", () => {
       .mockResolvedValue(undefined);
     renderComponent(view(snapshot(), { onReplaceControllers: save }));
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Личность" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Другой игрок" }));
     const button = screen.getByRole("button", { name: "Сохранить доступ" });
     fireEvent.click(button);
@@ -693,6 +694,8 @@ describe("character action feedback", () => {
     await galleryLoaded();
     const first = within(screen.getByRole("article", { name: "Персонаж A" }));
     const second = within(screen.getByRole("article", { name: "Персонаж B" }));
+    fireEvent.click(first.getByRole("tab", { name: "Личность" }));
+    fireEvent.click(second.getByRole("tab", { name: "Личность" }));
     const firstAccessDescription = first
       .getByRole("button", { name: "Сохранить доступ" })
       .getAttribute("aria-describedby");

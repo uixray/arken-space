@@ -466,7 +466,7 @@ export function ResourceCounters({
                   />
                   {overflow > 0 && (
                     <div
-                      className="resource-bar__overflow"
+                      className={`resource-bar__overflow resource-bar__overflow--${barVariant}`}
                       style={{ width: `${overflowPercent}%` }}
                     />
                   )}

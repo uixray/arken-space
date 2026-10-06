@@ -34,7 +34,7 @@
     },
     {
       "file": "apps/web/src/PlayerRequestsWorkspace.tsx",
-      "kind": "tag:select",
+      "kind": "tag:FormSelect",
       "count": 6
     },
     {
@@ -165,6 +165,11 @@
     {
       "file": "apps/web/src/sidebar/InitiativePanel.tsx",
       "kind": "tag:details",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/sidebar/QuickRollPanel.tsx",
+      "kind": "tag:Popup",
       "count": 1
     },
     {

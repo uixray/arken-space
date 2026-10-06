@@ -76,3 +76,36 @@ for (const kind of ["ABILITY", "SKILL"] as const) {
     });
   }
 }
+
+it("предлагает число бросков характеристики по Shift без немедленного броска", async () => {
+  const onQuickRoll = vi.fn();
+  renderComponent(
+    <QuickRollPanel
+      rollCharacter={
+        {
+          stats: { willpower: 3 },
+          skills: [],
+          entries: [],
+        } as unknown as CharacterDto
+      }
+      campaignId="campaign"
+      membershipId="member"
+      rows={[{ key: "willpower", label: "Сила воли" }]}
+      quickRollPending={false}
+      gmOnly={false}
+      onQuickRoll={onQuickRoll}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Сила воли" }), {
+    shiftKey: true,
+  });
+  expect(onQuickRoll).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "4" }));
+  expect(onQuickRoll).toHaveBeenCalledWith(
+    "1d20 + willpower",
+    "Сила воли",
+    3,
+    "NORMAL",
+    4,
+  );
+});

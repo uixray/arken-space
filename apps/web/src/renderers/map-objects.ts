@@ -145,10 +145,12 @@ export function canSelectDrawing(
   const bounds = drawingBounds(drawing);
   if (!bounds || !intersectsWorld(bounds, context.world)) return false;
   if (context.role === "GM") return true;
+  // Fog clips the rendered stroke, not the author's ability to move it.
+  // Requiring the entire bounding box to be revealed made even a tiny overlap
+  // with fog disable selection and dragging of the visible segment.
   return (
     Boolean(context.membershipId) &&
-    drawing.authorMembershipId === context.membershipId &&
-    isRectFullyRevealed(bounds, context.fogReveals)
+    drawing.authorMembershipId === context.membershipId
   );
 }
 

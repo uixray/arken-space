@@ -103,7 +103,9 @@ export const AppHeader = memo(function AppHeader({
         </>
       )}
       <div className="brand">
-        <span className="brand__mark" role="img" aria-label="ARKPATH" />
+        <a href="/?home=1" aria-label="Открыть главную страницу Arken Space">
+          <span className="brand__mark" role="img" aria-label="ARKPATH" />
+        </a>
       </div>
       <div className="scene-switcher">
         <ScenePicker

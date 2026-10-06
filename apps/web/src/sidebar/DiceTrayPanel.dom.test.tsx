@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { expect, it, vi } from "vitest";
-import { renderComponent, screen, userEvent } from "../test-support/render";
+import {
+  fireEvent,
+  renderComponent,
+  screen,
+  userEvent,
+  waitFor,
+} from "../test-support/render";
 import { DiceTrayPanel } from "./DiceTrayPanel";
 
 it("показывает ожидание сразу и принимает второй бросок до ответа первого (UIX-621)", async () => {
@@ -21,10 +27,10 @@ it("показывает ожидание сразу и принимает вт�
     />,
   );
   await userEvent.click(screen.getByRole("button", { name: "d20" }));
-  expect(onRoll).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(onRoll).toHaveBeenCalledTimes(1));
   const first = finish;
   await userEvent.click(screen.getByRole("button", { name: "d6" }));
-  expect(onRoll).toHaveBeenCalledTimes(2);
+  await waitFor(() => expect(onRoll).toHaveBeenCalledTimes(2));
   await act(async () => {
     first();
     finish();
@@ -79,21 +85,35 @@ it("собирает кости и доступные иконные режим�
   await userEvent.click(advantage);
   expect(advantage).toHaveAttribute("aria-pressed", "true");
   await userEvent.click(screen.getByRole("button", { name: "d20" }));
-  expect(onRoll).toHaveBeenCalledWith(
-    "1d20",
-    "d20",
-    "PUBLIC",
-    "hero",
-    "ADVANTAGE",
+  await waitFor(() =>
+    expect(onRoll).toHaveBeenCalledWith(
+      "1d20",
+      "Чистый бросок двадцатки",
+      "PUBLIC",
+      "hero",
+      "ADVANTAGE",
+    ),
   );
   expect(advantage).toHaveAttribute("aria-pressed", "false");
   await userEvent.click(screen.getByRole("button", { name: "d6" }));
-  expect(onRoll).toHaveBeenLastCalledWith(
-    "1d6",
-    "d6",
-    "PUBLIC",
-    "hero",
-    "NORMAL",
+  await waitFor(() =>
+    expect(onRoll).toHaveBeenLastCalledWith(
+      "1d6",
+      "Чистый бросок куба",
+      "PUBLIC",
+      "hero",
+      "NORMAL",
+    ),
+  );
+  await userEvent.click(screen.getByRole("button", { name: "d100" }));
+  await waitFor(() =>
+    expect(onRoll).toHaveBeenLastCalledWith(
+      "1d100",
+      "Чистый бросок стогранника",
+      "PUBLIC",
+      "hero",
+      "NORMAL",
+    ),
   );
   const visibility = screen.getByRole("button", { name: "Только мастеру" });
   expect(visibility).toHaveAttribute("aria-pressed", "false");
@@ -102,4 +122,41 @@ it("собирает кости и доступные иконные режим�
   expect(visibility.closest(".dice-tray-panel__toolbar")).toBe(
     advantage.closest(".dice-tray-panel__toolbar"),
   );
+});
+
+it("двойной клик даёт ровно два чистых броска без окна", async () => {
+  const onRoll = vi.fn().mockResolvedValue(undefined);
+  renderComponent(
+    <DiceTrayPanel
+      characterId={null}
+      visibility="PUBLIC"
+      onVisibilityChange={vi.fn()}
+      onRoll={onRoll}
+    />,
+  );
+  await userEvent.dblClick(screen.getByRole("button", { name: "d12" }));
+  await waitFor(() => expect(onRoll).toHaveBeenCalledTimes(2));
+  expect(
+    screen.queryByRole("group", { name: "Сколько раз бросить" }),
+  ).toBeNull();
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  expect(onRoll).toHaveBeenCalledTimes(2);
+});
+
+it("Shift открывает выбор числа повторов без предварительного броска", async () => {
+  const onRoll = vi.fn().mockResolvedValue(undefined);
+  renderComponent(
+    <DiceTrayPanel
+      characterId={null}
+      visibility="PUBLIC"
+      onVisibilityChange={vi.fn()}
+      onRoll={onRoll}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "d6" }), {
+    shiftKey: true,
+  });
+  expect(onRoll).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole("button", { name: "3" }));
+  await waitFor(() => expect(onRoll).toHaveBeenCalledTimes(3));
 });

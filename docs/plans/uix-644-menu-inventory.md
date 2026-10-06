@@ -123,6 +123,12 @@ runtime PASS. Детальное evidence ведётся в `uix-644-runtime-cov
 | `TokenPalette.tsx:441` (1)                             | GM, редактор токена из палитры; M.                                                                                                                                                                         | E1: модальное окно токена на настольном/узком экране.                                                                                |
 | `ui/SceneManagerDialog.tsx:220` (1)                    | GM, модальное окно SceneEditor из workspace менеджера сцен; выбор карты M; ниже вложенная загрузка изображения/выбор цвета.                                                                                | E1, E2; не все одновременно открытые вложенные владельцы.                                                                            |
 
+## UIX-674 source-inventory delta — 2026-10-06
+
+- Six `PlayerRequestsWorkspace` native selects became `FormSelect` popup controls. The native-select evidence below is historical and does not establish popup keyboard/dismissal acceptance on the new revision; the runtime ledger marks this bucket BLOCKED pending current-revision browser checks.
+- `QuickRollPanel` gained one portal `Tooltip.Popup`, visually checked for opacity/layering on the local stand. Full hover/focus/escape and viewport lifecycle remains BLOCKED in the runtime ledger.
+- Earlier totals and native-control row numbers in this inventory describe the pre-UIX-674 source snapshot; the machine-readable source index has been updated to the current source buckets.
+
 ## D. Нативные select и Gravity без общей обёртки
 
 Нативное окно вариантов рисует браузер/ОС: CSS z-index страницы не является способом поднять его список. Обрезание родителем/фокус/disabled всё равно проверяются в браузере. Ниже перечислены **все 15 нативных вхождений**.

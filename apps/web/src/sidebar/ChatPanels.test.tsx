@@ -301,7 +301,7 @@ describe("dice presentation boundary (UIX-289)", () => {
     semanticOutcome: { kind: "CRITICAL_SUCCESS", keptNaturalD20: 20 },
   };
 
-  function renderDiceBody(dice: unknown, skill: boolean) {
+  function renderDiceBody(dice: unknown, skill: boolean, body = "Test roll") {
     const payload = skill
       ? {
           ...(dice as Record<string, unknown>),
@@ -326,7 +326,7 @@ describe("dice presentation boundary (UIX-289)", () => {
       membershipId: "member-1",
       displayName: "Test participant",
       characterId: null,
-      body: "Test roll",
+      body,
       visibility: "PUBLIC",
       kind: "DICE",
       threadId: "table-1",
@@ -357,6 +357,40 @@ describe("dice presentation boundary (UIX-289)", () => {
     ).toBeNull();
     expect(document.querySelector(".roll-total")?.textContent).toBe("20");
   });
+
+  it.each([
+    ["ADVANTAGE", "преимущество", "Преимущество"],
+    ["DISADVANTAGE", "помеха", "Помеха"],
+  ])(
+    "keeps pure roll mode only in the badge (%s)",
+    (rollMode, suffix, badge) => {
+      const markup = renderDiceBody(
+        {
+          ...validDice,
+          formula: "1d100",
+          resolvedFormula: "1d100",
+          terms: [{ notation: "1d100", rolls: [97], subtotal: 97 }],
+          modifiers: [],
+          total: 97,
+          semanticOutcome: undefined,
+          rollMode,
+        },
+        false,
+        `Чистый бросок стогранника · ${suffix}`,
+      );
+      const document = new DOMParser().parseFromString(markup, "text/html");
+      expect(document.querySelector(".roll-result--pure")).not.toBeNull();
+      expect(
+        document.querySelector(".roll-details__heading")?.textContent,
+      ).toBe("Чистый бросок стогранника");
+      expect(document.querySelector(".roll-mode-badge")?.textContent).toBe(
+        badge,
+      );
+      expect(
+        document.querySelector(".roll-details__math > small")?.textContent,
+      ).toBe("1d100");
+    },
+  );
 
   it("shows actual arithmetic after the critical status when a modifier exists", () => {
     const markup = renderDiceBody(validDice, false);

@@ -1,5 +1,6 @@
 import "./roll-controls.css";
-import { useId, useState, type ReactNode } from "react";
+import { useId, useState, type ReactElement, type ReactNode } from "react";
+import { Tooltip } from "@base-ui/react/tooltip";
 import type { CharacterCatalogEntryDto, CharacterDto } from "@arken/contracts";
 import { STAT_VALUE_RANGE } from "@arken/system";
 import { Button } from "../design-system/Button";
@@ -9,7 +10,7 @@ import {
   readQuickRollsCollapsed,
   writeQuickRollsCollapsed,
 } from "../quick-rolls-preference";
-import { ROLL_MODIFIER_HINT, rollModeFromEvent } from "../roll-modifier-keys";
+import { rollModeFromEvent } from "../roll-modifier-keys";
 import type { RollMode } from "../roll-mode";
 import { AppIcon } from "../ui/AppIcon";
 import {
@@ -17,9 +18,36 @@ import {
   ExpandSectionIcon,
   SecretRollIcon,
 } from "../ui/icons";
+import { useRepeatRoll } from "./use-repeat-roll";
 
 const signedBonus = (bonus: number) =>
   new Intl.NumberFormat("en-US", { signDisplay: "always" }).format(bonus);
+
+function QuickRollTooltip({
+  content,
+  trigger,
+}: {
+  content: string;
+  trigger: ReactElement;
+}) {
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger delay={250} render={trigger} />
+      <Tooltip.Portal>
+        <Tooltip.Positioner
+          side="top"
+          sideOffset={8}
+          collisionPadding={8}
+          className="quick-roll-tooltip-positioner"
+        >
+          <Tooltip.Popup className="quick-roll-tooltip" role="tooltip">
+            {content}
+          </Tooltip.Popup>
+        </Tooltip.Positioner>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  );
+}
 
 /**
  * Plain, non-draggable character-stat quick-roll panel (UIX-387). Previously
@@ -61,6 +89,7 @@ export function QuickRollPanel({
     label: string,
     bonus: number,
     mode: RollMode,
+    count?: number,
   ) => void;
   onEntryAction?: (
     entry: CharacterCatalogEntryDto,
@@ -95,6 +124,7 @@ export function QuickRollPanel({
   const [activeTab, setActiveTab] = useState("stats");
   const [entryPending, setEntryPending] = useState<string | null>(null);
   const [entryError, setEntryError] = useState("");
+  const { onRollClick, popover } = useRepeatRoll();
   const entries = rollCharacter.entries ?? [];
   const ordinaryRows = rows.filter(
     (row) => !row.group || row.group === "characteristics",
@@ -134,22 +164,31 @@ export function QuickRollPanel({
     variant: "ordinary" | "combat" | "skill" = "ordinary",
   ) =>
     groupRows.map((stat) => (
-      <Button
+      <QuickRollTooltip
         key={stat.key}
-        className={`quick-roll-button quick-roll-button--${variant}`}
-        disabled={quickRollPending}
-        data-roll-tooltip={`${stat.label}: 1d20${signedBonus(rollCharacter.stats[stat.key] ?? STAT_VALUE_RANGE.defaultValue)}. ${ROLL_MODIFIER_HINT}`}
-        onClick={(event) =>
-          onQuickRoll(
-            `1d20 + ${stat.key}`,
-            stat.label,
-            rollCharacter.stats[stat.key] ?? STAT_VALUE_RANGE.defaultValue,
-            rollModeFromEvent(event.nativeEvent),
-          )
+        content={`1d20${signedBonus(rollCharacter.stats[stat.key] ?? STAT_VALUE_RANGE.defaultValue)}\nCtrl — Преимущество\nAlt — Помеха`}
+        trigger={
+          <Button
+            className={`quick-roll-button quick-roll-button--${variant}`}
+            disabled={quickRollPending}
+            onClick={(event) => {
+              const mode = rollModeFromEvent(event.nativeEvent);
+              onRollClick(event, (count) =>
+                onQuickRoll(
+                  `1d20 + ${stat.key}`,
+                  stat.label,
+                  rollCharacter.stats[stat.key] ??
+                    STAT_VALUE_RANGE.defaultValue,
+                  mode,
+                  count,
+                ),
+              );
+            }}
+          >
+            {stat.label}
+          </Button>
         }
-      >
-        {stat.label}
-      </Button>
+      />
     ));
 
   return (
@@ -159,6 +198,7 @@ export function QuickRollPanel({
       // Свёрнутому блоку заданная высота не нужна: он занимает свою строку.
       style={height != null && !collapsed ? { height } : undefined}
     >
+      {popover}
       <div className="quick-roll-panel__header">
         <button
           type="button"
@@ -247,22 +287,26 @@ export function QuickRollPanel({
             entries.some((entry) => entry.kind === "SKILL")) && (
             <div className="activity-quick-rolls" aria-busy={quickRollPending}>
               {rollCharacter.skills.map((skill) => (
-                <Button
+                <QuickRollTooltip
                   key={skill.key}
-                  className="quick-roll-button quick-roll-button--skill"
-                  disabled={quickRollPending}
-                  data-roll-tooltip={`${skill.name}: ${skill.formula} (бонус ${signedBonus(formulaBonus(skill.formula, rollCharacter.stats))}). ${ROLL_MODIFIER_HINT}`}
-                  onClick={(event) =>
-                    onQuickRoll(
-                      skill.formula,
-                      skill.name,
-                      formulaBonus(skill.formula, rollCharacter.stats),
-                      rollModeFromEvent(event.nativeEvent),
-                    )
+                  content={`${skill.formula}\nCtrl — Преимущество\nAlt — Помеха`}
+                  trigger={
+                    <Button
+                      className="quick-roll-button quick-roll-button--skill"
+                      disabled={quickRollPending}
+                      onClick={(event) =>
+                        onQuickRoll(
+                          skill.formula,
+                          skill.name,
+                          formulaBonus(skill.formula, rollCharacter.stats),
+                          rollModeFromEvent(event.nativeEvent),
+                        )
+                      }
+                    >
+                      {skill.name}
+                    </Button>
                   }
-                >
-                  {skill.name}
-                </Button>
+                />
               ))}
               {entries
                 .filter((entry) => entry.kind === "SKILL")

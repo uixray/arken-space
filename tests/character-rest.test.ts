@@ -167,6 +167,12 @@ describe("отдых по регену", () => {
     expect(resources.blessing!.current).toBe(0);
   });
 
+  it("восстанавливает пользовательский ресурс на указанную величину", async () => {
+    await setUp({ inspiration: { current: 1, maximum: 9, restAmount: 5 } }, {});
+    expect((await restTo("SHORT")).resources.inspiration!.current).toBe(3);
+    expect((await restTo("LONG")).resources.inspiration!.current).toBe(8);
+  });
+
   it("короткий отдых восстанавливает оба ресурса", async () => {
     // «Перевести дух» убрано: это был тот же короткий отдых, применённый к
     // одной выносливости. Два названия для одного правила заставляли мастера

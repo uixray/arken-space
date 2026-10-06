@@ -85,9 +85,6 @@ import {
   physicalRollBonus,
   physicalRollPresentation,
   physicalRollChatRequest,
-  readRollLogCollapsed,
-  rollLogHistoryPresentation,
-  writeRollLogCollapsed,
   type ActivityFilter,
 } from "../activity-roll-controls";
 import type { Props } from "../Sidebar";
@@ -348,21 +345,17 @@ function ChatMessageBodyComponent({
         <div className="roll-result roll-result--physical">
           <div className="roll-details">
             <div className="roll-details__heading">
-              <span>
-                Физический бросок · {presentation?.label ?? message.body}
-              </span>
-              {presentation?.mode !== "NORMAL" && presentation && (
-                <span className="roll-mode-badge">
-                  {presentation.mode === "ADVANTAGE"
-                    ? "Преимущество"
-                    : "Помеха"}
-                </span>
-              )}
+              <span>{presentation?.label ?? message.body}</span>
             </div>
-            <small>
-              {!presentation || presentation.mode === "NORMAL" ? "d20" : "2d20"}{" "}
-              · {physicalBonus} к броску
-            </small>
+            <div className="roll-details__math">
+              <small>
+                {!presentation || presentation.mode === "NORMAL"
+                  ? "d20"
+                  : "2d20"}{" "}
+                · {physicalBonus} к броску
+              </small>
+              <small>физ. бросок</small>
+            </div>
           </div>
           <strong className="roll-total" aria-label="Бонус к броску">
             {physicalBonus}
@@ -387,18 +380,30 @@ function ChatMessageBodyComponent({
     );
   }
   const details = compactDiceDetails(dice);
+  const pureRollHeading = message.body.replace(
+    /^(Чистый бросок .+?)\s*·\s*(?:преимущество|помеха)$/iu,
+    "$1",
+  );
+  const isPureRoll = pureRollHeading.startsWith("Чистый бросок ");
   return (
     <div
-      className={`roll-result${critical ? ` roll-result--critical-${critical.kind}` : ""}`}
+      className={`roll-result${isPureRoll ? " roll-result--pure" : ""}${critical ? ` roll-result--critical-${critical.kind}` : ""}`}
     >
       <div className="roll-details">
         <div className="roll-details__heading">
-          <span>{message.body}</span>
+          <span>{pureRollHeading}</span>
         </div>
         <div className="roll-details__math">
           <small>{details.diceLabel}</small>
-          {(critical || details.calculation) && (
+          {(critical ||
+            details.calculation ||
+            (dice.rollMode && dice.rollMode !== "NORMAL")) && (
             <span className="roll-details__math-right">
+              {dice.rollMode && dice.rollMode !== "NORMAL" && (
+                <span className="roll-mode-badge">
+                  {dice.rollMode === "ADVANTAGE" ? "Преимущество" : "Помеха"}
+                </span>
+              )}
               {critical && (
                 <span className="roll-critical-label">
                   {critical.kind === "success" ? "Крит. успех" : "Крит. провал"}
@@ -519,12 +524,7 @@ export function ActivityPanel({
   // The ref closes the same-render double-click gap; state is for feedback.
   const quickRollInFlight = useRef(false);
   const rollVisibility = useContext(RollVisibilityContext);
-  // UIX-372: the roll/event log can get long and spammy with quick rolls, so
-  // it can be collapsed to a compact "last N entries" view independently of
-  // whole-sidebar collapse or width resize.
-  const [rollLogCollapsed, setRollLogCollapsed] = useState(() =>
-    readRollLogCollapsed(window.localStorage, snapshot.me.id),
-  );
+  const [visibleHistoryLimit, setVisibleHistoryLimit] = useState(6);
   const characterStats =
     snapshot.characters.find(
       (character) => character.id === snapshot.me.characterId,
@@ -706,6 +706,7 @@ export function ActivityPanel({
      * считает и переключатель у костей существует.
      */
     mode: RollMode = "NORMAL",
+    count = 1,
   ) => {
     if (!rollCharacter || quickRollInFlight.current) return;
     quickRollInFlight.current = true;
@@ -715,21 +716,23 @@ export function ActivityPanel({
     setPendingQuickRoll({ characterName, label });
     setQuickRollError("");
     try {
-      if (physicalDice) {
-        const request = physicalRollChatRequest(
-          label,
-          bonus,
-          rollCharacter.id,
-          mode,
-        );
-        await onChat(
-          request.body,
-          rollVisibility,
-          "TABLE",
-          request.characterId,
-        );
-      } else {
-        await onRoll(formula, label, rollVisibility, rollCharacter.id, mode);
+      for (let index = 0; index < count; index += 1) {
+        if (physicalDice) {
+          const request = physicalRollChatRequest(
+            label,
+            bonus,
+            rollCharacter.id,
+            mode,
+          );
+          await onChat(
+            request.body,
+            rollVisibility,
+            "TABLE",
+            request.characterId,
+          );
+        } else {
+          await onRoll(formula, label, rollVisibility, rollCharacter.id, mode);
+        }
       }
     } catch (reason) {
       const message =
@@ -746,13 +749,10 @@ export function ActivityPanel({
     () => buildActivityTimeline(activityEvents),
     [activityEvents],
   );
-  const historyPresentation = rollLogHistoryPresentation(
-    timeline.length,
-    rollLogCollapsed,
-  );
+  const visibleEntryCount = Math.min(timeline.length, visibleHistoryLimit);
   const visibleTimeline =
-    historyPresentation.visibleEntryCount < timeline.length
-      ? timeline.slice(-historyPresentation.visibleEntryCount)
+    visibleEntryCount < timeline.length
+      ? timeline.slice(-visibleEntryCount)
       : timeline;
   const catalogEntryIds = useMemo(
     () => new Set(snapshot.catalogEntries.map((entry) => entry.id)),
@@ -769,7 +769,7 @@ export function ActivityPanel({
   // Jumping to a specific message (e.g. from a notification) must be able to
   // reveal it even if the log is currently collapsed to its compact view.
   useEffect(() => {
-    if (focusedMessageId) setRollLogCollapsed(false);
+    if (focusedMessageId) setVisibleHistoryLimit(Number.POSITIVE_INFINITY);
   }, [focusedMessageId]);
   useEffect(() => {
     if (!focusedMessageId) return;
@@ -882,18 +882,12 @@ export function ActivityPanel({
                   entryRevision: entry.revision,
                 })
               }
-              onQuickRoll={(formula, label, bonus, mode) =>
-                void submitQuickRoll(formula, label, bonus, mode)
+              onQuickRoll={(formula, label, bonus, mode, count) =>
+                void submitQuickRoll(formula, label, bonus, mode, count)
               }
             />
           ) : (
             <p className="muted">Нет доступного персонажа для броска.</p>
-          )}
-          {pendingQuickRoll && (
-            <p role="status">
-              Бросаем… {pendingQuickRoll.characterName} ·{" "}
-              {pendingQuickRoll.label}
-            </p>
           )}
           {quickRollError && (
             <p className="composer-error" role="alert">
@@ -955,34 +949,19 @@ export function ActivityPanel({
         ref={listRef}
         onScroll={onScroll}
       >
-        {historyPresentation.showControl && (
+        {visibleEntryCount < timeline.length && (
           <div className="activity-log-history-control">
-            {historyPresentation.truncatedLabel && (
-              <span className="activity-log-truncated-note">
-                {historyPresentation.truncatedLabel}
-              </span>
-            )}
+            <span className="activity-log-truncated-note">
+              Показаны последние {visibleEntryCount} из {timeline.length}.
+            </span>
             <button
               type="button"
               className="activity-log-toggle"
-              aria-expanded={!rollLogCollapsed}
               aria-controls="activity-message-list"
-              title={
-                rollLogCollapsed
-                  ? "Показать всю ленту событий"
-                  : "Показать только последние записи"
-              }
-              onClick={() => {
-                const next = !rollLogCollapsed;
-                setRollLogCollapsed(next);
-                writeRollLogCollapsed(
-                  window.localStorage,
-                  snapshot.me.id,
-                  next,
-                );
-              }}
+              title="Загрузить более ранние события"
+              onClick={() => setVisibleHistoryLimit((limit) => limit + 10)}
             >
-              {historyPresentation.actionLabel}
+              Показать больше
             </button>
           </div>
         )}

@@ -56,7 +56,6 @@ import {
   normalizeWallet,
   normalizeWalletValue,
   WALLET_ADJUST_DELAY_MS,
-  WALLET_KEYS,
   WALLET_LABELS,
   walletDeltaIsEmpty,
   spendWalletCoin,
@@ -940,9 +939,9 @@ export function CharacterPanel({
   const resourceRows = statResourceRowsFromLayout(snapshot.campaign.statLayout);
   const resourceLabels = resourceCostLabels(snapshot.campaign.statLayout);
   const [countersPending, setCountersPending] = useState(0);
-  const [vitalsTab, setVitalsTab] = useState<"resources" | "initiative">(
-    "resources",
-  );
+  const [vitalsTab, setVitalsTab] = useState<
+    "resources" | "stats" | "inventory" | "bio"
+  >("resources");
   const vitalsTabId = useId();
   const [countersError, setCountersError] = useState("");
   // Undefined preserves each catalog action's legacy advantage setting until the player explicitly overrides it.
@@ -1133,6 +1132,9 @@ export function CharacterPanel({
     CharacterDto["resources"]
   >(() => ({ ...(character?.resources ?? {}) }));
   const [newResourceName, setNewResourceName] = useState("");
+  const [editingResourceKey, setEditingResourceKey] = useState<string | null>(
+    null,
+  );
   useEffect(() => {
     if (character && countersPending === 0) {
       // A manual value can start by absorbing an unsent +/- batch. That
@@ -1331,7 +1333,8 @@ export function CharacterPanel({
   };
   const saveResources = async (next: CharacterDto["resources"]) => {
     setResourcesDraft(next);
-    if (JSON.stringify(next) === JSON.stringify(character.resources)) return;
+    if (JSON.stringify(next) === JSON.stringify(character.resources))
+      return true;
     setCountersPending((count) => count + 1);
     setCountersError("");
     try {
@@ -1346,6 +1349,7 @@ export function CharacterPanel({
           },
         },
       );
+      return true;
     } catch (reason) {
       setResourcesDraft(character.resources);
       setCountersError(
@@ -1353,6 +1357,7 @@ export function CharacterPanel({
           ? "Ресурсы изменены. Повторите действие."
           : "Не удалось сохранить ресурсы.",
       );
+      return false;
     } finally {
       setCountersPending((count) => Math.max(0, count - 1));
     }
@@ -1494,6 +1499,7 @@ export function CharacterPanel({
           </button>
           <div className="character-hero__info">
             <div className="inline-fields">
+              <strong className="character-hero__name">{character.name}</strong>
               <Button disabled={!editable} onClick={() => setRenameOpen(true)}>
                 Переименовать
               </Button>
@@ -1507,14 +1513,6 @@ export function CharacterPanel({
               {rollError}
             </p>
           )}
-          <Button
-            view="outlined"
-            disabled={!editable || countersPending > 0}
-            title="Половина регена выносливости и маны, округление вниз"
-            onClick={() => void runRest("SHORT")}
-          >
-            Короткий отдых
-          </Button>
           {onArchive && (
             <Button
               className="danger-link"
@@ -1557,7 +1555,7 @@ export function CharacterPanel({
         role="tablist"
         aria-label="Ключевые показатели персонажа"
       >
-        {(["resources", "initiative"] as const).map((tab) => (
+        {(["resources", "stats", "inventory", "bio"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -1573,15 +1571,29 @@ export function CharacterPanel({
               )
                 return;
               event.preventDefault();
+              const tabs = ["resources", "stats", "inventory", "bio"] as const;
+              const current = tabs.indexOf(vitalsTab);
               const next =
-                event.key === "ArrowLeft" || event.key === "Home"
-                  ? "resources"
-                  : "initiative";
+                event.key === "Home"
+                  ? tabs[0]
+                  : event.key === "End"
+                    ? tabs[3]
+                    : (tabs[
+                        (current + (event.key === "ArrowLeft" ? 3 : 1)) %
+                          tabs.length
+                      ] ?? tabs[0]);
               setVitalsTab(next);
               document.getElementById(`${vitalsTabId}-${next}-tab`)?.focus();
             }}
           >
-            {tab === "resources" ? "Ресурсы" : "Инициатива и реакция"}
+            {
+              {
+                resources: "Ресурсы",
+                stats: "Показатели",
+                inventory: "Инвентарь",
+                bio: "Личность",
+              }[tab]
+            }
           </button>
         ))}
       </div>
@@ -1593,36 +1605,73 @@ export function CharacterPanel({
         aria-label="Ключевые показатели"
         hidden={vitalsTab !== "resources"}
       >
+        <div className="character-vitals__actions">
+          <Button
+            view="outlined"
+            disabled={!editable || countersPending > 0}
+            title="Половина регена выносливости и маны, округление вниз"
+            onClick={() => void runRest("SHORT")}
+          >
+            Короткий отдых
+          </Button>
+        </div>
         <div className="character-vital-chip character-vital-chip--wallet">
           <span className="character-vital-chip__label">Кошелёк</span>
           <span className="character-vital-chip__value character-vital-chip__wallet-values">
             <AppIcon icon={CoinsIcon} />
             {(["gold", "silver", "copper"] as const).map((key) => (
               <label className="character-wallet__coin" key={key}>
-                <FormInput
-                  type="number"
-                  min={0}
-                  step={1}
-                  aria-label={`Кошелёк: ${WALLET_LABELS[key].toLowerCase()}`}
-                  value={walletDraft[key]}
-                  disabled={!editable}
-                  onChange={(event) => {
-                    cancelWalletBatch(false);
-                    const next = {
-                      ...walletDraftRef.current,
-                      [key]: normalizeWalletValue(event.target.value),
-                    };
-                    walletDraftRef.current = next;
-                    walletInputDirtyRef.current = true;
-                    setWalletDraft(next);
-                  }}
-                  onBlur={() => void saveWallet(walletDraftRef.current)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") event.currentTarget.blur();
-                  }}
-                />
-                <span>
-                  {key === "gold" ? "зм" : key === "silver" ? "см" : "мм"}
+                <span className="character-wallet__coin-label">
+                  {key === "gold"
+                    ? "Золото"
+                    : key === "silver"
+                      ? "Серебро"
+                      : "Медь"}
+                </span>
+                <span className="character-wallet__coin-controls">
+                  <Button
+                    disabled={
+                      !editable || !canSpendWalletCoin(walletDraft, key)
+                    }
+                    aria-label={`Уменьшить: ${WALLET_LABELS[key]}`}
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => changeWallet(key, -1)}
+                  >
+                    <AppIcon icon={DecreaseIcon} />
+                  </Button>
+                  <FormInput
+                    type="number"
+                    min={0}
+                    step={1}
+                    aria-label={`Кошелёк: ${WALLET_LABELS[key].toLowerCase()}`}
+                    value={walletDraft[key]}
+                    disabled={!editable}
+                    onChange={(event) => {
+                      cancelWalletBatch(false);
+                      const next = {
+                        ...walletDraftRef.current,
+                        [key]: normalizeWalletValue(event.target.value),
+                      };
+                      walletDraftRef.current = next;
+                      walletInputDirtyRef.current = true;
+                      setWalletDraft(next);
+                    }}
+                    onBlur={() => void saveWallet(walletDraftRef.current)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
+                  />
+                  <span>
+                    {key === "gold" ? "зм" : key === "silver" ? "см" : "мм"}
+                  </span>
+                  <Button
+                    disabled={!editable}
+                    aria-label={`Увеличить: ${WALLET_LABELS[key]}`}
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => changeWallet(key, 1)}
+                  >
+                    <AppIcon icon={AddIcon} />
+                  </Button>
                 </span>
               </label>
             ))}
@@ -1648,42 +1697,47 @@ export function CharacterPanel({
             >
               <span className="character-vital-chip__label">{label}</span>
               <span className="character-vital-chip__value character-vital-chip__resource-values">
-                <FormInput
-                  type="number"
-                  min={0}
-                  aria-label={`${label}: текущее`}
-                  value={res.current}
-                  disabled={!editable}
-                  onChange={(event) =>
-                    setResourcesDraft((current) => ({
-                      ...current,
-                      [key]: {
-                        ...res,
-                        current: Math.max(0, Number(event.target.value)),
-                      },
-                    }))
-                  }
-                  onBlur={() => void saveResources(resourcesDraft)}
-                />
-                <span aria-hidden="true">/</span>
-                <FormInput
-                  type="number"
-                  min={0}
-                  aria-label={`${label}: максимум`}
-                  value={max}
-                  disabled={!editable}
-                  onChange={(event) =>
-                    setResourcesDraft((current) => ({
-                      ...current,
-                      [key]: {
-                        ...res,
-                        maximum: Math.max(0, Number(event.target.value)),
-                        recoverable: true,
-                      },
-                    }))
-                  }
-                  onBlur={() => void saveResources(resourcesDraft)}
-                />
+                <label className="character-vital-chip__number-field">
+                  <span>Текущее</span>
+                  <FormInput
+                    type="number"
+                    min={0}
+                    aria-label={`${label}: текущее`}
+                    value={res.current}
+                    disabled={!editable}
+                    onChange={(event) =>
+                      setResourcesDraft((current) => ({
+                        ...current,
+                        [key]: {
+                          ...res,
+                          current: Math.max(0, Number(event.target.value)),
+                        },
+                      }))
+                    }
+                    onBlur={() => void saveResources(resourcesDraft)}
+                  />
+                </label>
+                <label className="character-vital-chip__number-field">
+                  <span>Максимум</span>
+                  <FormInput
+                    type="number"
+                    min={0}
+                    aria-label={`${label}: максимум`}
+                    value={max}
+                    disabled={!editable}
+                    onChange={(event) =>
+                      setResourcesDraft((current) => ({
+                        ...current,
+                        [key]: {
+                          ...res,
+                          maximum: Math.max(0, Number(event.target.value)),
+                          recoverable: true,
+                        },
+                      }))
+                    }
+                    onBlur={() => void saveResources(resourcesDraft)}
+                  />
+                </label>
               </span>
               <div className="character-vital-chip__controls">
                 <Button
@@ -1725,7 +1779,7 @@ export function CharacterPanel({
               </div>
               {regenKey && regenRow && (
                 <label className="character-vital-chip__regen">
-                  <span>{regenRow.label}</span>
+                  <span>Реген</span>
                   <FormInput
                     type="number"
                     aria-label={regenRow.label}
@@ -1760,313 +1814,240 @@ export function CharacterPanel({
             </div>
           );
         })}
-        {Object.entries(resourcesDraft)
-          .filter(([key]) => !resourceRows.some((row) => row.key === key))
-          .map(([key, res]) => (
-            <div
-              className="character-vital-chip character-vital-chip--additional-resource"
-              key={key}
-            >
-              <span className="character-vital-chip__label">{key}</span>
-              <span className="character-vital-chip__value character-vital-chip__resource-values">
-                <FormInput
-                  type="number"
-                  min={0}
-                  aria-label={`${key}: текущее`}
-                  value={res.current}
-                  disabled={!editable}
-                  onChange={(event) =>
-                    setResourcesDraft((current) => ({
-                      ...current,
-                      [key]: {
-                        ...res,
-                        current: Math.max(0, Number(event.target.value)),
-                      },
-                    }))
-                  }
-                  onBlur={() => void saveResources(resourcesDraft)}
-                />
-                {res.maximum !== undefined && (
-                  <>
-                    <span aria-hidden="true">/</span>
-                    <span>{res.maximum}</span>
-                  </>
-                )}
-              </span>
-            </div>
-          ))}
       </div>
       <div
-        className="character-vitals__initiative"
+        className="character-sheet-stat-panel"
         role="tabpanel"
-        id={`${vitalsTabId}-initiative-panel`}
-        aria-labelledby={`${vitalsTabId}-initiative-tab`}
-        hidden={vitalsTab !== "initiative"}
+        id={`${vitalsTabId}-stats-panel`}
+        aria-labelledby={`${vitalsTabId}-stats-tab`}
+        hidden={vitalsTab !== "stats"}
       >
-        <StatLayoutCard
-          title="Инициатива и реакция"
-          modifier="combat"
-          rows={initiativeRows}
-          values={character.stats}
-          editable={Boolean(editable)}
-          rollPending={rollPending}
-          canEditLayout={snapshot.me.role === "GM"}
-          showAddRow={false}
-          onChangeValue={(key, value) => changeStatValue(character, key, value)}
-          onRoll={(formula, label, mode) =>
-            void submitCharacterRoll(formula, label, mode)
-          }
-          onRenameRow={renameStatRow}
-          onAddRow={(label) => addStatRow("combat", label)}
-          onDeleteRow={deleteStatRow}
-          onMoveRow={moveStatRowBy}
-          onReorderRow={reorderStatRow}
-        />
-      </div>
-
-      <nav
-        className="character-section-nav"
-        aria-label={`Разделы персонажа ${character.name}`}
-      >
-        {[
-          ["stats", "Характеристики"],
-          ["combat", "Бой"],
-          ["resources", "Ресурсы"],
-          ["inventory", "Инвентарь"],
-          ["bio", "Личность"],
-        ].map(([section, label]) => (
-          <button
-            type="button"
-            key={section}
-            onClick={(event) => {
-              const target = event.currentTarget
-                .closest(".character-sheet-content")
-                ?.querySelector(`[data-character-section="${section}"]`);
-              target?.scrollIntoView({ behavior: "smooth", block: "start" });
-            }}
+        <div className="character-sheet-stat-grid">
+          {/* Секция 1: Характеристики и боевые параметры */}
+          <div
+            className="character-section character-section--stats"
+            data-character-section="stats"
           >
-            {label}
-          </button>
-        ))}
-      </nav>
-      {/* Секция 1: Характеристики и боевые параметры */}
-      <div
-        className="character-section character-section--stats"
-        data-character-section="stats"
-      >
-        <div className="character-card-row">
-          <StatLayoutCard
-            title="Характеристики"
-            modifier="stats"
-            rows={characteristicRows}
-            values={character.stats}
-            editable={Boolean(editable)}
-            rollPending={rollPending}
-            canEditLayout={snapshot.me.role === "GM"}
-            onChangeValue={(key, value) =>
-              changeStatValue(character, key, value)
-            }
-            onRoll={(formula, label, mode) =>
-              void submitCharacterRoll(formula, label, mode)
-            }
-            onRenameRow={renameStatRow}
-            onAddRow={(label) => addStatRow("characteristics", label)}
-            onDeleteRow={deleteStatRow}
-            onMoveRow={moveStatRowBy}
-            onReorderRow={reorderStatRow}
-          />
-        </div>
-      </div>
-      <div
-        className="character-section character-section--combat"
-        data-character-section="combat"
-      >
-        <div className="character-card-row">
-          <StatLayoutCard
-            title="Боевые характеристики"
-            modifier="combat"
-            rows={combatRows.filter(
-              (row) =>
-                !isSystemRegenStatKey(row.key) &&
-                row.key !== "initiative" &&
-                row.key !== "reaction",
-            )}
-            values={character.stats}
-            editable={Boolean(editable)}
-            rollPending={rollPending}
-            canEditLayout={snapshot.me.role === "GM"}
-            onChangeValue={(key, value) =>
-              changeStatValue(character, key, value)
-            }
-            onRoll={(formula, label, mode) =>
-              void submitCharacterRoll(formula, label, mode)
-            }
-            onRenameRow={renameStatRow}
-            onAddRow={(label) => addStatRow("combat", label)}
-            onDeleteRow={deleteStatRow}
-            onMoveRow={moveStatRowBy}
-            onReorderRow={reorderStatRow}
-          />
-          <div className="character-card character-card--skills">
-            <h3 className="character-card__header">Навыки</h3>
-            <div className="character-card__body">
-              {character.skills.length > 0 &&
-                character.skills.map((skill) => (
-                  <RollButton
-                    key={skill.key}
-                    name={skill.name}
-                    formula={skill.formula}
-                    disabled={rollPending}
-                    onClick={(event) =>
-                      void submitCharacterRoll(
-                        skill.formula,
-                        skill.name,
-                        rollModeFromEvent(event.nativeEvent),
-                      )
-                    }
-                  />
-                ))}
-              {skillEntries.length ? (
-                skillEntries.map((entry) => (
-                  <div className="character-card__row" key={entry.id}>
-                    <CharacterActionCard
-                      entry={entry}
-                      disabled={!editable}
-                      onAction={(input) =>
-                        catalogActions.onRollEntry(character.id, entry.id, {
-                          ...input,
-                        })
-                      }
-                    />
-                    {entry.data.uses && (
-                      <Button
-                        disabled={!editable}
-                        onClick={() =>
-                          catalogActions.onRechargeEntry(
-                            character.id,
-                            entry.id,
-                            entry.revision,
-                          )
-                        }
-                      >
-                        Перезарядить
-                      </Button>
-                    )}
-                    {editable && (
-                      <div className="inline-fields">
-                        <Button onClick={() => setEntryEditor(entry)}>
-                          Редактировать
-                        </Button>
-                        <Button
-                          className="danger-link"
-                          onClick={() =>
-                            void catalogActions.onDeleteCharacterEntry(
-                              character.id,
-                              entry.id,
-                              entry.revision,
-                            )
-                          }
-                        >
-                          Удалить
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))
-              ) : character.skills.length === 0 ? (
-                <p className="muted">Навыки ещё не добавлены.</p>
-              ) : null}
+            <div className="character-card-row">
+              <StatLayoutCard
+                title="Характеристики"
+                modifier="stats"
+                rows={characteristicRows}
+                values={character.stats}
+                editable={Boolean(editable)}
+                rollPending={rollPending}
+                canEditLayout={snapshot.me.role === "GM"}
+                onChangeValue={(key, value) =>
+                  changeStatValue(character, key, value)
+                }
+                onRoll={(formula, label, mode) =>
+                  void submitCharacterRoll(formula, label, mode)
+                }
+                onRenameRow={renameStatRow}
+                onAddRow={(label) => addStatRow("characteristics", label)}
+                onDeleteRow={deleteStatRow}
+                onMoveRow={moveStatRowBy}
+                onReorderRow={reorderStatRow}
+              />
             </div>
-            {editable && (
-              <div className="character-card__add">
-                <Button onClick={() => setCatalogPicker("SKILL")}>
-                  + Добавить навык…
-                </Button>
-              </div>
-            )}
           </div>
-          <div className="character-card character-card--abilities">
-            <h3 className="character-card__header">Способности и заклинания</h3>
-            <div className="character-card__body">
-              {character.spells.length > 0 &&
-                character.spells.map((spell) => (
-                  <div className="plain-row" key={spell.key}>
-                    <strong>{spell.name}</strong>
-                    <p>{spell.description}</p>
-                    {spell.formula && (
-                      <Button
+          <div
+            className="character-section character-section--combat"
+            data-character-section="combat"
+          >
+            <div className="character-card-row">
+              <StatLayoutCard
+                title="Боевые характеристики"
+                modifier="combat"
+                rows={[
+                  ...initiativeRows,
+                  ...combatRows.filter(
+                    (row) =>
+                      !isSystemRegenStatKey(row.key) &&
+                      row.key !== "initiative" &&
+                      row.key !== "reaction",
+                  ),
+                ]}
+                values={character.stats}
+                editable={Boolean(editable)}
+                rollPending={rollPending}
+                canEditLayout={snapshot.me.role === "GM"}
+                onChangeValue={(key, value) =>
+                  changeStatValue(character, key, value)
+                }
+                onRoll={(formula, label, mode) =>
+                  void submitCharacterRoll(formula, label, mode)
+                }
+                onRenameRow={renameStatRow}
+                onAddRow={(label) => addStatRow("combat", label)}
+                onDeleteRow={deleteStatRow}
+                onMoveRow={moveStatRowBy}
+                onReorderRow={reorderStatRow}
+              />
+              <div className="character-card character-card--skills">
+                <h3 className="character-card__header">Навыки</h3>
+                <div className="character-card__body">
+                  {character.skills.length > 0 &&
+                    character.skills.map((skill) => (
+                      <RollButton
+                        key={skill.key}
+                        name={skill.name}
+                        formula={skill.formula}
                         disabled={rollPending}
                         onClick={(event) =>
                           void submitCharacterRoll(
-                            spell.formula!,
-                            spell.name,
+                            skill.formula,
+                            skill.name,
                             rollModeFromEvent(event.nativeEvent),
                           )
                         }
-                      >
-                        Бросить {humanizeFormula(spell.formula, statLabels)}
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              {abilityEntries.length ? (
-                abilityEntries.map((entry) => (
-                  <div className="character-card__row" key={entry.id}>
-                    <CharacterActionCard
-                      entry={entry}
-                      disabled={!editable}
-                      onAction={(input) =>
-                        catalogActions.onRollEntry(character.id, entry.id, {
-                          ...input,
-                        })
-                      }
-                    />
-                    {entry.data.uses && (
-                      <Button
-                        disabled={!editable}
-                        onClick={() =>
-                          catalogActions.onRechargeEntry(
-                            character.id,
-                            entry.id,
-                            entry.revision,
-                          )
-                        }
-                      >
-                        Перезарядить
-                      </Button>
-                    )}
-                    {editable && (
-                      <div className="inline-fields">
-                        <Button onClick={() => setEntryEditor(entry)}>
-                          Редактировать
-                        </Button>
-                        <Button
-                          className="danger-link"
-                          onClick={() =>
-                            void catalogActions.onDeleteCharacterEntry(
-                              character.id,
-                              entry.id,
-                              entry.revision,
-                            )
+                      />
+                    ))}
+                  {skillEntries.length ? (
+                    skillEntries.map((entry) => (
+                      <div className="character-card__row" key={entry.id}>
+                        <CharacterActionCard
+                          entry={entry}
+                          disabled={!editable}
+                          onAction={(input) =>
+                            catalogActions.onRollEntry(character.id, entry.id, {
+                              ...input,
+                            })
                           }
-                        >
-                          Удалить
-                        </Button>
+                        />
+                        {entry.data.uses && (
+                          <Button
+                            disabled={!editable}
+                            onClick={() =>
+                              catalogActions.onRechargeEntry(
+                                character.id,
+                                entry.id,
+                                entry.revision,
+                              )
+                            }
+                          >
+                            Перезарядить
+                          </Button>
+                        )}
+                        {editable && (
+                          <div className="inline-fields">
+                            <Button onClick={() => setEntryEditor(entry)}>
+                              Редактировать
+                            </Button>
+                            <Button
+                              className="danger-link"
+                              onClick={() =>
+                                void catalogActions.onDeleteCharacterEntry(
+                                  character.id,
+                                  entry.id,
+                                  entry.revision,
+                                )
+                              }
+                            >
+                              Удалить
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    ))
+                  ) : character.skills.length === 0 ? (
+                    <p className="muted">Навыки ещё не добавлены.</p>
+                  ) : null}
+                </div>
+                {editable && (
+                  <div className="character-card__add">
+                    <Button onClick={() => setCatalogPicker("SKILL")}>
+                      + Добавить навык…
+                    </Button>
                   </div>
-                ))
-              ) : character.spells.length === 0 ? (
-                <p className="muted">Способности ещё не добавлены.</p>
-              ) : null}
-            </div>
-            {editable && (
-              <div className="character-card__add">
-                <Button onClick={() => setCatalogPicker("ABILITY")}>
-                  + Добавить способность…
-                </Button>
+                )}
               </div>
-            )}
+              <div className="character-card character-card--abilities">
+                <h3 className="character-card__header">
+                  Способности и заклинания
+                </h3>
+                <div className="character-card__body">
+                  {character.spells.length > 0 &&
+                    character.spells.map((spell) => (
+                      <div className="plain-row" key={spell.key}>
+                        <strong>{spell.name}</strong>
+                        <p>{spell.description}</p>
+                        {spell.formula && (
+                          <Button
+                            disabled={rollPending}
+                            onClick={(event) =>
+                              void submitCharacterRoll(
+                                spell.formula!,
+                                spell.name,
+                                rollModeFromEvent(event.nativeEvent),
+                              )
+                            }
+                          >
+                            Бросить {humanizeFormula(spell.formula, statLabels)}
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  {abilityEntries.length ? (
+                    abilityEntries.map((entry) => (
+                      <div className="character-card__row" key={entry.id}>
+                        <CharacterActionCard
+                          entry={entry}
+                          disabled={!editable}
+                          onAction={(input) =>
+                            catalogActions.onRollEntry(character.id, entry.id, {
+                              ...input,
+                            })
+                          }
+                        />
+                        {entry.data.uses && (
+                          <Button
+                            disabled={!editable}
+                            onClick={() =>
+                              catalogActions.onRechargeEntry(
+                                character.id,
+                                entry.id,
+                                entry.revision,
+                              )
+                            }
+                          >
+                            Перезарядить
+                          </Button>
+                        )}
+                        {editable && (
+                          <div className="inline-fields">
+                            <Button onClick={() => setEntryEditor(entry)}>
+                              Редактировать
+                            </Button>
+                            <Button
+                              className="danger-link"
+                              onClick={() =>
+                                void catalogActions.onDeleteCharacterEntry(
+                                  character.id,
+                                  entry.id,
+                                  entry.revision,
+                                )
+                              }
+                            >
+                              Удалить
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : character.spells.length === 0 ? (
+                    <p className="muted">Способности ещё не добавлены.</p>
+                  ) : null}
+                </div>
+                {editable && (
+                  <div className="character-card__add">
+                    <Button onClick={() => setCatalogPicker("ABILITY")}>
+                      + Добавить способность…
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2122,10 +2103,10 @@ export function CharacterPanel({
       <div
         className="character-section character-section--resources"
         data-character-section="resources"
+        hidden={vitalsTab !== "resources"}
       >
-        <h3 className="character-block-heading">Ресурсы и кошелёк</h3>
+        <h3 className="character-block-heading">Дополнительные ресурсы</h3>
         <div className="subsection character-resource-editor">
-          <h3>Дополнительные ресурсы</h3>
           {Object.entries(resourcesDraft)
             .filter(([key]) => key !== "physicalPower" && key !== "magicPower")
             .map(([key, resource]) => (
@@ -2134,133 +2115,290 @@ export function CharacterPanel({
                 key={key}
                 disabled={!editable}
               >
-                <legend>{key}</legend>
-                <div className="resource-card__extra-fields">
-                  <label className="field">
-                    <span>Название</span>
-                    <FormInput
-                      defaultValue={key}
-                      required
-                      onBlur={(event) => {
-                        const nextKey = event.target.value.trim();
-                        if (
-                          !nextKey ||
-                          nextKey === key ||
-                          resourcesDraft[nextKey]
-                        ) {
-                          event.target.value = key;
-                          return;
-                        }
-                        const { [key]: moved, ...rest } = resourcesDraft;
-                        void saveResources({ ...rest, [nextKey]: moved! });
-                      }}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Описание</span>
-                    <FormInput
-                      value={resource.description ?? ""}
-                      onChange={(event) =>
-                        setResourcesDraft((current) => ({
-                          ...current,
-                          [key]: {
-                            ...resource,
-                            description: event.target.value,
-                          },
-                        }))
-                      }
-                      onBlur={() => void saveResources(resourcesDraft)}
-                    />
-                  </label>
-                  <div className="resource-card__inputs">
+                <legend>
+                  {editingResourceKey === key ? "Создание нового ресурса" : key}
+                </legend>
+                {editingResourceKey === key ? (
+                  <div className="resource-card__extra-fields">
                     <label className="field">
-                      <span>Текущее</span>
+                      <span>Название</span>
                       <FormInput
-                        type="number"
-                        min={0}
-                        value={resource.current}
+                        defaultValue={key}
+                        required
+                        onBlur={(event) => {
+                          const nextKey = event.target.value.trim();
+                          if (
+                            !nextKey ||
+                            nextKey === key ||
+                            resourcesDraft[nextKey]
+                          ) {
+                            event.target.value = key;
+                            return;
+                          }
+                          const { [key]: moved, ...rest } = resourcesDraft;
+                          void saveResources({ ...rest, [nextKey]: moved! });
+                        }}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Описание</span>
+                      <FormInput
+                        value={resource.description ?? ""}
                         onChange={(event) =>
                           setResourcesDraft((current) => ({
                             ...current,
                             [key]: {
                               ...resource,
-                              current: Math.max(0, Number(event.target.value)),
+                              description: event.target.value,
                             },
                           }))
                         }
                         onBlur={() => void saveResources(resourcesDraft)}
                       />
                     </label>
+                    <div className="resource-card__inputs">
+                      <Button
+                        aria-label={`Уменьшить ${key}`}
+                        disabled={
+                          !editable ||
+                          countersPending > 0 ||
+                          resource.current <= 0
+                        }
+                        onClick={() =>
+                          void saveResources({
+                            ...resourcesDraft,
+                            [key]: {
+                              ...resource,
+                              current: resource.current - 1,
+                            },
+                          })
+                        }
+                      >
+                        <AppIcon icon={DecreaseIcon} />
+                      </Button>
+                      <label className="field">
+                        <span>Текущее</span>
+                        <FormInput
+                          type="number"
+                          min={0}
+                          value={resource.current}
+                          onChange={(event) =>
+                            setResourcesDraft((current) => ({
+                              ...current,
+                              [key]: {
+                                ...resource,
+                                current: Math.max(
+                                  0,
+                                  Number(event.target.value),
+                                ),
+                              },
+                            }))
+                          }
+                          onBlur={() => void saveResources(resourcesDraft)}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Максимум</span>
+                        <FormInput
+                          type="number"
+                          min={0}
+                          value={resource.maximum ?? resource.current}
+                          onChange={(event) => {
+                            const maximum = Math.max(
+                              0,
+                              Number(event.target.value),
+                            );
+                            setResourcesDraft((current) => ({
+                              ...current,
+                              [key]: {
+                                ...resource,
+                                maximum: maximum,
+                                current: resource.current,
+                              },
+                            }));
+                          }}
+                          onBlur={() => void saveResources(resourcesDraft)}
+                        />
+                      </label>
+                      <Button
+                        aria-label={`Увеличить ${key}`}
+                        disabled={!editable || countersPending > 0}
+                        onClick={() =>
+                          void saveResources({
+                            ...resourcesDraft,
+                            [key]: {
+                              ...resource,
+                              current: resource.current + 1,
+                            },
+                          })
+                        }
+                      >
+                        <AppIcon icon={AddIcon} />
+                      </Button>
+                    </div>
+                    <div className="field">
+                      <span>Изображение</span>
+                      <AssetPicker
+                        aria-label={`Изображение ресурса ${key}`}
+                        value={resource.imageAssetId ?? null}
+                        onUpload={async (file) =>
+                          (await assetActions.uploadAsset(file, "IMAGE")).id
+                        }
+                        assets={snapshot.assets.filter((asset) =>
+                          asset.mimeType.startsWith("image/"),
+                        )}
+                        onChange={(assetId) => {
+                          const next = {
+                            ...resourcesDraft,
+                            [key]: {
+                              ...resource,
+                              imageAssetId: assetId,
+                            },
+                          };
+                          void saveResources(next);
+                        }}
+                      />
+                    </div>
+                    <label className="compact-check">
+                      <input
+                        type="checkbox"
+                        checked={resource.recoverable !== false}
+                        onChange={(event) =>
+                          void saveResources({
+                            ...resourcesDraft,
+                            [key]: {
+                              ...resource,
+                              recoverable: event.target.checked,
+                            },
+                          })
+                        }
+                      />
+                      Восполнять при отдыхе
+                    </label>
                     <label className="field">
-                      <span>Максимум</span>
+                      <span>Сколько восполнять за длинный отдых</span>
                       <FormInput
                         type="number"
                         min={0}
-                        value={resource.maximum ?? resource.current}
-                        onChange={(event) => {
-                          const maximum = Math.max(
-                            0,
-                            Number(event.target.value),
-                          );
+                        value={resource.restAmount ?? 0}
+                        onChange={(event) =>
                           setResourcesDraft((current) => ({
                             ...current,
                             [key]: {
                               ...resource,
-                              maximum: maximum,
-                              current: resource.current,
+                              restAmount: Math.max(
+                                0,
+                                Number(event.target.value),
+                              ),
                             },
-                          }));
-                        }}
-                        onBlur={() => void saveResources(resourcesDraft)}
+                          }))
+                        }
                       />
                     </label>
-                  </div>
-                  <label className="field">
-                    <span>Изображение</span>
-                    <AssetPicker
-                      aria-label={`Изображение ресурса ${key}`}
-                      value={resource.imageAssetId ?? null}
-                      assets={snapshot.assets.filter((asset) =>
-                        asset.mimeType.startsWith("image/"),
-                      )}
-                      onChange={(assetId) => {
-                        const next = {
-                          ...resourcesDraft,
-                          [key]: {
-                            ...resource,
-                            imageAssetId: assetId,
-                          },
-                        };
-                        void saveResources(next);
+                    <Button
+                      disabled={countersPending > 0}
+                      onClick={async () => {
+                        if (await saveResources(resourcesDraft))
+                          setEditingResourceKey(null);
                       }}
-                    />
-                  </label>
-                  <label className="compact-check">
-                    <input
-                      type="checkbox"
-                      checked={resource.recoverable !== false}
-                      onChange={(event) =>
+                    >
+                      Сохранить
+                    </Button>
+                    <Button
+                      className="danger-link"
+                      onClick={() => {
+                        const { [key]: _removed, ...rest } = resourcesDraft;
+                        void saveResources(rest);
+                      }}
+                    >
+                      Удалить
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="resource-card__summary">
+                    <span className="resource-card__summary-value">
+                      {resource.current} /{" "}
+                      {resource.maximum ?? resource.current}
+                    </span>
+                    <Button
+                      disabled={
+                        !editable ||
+                        resource.current <= 0 ||
+                        countersPending > 0
+                      }
+                      aria-label={`Уменьшить ${key}`}
+                      onClick={() =>
+                        void saveResources({
+                          ...resourcesDraft,
+                          [key]: { ...resource, current: resource.current - 1 },
+                        })
+                      }
+                    >
+                      <AppIcon icon={DecreaseIcon} />
+                    </Button>
+                    <Button
+                      disabled={!editable || countersPending > 0}
+                      aria-label={`Увеличить ${key}`}
+                      onClick={() =>
+                        void saveResources({
+                          ...resourcesDraft,
+                          [key]: { ...resource, current: resource.current + 1 },
+                        })
+                      }
+                    >
+                      <AppIcon icon={AddIcon} />
+                    </Button>
+                    <div
+                      className="resource-bar"
+                      role="progressbar"
+                      aria-label={`Уровень: ${key}`}
+                      aria-valuenow={resource.current}
+                      aria-valuemin={0}
+                      aria-valuemax={Math.max(
+                        resource.maximum ?? resource.current,
+                        resource.current,
+                      )}
+                    >
+                      <div
+                        className="resource-bar__fill resource-bar__fill--default"
+                        style={{
+                          width: `${Math.min(100, (resource.current / Math.max(1, resource.maximum ?? resource.current)) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <Button
+                      disabled={
+                        !editable ||
+                        countersPending > 0 ||
+                        resource.recoverable === false ||
+                        (resource.restAmount ?? 0) <= 0 ||
+                        resource.current >=
+                          (resource.maximum ?? resource.current)
+                      }
+                      aria-label={`Восстановить ${resource.restAmount ?? 0}: ${key}`}
+                      onClick={() =>
                         void saveResources({
                           ...resourcesDraft,
                           [key]: {
                             ...resource,
-                            recoverable: event.target.checked,
+                            current: Math.min(
+                              resource.maximum ?? resource.current,
+                              resource.current + (resource.restAmount ?? 0),
+                            ),
                           },
                         })
                       }
-                    />
-                    Восполнять при отдыхе
-                  </label>
-                  <Button
-                    className="danger-link"
-                    onClick={() => {
-                      const { [key]: _removed, ...rest } = resourcesDraft;
-                      void saveResources(rest);
-                    }}
-                  >
-                    Удалить
-                  </Button>
-                </div>
+                    >
+                      +{resource.restAmount ?? 0}
+                    </Button>
+                    <Button
+                      disabled={!editable}
+                      onClick={() => setEditingResourceKey(key)}
+                    >
+                      Настроить
+                    </Button>
+                  </div>
+                )}
               </fieldset>
             ))}
           <div className="inline-fields">
@@ -2291,6 +2429,7 @@ export function CharacterPanel({
                 const key = newResourceName.trim();
                 if (!key) return;
                 setNewResourceName("");
+                setEditingResourceKey(key);
                 void saveResources({
                   ...resourcesDraft,
                   [key]: { current: 0, maximum: 0, recoverable: true },
@@ -2307,66 +2446,22 @@ export function CharacterPanel({
           )}
         </div>
 
-        <div className="character-wallet">
-          <label className="field">
-            Кошелёк (1 золото = 10 серебра; 1 серебро = 10 меди; значения не
-            нормализуются)
-            <div className="character-wallet__grid">
-              {WALLET_KEYS.map((key) => (
-                <span className="inline-fields character-wallet__row" key={key}>
-                  <b>{WALLET_LABELS[key]}</b>
-                  <Button
-                    disabled={
-                      !editable || !canSpendWalletCoin(walletDraft, key)
-                    }
-                    aria-label={`Уменьшить: ${WALLET_LABELS[key]}`}
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => changeWallet(key, -1)}
-                  >
-                    <AppIcon icon={DecreaseIcon} />
-                  </Button>
-                  <FormInput
-                    type="number"
-                    min={0}
-                    value={walletDraft[key]}
-                    disabled={!editable}
-                    onChange={(event) => {
-                      cancelWalletBatch(false);
-                      const next = {
-                        ...walletDraftRef.current,
-                        [key]: normalizeWalletValue(event.target.value),
-                      };
-                      walletDraftRef.current = next;
-                      walletInputDirtyRef.current = true;
-                      setWalletDraft(next);
-                    }}
-                    onBlur={() => void saveWallet(walletDraft)}
-                  />
-                  <Button
-                    disabled={!editable}
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => changeWallet(key, 1)}
-                    aria-label={`Увеличить: ${WALLET_LABELS[key]}`}
-                  >
-                    <AppIcon icon={AddIcon} />
-                  </Button>
-                </span>
-              ))}
-            </div>
-            {countersPending > 0 && <span className="muted">Сохраняем…</span>}
-            {countersError && (
-              <span className="field-error" role="alert">
-                {countersError}
-              </span>
-            )}
-          </label>
-        </div>
+        {countersPending > 0 && <span className="muted">Сохраняем…</span>}
+        {countersError && (
+          <span className="field-error" role="alert">
+            {countersError}
+          </span>
+        )}
       </div>
 
       {/* Секция 3: Инвентарь и снаряжение */}
       <div
         className="character-section character-section--inventory"
         data-character-section="inventory"
+        role="tabpanel"
+        id={`${vitalsTabId}-inventory-panel`}
+        aria-labelledby={`${vitalsTabId}-inventory-tab`}
+        hidden={vitalsTab !== "inventory"}
       >
         <h3 className="character-block-heading">Инвентарь и снаряжение</h3>
         <label className="field">
@@ -2410,8 +2505,11 @@ export function CharacterPanel({
       <div
         className="character-section character-section--bio"
         data-character-section="bio"
+        role="tabpanel"
+        id={`${vitalsTabId}-bio-panel`}
+        aria-labelledby={`${vitalsTabId}-bio-tab`}
+        hidden={vitalsTab !== "bio"}
       >
-        <h3 className="character-block-heading">Личность и галерея</h3>
         {snapshot.me.role === "GM" && (
           <CharacterControllerAccess
             character={character}
@@ -2431,8 +2529,8 @@ export function CharacterPanel({
                 {characterMutationError}
               </p>
             )}
-            <label className="field">
-              Портрет
+            <div className="field">
+              <span>Портрет</span>
               <AssetPicker
                 aria-label="Портрет персонажа"
                 value={character.portraitAssetId ?? null}
@@ -2451,7 +2549,7 @@ export function CharacterPanel({
                   );
                 }}
               />
-            </label>
+            </div>
             <ImageUploadField
               label="Загрузить портрет для персонажа"
               value={portraitUpload}

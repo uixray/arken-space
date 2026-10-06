@@ -30,7 +30,6 @@ import { shouldIgnoreGlobalShortcut } from "../input-diagnostics";
 import { fogHiddenTokenIds, isRectFullyRevealed } from "./fog";
 import { useFogPattern } from "./useFogPattern";
 import { paintFogBrushStroke } from "./fog-brush-stroke";
-import { fogBoundaryPixelRatio, fogBoundaryPixels } from "./fog-boundary";
 import { centerRectAtScale, fitRect } from "./camera-fit";
 import { useLatestRef } from "../use-latest-ref";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -92,6 +91,7 @@ import {
 } from "./token-drag-event";
 import { mapWorldPointFromDrop } from "../token-placement";
 import { getTokenImageMask } from "./token-image-mask";
+import { proportionalTokenSize } from "./token-resize";
 import {
   createTokenImageState,
   resolveTokenImageState,
@@ -141,6 +141,10 @@ function AnimatedPing({
   };
   scale: number;
 }) {
+  // A ping belongs to its sender, not to the viewer's theme. Reuse the
+  // deterministic member colour from cursor presence so every client sees
+  // the same player's cursor and ping in the same hue.
+  const color = cursorColorForMembership(ping.membershipId);
   const pingTime =
     typeof ping.createdAt === "number"
       ? ping.createdAt
@@ -188,34 +192,34 @@ function AnimatedPing({
     <Group x={ping.x} y={ping.y}>
       <Circle
         radius={r1}
-        stroke="#f59e0b"
+        stroke={color}
         strokeWidth={2.5 / scale}
         opacity={op1}
         listening={false}
       />
       <Circle
         radius={r2}
-        stroke="#fbbf24"
+        stroke={color}
         strokeWidth={2 / scale}
         opacity={op2}
         listening={false}
       />
       <Circle
         radius={r3}
-        stroke="#fcd34d"
+        stroke={color}
         strokeWidth={1.5 / scale}
         opacity={op3}
         listening={false}
       />
       <Circle
         radius={coreRadius * 1.6}
-        fill="#f59e0b"
+        fill={color}
         opacity={coreOpacity * 0.4}
         listening={false}
       />
       <Circle
         radius={coreRadius}
-        fill="#fbbf24"
+        fill={color}
         stroke="#78350f"
         strokeWidth={1.5 / scale}
         opacity={coreOpacity}
@@ -225,7 +229,7 @@ function AnimatedPing({
         x={22 / scale}
         y={-7 / scale}
         text={ping.displayName}
-        fill="#fef3c7"
+        fill={color}
         fontSize={13 / scale}
         fontStyle="bold"
         opacity={coreOpacity}
@@ -935,9 +939,6 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       ),
     [props.fogReveals],
   );
-  const [fogBoundary, setFogBoundary] = useState<HTMLCanvasElement | null>(
-    null,
-  );
 
   /*
    * UIX-395: fog visibility is the single most expensive thing this renderer
@@ -999,37 +1000,6 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       height: worldDraft.height,
       pixelRatio: 1,
     });
-    // Derive the decorative hairline from the composited mask. Outlining each
-    // operation leaves seams wherever brush strokes/areas overlap; the final
-    // alpha respects reveal/cover order and contains only the exposed edge.
-    try {
-      const composite = mask.toCanvas({
-        x: 0,
-        y: 0,
-        width: worldDraft.width,
-        height: worldDraft.height,
-        pixelRatio: fogBoundaryPixelRatio(worldDraft.width, worldDraft.height),
-      });
-      const context = composite.getContext("2d", { willReadFrequently: true });
-      if (context) {
-        const width = composite.width;
-        const height = composite.height;
-        const edge = document.createElement("canvas");
-        edge.width = width;
-        edge.height = height;
-        const edgeContext = edge.getContext("2d");
-        if (edgeContext) {
-          const pixels = context.getImageData(0, 0, width, height);
-          pixels.data.set(fogBoundaryPixels(pixels.data, width, height));
-          edgeContext.putImageData(pixels, 0, 0);
-          setFogBoundary(edge);
-        }
-      }
-    } catch {
-      // A cross-origin fog texture must never break the fog itself. In that
-      // case omit only the cosmetic boundary rather than exposing map data.
-      setFogBoundary(null);
-    }
     mask.getLayer()?.batchDraw();
   }, [fogPatternImage, orderedFogReveals, worldDraft.width, worldDraft.height]);
 
@@ -1199,24 +1169,6 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       showGmLayer,
     },
   );
-  const requestedDeleteToken =
-    interaction.deleteRequestedFor?.kind === "token"
-      ? selectableObjects.tokens.find(
-          (token) =>
-            token.id === interaction.deleteRequestedFor?.objectId &&
-            token.revision === interaction.deleteRequestedFor.revision,
-        )
-      : undefined;
-  const deleteRequestValid = canDeleteSelectedToken(
-    requestedDeleteToken,
-    props,
-  );
-  useEffect(() => {
-    // A confirmation belongs to one authoritative revision and permission set;
-    // do not silently retarget it after a snapshot update or restore it later.
-    if (interaction.deleteRequestedFor && !deleteRequestValid)
-      dispatchInteraction({ type: "cancel-delete" });
-  }, [interaction.deleteRequestedFor, deleteRequestValid]);
   const movableTargets = useMemo<MapMoveTarget[]>(
     () => [
       ...selectableObjects.tokens
@@ -2234,14 +2186,6 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           );
         })}
       </Group>
-      {fogBoundary && orderedFogReveals.length > 0 && (
-        <Image
-          image={fogBoundary}
-          width={worldDraft.width}
-          height={worldDraft.height}
-          listening={false}
-        />
-      )}
       {fogDraft && (
         <Rect
           {...fogDraft}
@@ -2746,8 +2690,10 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
               }}
               onDragEnd={(event) => {
                 event.cancelBubble = true;
-                const width = Math.round(Math.max(16, event.target.x()));
-                const height = Math.round(width / (token.width / token.height));
+                const { width, height } = proportionalTokenSize(
+                  token,
+                  event.target.x(),
+                );
 
                 const expected = {
                   width,
@@ -3355,8 +3301,9 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                           );
                       }}
                       onDragEnd={(event) => {
-                        const width = Math.round(
-                          Math.max(16, event.target.x()),
+                        const { width, height } = proportionalTokenSize(
+                          token,
+                          event.target.x(),
                         );
                         event.target
                           .getParent()
@@ -3367,12 +3314,15 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                           x: token.width,
                           y: token.height,
                         });
-                        void props.onTokenResize?.(token.id, token.revision, {
-                          width,
-                          height: Math.round(
-                            width / (token.width / token.height),
-                          ),
-                        });
+                        // A rejected resize must not become an unhandled
+                        // rejection: the global error boundary pauses the UI.
+                        // App's mutation runner already reports and recovers.
+                        void props
+                          .onTokenResize?.(token.id, token.revision, {
+                            width,
+                            height,
+                          })
+                          .catch(() => undefined);
                       }}
                     />
                   )}
@@ -3877,22 +3827,6 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           <button onClick={closeTokenMenu}>Отмена</button>
         </div>
       )}
-      {/* UIX-470: спрашивают теперь только про токен — рисунок удаляется сразу.
-          Прежний текст «Это действие нельзя отменить» был неправдой: удаление
-          пишется в `action_journal`, и Ctrl+Z возвращает объект. Пугать
-          необратимостью там, где её нет, — худший вид подтверждения: человек
-          учится не верить предупреждениям вообще. */}
-      <ConfirmDialog
-        open={interaction.deleteRequestedFor !== null && deleteRequestValid}
-        title="Убрать токен с карты?"
-        message="Действие можно отменить: Ctrl+Z вернёт токен на место."
-        onClose={() => dispatchInteraction({ type: "cancel-delete" })}
-        onConfirm={() =>
-          dispatchInteraction({
-            type: deleteRequestValid ? "confirm-delete" : "cancel-delete",
-          })
-        }
-      />
       <ConfirmDialog
         open={bulkDeleteRequested !== null && bulkDeleteValid}
         title="Удалить выбранные объекты?"
@@ -3992,16 +3926,16 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                       onClick={() => updateColor(value)}
                     />
                   ))}
+                  <label className="drawing-color-picker">
+                    <input
+                      type="color"
+                      aria-label="Выбрать свой цвет рисунка"
+                      title="Свой цвет"
+                      value={activeColor}
+                      onChange={(event) => updateColor(event.target.value)}
+                    />
+                  </label>
                 </span>
-                <label className="drawing-color-picker">
-                  <span>Цвет</span>
-                  <input
-                    type="color"
-                    aria-label="Цвет рисунка"
-                    value={activeColor}
-                    onChange={(event) => updateColor(event.target.value)}
-                  />
-                </label>
               </span>
 
               <span className="drawing-control-group">

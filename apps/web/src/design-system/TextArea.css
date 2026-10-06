@@ -33,10 +33,10 @@
     .g-text-area_disabled
   ),
 .g-text-area:focus-within:not(.g-text-area_disabled) {
-  border-color: var(--color-accent, #c46f49);
-  outline: var(--focus-ring-width, 2px) solid var(--color-focus, #c46f49);
-  outline-offset: var(--focus-ring-offset, 1px);
-  box-shadow: 0 0 0 1px var(--color-accent, #c46f49);
+  border-color: var(--color-focus, #c46f49);
+  border-width: 2px;
+  outline: none;
+  box-shadow: none;
 }
 
 /* Invalid / Error */
@@ -48,8 +48,8 @@
 
 .arken-text-area[data-invalid="true"]:focus-within,
 .g-text-area[data-invalid="true"]:focus-within {
-  outline-color: var(--color-danger, #da6b61) !important;
-  box-shadow: 0 0 0 1px var(--color-danger, #da6b61) !important;
+  border-color: var(--color-danger, #da6b61) !important;
+  box-shadow: none !important;
 }
 
 /* Disabled */
@@ -86,6 +86,12 @@
   outline: none;
   resize: vertical;
   caret-color: var(--color-accent, #c46f49);
+}
+
+/* The wrapper owns the only focus frame, including in the landing form. */
+.arken-text-area__control:focus-visible,
+.g-text-area__control:focus-visible {
+  outline: none;
 }
 
 .arken-text-area__control::placeholder,

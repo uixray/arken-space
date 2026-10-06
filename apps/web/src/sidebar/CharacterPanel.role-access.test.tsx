@@ -394,6 +394,7 @@ async function openBackstory(user: ReturnType<typeof userEvent.setup>) {
 }
 
 async function openPortraitEditor(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("tab", { name: "Личность" }));
   await user.click(screen.getByRole("button", { name: /^Изменить портрет:/ }));
   return screen.getByRole("dialog", { name: /^Портрет:/ });
 }
@@ -425,6 +426,7 @@ async function expectAllowedBackstory(
   expect(calls.onUpdateCounters).not.toHaveBeenCalled();
   expect(calls.onReplaceControllers).not.toHaveBeenCalled();
   expect(calls.onRoll).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("tab", { name: "Личность" }));
   const media = screen.getByRole("button", { name: "Gallery edit permission" });
   if (mediaEditable) expect(media).toBeEnabled();
   else expect(media).toBeDisabled();
@@ -468,6 +470,7 @@ describe("CharacterPanel backstory role and mutation wiring", () => {
     expect(calls.onUpdateCounters).not.toHaveBeenCalled();
     expect(calls.onReplaceControllers).not.toHaveBeenCalled();
     expect(calls.onRoll).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("tab", { name: "Личность" }));
     expect(
       screen.getByRole("button", { name: "Gallery edit permission" }),
     ).toBeDisabled();
@@ -792,6 +795,8 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     const calls = renderPanel(snapshot, character);
     const user = userEvent.setup();
 
+    await user.click(screen.getByRole("tab", { name: "Показатели" }));
+
     expect(
       screen.getByRole("button", { name: "+ Добавить навык…" }),
     ).toBeInTheDocument();
@@ -829,6 +834,10 @@ describe("CharacterPanel identity and portrait role wiring", () => {
       entries: [entry],
     });
     renderPanel(snapshot, character);
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("tab", { name: "Показатели" }));
 
     expect(
       screen.getByRole("button", { name: "+ Добавить навык…" }),
