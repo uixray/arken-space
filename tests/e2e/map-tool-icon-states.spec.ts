@@ -55,6 +55,7 @@ for (const role of ["GM", "PLAYER"] as const)
     test(`UIX-645 expanded map tools ${role} ${width}`, async ({
       page,
     }, testInfo) => {
+      test.setTimeout(120_000);
       await page.setViewportSize({ width, height: 850 });
       const errors: string[] = [];
       const writes: string[] = [];

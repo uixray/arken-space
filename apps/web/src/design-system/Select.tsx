@@ -269,20 +269,21 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
           control.focus();
         }
       };
-      const schedule = () => {
+      const schedule = (restoreTriggerFocus = false) => {
         cancelAnimationFrame(frame);
-        frame = requestAnimationFrame(() => measure(true));
+        frame = requestAnimationFrame(() => measure(restoreTriggerFocus));
       };
       measure(false);
       const observer =
         typeof ResizeObserver === "undefined"
           ? undefined
-          : new ResizeObserver(schedule);
+          : new ResizeObserver(() => schedule());
       observer?.observe(control);
-      window.addEventListener("resize", schedule);
+      const onWindowResize = () => schedule(true);
+      window.addEventListener("resize", onWindowResize);
       return () => {
         observer?.disconnect();
-        window.removeEventListener("resize", schedule);
+        window.removeEventListener("resize", onWindowResize);
         cancelAnimationFrame(frame);
       };
     }, [isOpen]);
@@ -474,7 +475,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
               handleOpenChange(true);
             }
           }}
-          onKeyDown={(event) => {
+          onKeyDownCapture={(event) => {
             if (!isOpen || event.key !== "Home") return;
             const first = popupRef.current?.querySelector<HTMLElement>(
               '[role="option"]:not([aria-disabled="true"])',

@@ -32,3 +32,12 @@
 - CI trace frames show the popup closing around Home and reopening around Enter, leaving the old value selected. Eight repeated local runs on the old revision passed, so this is timing-sensitive; the trace, not the local pass, governs the repair.
 - Added popup-level Home capture to focus the first enabled option before BaseSelect's item handling, and explicit unit/E2E focus assertions. Select unit suite 9/9 and the gallery/world dropdown E2E matrix 12/12 (Chromium + Firefox, narrow + desktop) pass locally.
 - Next: format/typecheck, commit/push, require full CI on exact new SHA. Final browser and host release gates remain open; production untouched.
+
+## Candidate 9bde217 CI result and connected repair — 2026-10-06
+
+- CI: `checks`, `multiplayer`, and both Firefox shards passed; both Chromium shards failed. Shard 1: GM and PLAYER 360px gallery Home-focus assertions. Shard 2: compact GM 360px map-toolbar bottom exceeded the short viewport. Aggregate E2E red.
+- Decisions: retain the intended whole-toolbar scroll, but bound its height by the actual compact viewport as well as its map container. Preserve Home keyboard selection; prevent ResizeObserver measurements from stealing option focus, and capture Home on the trigger before BaseSelect's own handler. The long map visual-contract case gets a 120s test timeout because its icon/hover matrix exceeds the previous 30s even on a local isolated run; this is not an assertion relaxation.
+- Changed files: `apps/web/src/design-system/Select.tsx`, `apps/web/src/mobile-foundation.css`, `tests/e2e/map-tool-icon-states.spec.ts`.
+- Verification: Chromium GM 360px map contract passed; gallery GM/PLAYER 360px repeated three times each (6/6), Select unit 9/9, workspace typecheck, Prettier and diff check passed. A combined first pass of the map matrix timed out after reaching later icon checks; with the focused 120s timeout, GM 360px completed in 34s. Browser QA and full CI on the next exact SHA remain required.
+- Blockers: Docker engine for local full-stack QA is off; no production host action was taken. Release gates (green exact-SHA CI, GM/player acceptance, backup/restore, non-live media smoke, explicit deploy authorization) remain open.
+- Next: commit/push this connected CI repair, update PR/Linear at stage gate, await complete CI; then perform remaining release checks. Production untouched.

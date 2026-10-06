@@ -1010,7 +1010,12 @@
 @media (max-width: 1023px) {
   .app-shell--compact .map-toolbar {
     /* Reserve the bottom row for the token tray instead of covering its trigger. */
-    max-height: calc(100% - 72px);
+    max-height: min(
+      calc(100% - 72px),
+      calc(
+        100dvh - var(--compact-header-height) - var(--compact-nav-height) - 16px
+      )
+    );
     overflow-y: auto;
     overscroll-behavior-y: contain;
   }
