@@ -258,6 +258,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
       if (!isOpen || !triggerRef.current) return;
       const control = triggerRef.current;
       let frame = 0;
+      let restoreTriggerFocus = false;
       const measure = (isResize = false) => {
         const width = control.getBoundingClientRect().width;
         setPopupWidth(
@@ -269,15 +270,23 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
           control.focus();
         }
       };
-      const schedule = (restoreTriggerFocus = false) => {
+      const schedule = (shouldRestoreFocus = false) => {
+        restoreTriggerFocus ||= shouldRestoreFocus;
         cancelAnimationFrame(frame);
-        frame = requestAnimationFrame(() => measure(restoreTriggerFocus));
+        frame = requestAnimationFrame(() => {
+          measure(restoreTriggerFocus);
+          restoreTriggerFocus = false;
+        });
       };
       measure(false);
+      let firstObservation = true;
       const observer =
         typeof ResizeObserver === "undefined"
           ? undefined
-          : new ResizeObserver(() => schedule());
+          : new ResizeObserver(() => {
+              schedule(firstObservation);
+              firstObservation = false;
+            });
       observer?.observe(control);
       const onWindowResize = () => schedule(true);
       window.addEventListener("resize", onWindowResize);

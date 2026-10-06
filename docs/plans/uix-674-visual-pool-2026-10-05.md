@@ -41,3 +41,19 @@
 - Verification: Chromium GM 360px map contract passed; gallery GM/PLAYER 360px repeated three times each (6/6), Select unit 9/9, workspace typecheck, Prettier and diff check passed. A combined first pass of the map matrix timed out after reaching later icon checks; with the focused 120s timeout, GM 360px completed in 34s. Browser QA and full CI on the next exact SHA remain required.
 - Blockers: Docker engine for local full-stack QA is off; no production host action was taken. Release gates (green exact-SHA CI, GM/player acceptance, backup/restore, non-live media smoke, explicit deploy authorization) remain open.
 - Next: commit/push this connected CI repair, update PR/Linear at stage gate, await complete CI; then perform remaining release checks. Production untouched.
+
+## Manual QA stand restored — 2026-10-06
+
+- Decision: resume the existing isolated `arken-manual-qa-20261004` stack on `127.0.0.1:15180` without resetting its named PostgreSQL/media volumes. Docker Desktop required the owner to start its engine; no production host was used.
+- Revision: PR HEAD `3f3f6a9`; manual web image `arken-manual-qa-web-3f3f6a9-localfix:local` includes an **uncommitted** Select focus repair, so this stand is visual QA evidence only, not an exact release-candidate proof. The running server image is older and its `/healthz` reports `multiplayer-test`, not the PR SHA; disclose this mixed provenance during acceptance.
+- Changed files: ignored `.data/manual-qa.web-uix674.override.yml` (backed up as `.data/manual-qa.web-uix674.override.before-3f3f6a9.yml`), `apps/web/src/design-system/Select.tsx` (uncommitted), and this checkpoint. Only the QA web container was recreated; server/PostgreSQL container IDs and persistent volumes remained unchanged.
+- Verification: `GET /` 200 with JS asset `/assets/index-XRY6J6Si.js`; `/healthz` status/database ok, schema 2. Web image label records PR SHA plus uncommitted Select fix. Locally, the connected 10-case Chromium selector/focus matrix passed. Full CI on `3f3f6a9` is red (both browser shard 2/2 jobs: eight Select focus/keyboard cases each), so release remains blocked.
+- Next: receive owner's visual QA feedback on 15180; complete focused Select/Firefox checks, commit one repair candidate, then require exact-SHA full CI and remaining release gates. Do not deploy production.
+
+## Connected Select regression repair — 2026-10-06
+
+- Root cause: the previous ResizeObserver focus guard was removed too broadly. BaseSelect popup opening relies on the first geometry observation returning focus to its trigger; suppressing that focus broke eight modal/feedback/template keyboard cases in each browser. Restoring focus on the first observation and explicit viewport resize while suppressing focus on later ordinary observations preserves both popup-open and Home-option behavior.
+- Changed files: `apps/web/src/design-system/Select.tsx` and this checkpoint. The live local QA web image on 15180 was built from these same uncommitted sources, but is not release evidence.
+- Verification: connected Chromium 10/10 and Firefox 10/10 E2E cases pass across modal owner, feedback selector, template modal and narrow gallery. The prior 16 CI failures across shard 2/2 map to these eight cases per browser. Typecheck/unit/format gate and exact-SHA CI still pending.
+- Blockers: user visual acceptance in progress; CI red on the previous exact SHA; production host gates and merge remain open.
+- Next: run local code-quality gate, commit/push one candidate, then inspect full exact-SHA CI without claiming completion from the focused matrix.
