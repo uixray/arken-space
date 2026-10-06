@@ -102,6 +102,7 @@ async function openInventory(page: Page) {
     "\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0438",
   );
   const workspace = page.locator(".character-workspace");
+  await workspace.getByRole("tab", { name: "Инвентарь" }).click();
   const inventory = workspace.getByLabel(
     /\u0418\u043d\u0432\u0435\u043d\u0442\u0430\u0440\u044c \(/,
   );

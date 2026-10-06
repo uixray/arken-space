@@ -118,7 +118,7 @@ for (const width of [1024, 1440]) {
     await expect(trigger).toBeFocused();
 
     await trigger.click();
-    await page.locator(".brand").click();
+    await page.locator(".map-viewport").click({ position: { x: 500, y: 300 } });
     await expect(list).toBeHidden();
     await trigger.click();
     await openWorkspaceSection(page, "Сцены");
@@ -763,7 +763,9 @@ for (const role of ["GM", "PLAYER"] as const)
       await assertHitTarget(red);
       await red.click();
       await expect(red).toHaveAttribute("aria-pressed", "true");
-      const color = panel.getByLabel("Цвет рисунка", { exact: true });
+      const color = panel.getByLabel("Выбрать свой цвет рисунка", {
+        exact: true,
+      });
       await expect(color).toHaveAttribute("type", "color");
       await expect(color).toHaveValue("#ef4444");
       const slider = panel.getByRole("slider", {
