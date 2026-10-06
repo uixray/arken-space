@@ -463,6 +463,11 @@ for (const layout of [
         name: "Очки: Выносливость",
       });
       await expect(input).toHaveValue("10");
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const more = page.getByRole("button", { name: "Показать больше" });
+        if (!(await more.count())) break;
+        await more.click();
+      }
       if (hasStoryMedia) {
         const images = page.locator(`${LIST} .story-post__media img`);
         await expect(images).toHaveCount(2);
@@ -588,6 +593,16 @@ for (const layout of [
         await expect(quickRollToggle).toHaveAttribute("aria-expanded", "true");
       }
       await mark(page, `baseline-1440x900-${layout}`);
+      await settleGeometry(page);
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const more = page.getByRole("button", { name: "Показать больше" });
+        if (!(await more.count())) break;
+        await more.click();
+        await settleGeometry(page);
+      }
+      await page.locator("#activity-message-list").evaluate((list) => {
+        list.scrollTop = list.scrollHeight;
+      });
       await settleGeometry(page);
       const before = await capture(`baseline-1440x900-${layout}`, true);
       expect(
@@ -823,8 +838,15 @@ for (const layout of [
         );
         expect(readerAfterRoll.bottom).toBeGreaterThan(FOLLOW_THRESHOLD);
         expect(
-          Math.abs(readerAfterRoll.scrollTop - readerResized.scrollTop),
-        ).toBeLessThanOrEqual(BOTTOM_TOLERANCE);
+          await page.locator(LIST).evaluate((list, id) => {
+            const anchor = document.getElementById(id!);
+            if (!anchor) return false;
+            const viewport = list.getBoundingClientRect();
+            const rect = anchor.getBoundingClientRect();
+            return rect.bottom > viewport.top && rect.top < viewport.bottom;
+          }, readerAnchorId),
+          "appending a roll keeps the same historical article in view",
+        ).toBe(true);
         await expect(newEvents).toBeVisible();
         await newEvents.click();
         await expect

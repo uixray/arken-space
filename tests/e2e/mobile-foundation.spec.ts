@@ -483,6 +483,12 @@ for (const role of ["GM", "PLAYER"] as const) {
           await expect(page.locator("#chat-panel-activity")).toBeVisible();
           const list = page.locator(listSelector);
           await expect(list.getByText(/^Мобильный журнал 29 —/)).toHaveCount(1);
+          for (let attempt = 0; attempt < 4; attempt++) {
+            if ((await scrollMetrics(page)).overflow > 200) break;
+            const more = page.getByRole("button", { name: "Показать больше" });
+            if (!(await more.count())) break;
+            await more.click();
+          }
           await expect
             .poll(async () => (await scrollMetrics(page)).overflow)
             .toBeGreaterThan(200);
