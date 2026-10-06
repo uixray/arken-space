@@ -64,7 +64,7 @@ describe("UIX645 dice controls", () => {
     });
     expect(onRoll).toHaveBeenCalledExactlyOnceWith(
       "1d20",
-      "d20",
+      "Чистый бросок двадцатки",
       "GM_ONLY",
       "character-icons",
       "ADVANTAGE",
