@@ -23,17 +23,17 @@ concurrency:
 
 jobs:
   browser:
-    name: e2e (${{ matrix.project }}, shard ${{ matrix.shard }}/2)
+    name: e2e (${{ matrix.project }}, shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
-    # Firefox превысил 45 минут: делим полный набор на два shard каждого браузера,
-    # не увеличивая лимит, число Playwright workers или retries.
+    # Два первых shard превысили 45 минут при ~279 тестах каждый. Три shard
+    # сохраняют полный набор и лимит, но уменьшают длину каждого задания.
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 6
       matrix:
         project: [chromium, firefox]
-        shard: [1, 2]
+        shard: [1, 2, 3]
         include:
           - project: chromium
             installBrowser: chrome
@@ -116,7 +116,7 @@ jobs:
           tail -40 /tmp/server.log
           exit 1
 
-      - run: pnpm test:e2e --project=${{ matrix.project }} --workers=1 --fail-on-flaky-tests --shard=${{ matrix.shard }}/2 --reporter=line,json
+      - run: pnpm test:e2e --project=${{ matrix.project }} --workers=1 --fail-on-flaky-tests --shard=${{ matrix.shard }}/3 --reporter=line,json
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: e2e-report.json
 
