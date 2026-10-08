@@ -202,7 +202,7 @@ export function StickerPicker({
             ref={searchRef}
             type="search"
             aria-label="Поиск стикеров"
-            placeholder="Поиск по имени и описанию"
+            placeholder="Поиск по описанию и паку"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />

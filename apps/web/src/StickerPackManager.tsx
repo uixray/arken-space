@@ -26,7 +26,6 @@ interface StickerDraft extends StickerUploadMetadata {
   key: string;
   file: File | null;
   fileLabel: string;
-  nameReviewed: boolean;
   status: FileStatus;
   error: string;
 }
@@ -36,13 +35,6 @@ const provenanceOptions: Array<[StickerProvenance, string]> = [
   ["ORIGINAL", "Собственный оригинал"],
   ["COMMISSIONED", "Создан по заказу"],
 ];
-
-function filenameLabel(fileName: string) {
-  return fileName
-    .replace(/\.[^.]+$/, "")
-    .trim()
-    .slice(0, 80);
-}
 
 function hasImportedProvenance(item: StickerDraft) {
   return (
@@ -165,12 +157,11 @@ function StickerPackManagerSession({ snapshot }: { snapshot: GameSnapshot }) {
       setAudience(detail.audience);
       setSendPolicy(detail.sendPolicy);
       setFiles(
-        detail.stickers.map((sticker) => ({
+        detail.stickers.map((sticker, index) => ({
           key: `server-${sticker.id}`,
           file: null,
-          fileLabel: sticker.name,
+          fileLabel: `Изображение ${index + 1}`,
           name: sticker.name,
-          nameReviewed: true,
           altText: sticker.altText,
           provenanceType: sticker.provenanceType,
           sourceReference: sticker.sourceReference ?? "",
@@ -315,12 +306,14 @@ function StickerPackManagerSession({ snapshot }: { snapshot: GameSnapshot }) {
         )
       )
         continue;
+      const fallbackName = `Стикер ${nextKey.current + 1}`;
       additions.push({
         key: `${nextKey.current++}-${identity}`,
         file,
         fileLabel: file.name,
-        name: filenameLabel(file.name),
-        nameReviewed: false,
+        // The API requires a stable label, but filenames are not a public-facing
+        // sticker name. Keep this implementation detail out of the UI.
+        name: fallbackName,
         altText: "",
         provenanceType: "IMPORTED",
         sourceReference: "",
@@ -366,15 +359,13 @@ function StickerPackManagerSession({ snapshot }: { snapshot: GameSnapshot }) {
       if (!sessionActive.current) break;
       if (!item.file) continue;
       if (
-        !item.name.trim() ||
-        !item.nameReviewed ||
         !item.altText.trim() ||
         !hasImportedProvenance(item)
       ) {
         updateFile(item.key, {
           status: "failed",
           error:
-            "Проверьте название, заполните alt-текст и обязательные сведения об источнике.",
+            "Заполните alt-текст и обязательные сведения об источнике.",
         });
         continue;
       }
@@ -674,48 +665,6 @@ function StickerPackManagerSession({ snapshot }: { snapshot: GameSnapshot }) {
               {files.map((file) => (
                 <fieldset className="sticker-pack-file" key={file.key}>
                   <legend>{file.file?.name ?? file.fileLabel}</legend>
-                  <p className="muted">
-                    {file.file
-                      ? "Имя из файла — только черновая подсказка; проверьте название перед загрузкой."
-                      : "Этот стикер уже записан на сервере; файл можно сверить повторным выбором по SHA-256."}
-                  </p>
-                  <label>
-                    Название стикера
-                    <input
-                      value={file.name}
-                      maxLength={80}
-                      disabled={
-                        file.status === "uploaded" ||
-                        file.status === "blocked" ||
-                        file.status === "uncertain" ||
-                        busy !== null
-                      }
-                      onChange={(event) =>
-                        updateFile(file.key, {
-                          name: event.currentTarget.value,
-                          nameReviewed: false,
-                        })
-                      }
-                    />
-                  </label>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={file.nameReviewed}
-                      disabled={
-                        file.status === "uploaded" ||
-                        file.status === "blocked" ||
-                        file.status === "uncertain" ||
-                        busy !== null
-                      }
-                      onChange={(event) =>
-                        updateFile(file.key, {
-                          nameReviewed: event.currentTarget.checked,
-                        })
-                      }
-                    />
-                    Название проверено человеком
-                  </label>
                   <label>
                     Alt-текст
                     <input

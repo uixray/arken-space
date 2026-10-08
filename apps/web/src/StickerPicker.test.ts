@@ -42,5 +42,6 @@ describe("filterStickerPacks", () => {
     expect(filterStickerPacks(packs, "CHARACTER", "Lyra")).toHaveLength(1);
     expect(filterStickerPacks(packs, "CHARACTER", "WAVES")).toHaveLength(1);
     expect(filterStickerPacks(packs, "CHARACTER", "missing")).toEqual([]);
+    expect(filterStickerPacks(packs, "CHARACTER", "Greeting")).toEqual([]);
   });
 });

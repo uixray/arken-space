@@ -94,7 +94,7 @@ describe("StickerPackManager", () => {
           id: "00000000-0000-4000-8000-000000000498",
           packId: packDraft.id,
           mediaId: "00000000-0000-4000-8000-000000000499",
-          name: "Смотритель машет",
+          name: "PRIVATE individual sticker name",
           altText: "Смотритель приветствует",
           provenanceType: "ORIGINAL",
           sourceReference: null,
@@ -119,6 +119,11 @@ describe("StickerPackManager", () => {
     expect(
       await screen.findByText("Загружен; повторно отправлен не будет."),
     ).toBeInTheDocument();
+    expect(screen.queryByText("PRIVATE individual sticker name")).toBeNull();
+    expect(screen.getByLabelText("Alt-текст")).toHaveValue(
+      "Смотритель приветствует",
+    );
+    expect(screen.getByText("Изображение 1")).toBeInTheDocument();
     expect(screen.getByText(/нужно выбрать повторно/)).toBeInTheDocument();
     expect(uploadSticker).not.toHaveBeenCalled();
   });
@@ -358,11 +363,6 @@ describe("StickerPackManager", () => {
     const originals = screen.getAllByLabelText("Происхождение");
     await user.selectOptions(originals[0]!, "ORIGINAL");
     await user.selectOptions(originals[1]!, "ORIGINAL");
-    const reviewed = screen.getAllByRole("checkbox", {
-      name: "Название проверено человеком",
-    });
-    await user.click(reviewed[0]!);
-    await user.click(reviewed[1]!);
     await user.click(
       screen.getByRole("button", { name: "Загрузить ожидающие стикеры" }),
     );
@@ -453,9 +453,6 @@ describe("StickerPackManager", () => {
       "ORIGINAL",
     );
     await user.click(
-      screen.getByRole("checkbox", { name: "Название проверено человеком" }),
-    );
-    await user.click(
       screen.getByRole("button", { name: "Загрузить ожидающие стикеры" }),
     );
     const publish = await screen.findByRole("button", {
@@ -533,6 +530,8 @@ describe("StickerPackManager", () => {
       new File(["webp"], "Кубик.webp", { type: "image/webp" }),
       new File(["png"], "Факел.png", { type: "image/png" }),
     ]);
+    expect(screen.queryByLabelText("Название стикера")).toBeNull();
+    expect(screen.queryByText("Название проверено человеком")).toBeNull();
 
     const altFields = screen.getAllByLabelText("Alt-текст");
     await user.type(altFields[0]!, "Герой бросает кубик");
@@ -548,11 +547,6 @@ describe("StickerPackManager", () => {
     const licenses = screen.getAllByLabelText("Лицензия / разрешение");
     await user.type(licenses[0]!, "Права подтверждены владельцем");
     await user.type(licenses[1]!, "Права подтверждены владельцем");
-    const nameChecks = screen.getAllByRole("checkbox", {
-      name: "Название проверено человеком",
-    });
-    await user.click(nameChecks[0]!);
-    await user.click(nameChecks[1]!);
     await user.click(
       screen.getByRole("button", { name: "Загрузить ожидающие стикеры" }),
     );
@@ -563,7 +557,7 @@ describe("StickerPackManager", () => {
         packDraft.id,
         expect.any(File),
         {
-          name: "Кубик",
+          name: "Стикер 1",
           altText: "Герой бросает кубик",
           provenanceType: "IMPORTED",
           sourceReference: "D:\\User\\Desktop\\стикеры",
@@ -584,7 +578,7 @@ describe("StickerPackManager", () => {
       3,
       packDraft.id,
       expect.any(File),
-      expect.objectContaining({ name: "Факел", altText: "Горящий факел" }),
+      expect.objectContaining({ name: "Стикер 2", altText: "Горящий факел" }),
     );
     const publishButton = screen.getByRole("button", {
       name: "Опубликовать пак…",

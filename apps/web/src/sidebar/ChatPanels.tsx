@@ -287,7 +287,6 @@ function ChatMessageBodyComponent({
           height={presentation.height}
           loading="lazy"
         />
-        <figcaption>{presentation.name}</figcaption>
       </figure>
     );
   }
