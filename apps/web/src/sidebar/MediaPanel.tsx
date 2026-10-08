@@ -12,6 +12,7 @@ import { ASSET_KIND_LABELS } from "../asset-labels";
 import { ImageUploadField } from "../ui/ImageUploadField";
 import { AudioUploadField } from "../ui/AudioUploadField";
 import type { AssetActions } from "../use-asset-actions";
+import { StickerPackManager } from "../StickerPackManager";
 
 export function MediaPanel({
   snapshot,
@@ -189,6 +190,7 @@ export function MediaPanel({
           );
         })}
       </div>
+      {snapshot.me.role === "GM" && <StickerPackManager snapshot={snapshot} />}
       {error && <div className="field-error">{error}</div>}
       <label>
         Тип файлов

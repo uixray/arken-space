@@ -184,6 +184,14 @@ describe("MediaPanel upload sections by role", () => {
       expect(actions.onUpload).not.toHaveBeenCalled();
       expect(actions.onGetUsage).not.toHaveBeenCalled();
       expect(actions.onDelete).not.toHaveBeenCalled();
+      if (role === "GM")
+        expect(
+          screen.getByRole("heading", { name: "Пак кампании" }),
+        ).toBeInTheDocument();
+      else
+        expect(
+          screen.queryByRole("heading", { name: "Пак кампании" }),
+        ).toBeNull();
     },
   );
 
