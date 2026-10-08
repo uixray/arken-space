@@ -178,3 +178,26 @@
 - Scope precision: campaign/member identity remains unchanged; callbacks persist correct same-identity keys after snapshot updates, not a cross-identity proof. Resize uses real App callbacks with mocked Sidebar/DOM bounds and synthetic capture, not browser visual acceptance. Recruitment preview guard reviewed structurally and hook-tested, not newly App-integrated.
 - Decision: freeze bounded command migration and tests; Sidebar19data/identity props intentionally preserves preview-aware policy, approximate15 target and whole398 acceptance not silently declared complete. No performance/state-context/fullE2E claim. Next pool: real local GM/PLAYER smoke and any stronger latest-identity evidence justified by production transitions.
 - UIX644 remaining local runtime agent confirmed running; native/remote/sticker owner questions pending. Production untouched.
+
+## Owner acceptance decisions 2026-10-08
+- Native Esc question deferred to later visual acceptance on the local test stand. Owner requested a visible complete checklist there; Luna assigned standalone QA-only HTML plus tracked checklist document, not production App UI.
+- Remote server remains stopped. Owner would start it only if needed for deployment preparation, not merely to inspect reports; no remote start/access/deploy implicitly authorized. Determine concrete readiness need before requesting startup.
+- Owner explicitly authorized triaging nine historical reports. Existing task mapping may be reviewed now; actual report/status changes remain dependent on live authorized access. No fabricated current report state.
+- Both original24 and final115 sticker packs should be available to everyone, not campaign-specific. Production publication remains separate explicit deploy gate; local fixture visibility must not be represented as production.
+- Current local API/Vite restoration expressly authorized without DB clearing/reseed; runtime agent active. Architecture frozen2e10d2e; full398 acceptance audit active.
+
+## Local runtime restored; bounded QA remains in progress
+- Owner-approved API/Vite restoration reused existing QA DB without clearing/reseed: DB container arken-uix644-qa-db-20261008 Up at127.0.0.1:14181; API PID23060 /healthz200 listening0.0.0.0:14182 (hardcoded wildcard, not falsely loopback); VitePID38464 HTTP200 at127.0.0.1:14183. No remote server action.
+- Unique644 continuation receipt .data/qa-prep/uix644-stat-layout-continuation-20261008.jsonl: elevatedChrome2/4, compact2FAIL newQAchecklistanchorinterceptsnav; desktopcampaign outside-clickPASS noerrors/writes. Character firstlocator hit hidden duplicate, nocharacter-ownerPASS inferred. QA-only checklist owner correcting link geometry before one bounded rerun; priorfailures retained.
+- Checklist HTML servedHTTP200; document humanacceptance remainspending. Stand-only link/browserpersistence/reset verification active, no productionApp modifications. Bothpacks ownerpolicy PUBLICallplayers; nativeEscape postponedhumanstage.
+- Next: correctedcompactQA link plusremaining644 realvisibleowner checks;398 independentGMPLAYERsmoke active. No globalcompletionclaim.
+
+## UIX398 local behavioral review gate
+- Root inspected actual smoke harness/JSON: localChrome GM/PLAYER workspace policies and Characters visible; GM collapse reload restore, pointer resize360→380 stored380/reload380; preview GET banner/GMreplacement/exitrestore. No pageerrors or mutationattempts;3chatread requests browserfulfilled toavoidDBcursor writes. Receipt .data/qa-prep/uix398-sidebar-smoke.json, sourcehashes recorded2e10d2e.
+- Fixture has no battleZone: recruitment browseraxis unexercised, production previewguard remains covered by structural/hook evidence. No chat tabs rendered thisbuild; no tabbehaviorclaim. No performance/fullE2E claim.
+- Live originalUIX398 AC retrieved: full green run/per-domain commit wording cannot be proved by bounded160tests alone. OwnerexcludedlegacyE2E andconnectedpool coherentcommit documented, but no unqualifiedfullrun claim. A/Bcandidate ready review with explicitscope; Cnotstarted. Review state ratherthanunsupportedDone.
+
+## Test stand checklist delivered; StatLayout edge defect found
+- QA-only /acceptance28checkbox page delivered via ignoredlocalViteplugin; actualisolatedChromium151 desktop1280x900+compact390x844 link/navigation/persistence/reset/backlink PASS noAPIwrites/pageerrors. RootJSONreview: .data/qa-prep/acceptance-link-browser-receipt-20261008.json. Initialoverlayinterception and wrongcwd404 preserved; finalVitePID38288 apps/webcwd, API/DBuntouched. Humanproductacceptance remainspending, visiblelist requestedownerfulfilled.
+- Remaining644 actualGMcharacterowner desktop+compact rowEsc/focusreturn PASS; compactowner44x44 at308/666. DeletepromptEscape cancelschildonly preservingSetup/rowmenu, noDELETE; outsidecloseboth. Compactscrolledlastrowaction insideviewport. Desktoplastrowaction y992 viewport900 while summary864 is a realcandidatecollision defect, causal screenshot/fix assigned scopedStatLayoutCard+test only.
+- Next: fixprovenlastrowcollision thenfocusedgate+bothviewportbrowser; independentpublication-preparation audit underway, no remoteaccess/start/deploy. UIX398InReview, notDone; originalfullrunwordingnotwaivedimplicitly.
