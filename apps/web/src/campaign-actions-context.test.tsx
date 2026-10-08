@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import { renderComponent, screen, userEvent } from "./test-support/render";
 import {
   CampaignActionsContext,
+  CAMPAIGN_ACTION_DOMAIN_KEYS,
   useCampaignActions,
+  useCampaignActionsValue,
   type CampaignActions,
 } from "./campaign-actions-context";
 
@@ -18,19 +20,29 @@ import {
 const noop = () => undefined;
 
 function makeActions(overrides: Record<string, unknown> = {}): CampaignActions {
-  const domain = new Proxy({} as never, { get: () => noop });
+  const domain = () =>
+    new Proxy({ testCommand: noop } as Record<string, unknown>, {
+      get: (target, key) =>
+        typeof key === "string" ? (target[key] ?? noop) : noop,
+    }) as never;
   return {
-    scene: domain,
-    worldMap: domain,
-    token: domain,
-    chat: domain,
-    access: domain,
-    catalog: domain,
-    story: domain,
-    playerRequest: domain,
-    asset: domain,
-    statLayout: domain,
-    chatHistory: domain,
+    scene: domain(),
+    worldMap: domain(),
+    token: domain(),
+    chat: domain(),
+    access: domain(),
+    catalog: domain(),
+    story: domain(),
+    playerRequest: domain(),
+    asset: domain(),
+    statLayout: domain(),
+    chatHistory: domain(),
+    character: domain(),
+    initiative: domain(),
+    dice: domain(),
+    campaign: domain(),
+    player: domain(),
+    sidebar: domain(),
     ...overrides,
   } as CampaignActions;
 }
@@ -65,6 +77,42 @@ describe("campaign actions invariant", () => {
 });
 
 describe("useCampaignActions", () => {
+  it("keeps the actual assembled context value stable across state rerenders", async () => {
+    const seen: CampaignActions[] = [];
+    function AppAssemblyHarness() {
+      const [snapshotRevision, setSnapshotRevision] = useState(1);
+      // Mirrors App: groups are rebuilt on render, while callback members are
+      // stable. This exercises production assembly for the complete contract.
+      const value = useCampaignActionsValue(makeActions());
+      seen.push(value);
+      return (
+        <CampaignActionsContext.Provider value={value}>
+          <span>revision {snapshotRevision}</span>
+          <button
+            type="button"
+            onClick={() => setSnapshotRevision((revision) => revision + 1)}
+          >
+            receive snapshot
+          </button>
+        </CampaignActionsContext.Provider>
+      );
+    }
+
+    renderComponent(<AppAssemblyHarness />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "receive snapshot" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "receive snapshot" }),
+    );
+
+    expect(seen).toHaveLength(3);
+    expect(seen[1]).toBe(seen[0]);
+    expect(seen[2]).toBe(seen[0]);
+    expect(nonFunctionEntries(seen[2]!)).toEqual([]);
+    expect(Object.keys(seen[2]!)).toEqual(CAMPAIGN_ACTION_DOMAIN_KEYS);
+  });
+
   it("hands every consumer the identical value across re-renders", async () => {
     // This identity is the whole basis for using context here: it is what
     // lets React.memo hold further down the tree. If the provider were given

@@ -24,7 +24,11 @@ import { Empty } from "./MediaPanel";
 import { canPlaceTokenDefinition } from "../token-placement";
 
 export function PalettePanel(props: Props) {
-  const { token: tokenActions, asset: assetActions } = useCampaignActions();
+  const {
+    token: tokenActions,
+    asset: assetActions,
+    sidebar: sidebarActions,
+  } = useCampaignActions();
   const definitions = props.snapshot.tokenDefinitions ?? [];
   const [editor, setEditor] = useState<
     (typeof definitions)[number] | "NEW" | null
@@ -228,11 +232,11 @@ export function PalettePanel(props: Props) {
           onPatch={tokenActions.onPatchTokenDefinition}
           onOpenCharacters={() => {
             setEditor(null);
-            props.onWorkspaceChange("setup");
+            sidebarActions.onWorkspaceChange("setup");
           }}
           onOpenMedia={() => {
             setEditor(null);
-            props.onWorkspaceChange("media");
+            sidebarActions.onWorkspaceChange("media");
           }}
         />
       )}

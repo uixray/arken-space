@@ -77,6 +77,7 @@ const unexpectedAction = (): never => {
 
 function actions(
   uploadAsset: CampaignActions["asset"]["uploadAsset"] = unexpectedAction,
+  onCampaignClock: CampaignActions["campaign"]["onCampaignClock"] = unexpectedAction,
 ): CampaignActions {
   return {
     scene: {
@@ -161,6 +162,31 @@ function actions(
     },
     statLayout: { onUpdateStatLayout: unexpectedAction },
     chatHistory: { onLoadThreadHistory: unexpectedAction },
+    character: {
+      replaceCharacterControllers: unexpectedAction,
+      patchCharacter: unexpectedAction,
+      updateCharacterCounters: unexpectedAction,
+      onCreateCharacter: unexpectedAction,
+    },
+    initiative: {
+      onUpdateInitiative: unexpectedAction,
+      onSetOwnInitiative: unexpectedAction,
+      onRollInitiative: unexpectedAction,
+      onSetBattleZone: unexpectedAction,
+      onRecruitFromBattleZone: unexpectedAction,
+    },
+    dice: { onRoll: unexpectedAction },
+    campaign: { onCampaignClock },
+    player: { onPreviewPlayer: unexpectedAction },
+    sidebar: {
+      onRequestedChatMessageHandled: unexpectedAction,
+      onChatVisibilityChange: unexpectedAction,
+      onCollapsedChange: unexpectedAction,
+      onResizeHandleDown: unexpectedAction,
+      onResizeHandleMove: unexpectedAction,
+      onResizeHandleUp: unexpectedAction,
+      onWorkspaceChange: unexpectedAction,
+    },
   };
 }
 
@@ -794,18 +820,27 @@ describe("character action feedback", () => {
 
     rendered.rerender(
       view(
-        snapshot([character({ id: "character-b", revision: 12 })]),
+        snapshot([
+          character({
+            id: "character-b",
+            name: "Персонаж B",
+            revision: 12,
+          }),
+        ]),
         { onPatch: patch },
         commands,
       ),
     );
     await galleryLoaded();
+    // Changing characters deliberately closes the old portrait dialog. Reopen
+    // the new character's dialog before starting its independent upload epoch.
+    const file = selectPortrait(new File(["b"], "b.png", { type: "image/png" }));
+    expect(
+      screen.getByRole("dialog", { name: "Портрет: Персонаж B" }),
+    ).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Загрузить и назначить" }),
     ).toHaveAttribute("aria-busy", "false");
-    const file = selectPortrait(
-      new File(["b"], "b.png", { type: "image/png" }),
-    );
     const button = screen.getByRole("button", {
       name: "Загрузить и назначить",
     });
@@ -906,41 +941,28 @@ describe("character action feedback", () => {
       character({ id: "character-c", name: "Персонаж C" }),
       character({ id: "character-d", name: "Персонаж D" }),
     ]);
+    const onCampaignClock = vi.fn(async () => {});
     const workspaceProps: ComponentProps<typeof CharacterWorkspace> = {
       snapshot: state,
       onClose: unexpectedAction,
       socket: null,
       presence: [],
-      onReplaceCharacterControllers: unexpectedAction,
-      onPatchCharacter: unexpectedAction,
       storyPosts: [],
       storyNextCursor: null,
-      onRoll: unexpectedAction,
-      onCreateCharacter: unexpectedAction,
       viewedSceneId: null,
       sceneDialogRequest: 0,
       selectedTokenIds: [],
-      onUpdateInitiative: unexpectedAction,
-      onSetOwnInitiative: unexpectedAction,
-      onRollInitiative: unexpectedAction,
-      onPreviewPlayer: unexpectedAction,
-      onUpdateCounters: unexpectedAction,
-      onCampaignClock: vi.fn(async () => {}),
+      canRecruitFromBattleZone: false,
       requestedChatMessageId: null,
-      onRequestedChatMessageHandled: unexpectedAction,
-      onChatVisibilityChange: unexpectedAction,
       collapsed: false,
-      onCollapsedChange: unexpectedAction,
-      onResizeHandleDown: unexpectedAction,
-      onResizeHandleMove: unexpectedAction,
-      onResizeHandleUp: unexpectedAction,
       workspace: "characters",
       operatorFeedbackAllowed: false,
-      onWorkspaceChange: unexpectedAction,
     };
     renderComponent(
       <ThemeProvider theme="dark" lang="ru">
-        <CampaignActionsContext.Provider value={actions()}>
+        <CampaignActionsContext.Provider
+          value={actions(undefined, onCampaignClock)}
+        >
           <CharacterWorkspace {...workspaceProps} />
         </CampaignActionsContext.Provider>
       </ThemeProvider>,
@@ -987,7 +1009,7 @@ describe("character action feedback", () => {
     });
     fireEvent.click(day);
     await waitFor(() =>
-      expect(workspaceProps.onCampaignClock).toHaveBeenCalledExactlyOnceWith(
+      expect(onCampaignClock).toHaveBeenCalledExactlyOnceWith(
         "ADVANCE_DAY",
         state.campaign.revision,
       ),

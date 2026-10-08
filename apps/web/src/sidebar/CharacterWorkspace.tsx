@@ -18,6 +18,7 @@ import {
   uniqueStatKey,
 } from "../stat-keys";
 import { useCampaignActions } from "../campaign-actions-context";
+import type { CampaignActions } from "../campaign-actions-context";
 import { createPortal } from "react-dom";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
 import { RESOURCE_REGEN_STAT, isSystemRegenStatKey } from "@arken/system";
@@ -97,7 +98,12 @@ export function CharacterWorkspace({
   ...props
 }: Props & { onClose: () => void; active?: boolean }) {
   // UIX-398 step B: archive/restore come from context, not through Sidebar.
-  const { worldMap: worldMapActions } = useCampaignActions();
+  const {
+    worldMap: worldMapActions,
+    character: characterActions,
+    campaign: campaignActions,
+    dice: diceActions,
+  } = useCampaignActions();
   const characters = useMemo(() => {
     const visible =
       props.snapshot.me.role === "GM"
@@ -265,7 +271,7 @@ export function CharacterWorkspace({
               setDayPending(true);
               void Promise.resolve()
                 .then(() =>
-                  props.onCampaignClock(
+                  campaignActions.onCampaignClock(
                     "ADVANCE_DAY",
                     props.snapshot.campaign.revision,
                   ),
@@ -435,10 +441,14 @@ export function CharacterWorkspace({
                         dispatch({ type: "OPEN", id: nextId })
                       }
                       showCharacterPicker={false}
-                      onPatch={props.onPatchCharacter}
-                      onReplaceControllers={props.onReplaceCharacterControllers}
-                      onRoll={props.onRoll}
-                      onUpdateCounters={props.onUpdateCounters}
+                      onPatch={characterActions.patchCharacter}
+                      onReplaceControllers={
+                        characterActions.replaceCharacterControllers
+                      }
+                      onRoll={diceActions.onRoll}
+                      onUpdateCounters={
+                        characterActions.updateCharacterCounters
+                      }
                       onArchive={
                         props.snapshot.me.role === "GM"
                           ? () => setArchiveTarget(character)
@@ -456,7 +466,7 @@ export function CharacterWorkspace({
         open={createCharacterOpen}
         characters={props.snapshot.characters}
         onCreate={async (name, template) => {
-          await props.onCreateCharacter(name, template);
+          await characterActions.onCreateCharacter(name, template);
           setCreateCharacterOpen(false);
         }}
         onClose={() => setCreateCharacterOpen(false)}
@@ -795,7 +805,7 @@ function CharacterControllerAccess({
 }: {
   character: CharacterDto;
   members: GameSnapshot["members"];
-  onSave: Props["onReplaceCharacterControllers"];
+  onSave: CampaignActions["character"]["replaceCharacterControllers"];
 }) {
   const canonical = useMemo(
     () =>
@@ -913,10 +923,10 @@ export function CharacterPanel({
   selectedId: string;
   setSelectedId: (value: string) => void;
   showCharacterPicker?: boolean;
-  onPatch: Props["onPatchCharacter"];
-  onReplaceControllers: Props["onReplaceCharacterControllers"];
-  onRoll: Props["onRoll"];
-  onUpdateCounters: Props["onUpdateCounters"];
+  onPatch: CampaignActions["character"]["patchCharacter"];
+  onReplaceControllers: CampaignActions["character"]["replaceCharacterControllers"];
+  onRoll: CampaignActions["dice"]["onRoll"];
+  onUpdateCounters: CampaignActions["character"]["updateCharacterCounters"];
   onArchive?: () => void;
 }) {
   // The catalog handlers are read here rather than passed in: this panel is

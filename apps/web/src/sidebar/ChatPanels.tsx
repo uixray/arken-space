@@ -87,7 +87,7 @@ import {
   physicalRollChatRequest,
   type ActivityFilter,
 } from "../activity-roll-controls";
-import type { Props } from "../Sidebar";
+import type { CampaignActions } from "../campaign-actions-context";
 import type { ChatActions } from "../use-chat-actions";
 import { useFollowScroll } from "../ui/useFollowScroll";
 import { decideComposerKeydown } from "../composer-keyboard-intent";
@@ -458,12 +458,12 @@ export function ActivityPanel({
   onActivityFiltersChange: (filters: Set<ActivityFilter>) => void;
   onChat: ChatActions["onChat"];
   onSticker: ChatActions["onSticker"];
-  onRoll: Props["onRoll"];
+  onRoll: CampaignActions["dice"]["onRoll"];
   focusedMessageId: string | null;
   onMessageFocused: () => void;
   onOpenPlayerRequestCreate: () => void;
   /** UIX-424, шаг 8: счётчики выносливости и маны правят те же `resources`. */
-  onUpdateCounters: Props["onUpdateCounters"];
+  onUpdateCounters: CampaignActions["character"]["updateCharacterCounters"];
   /** Сохранённая панель инициативы остаётся вне этого feed; данные/API сохранены. */
   selectedTokenIds: readonly string[];
   onUpdateInitiative: (
@@ -1545,7 +1545,7 @@ export function ChatPanel({
   visible?: boolean;
   onChat: ChatActions["onChat"];
   onSticker: ChatActions["onSticker"];
-  onRoll: Props["onRoll"];
+  onRoll: CampaignActions["dice"]["onRoll"];
   onMarkChatRead: ChatActions["onMarkChatRead"];
   activeStream: ChatStream;
   focusedMessageId: string | null;

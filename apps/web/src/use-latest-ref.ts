@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MutableRefObject } from "react";
+import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
 
 /**
  * UIX-398 — the indirection the ref-domains need.
@@ -26,4 +26,15 @@ export function useLatestRef<T>(value: T): MutableRefObject<T> {
     ref.current = value;
   });
   return ref;
+}
+
+/** Keep an event callback's identity while forwarding to its latest committed implementation. */
+export function useLatestCallback<T extends (...args: never[]) => unknown>(
+  callback: T,
+): T {
+  const callbackRef = useLatestRef(callback);
+  return useCallback(
+    ((...args: Parameters<T>) => callbackRef.current(...args)) as T,
+    [callbackRef],
+  );
 }

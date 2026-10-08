@@ -56,7 +56,7 @@ import {
 import { useMutationRunners } from "./use-mutation-runners";
 import { useSceneActions } from "./use-scene-actions";
 import { useWorldMapActions } from "./use-world-map-actions";
-import { useLatestRef } from "./use-latest-ref";
+import { useLatestCallback, useLatestRef } from "./use-latest-ref";
 import { useTokenDefinitionActions } from "./use-token-definition-actions";
 import { OptimisticTokenMutations } from "./optimistic-token-mutations";
 import {
@@ -67,7 +67,10 @@ import { useChatActions } from "./use-chat-actions";
 import { useAccessActions } from "./use-access-actions";
 import { useCatalogActions } from "./use-catalog-actions";
 import { useStatLayoutActions } from "./use-stat-layout-actions";
-import { useInitiativeActions } from "./use-initiative-actions";
+import {
+  createBattleZoneRecruitHandler,
+  useInitiativeActions,
+} from "./use-initiative-actions";
 import { CompactNavigation } from "./CompactNavigation";
 import {
   useCompactNavigation,
@@ -79,7 +82,10 @@ import { useChatHistoryActions } from "./use-chat-history-actions";
 import { useStoryActions } from "./use-story-actions";
 import { usePlayerRequestActions } from "./use-player-request-actions";
 import { useAssetActions } from "./use-asset-actions";
-import { CampaignActionsContext } from "./campaign-actions-context";
+import {
+  CampaignActionsContext,
+  useCampaignActionsValue,
+} from "./campaign-actions-context";
 import type { MapTool } from "./renderers/map-interaction";
 import type { RollMode } from "./RollModeControl";
 import {
@@ -285,6 +291,9 @@ export function App() {
   const [previewSnapshot, setPreviewSnapshot] = useState<GameSnapshot | null>(
     null,
   );
+  // Read the latest preview-aware campaign source without changing the
+  // function-only action context when a preview is entered or exited.
+  const campaignViewRef = useLatestRef(previewSnapshot ?? snapshot);
   const [error, setError] = useState("");
   const [sceneDialogRequest, setSceneDialogRequest] = useState(0);
   const [requestedSceneEditId, setRequestedSceneEditId] = useState<
@@ -416,6 +425,9 @@ export function App() {
     handleSidebarResizeMove,
     handleSidebarResizeEnd,
   } = useSidebarResize(sidebarCampaignId, sidebarMembershipId);
+  const stableHandleSidebarResizeEnd = useLatestCallback(
+    handleSidebarResizeEnd,
+  );
   useEffect(() => {
     if (!sidebarCampaignId || !sidebarMembershipId) return;
     setSidebarCollapsed(
@@ -438,6 +450,9 @@ export function App() {
       );
     },
     [snapshot],
+  );
+  const stableHandleSidebarCollapsedChange = useLatestCallback(
+    handleSidebarCollapsedChange,
   );
   const handleRequestedChatMessage = useCallback(
     () => setRequestedChatMessageId(null),
@@ -658,26 +673,28 @@ export function App() {
     }
   };
 
-  const submitRoll = async (
-    formula: string,
-    label?: string,
-    visibility = "PUBLIC" as MessageVisibility,
-    characterId: string | null = null,
-    rollMode: RollMode = "NORMAL",
-  ) =>
-    run(() =>
-      api("/api/dice", {
-        method: "POST",
-        body: JSON.stringify({
-          actionId: crypto.randomUUID(),
-          formula,
-          label,
-          visibility,
-          characterId,
-          rollMode,
+  const submitRoll = useLatestCallback(
+    async (
+      formula: string,
+      label?: string,
+      visibility = "PUBLIC" as MessageVisibility,
+      characterId: string | null = null,
+      rollMode: RollMode = "NORMAL",
+    ) =>
+      run(() =>
+        api("/api/dice", {
+          method: "POST",
+          body: JSON.stringify({
+            actionId: crypto.randomUUID(),
+            formula,
+            label,
+            visibility,
+            characterId,
+            rollMode,
+          }),
         }),
-      }),
-    );
+      ),
+  );
 
   /*
    * UIX-398 — the character domain is the first that genuinely reads live
@@ -852,41 +869,104 @@ export function App() {
     activeChatThreadIdRef,
   });
 
-  /*
-   * UIX-398 step B. Every domain object above is stable, so this one is too —
-   * which is what makes delivering them by context safe. Context has no
-   * selective subscription, so a value that changed would re-render every
-   * consumer on every change; see `campaign-actions-context.tsx`, and the
-   * test that rejects any non-function smuggled in here.
-   */
-  const campaignActions = useMemo(
-    () => ({
-      scene: sceneActions,
-      worldMap: worldMapActions,
-      token: tokenActions,
-      chat: chatActions,
-      access: accessActions,
-      catalog: catalogActions,
-      story: storyActions,
-      playerRequest: playerRequestActions,
-      asset: assetActions,
-      statLayout: statLayoutActions,
-      chatHistory: chatHistoryActions,
-    }),
-    [
-      sceneActions,
-      worldMapActions,
-      tokenActions,
-      chatActions,
-      accessActions,
-      catalogActions,
-      storyActions,
-      playerRequestActions,
-      assetActions,
-      statLayoutActions,
-      chatHistoryActions,
-    ],
+  const handleCreateCharacter = useCallback(
+    async (
+      name: string,
+      template?: import("./character-workspace-state").CharacterTemplateFields,
+    ) =>
+      run(
+        () =>
+          api("/api/characters", {
+            method: "POST",
+            body: JSON.stringify({
+              name,
+              actionId: crypto.randomUUID(),
+              ...(template ? { template } : {}),
+            }),
+          }),
+        true,
+      ),
+    [run],
   );
+
+  const handlePreviewPlayer = useCallback(async (membershipId: string) => {
+    const playerView = await api<GameSnapshot>(`/api/preview/${membershipId}`);
+    setTool("PAN");
+    setPreviewSnapshot(playerView);
+  }, []);
+
+  const handleCampaignClock = useCallback(
+    (
+      command:
+        | "ADVANCE_DAY"
+        | "LONG_REST"
+        | "START_BATTLE"
+        | "END_BATTLE"
+        | "RESET_CLOCK",
+      revision: number,
+    ) =>
+      run(
+        () =>
+          api("/api/campaign/clock", {
+            method: "POST",
+            body: JSON.stringify({
+              actionId: crypto.randomUUID(),
+              command,
+              revision,
+            }),
+          }),
+        true,
+      ),
+    [run],
+  );
+
+  const handleRecruitFromBattleZone = useLatestCallback(
+    createBattleZoneRecruitHandler(
+      () => campaignViewRef.current,
+      run,
+      initiativeActions.onRecruitFromBattleZone,
+    ),
+  );
+
+  /*
+   * UIX-398 step B. Group objects may be rebuilt in this assembly, so the
+   * production hook memoizes by the flattened command functions rather than
+   * those containers. Context has no selective subscription; its invariant
+   * and rerender behavior are covered by campaign-actions-context.test.tsx.
+   */
+  const campaignActions = useCampaignActionsValue({
+    scene: sceneActions,
+    worldMap: worldMapActions,
+    token: tokenActions,
+    chat: chatActions,
+    access: accessActions,
+    catalog: catalogActions,
+    story: storyActions,
+    playerRequest: playerRequestActions,
+    asset: assetActions,
+    statLayout: statLayoutActions,
+    chatHistory: chatHistoryActions,
+    character: {
+      ...characterActions,
+      onCreateCharacter: handleCreateCharacter,
+    },
+    initiative: {
+      ...initiativeActions,
+      onRecruitFromBattleZone: handleRecruitFromBattleZone,
+    },
+    dice: { onRoll: submitRoll },
+    campaign: { onCampaignClock: handleCampaignClock },
+    player: { onPreviewPlayer: handlePreviewPlayer },
+    sidebar: {
+      onRequestedChatMessageHandled: handleRequestedChatMessage,
+      onChatVisibilityChange: handleChatVisibilityChange,
+      onCollapsedChange: stableHandleSidebarCollapsedChange,
+      onResizeHandleDown: handleSidebarResizeStart,
+      onResizeHandleMove: handleSidebarResizeMove,
+      onResizeHandleUp: stableHandleSidebarResizeEnd,
+      onWorkspaceChange: handleWorkspaceChange,
+    },
+  });
 
   const viewSnapshot = useMemo(() => {
     // Reproject optimistic tokens whenever the external mutation store changes.
@@ -1402,64 +1482,6 @@ export function App() {
     [run],
   );
 
-  const battleZone = viewSnapshot?.campaign.battleZone;
-  const campaignRevision = viewSnapshot?.campaign.revision;
-  const handleRecruitFromBattleZone = useCallback(() => {
-    if (!battleZone || campaignRevision === undefined) return;
-    void run(() => initiativeActions.onRecruitFromBattleZone(campaignRevision));
-  }, [battleZone, campaignRevision, initiativeActions, run]);
-
-  const handleCreateCharacter = useCallback(
-    async (
-      name: string,
-      template?: import("./character-workspace-state").CharacterTemplateFields,
-    ) =>
-      run(
-        () =>
-          api("/api/characters", {
-            method: "POST",
-            body: JSON.stringify({
-              name,
-              actionId: crypto.randomUUID(),
-              ...(template ? { template } : {}),
-            }),
-          }),
-        true,
-      ),
-    [run],
-  );
-
-  const handlePreviewPlayer = useCallback(async (membershipId: string) => {
-    const playerView = await api<GameSnapshot>(`/api/preview/${membershipId}`);
-    setTool("PAN");
-    setPreviewSnapshot(playerView);
-  }, []);
-
-  const handleCampaignClock = useCallback(
-    (
-      command:
-        | "ADVANCE_DAY"
-        | "LONG_REST"
-        | "START_BATTLE"
-        | "END_BATTLE"
-        | "RESET_CLOCK",
-      revision: number,
-    ) =>
-      run(
-        () =>
-          api("/api/campaign/clock", {
-            method: "POST",
-            body: JSON.stringify({
-              actionId: crypto.randomUUID(),
-              command,
-              revision,
-            }),
-          }),
-        true,
-      ),
-    [run],
-  );
-
   const handlePublishActiveScene = useCallback(() => {
     if (!activeScene) return;
     if ([broadcastScene?.id, recentlyPublishedSceneId].includes(activeScene.id))
@@ -1915,44 +1937,23 @@ export function App() {
                   compactNavigation.characterVisited
                 }
                 selectedTokenIds={selectedTokenIds}
-                onUpdateInitiative={initiativeActions.onUpdateInitiative}
-                onSetOwnInitiative={initiativeActions.onSetOwnInitiative}
-                onRollInitiative={initiativeActions.onRollInitiative}
-                onRecruitFromBattleZone={
-                  viewSnapshot.campaign.battleZone
-                    ? handleRecruitFromBattleZone
-                    : undefined
-                }
+                canRecruitFromBattleZone={Boolean(
+                  viewSnapshot.campaign.battleZone,
+                )}
                 snapshot={snapshot}
                 requestedCharacterId={requestedCharacterId}
                 socket={socket}
                 presence={presence}
                 requestedChatMessageId={requestedChatMessageId}
-                onRequestedChatMessageHandled={handleRequestedChatMessage}
-                onChatVisibilityChange={handleChatVisibilityChange}
                 collapsed={compact ? false : sidebarCollapsed}
-                onCollapsedChange={handleSidebarCollapsedChange}
-                onResizeHandleDown={handleSidebarResizeStart}
-                onResizeHandleMove={handleSidebarResizeMove}
-                onResizeHandleUp={handleSidebarResizeEnd}
                 workspaceSidebarWidth={sidebarWidth}
                 workspace={workspace}
                 operatorFeedbackAllowed={operatorFeedbackAllowed}
-                onWorkspaceChange={handleWorkspaceChange}
-                onPatchCharacter={characterActions.patchCharacter}
-                onReplaceCharacterControllers={
-                  characterActions.replaceCharacterControllers
-                }
                 storyPosts={storyPosts}
                 storyNextCursor={storyNextCursor}
-                onRoll={submitRoll}
-                onCreateCharacter={handleCreateCharacter}
                 sceneDialogRequest={sceneDialogRequest}
                 requestedSceneEditId={requestedSceneEditId}
                 viewedSceneId={activeScene?.id ?? null}
-                onPreviewPlayer={handlePreviewPlayer}
-                onUpdateCounters={characterActions.updateCharacterCounters}
-                onCampaignClock={handleCampaignClock}
               />
             )}
             {compact && compactSurface === "menu" && (
