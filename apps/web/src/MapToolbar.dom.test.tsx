@@ -333,6 +333,44 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     expect(escape.defaultPrevented).toBe(false);
   });
 
+  it("lets an open tooltip own the first Escape before toolbar focus is released", async () => {
+    const props = createDefaultProps();
+    renderComponent(<MapToolbar {...props} />);
+    const fog = screen.getByRole("button", { name: "Открыть туман" });
+    await userEvent.hover(fog);
+    expect(await screen.findByRole("tooltip")).toBeInTheDocument();
+    fog.focus();
+
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument(),
+    );
+    const tooltipId = fog.getAttribute("aria-describedby");
+    const staleTooltip = tooltipId && document.getElementById(tooltipId);
+    if (staleTooltip) expect(staleTooltip).not.toHaveAttribute("data-open");
+    expect(fog).toHaveFocus();
+
+    await userEvent.keyboard("{Escape}");
+    expect(fog).not.toHaveFocus();
+  });
+
+  it("does not let a stale closed tooltip node keep toolbar focus on Escape", async () => {
+    const props = createDefaultProps();
+    renderComponent(<MapToolbar {...props} />);
+    const fog = screen.getByRole("button", { name: "Открыть туман" });
+    const stale = document.createElement("div");
+    stale.id = "stale-toolbar-tooltip";
+    stale.setAttribute("role", "tooltip");
+    document.body.append(stale);
+    fog.setAttribute("aria-describedby", stale.id);
+    fog.focus();
+
+    await userEvent.keyboard("{Escape}");
+
+    expect(fog).not.toHaveFocus();
+    stale.remove();
+  });
+
   it("не возвращает боевые кнопки при сохранённом активном столкновении", () => {
     const props = createDefaultProps();
     props.snapshot.campaign.battleActive = true;

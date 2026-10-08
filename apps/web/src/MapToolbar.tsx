@@ -190,6 +190,15 @@ export function MapToolbar({
           ".map-tool",
         );
         if (focusedTool && toolbarRef.current?.contains(focusedTool)) {
+          const describedBy = focusedTool.getAttribute("aria-describedby");
+          const tooltipOwnsEscape = describedBy
+            ?.split(/\s+/)
+            .some((id) => {
+              const popup = document.getElementById(id);
+              return popup?.getAttribute("role") === "tooltip" &&
+                popup.hasAttribute("data-open");
+            });
+          if (tooltipOwnsEscape) return;
           focusedTool.blur();
         }
       }}

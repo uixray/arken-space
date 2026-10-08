@@ -118,11 +118,7 @@ const rows = [
   { key: "agility", label: "Ловкость" },
 ];
 
-const renderCard = (
-  overrides: Partial<Parameters<typeof StatLayoutCard>[0]> = {},
-  openMenus = true,
-) => {
-  const props = {
+const defaultCardProps = () => ({
     title: "Характеристики",
     modifier: "stats",
     rows,
@@ -137,8 +133,12 @@ const renderCard = (
     onAddRow: vi.fn(async () => {}),
     onDeleteRow: vi.fn(async () => {}),
     onMoveRow: vi.fn(async () => {}),
-    ...overrides,
-  };
+});
+const renderCard = (
+  overrides: Partial<Parameters<typeof StatLayoutCard>[0]> = {},
+  openMenus = true,
+) => {
+  const props = { ...defaultCardProps(), ...overrides };
   const rendered = renderComponent(<StatLayoutCard {...props} />);
   if (openMenus)
     rendered.container
@@ -150,6 +150,72 @@ const renderCard = (
 };
 
 describe("карточка группы характеристик", () => {
+  it("closes only the open row menu on Escape and returns focus before the owning dialog", async () => {
+    let parentEscapeCount = 0;
+    const props = defaultCardProps();
+    renderComponent(
+      <div
+        role="dialog"
+        onKeyDown={(event) => {
+          if (event.key === "Escape") parentEscapeCount += 1;
+        }}
+      >
+        <StatLayoutCard {...props} />
+      </div>,
+    );
+    const summary = screen.getByLabelText("Действия строки «Сила»");
+    const menu = summary.closest("details")!;
+    await userEvent.click(summary);
+    expect(menu).toHaveProperty("open", true);
+
+    await userEvent.keyboard("{Escape}");
+
+    expect(menu).toHaveProperty("open", false);
+    expect(summary).toHaveFocus();
+    expect(parentEscapeCount).toBe(0);
+  });
+
+  it("dismisses a row menu on outside pointer without stealing focus from the next owner", async () => {
+    renderCard({}, false);
+    const firstSummary = screen.getByLabelText("Действия строки «Сила»");
+    const secondSummary = screen.getByLabelText("Действия строки «Ловкость»");
+    const firstMenu = firstSummary.closest("details")!;
+    const secondMenu = secondSummary.closest("details")!;
+    await userEvent.click(firstSummary);
+    expect(firstMenu).toHaveProperty("open", true);
+
+    await userEvent.click(secondSummary);
+
+    expect(firstMenu).toHaveProperty("open", false);
+    expect(secondMenu).toHaveProperty("open", true);
+    expect(secondSummary).toHaveFocus();
+  });
+
+  it("does not intercept Escape owned by a nested dialog", async () => {
+    renderCard({}, false);
+    const summary = screen.getByLabelText("Действия строки «Ловкость»");
+    const menu = summary.closest("details")!;
+    await userEvent.click(summary);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Переименовать «Ловкость»" }),
+    );
+    expect(screen.getByRole("dialog")).toBeVisible();
+
+    const input = screen.getByRole("textbox", { name: "Название" });
+    const escape = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    input.dispatchEvent(escape);
+
+    // The lightweight Dialog mock does not implement its own Escape close;
+    // this assertion only verifies that the row owner leaves the event alone.
+    expect(escape.defaultPrevented).toBe(false);
+    expect(menu).toHaveProperty("open", true);
+    expect(screen.getByRole("dialog")).toBeVisible();
+  });
+
   it("hides editing actions behind the row menu and exposes a six-dot keyboard handle", async () => {
     const props = renderCard({}, false);
     const menu = screen.getByLabelText("Действия строки «Ловкость»");

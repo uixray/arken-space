@@ -1,5 +1,5 @@
 import "./roll-controls.css";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "../design-system/Button";
 import { isSystemRegenStatKey, STAT_VALUE_RANGE } from "@arken/system";
 import { ApiError, formatApiError } from "../api";
@@ -168,6 +168,7 @@ export function StatLayoutCard({
   onReorderRow?: (key: string, targetKey: string) => Promise<void>;
 }) {
   const fieldIdPrefix = useId();
+  const cardRef = useRef<HTMLDivElement>(null);
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
   // `null` — окно закрыто; `{ key: undefined }` — добавление новой строки.
   const [editing, setEditing] = useState<{ key?: string } | null>(null);
@@ -190,6 +191,28 @@ export function StatLayoutCard({
     null,
   );
 
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      const targetDialog =
+        target instanceof Element ? target.closest('[role="dialog"], dialog') : null;
+      for (const menu of cardRef.current?.querySelectorAll<HTMLDetailsElement>(
+        "details.stat-field__menu[open]",
+      ) ?? []) {
+        // The card's rename/delete prompts are portalled outside this card's
+        // DOM, but remain its child interaction. Other dialogs do not own it.
+        if (editing || deleting) continue;
+        const ownerDialog = menu.closest('[role="dialog"], dialog');
+        if (targetDialog && targetDialog === ownerDialog && menu.contains(target))
+          continue;
+        if (!menu.contains(target)) menu.open = false;
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [deleting, editing]);
+
   const askToDelete = (row: { key: string; label: string }) => {
     setRefusal(null);
     setDeleting(row);
@@ -209,7 +232,7 @@ export function StatLayoutCard({
   };
 
   return (
-    <div className={`character-card character-card--${modifier}`}>
+    <div ref={cardRef} className={`character-card character-card--${modifier}`}>
       <h3 className="character-card__header">{title}</h3>
       <div className="character-card__body">
         {rows.map((row, index) => (
@@ -301,7 +324,28 @@ export function StatLayoutCard({
             )}
             <div className="stat-field__actions">
               {canEditLayout && (
-                <details className="stat-field__menu">
+                <details
+                  className="stat-field__menu"
+                  onKeyDownCapture={(event) => {
+                    const menu = event.currentTarget;
+                    if (event.key !== "Escape" || !menu.open) return;
+                    const target = event.target;
+                    // React keyboard events from a portalled child still pass
+                    // through this component. Do not intercept a nested dialog.
+                    if (!(target instanceof Node) || !menu.contains(target))
+                      return;
+                    const targetDialog =
+                      target instanceof Element
+                        ? target.closest('[role="dialog"], dialog')
+                        : null;
+                    const ownerDialog = menu.closest('[role="dialog"], dialog');
+                    if (targetDialog && targetDialog !== ownerDialog) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    menu.open = false;
+                    menu.querySelector<HTMLElement>("summary")?.focus();
+                  }}
+                >
                   <summary aria-label={`Действия строки «${row.label}»`}>
                     …
                   </summary>
