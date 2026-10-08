@@ -45,6 +45,7 @@ function clearStoredIntent(key: string) {
 
 /** Separate creator-owned catalog controls; campaign pack ACLs remain elsewhere. */
 export function GlobalStickerPackManager() {
+  const ownsHeldEscape = useRef(false);
   const [packs, setPacks] = useState<GlobalPackRow[]>([]);
   const [detail, setDetail] = useState<GlobalPackDetail | null>(null);
   const [name, setName] = useState("");
@@ -342,7 +343,35 @@ export function GlobalStickerPackManager() {
   const selected = packs.find((pack) => pack.id === selectedPackId);
   return (
     <details className="global-sticker-manager">
-      <summary>Общие паки</summary>
+      <summary
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          const details = event.currentTarget.parentElement;
+          if (!(details instanceof HTMLDetailsElement)) return;
+          // A held Escape can emit repeat keydowns after this disclosure closes.
+          // Only suppress repeats when this summary owned the initial keydown.
+          if (!details.open) {
+            if (!ownsHeldEscape.current) return;
+            if (!event.repeat) {
+              ownsHeldEscape.current = false;
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          ownsHeldEscape.current = true;
+          details.open = false;
+          event.currentTarget.focus();
+        }}
+        onKeyUp={(event) => {
+          if (event.key === "Escape") ownsHeldEscape.current = false;
+        }}
+      >
+        Общие паки
+      </summary>
       <section aria-label="Управление общими паками">
         <p className="muted">
           Общие паки видны авторизованным участникам. Управлять ими может только

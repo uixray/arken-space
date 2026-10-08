@@ -398,3 +398,69 @@ it("does not upload again when reload finds a pending same-source upload", async
       .mock.calls.filter((call) => String(call[0]).includes("/stickers?")),
   ).toHaveLength(1);
 });
+
+it("owns Escape only for its open summary, leaving select and parent Escape intact", async () => {
+  const onParentEscape = vi.fn();
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === "/api/gm/global-sticker-packs")
+      return [
+        { id: "pack-escape", name: "Пак", lifecycle: "DRAFT", revision: 0 },
+      ] as never;
+    if (path === "/api/gm/global-sticker-packs/pack-escape")
+      return {
+        id: "pack-escape",
+        name: "Пак",
+        lifecycle: "DRAFT",
+        revision: 0,
+        stickers: [],
+      } as never;
+    return {} as never;
+  });
+  renderComponent(
+    <div onKeyDown={(event) => event.key === "Escape" && onParentEscape()}>
+      <GlobalStickerPackManager />
+    </div>,
+  );
+
+  const summary = screen.getByText("Общие паки");
+  const details = summary.parentElement as HTMLDetailsElement;
+  const unownedRepeat = fireEvent.keyDown(summary, {
+    key: "Escape",
+    repeat: true,
+  });
+  expect(unownedRepeat).toBe(true);
+  expect(onParentEscape).toHaveBeenCalledTimes(1);
+
+  fireEvent.click(summary);
+  expect(details.open).toBe(true);
+
+  const ownedEscape = fireEvent.keyDown(summary, { key: "Escape" });
+  expect(ownedEscape).toBe(false);
+  expect(details.open).toBe(false);
+  expect(summary).toHaveFocus();
+  expect(onParentEscape).toHaveBeenCalledTimes(1);
+
+  const heldEscapeRepeat = fireEvent.keyDown(summary, {
+    key: "Escape",
+    repeat: true,
+  });
+  expect(heldEscapeRepeat).toBe(false);
+  expect(onParentEscape).toHaveBeenCalledTimes(1);
+
+  fireEvent.keyUp(summary, { key: "Escape" });
+  fireEvent.keyDown(summary, { key: "Escape" });
+  expect(onParentEscape).toHaveBeenCalledTimes(2);
+
+  fireEvent.click(summary);
+  const select = await screen.findByLabelText("Мои общие паки");
+  const nativeEscape = fireEvent.keyDown(select, { key: "Escape" });
+  expect(nativeEscape).toBe(true);
+  expect(details.open).toBe(true);
+  expect(onParentEscape).toHaveBeenCalledTimes(3);
+
+  fireEvent.keyDown(screen.getByLabelText("Название нового общего пака"), {
+    key: "Escape",
+  });
+  expect(details.open).toBe(true);
+  expect(onParentEscape).toHaveBeenCalledTimes(4);
+});
