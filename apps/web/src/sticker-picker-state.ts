@@ -11,7 +11,9 @@ export function filterStickerPacks(
   return packs
     .filter(
       (pack) =>
-        pack.canSend && (category === "COMMON" || pack.subject === category),
+        pack.canSend &&
+        (category === "COMMON" ||
+          (pack.scope !== "GLOBAL_PUBLIC" && pack.subject === category)),
     )
     .flatMap((pack) => pack.stickers.map((sticker) => ({ pack, sticker })))
     .filter(({ pack, sticker }) =>

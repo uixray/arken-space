@@ -168,6 +168,7 @@ export function chatMessageDto(
     dice: normalizeDiceResult(row.dice),
     skillCard: normalizeSkillCard(row.dice),
     stickerId: row.stickerId,
+    globalStickerId: row.globalStickerId,
     stickerPresentation: row.stickerPresentation,
     createdAt: row.createdAt.toISOString(),
   };

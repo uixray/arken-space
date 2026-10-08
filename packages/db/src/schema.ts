@@ -1671,6 +1671,87 @@ export const stickers = pgTable(
   ],
 );
 
+/** Service-wide public catalog. It is deliberately separate from campaign ACL rows. */
+export const globalStickerPacks = pgTable(
+  "global_sticker_packs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    creatorMembershipId: uuid("creator_membership_id"),
+    createActionId: text("create_action_id").notNull(),
+    lifecycle: stickerPackLifecycleEnum("lifecycle").notNull().default("DRAFT"),
+    revision: integer("revision").notNull().default(0),
+    deprecatedAt: timestamp("deprecated_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "global_sticker_packs_creator_fk",
+      columns: [table.creatorMembershipId],
+      foreignColumns: [memberships.id],
+    }).onDelete("set null"),
+    index("global_sticker_packs_lifecycle_idx").on(table.lifecycle),
+    uniqueIndex("global_sticker_packs_creator_action_idx").on(table.creatorMembershipId, table.createActionId),
+  ],
+);
+
+export const globalStickerMedia = pgTable(
+  "global_sticker_media",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    uploadedByMembershipId: uuid("uploaded_by_membership_id"),
+    storageKey: text("storage_key").notNull(),
+    mimeType: text("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    sha256: text("sha256").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "global_sticker_media_uploader_fk",
+      columns: [table.uploadedByMembershipId],
+      foreignColumns: [memberships.id],
+    }).onDelete("set null"),
+    uniqueIndex("global_sticker_media_storage_key_idx").on(table.storageKey),
+    index("global_sticker_media_sha_idx").on(table.sha256),
+    check("global_sticker_media_size_check", sql`${table.sizeBytes} > 0`),
+    check("global_sticker_media_dimensions_check", sql`${table.width} BETWEEN 1 AND 4096 AND ${table.height} BETWEEN 1 AND 4096`),
+  ],
+);
+
+export const globalStickers = pgTable(
+  "global_stickers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    packId: uuid("pack_id").notNull(),
+    actionId: text("action_id").notNull(),
+    mediaId: uuid("media_id").notNull(),
+    name: text("name").notNull(),
+    altText: text("alt_text").notNull(),
+    authorCredit: text("author_credit"),
+    licenseNote: text("license_note"),
+    sourceReference: text("source_reference"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "global_stickers_pack_fk",
+      columns: [table.packId],
+      foreignColumns: [globalStickerPacks.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "global_stickers_media_fk",
+      columns: [table.mediaId],
+      foreignColumns: [globalStickerMedia.id],
+    }).onDelete("restrict"),
+    uniqueIndex("global_stickers_pack_id_id_idx").on(table.packId, table.id),
+    uniqueIndex("global_stickers_pack_action_idx").on(table.packId, table.actionId),
+  ],
+);
+
 export const chatThreads = pgTable(
   "chat_threads",
   {
@@ -1751,6 +1832,7 @@ export const chatMessages = pgTable(
       operationCount: number;
     }>(),
     stickerId: uuid("sticker_id"),
+    globalStickerId: uuid("global_sticker_id"),
     stickerPresentation: jsonb("sticker_presentation").$type<{
       name: string;
       altText: string;
@@ -1778,13 +1860,18 @@ export const chatMessages = pgTable(
       columns: [table.campaignId, table.stickerId],
       foreignColumns: [stickers.campaignId, stickers.id],
     }).onDelete("restrict"),
+    foreignKey({
+      name: "chat_messages_global_sticker_fk",
+      columns: [table.globalStickerId],
+      foreignColumns: [globalStickers.id],
+    }).onDelete("restrict"),
     check(
       "chat_messages_sticker_shape_check",
-      sql`(${table.stickerId} IS NULL AND ${table.stickerPresentation} IS NULL) OR (${table.stickerId} IS NOT NULL AND ${table.stickerPresentation} IS NOT NULL AND ${table.kind} = 'TEXT' AND ${table.dice} IS NULL)`,
+      sql`(${table.stickerId} IS NULL AND ${table.globalStickerId} IS NULL AND ${table.stickerPresentation} IS NULL) OR (((${table.stickerId} IS NOT NULL)::int + (${table.globalStickerId} IS NOT NULL)::int) = 1 AND ${table.stickerPresentation} IS NOT NULL AND ${table.kind} = 'TEXT' AND ${table.dice} IS NULL)`,
     ),
     check(
       "chat_messages_player_request_shape_check",
-      sql`${table.playerRequestId} IS NULL OR (${table.kind} = 'SYSTEM' AND ${table.body} = '' AND ${table.dice} IS NULL AND ${table.systemData} IS NULL AND ${table.stickerId} IS NULL AND ${table.stickerPresentation} IS NULL)`,
+      sql`${table.playerRequestId} IS NULL OR (${table.kind} = 'SYSTEM' AND ${table.body} = '' AND ${table.dice} IS NULL AND ${table.systemData} IS NULL AND ${table.stickerId} IS NULL AND ${table.globalStickerId} IS NULL AND ${table.stickerPresentation} IS NULL)`,
     ),
     check(
       "chat_messages_sticker_presentation_check",

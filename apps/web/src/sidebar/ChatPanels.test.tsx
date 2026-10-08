@@ -168,6 +168,35 @@ describe("ChatPanel composer (UIX-388 layout repair)", () => {
   });
 });
 
+describe("global sticker chat messages", () => {
+  it("renders global media through its authenticated content route", () => {
+    const html = renderToStaticMarkup(
+      <ChatMessageBody
+        message={{
+          kind: "STICKER",
+          globalStickerId: "global-sticker-1",
+          stickerPresentation: { altText: "Солнце", width: 64, height: 64 },
+        } as never}
+      />,
+    );
+    expect(html).toContain('/api/global-stickers/global-sticker-1/content');
+    expect(html).toContain('alt="Солнце"');
+  });
+
+  it("keeps legacy campaign sticker content routing intact", () => {
+    const html = renderToStaticMarkup(
+      <ChatMessageBody
+        message={{
+          kind: "STICKER",
+          stickerId: "campaign-sticker-1",
+          stickerPresentation: { altText: "Привет", width: 64, height: 64 },
+        } as never}
+      />,
+    );
+    expect(html).toContain('/api/stickers/campaign-sticker-1/content');
+  });
+});
+
 /**
  * UIX-501 — за кого сделан бросок.
  *

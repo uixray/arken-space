@@ -272,16 +272,21 @@ function ChatMessageBodyComponent({
         onOpen={onOpenPlayerRequests ?? (() => {})}
       />
     );
-  if (message.stickerId || message.stickerPresentation) {
+  if (message.globalStickerId || message.stickerId || message.stickerPresentation) {
     const presentation = message.stickerPresentation;
-    if (!message.stickerId || !presentation)
+    const stickerId = message.globalStickerId ?? message.stickerId;
+    if (!stickerId || !presentation)
       return (
         <p className="chat-sticker-tombstone">{"Стикер больше недоступен"}</p>
       );
     return (
       <figure className="chat-sticker">
         <img
-          src={`/api/stickers/${message.stickerId}/content`}
+          src={
+            message.globalStickerId
+              ? `/api/global-stickers/${message.globalStickerId}/content`
+              : `/api/stickers/${stickerId}/content`
+          }
           alt={presentation.altText}
           width={presentation.width}
           height={presentation.height}
@@ -1079,8 +1084,8 @@ export function ActivityPanel({
             {!composer.trim() && (
               <StickerPicker
                 iconOnly
-                onSelect={(stickerId) =>
-                  onSticker({ stream: "TABLE" }, stickerId)
+                onSelect={(stickerId, scope) =>
+                  onSticker({ stream: "TABLE" }, stickerId, scope)
                 }
               />
             )}
@@ -1493,8 +1498,8 @@ export function DirectChatPanel({
           </div>
           <StickerPicker
             disabled={uploading}
-            onSelect={(stickerId) =>
-              onSticker({ threadId: activeThread.id }, stickerId)
+            onSelect={(stickerId, scope) =>
+              onSticker({ threadId: activeThread.id }, stickerId, scope)
             }
           />
           <label className="direct-attach-button">
@@ -1856,10 +1861,11 @@ export function ChatPanel({
                 {!composer.trim() && (
                   <StickerPicker
                     iconOnly
-                    onSelect={(stickerId) =>
+                    onSelect={(stickerId, scope) =>
                       onSticker(
                         { stream: activeStream as "TABLE" | "STORY" },
                         stickerId,
+                        scope,
                       )
                     }
                   />

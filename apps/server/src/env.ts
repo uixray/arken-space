@@ -35,6 +35,7 @@ export const env = z
       .min(32)
       .default("development-master-token-change-me-now"),
     MEDIA_ROOT: z.string().default("./media"),
+    GLOBAL_STICKERS_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
     MEDIA_QUOTA_BYTES: bytes.default(5 * 1024 ** 3),
     MIN_FREE_DISK_BYTES: bytes.default(5 * 1024 ** 3),
     MAX_IMAGE_BYTES: bytes.default(20 * 1024 ** 2),

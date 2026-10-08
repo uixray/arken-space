@@ -201,3 +201,89 @@
 - QA-only /acceptance28checkbox page delivered via ignoredlocalViteplugin; actualisolatedChromium151 desktop1280x900+compact390x844 link/navigation/persistence/reset/backlink PASS noAPIwrites/pageerrors. RootJSONreview: .data/qa-prep/acceptance-link-browser-receipt-20261008.json. Initialoverlayinterception and wrongcwd404 preserved; finalVitePID38288 apps/webcwd, API/DBuntouched. Humanproductacceptance remainspending, visiblelist requestedownerfulfilled.
 - Remaining644 actualGMcharacterowner desktop+compact rowEsc/focusreturn PASS; compactowner44x44 at308/666. DeletepromptEscape cancelschildonly preservingSetup/rowmenu, noDELETE; outsidecloseboth. Compactscrolledlastrowaction insideviewport. Desktoplastrowaction y992 viewport900 while summary864 is a realcandidatecollision defect, causal screenshot/fix assigned scopedStatLayoutCard+test only.
 - Next: fixprovenlastrowcollision thenfocusedgate+bothviewportbrowser; independentpublication-preparation audit underway, no remoteaccess/start/deploy. UIX398InReview, notDone; originalfullrunwordingnotwaivedimplicitly.
+
+## Global sticker scope audit blocks premature publication
+- Independentpublicationaudit found current sticker schema/routes/catalog/mediaauthorization strictlycampaignscoped. CAMPAIGN+ALL_MEMBERS means onecampaign, NOTownerrequestedallcampaigns/everyone. EarlierchecklistPUBLICwording is requestedtarget, notimplementedproof. Both24+115globalrequirement retained; no reinterpretation asonecampaign.
+- Audit artifact docs/plans/arkenhar-publication-preparation20261008.md maps globalmodelgap, ignoredassets/releaseboundary, resume/idempotence/sourceSHAmanifest, targetinventory/quota/data rollback prerequisites. release.sh unconfirmed pathwritescheckout/backups/rehearsal, notread-onlydryrun. No serverstartup neededyet.
+- Luna globalcatalogimplementation-plan read-only task active: schema/routes/media/chat/clientscope and distinctglobalpublisherauthority. Productquestion onlyifgenuineunresolvedauthority, notweakerscopealternative.
+- UIX644 desktopedge controls reachableafterexistingbodyscroll is NOTunqualifiedcollisionPASS; originalAC no clipping/viewportedges retrievedlive. Scopedownerreviewing consistentoverlaycontract beforepatch; evidencebelowviewportretained.
+
+## Global publishing authority owner decision
+- Owner explicitly chose ANY GM may publish service-wide packs. No operator-only restriction imposed; privatecampaignpacks remainseparate. Globalcatalog/publicscope implementation needed, notmerelyimportexistingCAMPAIGNpacks.
+- Conservative unchangedauth default: creatorGM membership owns globalpack editing/lifecycle; unrelatedGMs cannotoverwrite/archiveothers. Existingauth membership/campaign principal only; no accountidentityredesign silentlyincluded. Luna finalschema/routes/media/chat/clientpartition pendingbeforeexecution.
+- StatLayoutscope approvedlocalcollisionflip/clamp preservingnative details/owner andnestedEscape, recomputeonownscroll/viewportresize; no arbitraryzindex/portalrewrite/manualscrollsubstitution. Worker ownsStatLayoutCard+test+stat-fieldonlystyles; connectedgate afterstable.
+
+## Global catalog connected implementation pool authorized
+- Owner's allcampaigns scope + ANYGMglobalpublish implementedas additiveexplicitglobalcatalog, not reinterpretingcampaignACL. Plan Luna source-map proposesglobalpack/sticker/media tables +explicitglobalchatdiscriminant; authenticatedGLOBALdiscovery/media/send, creator-membershiplifecycle, existingcampaignprivatepacks unchanged. No anonymouspublicdownload promise.
+- Backend Luna ownsDB/additivemigration/contracts/newglobaldomainservice/minimalrouterregistration/tests; web Luna ownspicker/chat/globalGMmanager/tests, coordinatetypehandoff. No existinglocalDBmigration/import/serverrestart untilintegrationgate. Separate139sourceimport stage onlyafterimplementedglobalmodel.
+- Preservehistoricalmedia on deprecate/featuredisable; no destructive downmigrationwithchatrefs. Oneconnectedfocusedgateafterfreeze; originalprivateACL/replay/threadownership/backcompat required. ApproximateETA60-90min implementation, no productioncompletiondate inferred.
+- ThirdLuna scopedStatLayoutcollision remainsindependent; rootcheckpointownership separate. Publicationprepdoc preliminarygap audit retained. Serverstartupstillpremature/noauthorization.
+
+## StatLayout final nested-clipping review delta
+- RootrequestedintersectALLclippingancestors ratherthanfirstonly; workerfixed clientTop/clientHeight intersection, boundedno-open-menu RAFguard, readability. Newnestedouterclipregression29/29PASS. Sourcehash A2E2488D...19CBACEB7; test421DE3C7...28037B9. PrioractualChrome4/4 applies previoushash/normalancestor geometry, notnewnestedbrowserproof.
+- Concurrentofficialwebtsc failed newlyeditedStickerPicker.tsx253 unresolvedpackidentifier; outsideStatLayoutownership, webowner notified. No sourceacceptedglobaljointgateyet, no testfailureerasure. FrozenStatLayout3filesawaitjointtsc afterglobalcontract/webstabilizes.
+- Globalbackend additive0047migration/schema/contracts/routerintegrationactive; frontendpicker/send/renderactive, managerAPIhandoffblockeduntilbackendexactpaths/bodyresponses. Rootrelayrequested, no reseed/localmigration/deploy.
+
+## Global catalog recovery handoff
+- Web initialcandidate includes globalpicker/sendscope/chatmedia andseparateGMglobalmanager, existingcampaignmanager untouched. Rootrejectedassuminghappy-pathuploads suffice: original497safeambiguousoperation/resume remainsrequiredfor139sources.
+- Backend exactrecoverycontract handedoff: createactionId samecreator/actionreplay200; ownpackdetail orderedstickers actionId+metadata+SHA; uploadsameactionreplay200 before rereadingretryfile; publishrevisionCAS/ACTIVEreplay. Frontend adapting intentactionIDs/detailrecovery andfocusedtests; finalfreeze notyetdeclared. No candidateacceptancefrommid-editgate.
+- StatLayout29tests sourcefrozenawaitjointwebtsc;644nextPlayerRequests6controls QApreparationonly pendingglobalintegrationfreeze. No nativeOSmanualrepeat, server/prod untouched.
+
+## Global backend evidence remains insufficient - gate not accepted
+- Backend isolatedroute2/2 creator/PLAYER/anonymous tests reported, but crosscampaignactualmedia/send/history andoldACL/coreidempotency stillmissing. Rootexplicitlyrequires originalglobalbehavior notcreatoronly green. Newrealintegrationtests pending; noQA DB migrated.
+- Rootcandidatereview raised uploadDRAFT-beforetransaction/publishrace, globalSHAunique duplicateimagefailure, catchall400maskinginternalerror, ORMhelperexportsinstance mismatch rationale. Backendmustresolve/provebeforefreeze; independentLuna read-onlycriticalreviewassignedidleQAagent.
+- PlayerRequests8caseChromeFirefoxGMPLAYERdesktopcompactgate preparedNOTEXECUTED, actualvisibleworkspace/noforce/norequestsubmit, writeguarded. Fixturealternativecharacter absence fails ratherthanfabricateschoicePASS. WaitrootstableintegrationGO.
+- Next: connectedbackendcoreevidence +webrecoveryfreeze, jointtypechecks/tests thenPlayerRequests/runtime/global139importplan. No unsupportedDone orproductionchanges.
+
+## Worker continuity restored from authoritative state
+- collaboration.list_agents returned rootonly: previousglobalworkers terminal/unavailable, notassumedstillrunningfromintent. Currentdirtycandidate preserved; freshLuna backend/webresume plusindependentcriticalreview dispatchedusingcheckpoint+Git ratherthanbroadrestart.
+- Backendfreshinspection confirmscoretests incomplete andduplicateimageconstraint/raceerrormapping remaincandidatefindings. Resumeowns samefiles, noQA DBmigration/servicesrestart. Webresumefocusedgatepending; independentreview noedits.
+- PriorPlayerRequestspreparedNOTEXECUTED stillholds. No test/processrestartsolelywaittimeout; freshowners inspectexistinghandles beforecommands. Goalprogress remainsrealimplementation/evidence, noDoneclaim.
+
+## Independent global critical review and canonical intent binding
+- Candidate independentreview identified createpayloadreplay/race, uploadmetadata/sourceintentbinding, chatconcurrentaction reconciliation, missing0047snapshot and orphancreatorlifecycle gaps; backendowner fixingactualroutes+integrationtests. ORMbarrel exports structurallyvalid, no unsupportedclaim of rootcause solved solelyalias.
+- Canonical uploadintent now includes sourceSha25664hex computedclientbeforeintent. Bind persistedactionId+metadata+expectedSHA, initialactualbuffer hash mustmatch; changeddeclaredSHA/metadata replay409; sameintent returnsstableID before retryfileconsumption. Serverdoesnotclaim retrybytesinspected. Webowneradapting, frozencontractdeltaexplicit notsilent.
+- Ownerexplicitlyapprovedoperator management of globalpacks whosecreator membershipdeleted; unrelatedGMstillcannotmutateothers. Preserveglobalhistory/media, no cascade, reuseexistingoperatorcapability. Rootdeferredglobalcompletependingproofs andmigrationmetadata.
+
+## Root frozen web gate live - no pass inferred
+- Webowner finalfrozenfiles/hashmanifest reported; canonicalsourceSHAquery and sessionStorage intent IDs/hash added, nofiles/provenance/secretsstored. Focusedroot6fileVitest escalation session91167 started; onlyRUNbanner sofar. AuthoritativeelevatedCIM confirmed rootVitestPID20608+forkworker23836 live, exactcommand6files, notassumedterminal/restarted because observationtimeout.
+- Newindependentreview confirmscreate/uploadintentbinding andchatwinnerreconciliation structurallyimproved; SAMEPACKsourceSHAduplicate refusal, realoperatororphantests, concurrentchat and0047snapshot stillrequired. BackendauthoringfullroutePGlitegate, noQA DBmigration/serverrestart.
+- Earliermissing44–46migrationalert withdrawn: rootfullpathexplicitlisting confirmsSQLandsnapshots44/45/46. No reconstructionofnonmissinghistory;47metadataremainsnewcandidatework.
+
+## Root web gate partial failures and remaining backend recovery defect
+- Rootsession91167 producedactual manager5tests2FAIL (reloadcreateintent andaccepteduploadreloadno-duplicate); remainingfilesstillrunning, nofinalcount/exit yet. Sourceunchangedduringgate; fixeswaitterminaldetails, no greenclaim.
+- Independentbackendreview now confirms sourceSHA samepackrefusal/creatororphanoperator/concurrentchat structuralfixes, but uploadcatch deletesstoredfile BEFOREqueryingambiguouscommittedwinner; couldreturn200 withmissingmedia. Backendnotified reordercleanup onlyprovenunreferencedfile +fault-after-commit regression. New47snapshotmetadata stillpendingconsistentgeneration.
+- Focus remainsoriginalsafeupload/recovery/globalcrosscampaign acceptance, notcreator-onlyhappytest. QA DB/server/produnchanged; fullgoalunachieved.
+
+## Gate diagnostics without weakening criteria
+- Rootweb91167 stilllive; authoritativeforkPID changed, so no assumptiontimeout=stopped. Read-onlywebdiagnosis identifies create-labelambiguity and reloadtestfixture exposingcommittedupload tooearly (currentmanageralreadyreconciles+clearsintent). Rootapprovedprovisional distinctcreatelabel and separate immediate-reconcile vsdelayed-readreload fixtures, but editswaitterminal gate toavoidmixedsource.
+- BackendfirstfocusedgateFAILED: duplicatecampaign TABLEthread testfixture, hooktimeout underparallelPGlite, orphanoperatordeprecate500; actualerror investigation required notexpectationwaiver. Fixtureselectcanonicalexistingthread correction, serialgate planned. Ambiguouscommitcleanup reorderedwinnerlookupbeforetempremove anddeterministiccommit-then-throw regression added; finalverificationpending.
+- No acceptance/complete status, noQA DB orprodactions. Nextterminal gate diagnostics→onefrozenrepairgate; remainingscope retained.
+
+## Known-failing web gate explicitly cancelled, not timeout restart
+- RootownedVitest91167 deliberatelyCtrlC afterdefinitive2managerfailures; terminalEXIT1 confirmed. This is failure-drivenrepair, notclaimprocessdead or automaticrestartafterobservationtimeout. Remaining5suites notexecuted/verified tocompletion. No unqualified6filepass.
+- Webworker authorizedsamefrozenfilefix: distinctcreationlabel and modeldelayedread reloadfixture separatelyfromimmediatecommitreconcile, retainallno-duplicate/idempotencyassertions. Oneconnected6filegate afternewfreeze; no paralleltestloops.
+- Backendgate#2 6/8PASS: actualcrosscampaignsend/history/disable/privateACL andPNG/SHA/replay/duplicate/ambiguouscommit tests passed; orphandeprecateinvalidrevisionexpression andlegacyfixtureTABLEcollision stillFAIL, fixes atomicSQL/selectcanonicaltable andfinalgatepending. Failurehistoryretained.
+
+## Root six-file terminal gate and actual create-recovery defect
+- Root63265 terminalEXIT1:6files,66/67PASS,39.51s. OnlyuncertaincreateafterreloadFAIL expectedtwoPOSTcalls gotone at199. Uploadimmediateanddelayedreload proof nowPASS; unrelatedremaining5suitesPASS. Priorcancelled91167 remainsseparatefailurepartialhistory.
+- Workerconfirmed actualproductionguardbug: createfield/buttonusesstoredintentname butcreate() guardchecksemptynewname, silentlyreturns onenabledreloadretry. Rootapprovedderiveguardfromstoredintent whenuncertaincreate, preserve2calls/sameactionIDtest. No expectationweakening. Final6file+officialwebtsc afterfinalfreeze.
+- Backend8/8isolatedrealroute/migration gate reported, rootinspectedactualtestcases/migrationlegacySQL/Promiseallonehistorymessage. Officialbuild/typechecks/47snapshot stillpending; no completeclaim.
+
+## Global candidate connected gate results
+- Root79109 terminal6files67/67PASS; officialwebtscFAILED two errors: restored uploadintent lacksrequiredfiledetails inref type, fixturePromiseunknown vsPromisevoid. Scopedmodel/fixturetypingrepair assigned, no castingawayrestoredstate; delta2filetests+officialtsc next, unchanged67scope sourcehashqualified.
+- Backendisolated2files8/8PASS, drizzlejournal/snapshotcheckPASS,d b/contracts/serverofficialtypechecksPASS reportedfinalhashmanifest; independentstructuralreview approves ambiguouscommitfilepreserve +snapshot47chain. Rootreviewedactualroutecases/SQL, no productionstate inferred.
+- Remainingcriticalbackendrace uploadvs publish deterministicinterleavingnotyetproved; testonlyplussharedfeedbackoperatorACL regression connectedgate assignedbeforefreeze. LocalruntimeDB stillnotmigrated/new139globalpacksnotimported.
+- Original473realqueue/servertrust/nativehumanmatrix remainseparate; scopeunchanged. Next typerepair/raceproof→commitconnectedglobalpool→isolatedlocalruntimeintegration/importexplicitgate, notautomaticprod.
+
+## Local global-catalog integration approval and web final acceptance
+- Root44449 delta2files7/7PASS +officialwebtypecheck terminalEXIT0. Combinedwithroot79109unchanged6file67/67PASS, scopedtyperepairaccepted; failures79109tsc retainedhistory. WebfrozenmanagerSHA2EF4C5A9...36A40E0, hooktest76774569...FE0156.
+- Ownerexplicitapproved AFTERgreen gate backup+additiveLOCALtestDBmigration +global24/115import. Oldpacks/data preservednoDELETE/reseed; remote/prod untouched. FreshLuna ignoredartifactimportprep assignedWAITROOTGO untilfinalbackend3file race+feedbackACLgate.
+- Backendtestonlyrace: publishfirst pausedafterrealstoredPNG=>409cleanup/noACTIVEappend, uploadfirstthenpublish retainsitem; connectedbackend+feedbackoperatorregression running. Sourceunchangedfinaltests, integrationnotaccepteduntilterminal.
+- Nextfreezecommitglobalpool+StatLayoutscopedfix aftergate, verifiedbackup/restoreability andmigrationbaseline inspection beforelocal47apply/APIownedrestart; source139manifest/idempotentstabletarget resume, globalcrosscampaignbrowserverification. No productionreadyclaim.
+
+## Final connected code gates accepted; local integration next
+- Backendfinal3files16/16PASS includesrealglobalroutes/migration/upload/race +existingfeedbackoperatorACL. Drizzlecheck andofficialdb/contracts/servertypechecksPASS; integrationhash508f5be2...6313fc5. No localQA DBapplication/prod.
+- Rootweb6files67/67PASS +aftertyperepairdelta2files7/7PASS officialwebtscEXIT0. ScopedStatLayout29tests coveredin67; nestedclip/ownerdismiss preserved source, normalviewportactualChrome4/4 previoushashqualified. Independentbackendsourceapprove+rootfailurehistory retained.
+- Decision freezeStatLayoutcollision separately, thencoherentglobalcatalogschema/contracts/backend/web/recoverypool. This is verifiedcodegate, NOTglobal139import/crosscampaignbrowser/productioncompletion. Ownerlocalbackup/migration/import approval explicit; preparedworkerawaitsROOTGO.
+- Nextinspectlocalmigrationbaseline/backupexactnamedDB+restorecheck then47apply/restartonlyQAAPI/globalflag andidempotent139import, preserveoldpacks. Remote/servertrust/real473 remainseparate.

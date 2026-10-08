@@ -1973,6 +1973,8 @@ export const createStickerMessageSchema = z.union([
   createStickerMessageBaseSchema
     .extend({ stream: z.enum(["TABLE", "STORY"]) })
     .strict(),
+  z.object({ actionId: actionIdSchema, scope: z.literal("GLOBAL"), globalStickerId: z.string().uuid(), threadId: z.string().uuid() }).strict(),
+  z.object({ actionId: actionIdSchema, scope: z.literal("GLOBAL"), globalStickerId: z.string().uuid(), stream: z.enum(["TABLE", "STORY"]) }).strict(),
 ]);
 export type CreateStickerMessage = z.infer<typeof createStickerMessageSchema>;
 
@@ -2499,13 +2501,25 @@ export interface StickerDto {
 /** Entitlement and consent rows are intentionally not exposed. */
 export interface StickerPackDto {
   id: string;
+  /** Absent on older campaign DTOs; global catalog entries are explicitly tagged. */
+  scope?: "CAMPAIGN" | "GLOBAL_PUBLIC";
   name: string;
-  subject: StickerPackSubject;
+  subject: StickerPackSubject | "COMMON";
   subjectCharacterId: string | null;
   subjectMembershipId: string | null;
   subjectLabel: string | null;
   lifecycle: "ACTIVE" | "DEPRECATED";
   canSend: boolean;
+  stickers: StickerDto[];
+}
+
+export interface GlobalStickerPackDto {
+  id: string;
+  scope: "GLOBAL_PUBLIC";
+  name: string;
+  subject: "COMMON";
+  lifecycle: "ACTIVE" | "DEPRECATED";
+  canSend: true;
   stickers: StickerDto[];
 }
 
@@ -2584,6 +2598,7 @@ export interface ChatMessageDto {
   /** Immutable v1 skill/ability card stored with the message, when present. */
   skillCard?: SkillCardSnapshot | null;
   stickerId?: string | null;
+  globalStickerId?: string | null;
   stickerPresentation?: StickerPresentation | null;
   attachments?: ChatAttachmentMetadata[];
   createdAt: string;

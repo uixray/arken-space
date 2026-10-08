@@ -88,6 +88,9 @@ import {
   campaigns,
   characters,
   chatMessages,
+  globalStickerPacks,
+  globalStickers,
+  globalStickerMedia,
   chatReadCursors,
   chatThreads,
   chatAttachments,
@@ -149,6 +152,7 @@ import { registerWorldMapRoutes } from "./world-map-routes.js";
 import { registerStoryRoutes } from "./story.js";
 import { registerStoryAttachmentLifecycleRoutes } from "./story-attachment-lifecycle.js";
 import { registerStickerPackAdminRoutes } from "./sticker-pack-admin.js";
+import { registerGlobalStickerRoutes } from "./global-sticker-catalog.js";
 import { registerAssetLifecycleRoutes } from "./asset-usage.js";
 import { assetContentVersion, assetDto } from "./asset-lifecycle.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
@@ -938,6 +942,7 @@ export function registerRoutes(
   registerStickerPackAdminRoutes(app, db, (request, reply) =>
     requireAuth(request, reply, db),
   );
+  registerGlobalStickerRoutes(app, db);
   registerOperatorFeedbackRoutes(app, db);
   registerPlayerRequestRoutes(app, db, io);
   registerCharacterMediaRoutes(app, db);
@@ -5963,6 +5968,38 @@ export function registerRoutes(
         })),
       });
     }
+    const globalPacks = env.GLOBAL_STICKERS_ENABLED ? await db
+      .select()
+      .from(globalStickerPacks)
+      .where(eq(globalStickerPacks.lifecycle, "ACTIVE")) : [];
+    for (const pack of globalPacks) {
+      const items = await db
+        .select({ sticker: globalStickers, media: globalStickerMedia })
+        .from(globalStickers)
+        .innerJoin(globalStickerMedia, eq(globalStickerMedia.id, globalStickers.mediaId))
+        .where(eq(globalStickers.packId, pack.id));
+      result.push({
+        id: pack.id,
+        scope: "GLOBAL_PUBLIC" as const,
+        name: pack.name,
+        subject: "COMMON" as const,
+        subjectCharacterId: null,
+        subjectMembershipId: null,
+        subjectLabel: null,
+        lifecycle: pack.lifecycle,
+        canSend: true,
+        stickers: items.map(({ sticker, media }) => ({
+          id: sticker.id,
+          packId: sticker.packId,
+          name: sticker.name,
+          altText: sticker.altText,
+          url: `/api/global-stickers/${sticker.id}/content`,
+          width: media.width,
+          height: media.height,
+          attribution: { authorCredit: sticker.authorCredit, licenseNote: sticker.licenseNote },
+        })),
+      });
+    }
     reply.header("Cache-Control", "private, no-store");
     return result;
   });
@@ -6055,6 +6092,7 @@ export function registerRoutes(
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     const body = createStickerMessageSchema.parse(request.body);
+    const globalRequest = "scope" in body;
     let thread;
     try {
       thread = await resolveChatThread(db, auth, body, ["TABLE", "STORY"], {
@@ -6069,7 +6107,15 @@ export function registerRoutes(
     )
       return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
     const duplicate = await findAction(db, auth.campaignId, body.actionId);
-    if (duplicate)
+    if (duplicate && globalRequest) {
+      const payload = duplicate.payload as Record<string, unknown>;
+      return duplicate.membershipId === auth.membershipId &&
+        duplicate.type === "chat.created" && payload.threadId === thread.id &&
+        payload.globalStickerId === body.globalStickerId
+        ? reply.code(200).send(duplicate.payload)
+        : reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
+    }
+    if (duplicate && !globalRequest)
       return isMatchingStickerReplay(duplicate, {
         membershipId: auth.membershipId,
         threadId: thread.id,
@@ -6077,6 +6123,56 @@ export function registerRoutes(
       })
         ? reply.code(200).send(duplicate.payload)
         : reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
+    if (globalRequest) {
+      if (!env.GLOBAL_STICKERS_ENABLED) return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
+      const [resolved] = await db
+        .select({ sticker: globalStickers, pack: globalStickerPacks, media: globalStickerMedia })
+        .from(globalStickers)
+        .innerJoin(globalStickerPacks, eq(globalStickerPacks.id, globalStickers.packId))
+        .innerJoin(globalStickerMedia, eq(globalStickerMedia.id, globalStickers.mediaId))
+        .where(and(eq(globalStickers.id, body.globalStickerId), eq(globalStickerPacks.lifecycle, "ACTIVE")))
+        .limit(1);
+      if (!resolved) return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
+      const viewers = thread.type === "DIRECT" ? directThreadMemberIds(thread) : [];
+      const presentation = {
+        name: resolved.sticker.name,
+        altText: resolved.sticker.altText,
+        assetUrl: `/api/global-stickers/${resolved.sticker.id}/content`,
+        width: resolved.media.width,
+        height: resolved.media.height,
+      };
+      const audienceMembershipIds = thread.type === "DIRECT" ? viewers : null;
+      let saved;
+      try {
+        saved = await db.transaction(async (tx) => {
+          const [row] = await tx.insert(chatMessages).values({
+            campaignId: auth.campaignId, membershipId: auth.membershipId, characterId: null,
+            kind: "TEXT", threadId: thread.id, visibility: "PUBLIC", body: "",
+            globalStickerId: resolved.sticker.id, stickerId: null,
+            stickerPresentation: presentation, stickerViewerMembershipIds: audienceMembershipIds,
+          }).returning();
+          const dto = chatMessageDto(row!, auth.displayName, thread.stream);
+          const [event] = await tx.insert(gameEvents).values({ campaignId: auth.campaignId, actionId: body.actionId, membershipId: auth.membershipId, type: "chat.created", entityType: "chat", entityId: row!.id, payload: dto }).returning();
+          return { dto, event: event! };
+        });
+      } catch (error) {
+        // Concurrent retries can both pass the initial lookup; the action
+        // unique constraint elects one winner and the loser replays it.
+        const winner = await findAction(db, auth.campaignId, body.actionId);
+        if (winner) {
+          const payload = winner.payload as Record<string, unknown>;
+          return winner.membershipId === auth.membershipId && winner.type === "chat.created" &&
+            payload.threadId === thread.id && payload.globalStickerId === body.globalStickerId
+            ? reply.code(200).send(winner.payload)
+            : reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
+        }
+        throw error;
+      }
+      const envelope = { sequence: Number(saved.event.sequence), actionId: body.actionId, emittedAt: saved.event.createdAt.toISOString(), data: saved.dto };
+      if (audienceMembershipIds) for (const membershipId of audienceMembershipIds) io.to(memberRoom(membershipId)).emit("chat:created", envelope);
+      else io.to(campaignRoom(auth.campaignId)).emit("chat:created", envelope);
+      return reply.code(201).send(saved.dto);
+    }
     const resolved = await resolveSticker(db, auth, body.stickerId);
     if (
       !resolved ||

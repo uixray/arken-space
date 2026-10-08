@@ -71,6 +71,25 @@ export async function requireAuth(
   return auth;
 }
 
+export function isOperatorMembershipId(membershipId: string) {
+  return env.OPERATOR_MEMBERSHIP_IDS.split(",").map((value) => value.trim()).filter(Boolean).includes(membershipId);
+}
+
+/** Shared existing operator allowlist gate for operator-only workflows. */
+export async function requireOperator(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  db: Database,
+) {
+  const auth = await requireAuth(request, reply, db);
+  if (!auth) return null;
+  if (!isOperatorMembershipId(auth.membershipId)) {
+    await reply.code(403).send({ error: "OPERATOR_REQUIRED" });
+    return null;
+  }
+  return auth;
+}
+
 export async function createSession(
   db: Database,
   reply: FastifyReply,

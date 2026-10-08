@@ -330,6 +330,13 @@
       "when": 1791029202865,
       "tag": "0046_public_roadmap_votes",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1791036000000,
+      "tag": "0047_global_sticker_catalog",
+      "breakpoints": true
     }
   ]
 }
