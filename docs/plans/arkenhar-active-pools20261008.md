@@ -89,3 +89,15 @@
 - Owner473cadencechosen ONLYONREQUEST, nobefore-sessionautomation; docs/plans/uix473-feedback-triage20261008.md andLinear f2be8418recorddecision. Originalproduction9statuschangesremainnotperformed.
 - OwnerapprovedmanualFirefox, compatibleheadedactualoperatorUIheldlive worker session30510; rootpresented3steps andawaitsactualhumanresult. Don'tcloseFirefoxbeforeownerreply, sharedservicesstayup. Aftermanualwindow restrictAPIbindcurrently0.0.0.0orstopnamedlocaltarget; no productionaction.
 
+
+## Linear acceptance stages / manual recovery
+- UIX293Done confirmedLinear afteroriginal7ACaudit; comment e4bd7d36. UIX497/649InReview localmanager/contentready, targetrealcampaignpublicationnotperformed; comments4dd321a9/b7d503f9. UIX318localUIprivacyready InReview, no freshproductionhostidentityproof whileownerstoppedserver; no false currentproductionclaim.
+- Owner accidentallyclosedmanualworkspace, so3stepnativecheckNOTaccepted. Luna verifiedheldsession30510stillrunning; no externalbrowsercontrolendpoint/CUAavailable. RootgaveexactTOPnav 'Ещё7' rightof 'Сюжет' ->Обратнаясвязь, notleftmaptoolsMore. Do notspawn/restartlivebrowserwithoutauthoritativeclosure/userneed.
+- IndependentLuna assignedfreshbounded644firstopenResizeObserverprobe onactualapprovedlocaltarget (no broadE2E, no speculativefix/nonrepro-as-causalPASS); ETA20–30min. Originalgoalremainsopen due644causal/manual +473realproductiontriage +actualcontentreleaseboundary.
+
+
+## Owner visual finding318 corrected / connectedpoolaccepted
+- Owner supplied2screenshots showingloadedcounterflush-edge anddetailactionswithoutgap; boundedLuna sourceonlyOperatorFeedbackWorkspace.css/.tsx. Reusedspace-md12 inset andspace-sm8 wrappedactions; detailheading scrollmargin, noAPI/privacy/statechanges/sharedstyles. Rootindependentreaddiff+actualscreenshot accepted.
+- Root re-executedactualheadedChromegeometry helpers session22236:desktopstatus/detailinset12, headingvisible, actionsgap8;compact390x844 inset12/gap8, afterselectionfocusedheading719..747insideviewport. Connected2testsuites14/14 andofficialwebtsc0(session14948);Prettiercheck/diffclean. Freezeexplicit2appfiles+thischeckpoint, nootherassets.
+- Fresh644GMROprobe Chrome/Firefoxdesktop/compact no errorswithcapturedobserverstacks, NOTcausalfix. PLAYERmissingdefinitionfixture isnottrueblocker: rootauthorizeddistinctsynthetictokendefinition viaactualGMAPI thenPLAYERprobe, nooverlayacceptance/reseed. Historical2FAIL retained; ownermanualnativecheckstillawaitingexplicitresult, ownerseeswindowbutaskedclarificationandrootrestated3steps.
+
