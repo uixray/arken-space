@@ -338,3 +338,18 @@
 - Linear497 commentc158c524-5946-4639-b665-fa3d735e42c6 and649 commentcbe4b880-c2b3-4a7f-b1ae-49a937737ff9 retainInReview/pendingcrosscampaign/human/remote. No completionclaim.
 -644correctedHome-route run97842 terminal4GMpass/4PLAYERfail: desktop onlynone-character fixturegap; compactcenter-hit failureclassificationpending. InitialArrowDown97923 all8failsretained. No productsourcechanged.
 - Root assigned allowedB-only GM/PLAYER realbrowser independentproof whilepartyAcredentialpermissionpending; explicitly not replacement forcrosscampaign isolationcriterion. Next evidence: compacthitdefect, Bsend/receiver/decode, Aauthorization.
+
+## Independent archive/live preservation audit
+- Root executed elevated readonly pg_restore-data-to-stdout parser for backed-up sticker_media (no restore) and live SELECT map: baseline141/live141,0 mismatched IDs/SHA. Root live global_sticker_media count139/distinctSHA139. Temporary /tmp archive copy removed in finally. Terminal EXIT0; no secret output, no DB mutation.
+- Worker separately compares old141sticker IDs+pack/media associations andthreeoldpacks24/2/115; root independent check coversmediaID/SHA only, not allremainingfields. Exactboundary retained.
+- Import worker terminalcomplete; A auth approval stillpending, B-only realbrowser gate ongoing and explicitlynotcrosscampaign closure.644terminal97842 observed4pass4fail; compacttrace classificationnext. Goal remainsopen.
+
+##644 compactfailure classified; bounded QA correction approved
+- Savedtrace/screenshot identifies PLAYER compact sharedAudience filter below stackedbody viewport; test did centerhit before normalclickautoscroll, workspacebody is overflowauto. Permanentproductoverlay not demonstrated; exactrect/hit-element not previouslycaptured, no inventedgeometry.
+- ROOTGO QA-only scrollIntoViewIfNeeded thenrecordrect/center-hit, boundedPLAYER-only4cells ChromeFirefoxdesktopcompact; retaininitialfailures, no productpatch/fixturemutation/GMrepeat. Singletoncharacter has0ownedfixtures: lifecycleproof separately, selectionvaluechangePENDING, notfakewholepass.
+- GlobalB-onlybrowser worker live execution23064 confirmed, polling samehandle; harnessnav/case/close fixes only. FullA/B pendingexplicitcredentialauthorization; no restartsolelybecauseobservationtimeout.
+
+##644 PlayerRequests connected runtime delta terminal
+- Luna40597 EXIT0 exactly4PLAYERcells after verifiedgrep/scrolledrealhit.5/6valuechanges eachcell,characterNone-only0ownedfixturespending; lifecycleall6. GM4cells from97842 pass/Home-routeonly, original97923ArrowDownfailretained. No productsource/fixturechange/submission; chatreadmockscopeexplicit.
+- Tracked delta docs/plans/uix-644-playerrequests-runtime20261008.md added; whole48/90registry INCOMPLETE unchanged. CompactAudience actualscroll/hitgeometryrecorded, no productpatchwarranted.
+- GlobalB browser harness corrected visibleworkspaceclose/collapsedsidebar issue, worker continues realgate; fullcrosscampaign authorizationpending.
