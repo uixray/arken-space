@@ -2,8 +2,17 @@
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
-import { renderComponent, screen, userEvent } from "./test-support/render";
+import {
+  renderComponent,
+  screen,
+  userEvent,
+  waitFor,
+} from "./test-support/render";
 import { MapToolbar, type MapToolbarProps } from "./MapToolbar";
+import {
+  MAP_TOOL_SHORTCUTS,
+  shortcutLabel,
+} from "./renderers/map-tool-shortcuts";
 import { cursorPreferenceDefault } from "./cursor-preference";
 import { writeToolbarCollapsed } from "./toolbar-preference";
 
@@ -133,7 +142,7 @@ describe("MapToolbar — панель инструментов карты (UIX-4
       cursorPreference: cursorPreferenceDefault("PLAYER"),
     });
 
-    renderComponent(<MapToolbar {...props} />);
+    const { container } = renderComponent(<MapToolbar {...props} />);
 
     expect(
       screen.getByRole("button", { name: "Перемещение" }),
@@ -153,6 +162,88 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     expect(
       screen.queryByRole("button", { name: "Обвести зону боя" }),
     ).not.toBeInTheDocument();
+    for (const entry of MAP_TOOL_SHORTCUTS.filter(
+      (shortcut) => shortcut.gmOnly,
+    )) {
+      expect(
+        container.querySelector(`[data-tool="${entry.tool}"]`),
+        `${entry.tool} is GM-only`,
+      ).toBeNull();
+      if (entry.shiftTool)
+        expect(
+          container.querySelector(`[data-tool="${entry.shiftTool}"]`),
+          `${entry.shiftTool} is GM-only`,
+        ).toBeNull();
+    }
+  });
+
+  it("shows each canonical shortcut in the actual GM toolbar tooltip", async () => {
+    const user = userEvent.setup();
+    const { container } = renderComponent(
+      <MapToolbar {...createDefaultProps()} />,
+    );
+    const toolbar = container.querySelector(".map-toolbar")!;
+
+    for (const entry of MAP_TOOL_SHORTCUTS) {
+      const trigger = toolbar.querySelector<HTMLElement>(
+        `[data-tool="${entry.tool}"]`,
+      );
+      expect(trigger, `${entry.tool} trigger`).not.toBeNull();
+      await user.hover(trigger!);
+      const tooltip = await screen.findByRole("tooltip");
+      expect(
+        tooltip.textContent?.trim().split("·").at(-1)?.trim(),
+        `${entry.tool} tooltip shortcut`,
+      ).toBe(shortcutLabel(entry.tool));
+      await user.unhover(trigger!);
+      await waitFor(() =>
+        expect(screen.queryByRole("tooltip")).not.toBeInTheDocument(),
+      );
+
+      if (entry.shiftTool) {
+        const shiftTrigger = toolbar.querySelector<HTMLElement>(
+          `[data-tool="${entry.shiftTool}"]`,
+        );
+        expect(shiftTrigger, `${entry.shiftTool} trigger`).not.toBeNull();
+        await user.hover(shiftTrigger!);
+        const shiftTooltip = await screen.findByRole("tooltip");
+        expect(
+          shiftTooltip.textContent?.trim().split("·").at(-1)?.trim(),
+          `${entry.shiftTool} tooltip shortcut`,
+        ).toBe(shortcutLabel(entry.shiftTool));
+        await user.unhover(shiftTrigger!);
+        await waitFor(() =>
+          expect(screen.queryByRole("tooltip")).not.toBeInTheDocument(),
+        );
+      }
+    }
+  });
+
+  it("keeps the GM fog heading between navigation and map markers", () => {
+    const { container } = renderComponent(
+      <MapToolbar {...createDefaultProps()} />,
+    );
+    const group = container.querySelector(".toolbar-group")!;
+    const children = Array.from(group.children);
+    const indexOfText = (text: string) =>
+      children.findIndex((child) => child.textContent?.trim() === text);
+    const fogHeading = indexOfText("Туман");
+    const markersHeading = indexOfText("Метки");
+    const pan = children.findIndex(
+      (child) => child.getAttribute("data-tool") === "PAN",
+    );
+    const fog = children.findIndex(
+      (child) => child.getAttribute("data-tool") === "FOG",
+    );
+    const ruler = children.findIndex(
+      (child) => child.getAttribute("data-tool") === "RULER",
+    );
+
+    expect(pan).toBeGreaterThanOrEqual(0);
+    expect(fogHeading).toBeGreaterThan(pan);
+    expect(fog).toBeGreaterThan(fogHeading);
+    expect(markersHeading).toBeGreaterThan(fog);
+    expect(ruler).toBeGreaterThan(markersHeading);
   });
 
   it("рендерит инструменты GM без отключённого боя (UIX-621)", () => {
