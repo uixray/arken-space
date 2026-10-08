@@ -287,3 +287,54 @@
 - Rootweb6files67/67PASS +aftertyperepairdelta2files7/7PASS officialwebtscEXIT0. ScopedStatLayout29tests coveredin67; nestedclip/ownerdismiss preserved source, normalviewportactualChrome4/4 previoushashqualified. Independentbackendsourceapprove+rootfailurehistory retained.
 - Decision freezeStatLayoutcollision separately, thencoherentglobalcatalogschema/contracts/backend/web/recoverypool. This is verifiedcodegate, NOTglobal139import/crosscampaignbrowser/productioncompletion. Ownerlocalbackup/migration/import approval explicit; preparedworkerawaitsROOTGO.
 - Nextinspectlocalmigrationbaseline/backupexactnamedDB+restorecheck then47apply/restartonlyQAAPI/globalflag andidempotent139import, preserveoldpacks. Remote/servertrust/real473 remainseparate.
+
+## Source manifest verified and local runtime availability changed
+- Offline139manifest sourcefilesindependentlyrehash24+115allmatch139uniqueSHA, deterministicUUIDv5actions. Exact24authoritativemetadata draft locatedviaexistingimportscript; neutralunknownidentityalts retainedasdraft, humaneditorialreviewpending notfakeidentity. No importfromcampaignpackreconstruction.
+- Dockerinitiallyunavailable evenrootelevatedpipecheck; userexplicitlyturnedDockeron 'готово'. Localworkerresumesnamedexistingcontaineridentity/baseline/backup before47, no recreatevolume/reseed/imagepull.
+- OwnerexplicitapprovedsecondisolatedsyntheticQApartyGMPLAYER ONLYifinventoryoneparty; existingparty/data preserved, neededactualcrosscampaignglobalvisibility/privateACL proof. Importworkerownsfixture auth privateartifact, browserworkerwaitsready. No tokensprinted/productionchanges.
+- NextreadonlyDBmigrationjournal+verifiedbackupreport→local47apply/APIrestore/idempotent139globalimport→crosscampaigndesktopcompactbrowsergate. Originalfullgoalstillopen.
+
+## Local DB identity and migration baseline verified
+- ExactapprovedexistingQAcontainer startedonly; no recreate/reseed. DBidentity arken_qa/userarken_qa/PostgreSQL17.10/system7694260772466155553, loopback14181 namedvolume preserved. Journal47rows latesthash+timestamp matches0046 (1791029202865); repo48entries with0047pending. No inferencefromseed.
+- BaselineoneQApartyGMPLAYER; oldcampaignpacks24/115 ACTIVE CAMPAIGN +managerprobe2 GM_ONLY, total141media retainedIDs. Globaltablesabsentpre47. Backupcustomformatguard+pg_restore--list underway; that checksarchivecontents, NOTactualrestorerehearsal.
+- ROOTGO officialpending47-only on explicitverifiedDB AFTERbackupsuccess/SHA/list, thenverifyold3pack/mediaidentityunchangedglobalempty. SecondisolatedQApartyownerapprovedbecauseonlyonepresent. No userextraapprovalneededforalreadyexplicitlocal scope; remoteoff.
+- BackendLuna parallelreadonlyliveLinearrefresh savednine-topictriagemap, no realreportstatusclaims/writes. NextlocalAPI+global139import andcrosscampaignbrowser.
+
+## UIX473 task-side triage stage gate
+- LiveLinearrefresh verifiesnine-topicmap no duplicateissue:Done491/492/493/494+related467,Backlog347/495/496. Evidence differs;493Done/PRnotreportresolutionproof. Trackedtriage docupdatedbyLuna; no actualsourceIDs/statesread orreporttransition.
+- Localbackupartifact311439bytesPGDMPmagic present, SHA+container/tmp pg_restore--listverify pending; pipeverifiererrorretained noDBchange. OnlynamedDBstarted, no47apply/import/APIreadyyet. Browserworkerspreparedwaitconfirmedruntime.
+- Nextsuccessfulbackuplist/SHA→47officialpendingmigration→139globalimports/crosscampaignbrowser. Remoteoff/statuswritesunperformed; no goalcomplete.
+
+## Backup independently matched; migration outcome under audit
+- Backup311439bytes SHA578beb0d...8077295 independentlymatchedrootGetFileHash. Workerpg_restore--list503TOCsuccess viaunmountedcontainer/tmp, tempremoved; noactualrestore performed. Targetidentity/archivepath recorded, older3packs141mediabaseline retained.
+- Officialpending47migration returnedEXIT1 with onlyalready-existingjournal/schemaNOTICE visible. Workerhaltedallfurtherwrites/import/restart; readonlyjournal47hash+globaltables/chatFK/checks audit beforeanyretry. No assumptionnonzero=rollback or automaticrerun.
+- Nextdeterminemigrationcommitted/rolledback fromcurrentDB, diagnoseexactstderr; onlyverifiedoutcomepermitsAPIrestore/import. Browserworkerswaitreadiness no stale-loggreen.
+
+## Migration outcome verified independently of wrapper exit
+- Readonlypoststate journal48rows exact0047hash/timestamp1791036000000 +3emptyglobaltables/chatcolumn/validatedFK+2shapechecks, allold3packsIDsrevisions24/115/2and141mediaunchanged. No partialstate; no migrationretry.
+- Rootreadofficialmigrate.ts no explicitsuccess exit1; wrapperNOTICE/exitdiagnostics readonlypending. Commandnotgreen remainsdocumented, notsilentlyrewritten. Exactatomicpoststate supports LOCALnextsteps whileanomalyretained; no productiongateinheritance.
+- ROOTGO localcurrent3ed0f51DB/contracts/serverbuild/ownedAPI+Viterestore thenactualglobalinventory+139sourceimport; secondseparateQApartyonlyifneeded ownerapproved. No remote/deploy. Browserworkerswaitlivehealth/currentroutes notoldlogs.
+
+## Local runtime rebuild and manual checklist scope correction
+- Previous continuation yielded concrete evidence: contracts/db/server builds EXIT0 at 3ed0f51; existing-data ensureSeed preflight checked. Importer now owns hidden API PID23636; live health/listener and Vite readiness still pending, no import completion claimed.
+- Root corrected tracked visual acceptance and local HTML from campaign PUBLIC wording to actual GLOBAL_PUBLIC across both QA parties, separate common-pack manager, creator-only editing and operator orphan-fixture pending. Corrected QA checklist link placement to top navigation. Human acceptance remains pending; source edit only, rendered check deferred until Vite ready.
+- Second isolated QA party authorized only because inventory has one; worker owns fixture creation. Old packs/data preserved. Next actual API/Vite readiness,139 global imports, crosscampaign browser proof, then queued644 FormSelect matrix. Migration EXIT1 wrapper anomaly retained; no retry, remote/deploy untouched.
+
+## Local readiness independently verified; browser matrix dispatched
+- Root elevated GET /healthz200: databaseok, buildRevision3ed0f51966e0c547b33311387c10e52f4e42391f; live node PID23636 confirmed. API listens0.0.0.0:14182, not loopback-only.
+- Vite launcher22652/listener29260 at127.0.0.1:14183; root GET /acceptance200 confirms GLOBAL_PUBLIC/crosscampaign text, root GET /200. HTTP source availability does not replace rendered acceptance proof.
+- Reused Luna644 worker dispatched prepared no-submit FormSelect browser matrix now runtime ready; importer owns approved second isolated QA fixture and139 API import, not completed yet; web worker owns global browser script/receipt. No migrationretry/productionaction.
+- Live Linear497/649 read: both InReview; descriptions still historical singlecampaign proof, to update at completed global runtime gate only. Goal remains incomplete, local evidence advanced.
+
+## Global139 local import executed; specific browser auth approval pending
+- Luna created only approved second synthetic campaign afb9b8fe-301b-4de9-bfad-233dd69cf126 viaofficialhelper +PLAYERinvite201; originalparty not reseeded.
+- Actual API globalpacks ACTIVE:497=2f77fde4-3f5c-4167-8a14-ec31be51d155 count24;649=a9e197b7-aa5d-4d80-8fa0-fad39ac73293 count115. Importreceipt139uniqueSHA/idempotentverification0writes; rootreviewfound published:falseambiguous resume-passlabel and preservationbooleanneedscomparativeevidence, requestedclarification. Initialreceipt-onlyfailure afterpublish retained/resumedsameactions.
+- Globalbrowser fixture hadonlypartyB; reviewer rejected reading/persisting existingpartyA syntheticcredentialswithouttrustedexplicitpermission. Rootaskedexactpermission viaasyncUI; no bypass. OtherlocalQA independentcontinues.
+-644firstactualmatrix terminal97923 eightfails initialArrowDowntriggercommit assertion; sourceunchanged, initialtracesretained. QA-only Home/focus/Enter route rerunauthorized, notsubstituteforunprovedoriginalkeyboardroute; awaitterminal.
+- Next independentimportbaselinecompare/receipt thenrealglobalcrosscampaignbrowser afterauthpermission; humanalt/nativeEsc/remotegatesremainpending. No goalcomplete/productionaction.
+
+## Local global integration stage gate recorded
+- Root re-read importreceipt: top-levelscopeGLOBAL_PUBLIC/current3ed0f51, ACTIVE24+115, wasPublishedByThisImporttrue, publishedOnIdempotentVerificationPassfalse,139uniqueSHA,0verificationwrites. Preservationreceipt records archivebaseline141media IDs/SHA unchanged and oldpack24/2/115 retained; independent DB reread not yet root proof.
+- Linear497 commentc158c524-5946-4639-b665-fa3d735e42c6 and649 commentcbe4b880-c2b3-4a7f-b1ae-49a937737ff9 retainInReview/pendingcrosscampaign/human/remote. No completionclaim.
+-644correctedHome-route run97842 terminal4GMpass/4PLAYERfail: desktop onlynone-character fixturegap; compactcenter-hit failureclassificationpending. InitialArrowDown97923 all8failsretained. No productsourcechanged.
+- Root assigned allowedB-only GM/PLAYER realbrowser independentproof whilepartyAcredentialpermissionpending; explicitly not replacement forcrosscampaign isolationcriterion. Next evidence: compacthitdefect, Bsend/receiver/decode, Aauthorization.
