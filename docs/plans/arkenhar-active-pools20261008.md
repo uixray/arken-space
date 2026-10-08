@@ -76,3 +76,16 @@
 - IndependentLuna approvesArkenDialogguard/tests. ActualheadedFirefoxfirstEscape nowpreservesworkspace/selectfocus. Standalone-nativeFirefox reproduces :open stayingtrue through3PlaywrightEscapes withtrustedkeydown/keyup notprevented: thisautomationcannotproveOSpopupdismissal/secondworkspaceEscape. Preserve manualgate; nofull644PASSclaim. Root2dialog suites10/10+webtsc0, narrowdiffreviewaccepted; fixreadyforlocalfreezeonly.
 - Root independentlyreran115 liveverification: ACTIVE115, allRussianaltsmatchmanifest, truthfulIMPORTEDprovenance, CAMPAIGN/ALL_MEMBERS; rehashedall115sources unchanged. Workerdesktop/mobile send201+decodedmedia receipts reviewed, initialmobilefailedharness preservedandsupersededbyseparatesuccessreport. Separate24packstillpending, noproductionpublish.
 
+
+## Original24 separatecontent gate accepted / fullUI audit remaining
+- Luna imported24separateoriginalPNGs withownerconfirmedORIGINALprovenance, preservedprior115packIDs, actualGMUIpublish200 ->ACTIVE24. PLAYER desktopsearch24/send201; separateGMreceivessame exactmessageid+stickercontentURLviaWSwithoutreloadanddecodesimage. Rootread exactreceipt thenindependentlyverify-final.mjs exit0:24sourceSHAunchanged,alt/provenancepersisted, expectedpackcount1->2/priorIDsretained.
+- 649recipientreceiptinitiallycountonly; workerassignedfinalexactmessageidentityproof for115. 497runtimegenericGMcreate/batchuploadform notprovenbyAPIimports, soassignedtinyseparateUIprobe; nofull497Doneyet. ExtraQApacknotcanonicalcontent andmustnotreplace115/24. Preservehistorical2packgatewhenprobechangescount.
+- Rootviewed actualcompact115picker screenshot: renderedtransparentstickers/noindividualcaptions; accessiblealtretained. 318supplement actualoperatorrowselectionharnessdebug continues, noclaimfromfailedattempt. Rootsourcebranch ec67b2d; no productionaction.
+
+
+## Final connected local acceptance gate
+- Currentec67b2d root8files44/44PASS exit0 session81742, covering293API/storyUI,318security/export anddialogownership. Luna MediaPaneldistinctbyteactualUIcomplete;318reveal/contact/copy/attachments/RESOLVED/DISMISSEDcomplete withordinaryGMbrowsernotclaimed (coveredcurrentAPItests). 293originalAC auditwritten docs/plans/uix293-completion-audit20261008.md.
+- Root final3packread-onlyverifierexit0:115+24+2probe exactIDs/alt/sourceSHA/retainedexistingsticker-mediaIDs allmatch,probeGM_ONLYhiddenplayer. Exactrecipient115and24 messageid+contentURL WS/no reload/decoded receiptsread. Localcontent/managerready; productionnotrequestedandnotpublished.
+- Owner473cadencechosen ONLYONREQUEST, nobefore-sessionautomation; docs/plans/uix473-feedback-triage20261008.md andLinear f2be8418recorddecision. Originalproduction9statuschangesremainnotperformed.
+- OwnerapprovedmanualFirefox, compatibleheadedactualoperatorUIheldlive worker session30510; rootpresented3steps andawaitsactualhumanresult. Don'tcloseFirefoxbeforeownerreply, sharedservicesstayup. Aftermanualwindow restrictAPIbindcurrently0.0.0.0orstopnamedlocaltarget; no productionaction.
+
