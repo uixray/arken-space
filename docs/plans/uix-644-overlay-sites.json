@@ -18,6 +18,16 @@
       "count": 1
     },
     {
+      "file": "apps/web/src/GlobalStickerPackManager.tsx",
+      "kind": "tag:details",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/GlobalStickerPackManager.tsx",
+      "kind": "tag:select",
+      "count": 1
+    },
+    {
       "file": "apps/web/src/MapToolbar.tsx",
       "kind": "tag:details",
       "count": 2

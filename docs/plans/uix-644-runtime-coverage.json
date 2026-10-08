@@ -74,6 +74,40 @@
       "rule": "Historical37/76 denominator and every old status/evidence remain immutable. Both new reachable theme Select rows have scoped PASS and exact e67 checks/E2E/multiplayer SUCCESS. This does not waive the original ResizeObserver causal gap, native Firefox popup acceptance or the rest of UIX-644.",
       "passBuckets": 2,
       "blockedBuckets": 0
+    },
+    "currentStaticRegistryRefresh": {
+      "sourceRevision": "5815ce59a1264391fcd15e2db76e32c6fc2c2cd2",
+      "inventoryTest": {
+        "command": "pnpm exec vitest run apps/web/src/overlay-inventory.test.ts --reporter=verbose",
+        "result": "1 failed / 7 passed before registry refresh; only failure was two new GlobalStickerPackManager buckets, with no removed rows.",
+        "afterRefresh": "EXIT0: 1 file / 8 tests passed. Static coverage only, no runtime acceptance."
+      },
+      "previousRegistryDenominator": {
+        "buckets": 48,
+        "jsxOccurrences": 90,
+        "revision": "917af2d"
+      },
+      "currentStaticInventory": {
+        "buckets": 50,
+        "jsxOccurrences": 92
+      },
+      "addedBuckets": [
+        {
+          "key": "apps/web/src/GlobalStickerPackManager.tsx::tag:details",
+          "count": 1,
+          "owner": "GM-only GlobalStickerPackManager rendered by MediaPanel within the media workspace/sidebar owner; in-flow native details disclosure.",
+          "ancestors": "MediaPanel GM conditional → GlobalStickerPackManager → details/summary → global pack management section",
+          "runtimeStatus": "BLOCKED"
+        },
+        {
+          "key": "apps/web/src/GlobalStickerPackManager.tsx::tag:select",
+          "count": 1,
+          "owner": "GM-only GlobalStickerPackManager rendered by MediaPanel within the media workspace/sidebar owner; native select for choosing an owned global pack.",
+          "ancestors": "MediaPanel GM conditional → GlobalStickerPackManager → packs-present conditional → select/option",
+          "runtimeStatus": "BLOCKED"
+        }
+      ],
+      "rule": "Static discovery only. Both rows are BLOCKED_RUNTIME_PENDING: no placement, keyboard, focus, lifecycle, or hit-test runtime evidence is claimed. Historical acceptance denominators, rows and evidence remain unchanged; overall acceptance remains INCOMPLETE."
     }
   },
   "evidence": {
@@ -321,6 +355,26 @@
       "scope": "One feedback category selector, GM/PLAYER, 1280→390→360 short→1280; keyboard/pointer/Escape/outside and visible close focus.",
       "evidence": ["feedback"],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/GlobalStickerPackManager.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "GM-only GlobalStickerPackManager disclosure, mounted from MediaPanel. Static source confirms a native in-flow details/summary control; no runtime lifecycle evidence is recorded.",
+      "evidence": [],
+      "next": "Verify actual GM rendering, pointer/keyboard open-close, Escape/outside behavior, focus and visible placement in desktop/compact browser contexts before status change."
+    },
+    {
+      "file": "apps/web/src/GlobalStickerPackManager.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "GM-only native select for choosing an owned global pack, conditional on packs being present. No runtime render, keyboard, focus, popup or selection evidence is recorded.",
+      "evidence": [],
+      "next": "With an authorized GM fixture containing packs, verify actual open/select/close, focus and placement in desktop/compact browsers; do not infer runtime PASS from static discovery."
     },
     {
       "file": "apps/web/src/MapToolbar.tsx",
@@ -963,14 +1017,20 @@
     "scope": "Source reachability only; preserves all static buckets, not runtime acceptance."
   },
   "currentInventoryReconciliation": {
-    "revision": "917af2deee0f80d02adcc66634ffc504b5e249e4",
-    "buckets": 48,
-    "jsxOccurrences": 90,
+    "revision": "5815ce59a1264391fcd15e2db76e32c6fc2c2cd2",
+    "buckets": 50,
+    "jsxOccurrences": 92,
     "statusCounts": {
       "PASS": 27,
       "FAIL": 2,
-      "BLOCKED": 19
+      "BLOCKED": 21
     },
-    "note": "Current rows match static index; historical reconciliation37/76 and additions39/78 retained as revision-scoped history, not current totals. No historical PASS transferred to current SHA."
+    "historicalDenominator": {
+      "revision": "917af2deee0f80d02adcc66634ffc504b5e249e4",
+      "buckets": 48,
+      "jsxOccurrences": 90
+    },
+    "note": "Current source index now has 50/92 including two BLOCKED GlobalStickerPackManager rows. Prior 48/90 is preserved as the historical denominator; reconciliation37/76 and additions39/78 remain revision-scoped history. No historical PASS transferred to current SHA."
   }
 }
+

@@ -353,3 +353,19 @@
 - Luna40597 EXIT0 exactly4PLAYERcells after verifiedgrep/scrolledrealhit.5/6valuechanges eachcell,characterNone-only0ownedfixturespending; lifecycleall6. GM4cells from97842 pass/Home-routeonly, original97923ArrowDownfailretained. No productsource/fixturechange/submission; chatreadmockscopeexplicit.
 - Tracked delta docs/plans/uix-644-playerrequests-runtime20261008.md added; whole48/90registry INCOMPLETE unchanged. CompactAudience actualscroll/hitgeometryrecorded, no productpatchwarranted.
 - GlobalB browser harness corrected visibleworkspaceclose/collapsedsidebar issue, worker continues realgate; fullcrosscampaign authorizationpending.
+
+## ArrowDown failure criterion corrected from actual savedtrace
+- Luna initialGMChromiumtrace confirms ArrowDown highlights alreadyselectedcurrentoption; Enter closeswithsamevalue. Originalmust-change-value assertion invalid for thiscase, not productbug. Failureexecutionhistory retained; no extrapolationtosixcontrols/allengines.
+- CurrentpartialPLAYERHome-route gate preserved at5815ce5; newdiagnosticdocdelta appended. Full644stillopen for characterfixture/nativehuman/sceneselection/browserzoom/causalRO.
+- GlobalBbrowserworker diagnosing composerhiddenstate, no message-sendproofyet; Aauthpermissionpending.
+
+## GlobalB real send gate and current registry drift verified
+- Luna26158 realB GM→PLAYER201 cfa9a77d-eabb-48a9-925d-3a25186c564a /PLAYER→GM201868f18f4-9aa9-4747-a94d-7e544d729884 exactsameIDsreceiver+decodedbothends. Desktopcompactroles139globaloptions/no visibleindividualnames. Fullgate NOTPASS:464mediarequests433200webp/31429JSON; actualthrottlingretained forboundedfreshwindowdiagnosis, no rate-limitdisable. A/Bisolationpendingauthapproval.
+- IndependentofflinefullinventorytestEXIT1 1fail7pass reveals exactly2newGlobalStickerPackManager details/selectrows no removals; actual50buckets92occurrences, historical48/90notcurrent. Luna assignedregistry-onlydelta/updateBLOCKEDruntime andconnectedrerun; preserveoldscopeevidence.
+- Rootreadindexglobalrateenvmax/1minute; no sourcepatchuntilfirstnaturalpicker429diagnosis. Nextregistrycoherentupdate andnormal-loadmediaassessment; goalnotcomplete.
+
+## Current static registry gate accepted; media normal-load probe ongoing
+- Registry3files rootdiffreview confirms2newmanagerrows BLOCKED runtime, fullscan50/92 preservedhistorical48/90/current27PASS2FAIL21BLOCKED. Focusedinventoryrerun8/8 EXIT0; rootaddedafterRefreshterminalresult, JSONparsevalid. Staticonly, notwhole644/runtimeclosure.
+- Cooldownbrowserprobe90398 no429 among89content200, but harnesswaitedall139lazyimagescomplete andtimedout30sec. This is notallmediaPASS; visibleloadprobe correctionapproved, ordinaryscrollneededtoexposeoffscreenimages. Prior31429realresponses retained; noenvlimiterchange.
+- Lastuseraskedglobalreadiness: roughplanning3–7workdays smallinviteddesktopbeta conditionalreleasegate,2–4weeksstabilizationafterrealsessions,3–6weeksresult-basedcase. These are estimates not verifieddeliverydates/permissiontochangegoal ordeploy. Originalpoolgoal remainsfullscope.
+- Next normal-load429assessment/currentregistrycommit, Aauthpermission/humanacceptancepending. Remoteoff.

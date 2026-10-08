@@ -26,3 +26,6 @@ After normal scroll, Audience trigger x21,y651.390625 (Chrome) /651.4000244 (Fir
 - Remaining full registry, real scene selection, true browser zoom, causal ResizeObserver replay and owner-deferred native Firefox popup/manual acceptance.
 - No full E2E or production gate claimed; remote remains stopped.
 
+
+## Saved initial ArrowDown trace diagnosis
+Luna inspected initial GM desktop Chromium trace: ArrowDown call897 aftersnapshot8870.809 highlights selectedCurrentOpen option (aria-selectedtrue,tabindex0,data-highlighted); Enter call899 snapshot8949.862 closespopup and preservesCurrentOpen. Thus initial no-value-change assertion was invalid as a productfailure criterion for this case: the first ArrowDown focused the currentoption. Initial failedexecution receipts remain preserved. This one intermediate DOM trace does not prove everycontrol/browser; actual available alternativevaluechanges remain covered by correctedHome-route matrix. Select wrapper delegates arrows toBaseUI and handlesHome explicitly. No productsourceedit.
