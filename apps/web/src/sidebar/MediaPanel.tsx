@@ -30,6 +30,7 @@ export function MediaPanel({
 }) {
   const uploadStatusPrefix = useId();
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [kindFilter, setKindFilter] = useState<AssetKind | "ALL">("ALL");
   const [replacementId, setReplacementId] = useState<string | null>(null);
   const replacement = snapshot.assets.find(
     (asset) => asset.id === replacementId,
@@ -56,6 +57,21 @@ export function MediaPanel({
     IMAGE: "Другие изображения",
     AUDIO: "Музыка и звуки",
   };
+  const uploadPurposes: Record<AssetKind, string> = {
+    MAP: "Для карт и фонов сцен кампании.",
+    TOKEN: "Для изображений игровых токенов.",
+    PORTRAIT: "Для портретов персонажей.",
+    IMAGE: "Для изображений в других разделах кампании.",
+    AUDIO: "Для музыкальных дорожек и звуков кампании.",
+  };
+  const kindOrder: AssetKind[] = ["MAP", "TOKEN", "PORTRAIT", "IMAGE", "AUDIO"];
+  const visibleKinds = kindOrder.filter((kind) =>
+    snapshot.assets.some((asset) => asset.kind === kind),
+  );
+  const filteredKinds =
+    kindFilter === "ALL"
+      ? visibleKinds
+      : kindOrder.filter((kind) => kind === kindFilter);
   const upload = async (kind: AssetKind) => {
     const file = drafts[kind];
     if (!file) return;
@@ -153,6 +169,10 @@ export function MediaPanel({
                   }
                 />
               )}
+              <p className="muted">
+                {uploadPurposes[kind]} Загрузка не прикрепляет файл
+                автоматически.
+              </p>
               <Button
                 view="action"
                 disabled={!drafts[kind] || uploading !== null}
@@ -170,110 +190,158 @@ export function MediaPanel({
         })}
       </div>
       {error && <div className="field-error">{error}</div>}
+      <label>
+        Тип файлов
+        <select
+          aria-label="Фильтр файлов по типу"
+          value={kindFilter}
+          onChange={(event) =>
+            setKindFilter(event.currentTarget.value as AssetKind | "ALL")
+          }
+        >
+          <option value="ALL">Все типы</option>
+          {kindOrder.map((kind) => (
+            <option key={kind} value={kind}>
+              {labels[kind]}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="asset-list">
-        {snapshot.assets.map((asset) => {
-          const usage = usageByAsset[asset.id];
-          return (
-            <div className="asset-row" key={asset.id}>
-              {asset.kind !== "AUDIO" ? (
-                <img
-                  className="asset-thumbnail"
-                  src={asset.url}
-                  alt={`Превью: ${asset.name}`}
-                />
-              ) : (
-                <span aria-label={ASSET_KIND_LABELS.AUDIO}>
-                  {ASSET_KIND_LABELS.AUDIO}
-                </span>
-              )}
-              <div>
-                <strong>{asset.name}</strong>
-                <small>
-                  {ASSET_KIND_LABELS[asset.kind]} ·{" "}
-                  {(asset.sizeBytes / 1024 / 1024).toFixed(1)} МБ
-                </small>
-                {asset.kind === "AUDIO" && (
-                  <>
-                    <Button
-                      aria-expanded={previewId === asset.id}
-                      onClick={() =>
-                        setPreviewId(previewId === asset.id ? null : asset.id)
-                      }
-                    >
-                      {previewId === asset.id ? "Закрыть превью" : "Прослушать"}
-                    </Button>
-                    {previewId === asset.id && (
-                      <AssetAudioPreview
-                        key={`${snapshot.campaign.id}:${snapshot.me.id}:${asset.url}`}
-                        url={asset.url}
-                        name={asset.name}
-                      />
-                    )}
-                  </>
-                )}
-                {snapshot.me.role === "GM" && (
-                  <div>
-                    <Button
-                      loading={checkingAssetId === asset.id}
-                      disabled={
-                        checkingAssetId !== null || deletingAssetId !== null
-                      }
-                      onClick={() => void checkUsage(asset.id)}
-                    >
-                      {usage
-                        ? "Обновить использование"
-                        : "Проверить использование"}
-                    </Button>
-                    {onReplace && onRefresh && (
-                      <Button
-                        disabled={
-                          checkingAssetId !== null ||
-                          deletingAssetId !== null ||
-                          uploading !== null
-                        }
-                        onClick={() => setReplacementId(asset.id)}
-                      >
-                        Заменить файл
-                      </Button>
-                    )}
-                    {usage && (
-                      <div aria-live="polite">
+        {snapshot.assets.length === 0 ||
+        (kindFilter !== "ALL" &&
+          !snapshot.assets.some((asset) => asset.kind === kindFilter)) ? (
+          <p className="muted">
+            {kindFilter === "ALL"
+              ? "Файлов пока нет."
+              : `Нет файлов типа «${labels[kindFilter]}».`}
+          </p>
+        ) : (
+          filteredKinds.map((kind) => {
+            const assets = snapshot.assets.filter(
+              (asset) => asset.kind === kind,
+            );
+            if (assets.length === 0) return null;
+            return (
+              <section aria-label={`Файлы: ${labels[kind]}`} key={kind}>
+                <h3>
+                  {labels[kind]}{" "}
+                  <span className="revision">{assets.length}</span>
+                </h3>
+                {assets.map((asset) => {
+                  const usage = usageByAsset[asset.id];
+                  return (
+                    <div className="asset-row" key={asset.id}>
+                      {asset.kind !== "AUDIO" ? (
+                        <img
+                          className="asset-thumbnail"
+                          src={asset.url}
+                          alt={`Превью: ${asset.name}`}
+                        />
+                      ) : (
+                        <span aria-label={ASSET_KIND_LABELS.AUDIO}>
+                          {ASSET_KIND_LABELS.AUDIO}
+                        </span>
+                      )}
+                      <div>
+                        <strong>{asset.name}</strong>
                         <small>
-                          {usage.inUse
-                            ? `Используется: ${usage.usages.length}`
-                            : "Не используется"}
+                          {ASSET_KIND_LABELS[asset.kind]} ·{" "}
+                          {(asset.sizeBytes / 1024 / 1024).toFixed(1)} МБ
                         </small>
-                        {usage.usages.length > 0 && (
-                          <ul>
-                            {usage.usages.map((item) => (
-                              <li key={`${item.kind}:${item.entityId}`}>
-                                {item.label} · {item.location}
-                              </li>
-                            ))}
-                          </ul>
+                        {asset.kind === "AUDIO" && (
+                          <>
+                            <Button
+                              aria-expanded={previewId === asset.id}
+                              onClick={() =>
+                                setPreviewId(
+                                  previewId === asset.id ? null : asset.id,
+                                )
+                              }
+                            >
+                              {previewId === asset.id
+                                ? "Закрыть превью"
+                                : "Прослушать"}
+                            </Button>
+                            {previewId === asset.id && (
+                              <AssetAudioPreview
+                                key={`${snapshot.campaign.id}:${snapshot.me.id}:${asset.url}`}
+                                url={asset.url}
+                                name={asset.name}
+                              />
+                            )}
+                          </>
                         )}
-                        {usage.canDelete ? (
-                          <Button
-                            view="outlined-danger"
-                            loading={deletingAssetId === asset.id}
-                            disabled={deletingAssetId !== null}
-                            onClick={() => void remove(asset.id, asset.name)}
-                          >
-                            Удалить файл
-                          </Button>
-                        ) : (
-                          <small>
-                            Удаление заблокировано: файл используется.
-                          </small>
+                        {snapshot.me.role === "GM" && (
+                          <div>
+                            <Button
+                              loading={checkingAssetId === asset.id}
+                              disabled={
+                                checkingAssetId !== null ||
+                                deletingAssetId !== null
+                              }
+                              onClick={() => void checkUsage(asset.id)}
+                            >
+                              {usage
+                                ? "Обновить использование"
+                                : "Проверить использование"}
+                            </Button>
+                            {onReplace && onRefresh && (
+                              <Button
+                                disabled={
+                                  checkingAssetId !== null ||
+                                  deletingAssetId !== null ||
+                                  uploading !== null
+                                }
+                                onClick={() => setReplacementId(asset.id)}
+                              >
+                                Заменить файл
+                              </Button>
+                            )}
+                            {usage && (
+                              <div aria-live="polite">
+                                <small>
+                                  {usage.inUse
+                                    ? `Используется: ${usage.usages.length}`
+                                    : "Не используется"}
+                                </small>
+                                {usage.usages.length > 0 && (
+                                  <ul>
+                                    {usage.usages.map((item) => (
+                                      <li key={`${item.kind}:${item.entityId}`}>
+                                        {item.label} · {item.location}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                                {usage.canDelete ? (
+                                  <Button
+                                    view="outlined-danger"
+                                    loading={deletingAssetId === asset.id}
+                                    disabled={deletingAssetId !== null}
+                                    onClick={() =>
+                                      void remove(asset.id, asset.name)
+                                    }
+                                  >
+                                    Удалить файл
+                                  </Button>
+                                ) : (
+                                  <small>
+                                    Удаление заблокировано: файл используется.
+                                  </small>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
+                    </div>
+                  );
+                })}
+              </section>
+            );
+          })
+        )}
       </div>
     </section>
   );
