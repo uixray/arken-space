@@ -386,3 +386,25 @@
 - Linear4978d06c791-df5c-42d2-9dc1-2cc026107f69 /649da4818e1-48d1-43a3-8442-7a033afaf648 fresh2packsendproof recordedretainInReview/humanAisolation/429burstpending.657Discover7656f806-2a60-44a1-a8b7-aadeef24f344 selfserviceabsent/readiness audit, ownerchoicepending retainBacklog no unauthorizedscopeimplementation.
 - Brotationnonsecretproof rootreviewacceptedwithoriginalPLAYtokenchecklimitation. Globalmanager4cellruntimeLuna reusedonlynewapprovedBfixture programmaticnosecretoutput; requireelevatedloopback/healthz, no restarts fromsandboxfalseunavailable. Agentconfirmedlive; waittimeoutnotterminal/norestart.
 - Next actualnewdetails/select4cellterminal, rootreviewandcheckpoint. WeekenddeadlineproductdecisionandAauthpermissionremainpending; originalfullgoalnotshrunken orcompleted.
+
+## Owner authdecision: fullauth later, prepareotherworkfirst
+- Ownerselectednormalfullauthorization butexplicitlydefersimplementation untilrestprepared. No silentGMsecretlink substitute/noaccountschema/signupcodingnow.657stagecommentrecordsdecision; originalpools/releasepreparationcontinue. Publicregistrationnotready untilauthimplemented/accepted, weekendtargetnotguaranteed.
+- Manager4cellrun initialstrictheadinglocatorfailure twoFilesheadings, no controlsreached: QAonlynarrowlocatorfix+oneconnectedrerunapproved, initialfailuresretained. No productsourcechange.
+
+## Connected local releasepreparation started without authimplementation
+- Root officialwebproductionbuild launched atcurrente514484/docdirty product3ed0f51: liveexec50484, Vite8.2.1transforming no terminalyet. Repeatedsamehandlepollreturnsrunning, nothung/failedclaim orrestart. No API/Viterestart/deploy.
+- Currentproductionreleasechecklistread: reviewedexactcommittedSHA/mainancestry/env/media/backuprestore gates exist; docsnotproof. HistoricalfullE2E clause notsilentlyenforcedoverownerexplicitexclusion; focusedexactcandidateproofneeded andfullsuitewaiverrecordedseparately.
+- Luna correctedmanager4cellrun live11941, initial4strictheadinglocatorharnessfailsretained. Userauthlater decision unchanged; source andfixtures unchanged. Next terminalbuild/runtimeproof andboundedreleasegateplan, no serveraccess withoutrequest.
+
+## Web candidate build terminal verified
+- Rootlive50484 nowEXIT0:4761modules/Vite8.2.1/built1m59, largechunkwarningonly. No restart/interruption, observationtimeoutsnotfailures. HEADe5144849e0eea6735dd12195829e876aa0aab821/doccheckpointdirty; appsourceunchanged3ed0f51.
+- ReadonlyLunamanifest web-build-diagnostic-receipt.json: indexhtml609B SHAa7ff902...d37df4; mainJS1160977B SHAb740cd0...93f76d1; CSS328940B SHA01c5fc6...a0f4933. Buildproof only, notservedproductionbrowser/security/remotegate. API/Viteunchanged.
+- Manager11941stillpendingterminal lastconfirmedfirstChromiumtimeout; needexactstackbeforeanyrerun. Authimplementationexplicitlylater; allcurrentissuescompletioncriteria notwaived.
+
+## Actual newdisclosure Escape ownership defect isolated
+-11941 stoppedafter2desktopChromeFirefoxsamefailure: visiblemanager/summaryhitPASS, Escape makes Files/managerabsent and Charactersvisible; compactnotrun. This is observedparentdismiss, not locatorwaiver PASS. No screenshot/traceduecredential-safeconfig, DOMcontextsretained.
+- RootinspectedArkenDialog workspacebubbleEscapeonClose; Globalmanagernative details lacks ownsummaryEscape handler. ROOTGO narrowGlobalmanager+test ownership: openownsummaryEscape consume/collapse/focus, closedsummarynextEscparent; nativeSELECT/childpopup Escape untouched. Sourcefreeze→connectedmanager/dialogtests+webtsc→4cellbrowser; noharnesswaive orwhole644Done.
+- PreviouswebbuildEXIT0 verifiedbeforethisfix; newsourcewillrequire onefreshbuildaftermajorpool, no productiongateinheritance. Authimplementationlater/remoteoff unchanged.
+
+## Session explicitly paused by owner
+GoalPAUSED, Luna interrupted. Resume entry: docs/plans/arkenhar-handoff20261008.md. Dirty summaryEscapefix/test preservedUNTESTED; held-repeat reviewnotapplied. No sourcecommit/deploy/cleanup. All current decisions and evidence scopes indexed in handoff.
