@@ -37,3 +37,19 @@
 ## UIX676 pool accepted / freeze pending
 - Corrected source finalindependentreview and16/16 actualintegration +officialservertypecheck0. Sixfilemanifest freeze includes3serverfiles +poolcheckpoint +proposal +activepoolscheckpoint; no otherassets/tmp/worktrees.
 - Requirements satisfied onlyforboundedserverdecompositionUIX676. Originalgoal293/318/473/644/497/649 stillrequiresliveQA/contentintegration, notDone.
+
+## Live QA and correct115 pack ready
+- Docker ownerstarted androotverified29.7.2 outside sandbox. Isolatedcachedpostgres17 container arken-uix644-qa-db-20261008 bound127.0.0.1:14181 only; hostfreshserver14182 andVite14183 reachable. SyntheticGM allowlistedoperator allowed, playeroperator403; readinessnotbrowseracceptance.
+- CompatibleheadedFirefox launch failed pre-page inworkercontext; no nativepopupPASSclaim. Chrome livebrowser work now assigned: reviewer293/318, implementationworker497/649+LOCAL syntheticpackimport. Sharedservices stayalive untilcoordinatedteardown; no production/remote/imagepull/build.
+- Correct115 metadata allvisualreviewed in3batches; rootmerge mainrepo.data/qa-prep/uix649-final115/manifest-115.ru.json:115 uniqueids/sourcepaths,115liveSHA matches, Russianalt<=148,7captionuncertainties explicitlyflagged no inventedidentity. First40RUtranslationretainsEnglishdescriptionprovenance. Originalsnotchanged.
+- Pendinginitmetadata handle explicitlyinterrupted/ownershiprevoked fordeadline-driven rescheduling; tool stillreports pending_init, so no assumptionitfailed/dead. No duplicateownership: activeotherLuna completed41–115, freshfirstbatch completed1–40. Newspawn/firstbatchfollowup hitthreadlimit; reusedexistingLuna worker safely.
+- Userrequested15minupdate deadline approx14:52MSK; firstrealQA milestone alreadyachieved beforedeadline. Expected targetedliveQA1–2h fromnow withfirstconnectedresults20–30min, estimatesnotacceptancepromise.
+
+## Firefox local runtime gate unblocked
+- Owner explicitly approved only compatible Playwright Firefox acquisition. Root pnpm exec playwright install firefox outside sandbox exited0; executablePath C:\Users\UIXRay\AppData\Local\ms-playwright\firefox-1538\firefox\firefox.exe independently exists. No system Firefox change or production action. Luna live reviewer assigned targeted headed native-select after293/318; no browser PASS claimed yet.
+- Live headed Chrome GM login/upload201/story PATCH200 observed by reviewer, replacement A-to-B still under scenario/payload investigation, not accepted. Sticker local import remains active independent job.
+
+
+## UIX644 inventory reconciliation pool
+- Root source-reviewed new manager6select/catalog1select occurrences; full current ASTindex48groups/90occurrences. Beforeupdateguard7/8 failed for these exact omissions; afterupdate8/8PASS. Runtime rows27historical scopePASS/2FAIL/19BLOCKED, no currentSHA pass transfer. Changed only menuinventory/staticJSON/runtimeJSON/thischeckpoint; sourcecode unchanged. Next Luna live browser gates, nativeFirefox and original causalRO remain open.
+

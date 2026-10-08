@@ -387,6 +387,16 @@
       "next": "Real multiplayer persistence and physical devices remain separate gates."
     },
     {
+      "file": "apps/web/src/StickerPackManager.tsx",
+      "kind": "tag:select",
+      "count": 6,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "GM sticker manager: subject, character, player, audience, send policy, per-file provenance. Conditional branches remain separately testable.",
+      "evidence": [],
+      "next": "Verify real pointer/keyboard open/select/close, Escape/focus and desktop/compact in Chrome/Firefox; no runtime PASS from inventory."
+    },
+    {
       "file": "apps/web/src/StickerPicker.tsx",
       "kind": "role:listbox",
       "count": 1,
@@ -709,6 +719,16 @@
       }
     },
     {
+      "file": "apps/web/src/sidebar/MediaPanel.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "GM media catalog kind filter.",
+      "evidence": [],
+      "next": "Verify real pointer/keyboard open/select/close, Escape/focus and desktop/compact in Chrome/Firefox; no runtime PASS from inventory."
+    },
+    {
       "file": "apps/web/src/sidebar/QuickRollPanel.tsx",
       "kind": "tag:Popup",
       "count": 1,
@@ -941,5 +961,16 @@
     "revision": "c8d76655e737ec48ad2dcc4becc331b912ac379d",
     "document": "docs/plans/uix-644-applicability.md",
     "scope": "Source reachability only; preserves all static buckets, not runtime acceptance."
+  },
+  "currentInventoryReconciliation": {
+    "revision": "917af2deee0f80d02adcc66634ffc504b5e249e4",
+    "buckets": 48,
+    "jsxOccurrences": 90,
+    "statusCounts": {
+      "PASS": 27,
+      "FAIL": 2,
+      "BLOCKED": 19
+    },
+    "note": "Current rows match static index; historical reconciliation37/76 and additions39/78 retained as revision-scoped history, not current totals. No historical PASS transferred to current SHA."
   }
 }
