@@ -124,6 +124,18 @@ export function ArkenDialog({
             )
               return;
 
+            // Native popups do not expose aria-expanded. In Firefox the
+            // Escape bubbles while :open is still true; let the browser close
+            // only that popup, without cancelling its default key behavior.
+            if (targetElement instanceof HTMLSelectElement) {
+              try {
+                if (targetElement.matches(":open")) return;
+              } catch {
+                // Older engines may not support :open. Keep ordinary closed
+                // control Escape behavior rather than trapping every select.
+              }
+            }
+
             onClose();
           }}
         >

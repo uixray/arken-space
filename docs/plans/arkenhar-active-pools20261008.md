@@ -53,3 +53,26 @@
 ## UIX644 inventory reconciliation pool
 - Root source-reviewed new manager6select/catalog1select occurrences; full current ASTindex48groups/90occurrences. Beforeupdateguard7/8 failed for these exact omissions; afterupdate8/8PASS. Runtime rows27historical scopePASS/2FAIL/19BLOCKED, no currentSHA pass transfer. Changed only menuinventory/staticJSON/runtimeJSON/thischeckpoint; sourcecode unchanged. Next Luna live browser gates, nativeFirefox and original causalRO remain open.
 
+
+## Connected live Chrome gate293/318 accepted
+- Luna headedChrome actualAPI/isolatedDB7scenario gatesPASS onruntime917af2d (08f49bd docs-only). PublishedA replacedB via actualReplace filechooser, currentB/historyA, DELETE409guard, unusedUIcleanup, PLAYER403, actualreportUI submit, GMoperator privacy defaults ACK-to-LINK. Rootread receipt .data/qa-prep/uix293-318-browser-check.md; no blanket fullissueDone. Linear stagecomments b846bc64-1265-4bc7-be7c-bc4bd9419073 /677012b6-1a6f-4a53-9393-d3233e1a2659.
+- Livehealth200; previousPTYhandles missing but authoritativeTCPprocesses alive, no restart. DB/Vite loopback; APIcurrently0.0.0.0:14182, mustnarrowbinding after coordinatedQA window. No productiontraffic/action. Next nativeFirefox~10min, sticker115import active on samefixturewithoutreseed; fullAC audit stillrequired.
+
+
+## Full-scope audit follow-up
+- Root currentconnectedsecurity318 tests3files15/15PASS exit0(session78311): actualAPI/PGlite authorization/filters/pagination/reveal/audit/attachments/transitions/export plusfrontendquery/link/diagnostics. Rate-limit testchecksconfiguration, notlive429; do notoverstate.
+- Root293 connectedAPI/lifecycle/component3files19/19PASS exit0(session18763), includingallfivegenericassetkind replacements, resource/worldACL, rollback/audit/replay andstorylifecycle. Genericcatalogbrowserfullevidence stillmustmatchoriginalscope.
+- Luna compatibleheadedFirefox153 launched. NativepopupvisuallyopenskeyboardAltDown; pointeropenunproven. Escapeclosedparentdialog ratherthankeepingworkspaceopen: potentialrealdefect underrepeatedcausaldiagnosis, notPASS andnotwaived. Additional318browserreveal/copy/attachment/terminalstates coverage queuedafterdiagnosis. No sourcechanges/restarts/deploy.
+
+
+## UIX644 causal native Escape fix under verification
+- Luna repeatedheadedFirefox153repro twice: popup:open true, targetSELECT withno role/aria-expanded, defaultPreventedfalse atcapture/bubble, workspaceclosed. Closedselectbaselineclosesnormally. Root bounded12lineArkenDialog native:openguard addedwithoutpreventDefault plus3DOMnativeownershiptests. IndependentLunareview/runtimepending.
+- Rootconnected2dialog suites10/10PASS andofficialwebtypecheckexit0(session14105). TheseDOMtests explicitlymodelnativeopen, notactualOSpopupacceptance.
+- FirstheadedFirefoxafterfix keptworkspace/focus, but:open remainedtrueafterEscape, sofullfirst/secondEscape contractNOTPASS. Workercheckingvisualpopup/keyevents andstandalone-nativecontrol toseparateautomation/browser behavior fromappdefect; noexpectationweakening/no broadnativeblurhack. Sourcefixnotfrozenyet.
+- Sticker115uploads201anddraftGETcount115confirmedworker; LOCALpublish/playerdecodeflow underway, separate24pack stillnotreplaced.
+
+
+## Native Escape boundedfix acceptance
+- IndependentLuna approvesArkenDialogguard/tests. ActualheadedFirefoxfirstEscape nowpreservesworkspace/selectfocus. Standalone-nativeFirefox reproduces :open stayingtrue through3PlaywrightEscapes withtrustedkeydown/keyup notprevented: thisautomationcannotproveOSpopupdismissal/secondworkspaceEscape. Preserve manualgate; nofull644PASSclaim. Root2dialog suites10/10+webtsc0, narrowdiffreviewaccepted; fixreadyforlocalfreezeonly.
+- Root independentlyreran115 liveverification: ACTIVE115, allRussianaltsmatchmanifest, truthfulIMPORTEDprovenance, CAMPAIGN/ALL_MEMBERS; rehashedall115sources unchanged. Workerdesktop/mobile send201+decodedmedia receipts reviewed, initialmobilefailedharness preservedandsupersededbyseparatesuccessreport. Separate24packstillpending, noproductionpublish.
+

@@ -97,6 +97,68 @@ it("does not close when a child already consumed Escape", () => {
   expect(onClose).not.toHaveBeenCalled();
 });
 
+it.each(["closed", "unsupported"])(
+  "allows workspace Escape from a %s native select",
+  (state) => {
+    const onClose = vi.fn();
+    renderComponent(
+      <ArkenDialog
+        open
+        title="Фильтры"
+        variant="workspace"
+        footer={false}
+        onClose={onClose}
+      >
+        <select aria-label="Тип">
+          <option>Все</option>
+        </select>
+      </ArkenDialog>,
+    );
+    const select = screen.getByRole("combobox", { name: "Тип" });
+    const originalMatches = select.matches.bind(select);
+    vi.spyOn(select, "matches").mockImplementation((selector) => {
+      if (selector !== ":open") return originalMatches(selector);
+      if (state === "unsupported")
+        throw new DOMException("Unsupported selector", "SyntaxError");
+      return false;
+    });
+    fireEvent.keyDown(select, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  },
+);
+
+it("leaves an open native popup Escape to the browser, then closes on the next Escape", () => {
+  const onClose = vi.fn();
+  renderComponent(
+    <ArkenDialog
+      open
+      title="Фильтры"
+      variant="workspace"
+      footer={false}
+      onClose={onClose}
+    >
+      <select aria-label="Тип">
+        <option>Все</option>
+      </select>
+    </ArkenDialog>,
+  );
+  const select = screen.getByRole("combobox", { name: "Тип" });
+  const originalMatches = select.matches.bind(select);
+  let open = true;
+  // jsdom has no OS popup; this checks event ownership only. Headed Firefox
+  // separately verifies the real :open lifecycle and native default behavior.
+  vi.spyOn(select, "matches").mockImplementation((selector) =>
+    selector === ":open" ? open : originalMatches(selector),
+  );
+  select.focus();
+  expect(fireEvent.keyDown(select, { key: "Escape" })).toBe(true);
+  expect(onClose).not.toHaveBeenCalled();
+  expect(select).toHaveFocus();
+  open = false;
+  fireEvent.keyDown(select, { key: "Escape" });
+  expect(onClose).toHaveBeenCalledTimes(1);
+});
+
 it("does not claim Escape bubbling from a portalled child overlay", () => {
   const onClose = vi.fn();
   renderComponent(
