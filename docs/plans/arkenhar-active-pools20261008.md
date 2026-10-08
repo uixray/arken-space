@@ -369,3 +369,20 @@
 - Cooldownbrowserprobe90398 no429 among89content200, but harnesswaitedall139lazyimagescomplete andtimedout30sec. This is notallmediaPASS; visibleloadprobe correctionapproved, ordinaryscrollneededtoexposeoffscreenimages. Prior31429realresponses retained; noenvlimiterchange.
 - Lastuseraskedglobalreadiness: roughplanning3–7workdays smallinviteddesktopbeta conditionalreleasegate,2–4weeksstabilizationafterrealsessions,3–6weeksresult-basedcase. These are estimates not verifieddeliverydates/permissiontochangegoal ordeploy. Originalpoolgoal remainsfullscope.
 - Next normal-load429assessment/currentregistrycommit, Aauthpermission/humanacceptancepending. Remoteoff.
+
+## Rate probe terminal and syntheticcredential incident handling
+- Root read freshreadonlyreceipt9143149:278contentresponses GMPLAYERnaturaldesktopscrollall139,200/0brokenvisible; no compactrerun ornewsendproof. Priorburst31429notwaived; originalfullsendreceipt overwritten, onlylabelledsummaryretained.
+- Root SELECT independentlyconfirms2earlierexactmessageIDs persisted incampaignB andreferenceGLOBALsticker014b54d1; bothsameitem, thusnotproofbothpackssent. WS/decodeproofworker-onlysummary dueoriginalreceiptloss. Fresh2packsend gate preparedwithimmutable receipts afterrotation.
+- LunaaccidentallyprintedBprivatefixturecredentials intooltranscript; userexplicitapprovedONLYnewBGMPLAYERrotate/dataretain. FirstPLAYERrotationcommitted, harnessoldtokenassert400emptyplaceholder; resumeonlysameBgrantcurrent→new token withmemorydenyproof, GMlast. OriginalA/realcredentials untouched; futureBbrowserauthpauseduntilrotationREADY.
+- Portfoliocasepromptdelivereduserrequested, noportfolioagentcreated/toolsreenabled/deploypermission. Nextterminalrotationsecurityproof then2packsendreceipt/currentglobalcontrolsQA. Aauthexactpermissionstillpending.
+
+## Fresh139 pack sends accepted; weekend first-run audit finds missing productpath
+- OfficialBrotationterminal: oldGMtoken403/oldsessiondeny/newGMauthok; previousPLAYER410/newauthok; originalpre-firstrotPLAYERtokennotdirectlytested(emptyplaceholder400); noAchanges. Rootreadnonsecretreceipt; no more rotationneeded.
+- Freshimmutablebrowserreceipt928889CE...496E27A at9143149 real2contexts GMdesktop1360x900/PLAYERcompact390x844, pack24message73798caf...d460 andpack115message4d2f5b70...a2a2, each201/WSsameID/decodebothends/content200/no mocks/unexpectedwrites/pageerrors. Root independentSELECT joins confirmdistinctpackIDs andmessagepersisted. A/Bisolation/humanreviewpending, priorburst429notwaived.
+- Ownerweekend10–11Octpubliclanding+registration+self-owncampaign target, personalfriends/portfolio notmassscale; no implicitdeploypermission. Luna readonlyaudit exactUIX657 scope findslandingexistsbutaccountregistration/publiccampaigncreate absent, GMbearer/playerinviteonly; helperstartupnotselfservice.
+- ReadonlycurrentSHA auth11/11+selectedforeigncampaignboundary1/1 evidence NOTsignupgate. Rootaskedownerdecision secretGMlinkcampaignMVP(noaccount) vs realemailpasswordrecovery/MyCampaigns largerrelease scope. Awaitproductdecision, no silent easier substitution. Next657implementationboundedplan afteranswer, originalgoalissuesremainopen.
+
+## Latest stage gates and originalpool continuation
+- Linear4978d06c791-df5c-42d2-9dc1-2cc026107f69 /649da4818e1-48d1-43a3-8442-7a033afaf648 fresh2packsendproof recordedretainInReview/humanAisolation/429burstpending.657Discover7656f806-2a60-44a1-a8b7-aadeef24f344 selfserviceabsent/readiness audit, ownerchoicepending retainBacklog no unauthorizedscopeimplementation.
+- Brotationnonsecretproof rootreviewacceptedwithoriginalPLAYtokenchecklimitation. Globalmanager4cellruntimeLuna reusedonlynewapprovedBfixture programmaticnosecretoutput; requireelevatedloopback/healthz, no restarts fromsandboxfalseunavailable. Agentconfirmedlive; waittimeoutnotterminal/norestart.
+- Next actualnewdetails/select4cellterminal, rootreviewandcheckpoint. WeekenddeadlineproductdecisionandAauthpermissionremainpending; originalfullgoalnotshrunken orcompleted.
