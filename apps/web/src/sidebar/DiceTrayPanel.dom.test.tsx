@@ -10,7 +10,7 @@ import {
 } from "../test-support/render";
 import { DiceTrayPanel } from "./DiceTrayPanel";
 
-it("показывает ожидание сразу и принимает второй бросок до ответа первого (UIX-621)", async () => {
+it("объявляет busy без видимой строки и принимает второй бросок до ответа первого (UIX-621)", async () => {
   let finish!: () => void;
   const onRoll = vi.fn(
     () =>
@@ -26,15 +26,25 @@ it("показывает ожидание сразу и принимает вт�
       onRoll={onRoll}
     />,
   );
+  const panel = screen.getByLabelText("Физические кости");
+  expect(panel).toHaveAttribute("aria-busy", "false");
   await userEvent.click(screen.getByRole("button", { name: "d20" }));
   await waitFor(() => expect(onRoll).toHaveBeenCalledTimes(1));
+  expect(panel).toHaveAttribute("aria-busy", "true");
+  expect(panel).not.toHaveTextContent("Бросаем");
+  expect(panel.querySelector(":scope > p")).toBeNull();
   const first = finish;
   await userEvent.click(screen.getByRole("button", { name: "d6" }));
   await waitFor(() => expect(onRoll).toHaveBeenCalledTimes(2));
+  const second = finish;
+  expect(panel).toHaveAttribute("aria-busy", "true");
   await act(async () => {
     first();
-    finish();
+    await Promise.resolve();
   });
+  expect(panel).toHaveAttribute("aria-busy", "true");
+  await act(async () => second());
+  await waitFor(() => expect(panel).toHaveAttribute("aria-busy", "false"));
 });
 
 it("показывает отказ сервера и разрешает повторный бросок", async () => {
@@ -49,6 +59,10 @@ it("показывает отказ сервера и разрешает пов�
   );
   await userEvent.click(screen.getByRole("button", { name: "d20" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Нет соединения");
+  expect(screen.getByLabelText("Физические кости")).toHaveAttribute(
+    "aria-busy",
+    "false",
+  );
   expect(screen.getByRole("button", { name: "d20" })).toBeEnabled();
 });
 
@@ -125,7 +139,13 @@ it("собирает кости и доступные иконные режим�
 });
 
 it("двойной клик даёт ровно два чистых броска без окна", async () => {
-  const onRoll = vi.fn().mockResolvedValue(undefined);
+  const resolvers: Array<() => void> = [];
+  const onRoll = vi.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        resolvers.push(resolve);
+      }),
+  );
   renderComponent(
     <DiceTrayPanel
       characterId={null}
@@ -135,7 +155,18 @@ it("двойной клик даёт ровно два чистых броска
     />,
   );
   await userEvent.dblClick(screen.getByRole("button", { name: "d12" }));
+  const panel = screen.getByLabelText("Физические кости");
+  await waitFor(() => expect(onRoll).toHaveBeenCalledTimes(1));
+  expect(panel).toHaveAttribute("aria-busy", "true");
+  expect(panel).not.toHaveTextContent("Бросаем");
+  expect(panel.querySelector(":scope > p")).toBeNull();
+  await act(async () => resolvers[0]!());
   await waitFor(() => expect(onRoll).toHaveBeenCalledTimes(2));
+  expect(panel).toHaveAttribute("aria-busy", "true");
+  expect(panel).not.toHaveTextContent("Бросаем");
+  expect(panel.querySelector(":scope > p")).toBeNull();
+  await act(async () => resolvers[1]!());
+  await waitFor(() => expect(panel).toHaveAttribute("aria-busy", "false"));
   expect(
     screen.queryByRole("group", { name: "Сколько раз бросить" }),
   ).toBeNull();
