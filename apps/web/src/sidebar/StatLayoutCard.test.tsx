@@ -191,6 +191,157 @@ describe("карточка группы характеристик", () => {
     expect(secondSummary).toHaveFocus();
   });
 
+  it("flips row actions into the available scroll viewport and clamps only when neither side fits", async () => {
+    const props = defaultCardProps();
+    const rendered = renderComponent(
+      <div
+        className="arken-workspace-window__body"
+        style={{ overflowY: "auto", height: "550px" }}
+      >
+        <StatLayoutCard {...props} />
+      </div>,
+    );
+    const body = rendered.container.querySelector(
+      ".arken-workspace-window__body",
+    )!;
+    const summary = screen.getByLabelText("Действия строки «Сила»");
+    const menu = summary.closest("details") as HTMLDetailsElement;
+    const popup = menu.querySelector(".stat-field__menu-items") as HTMLElement;
+    const makeRect = (top: number, bottom: number, height = bottom - top) =>
+      ({
+        x: 0,
+        y: top,
+        top,
+        bottom,
+        left: 0,
+        right: 200,
+        width: 200,
+        height,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    let summaryRect = makeRect(560, 588);
+    let popupHeight = 160;
+    body.getBoundingClientRect = () => makeRect(50, 600);
+    summary.getBoundingClientRect = () => summaryRect;
+    popup.getBoundingClientRect = () => makeRect(0, popupHeight, popupHeight);
+    Object.defineProperty(popup, "scrollHeight", {
+      configurable: true,
+      get: () => popupHeight,
+    });
+    Object.defineProperty(body, "clientTop", { configurable: true, value: 0 });
+    Object.defineProperty(body, "clientHeight", {
+      configurable: true,
+      value: 550,
+    });
+    const scheduledFrames: FrameRequestCallback[] = [];
+    const raf = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        scheduledFrames.push(callback);
+        return scheduledFrames.length;
+      });
+    const flushFrames = () => {
+      for (const callback of scheduledFrames.splice(0)) callback(0);
+    };
+
+    try {
+      await userEvent.click(summary);
+      fireEvent(menu, new Event("toggle", { bubbles: true }));
+      flushFrames();
+      expect(menu).toHaveAttribute("data-menu-side", "above");
+      expect(menu.style.getPropertyValue("--stat-field-menu-max-height")).toBe(
+        "",
+      );
+
+      summaryRect = makeRect(150, 178);
+      fireEvent(window, new Event("resize"));
+      flushFrames();
+      expect(menu).toHaveAttribute("data-menu-side", "below");
+
+      popupHeight = 500;
+      summaryRect = makeRect(300, 328);
+      fireEvent(window, new Event("resize"));
+      flushFrames();
+      expect(menu).toHaveAttribute("data-menu-side", "below");
+      expect(menu.style.getPropertyValue("--stat-field-menu-max-height")).toBe(
+        "264px",
+      );
+    } finally {
+      raf.mockRestore();
+    }
+  });
+
+  it("intersects nested clipping ancestors when placing row actions", async () => {
+    const props = defaultCardProps();
+    const rendered = renderComponent(
+      <div className="outer-clip" style={{ overflowY: "auto" }}>
+        <div
+          className="arken-workspace-window__body"
+          style={{ overflowY: "auto" }}
+        >
+          <StatLayoutCard {...props} />
+        </div>
+      </div>,
+    );
+    const outer = rendered.container.querySelector(".outer-clip")!;
+    const inner = rendered.container.querySelector(
+      ".arken-workspace-window__body",
+    )!;
+    const summary = screen.getByLabelText("Действия строки «Сила»");
+    const menu = summary.closest("details") as HTMLDetailsElement;
+    const popup = menu.querySelector(".stat-field__menu-items") as HTMLElement;
+    const makeRect = (top: number, bottom: number) =>
+      ({
+        x: 0,
+        y: top,
+        top,
+        bottom,
+        left: 0,
+        right: 200,
+        width: 200,
+        height: bottom - top,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    outer.getBoundingClientRect = () => makeRect(200, 500);
+    inner.getBoundingClientRect = () => makeRect(50, 700);
+    summary.getBoundingClientRect = () => makeRect(430, 458);
+    popup.getBoundingClientRect = () => makeRect(0, 160);
+    Object.defineProperty(popup, "scrollHeight", {
+      configurable: true,
+      get: () => 160,
+    });
+    Object.defineProperty(outer, "clientTop", { configurable: true, value: 0 });
+    Object.defineProperty(outer, "clientHeight", {
+      configurable: true,
+      value: 300,
+    });
+    Object.defineProperty(inner, "clientTop", { configurable: true, value: 0 });
+    Object.defineProperty(inner, "clientHeight", {
+      configurable: true,
+      value: 650,
+    });
+    const scheduledFrames: FrameRequestCallback[] = [];
+    const raf = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        scheduledFrames.push(callback);
+        return scheduledFrames.length;
+      });
+
+    try {
+      await userEvent.click(summary);
+      fireEvent(menu, new Event("toggle", { bubbles: true }));
+      for (const callback of scheduledFrames.splice(0)) callback(0);
+
+      // The inner viewport alone has 234px below and would choose below;
+      // the outer clip leaves only 34px there, so the menu must flip above.
+      expect(menu).toHaveAttribute("data-menu-side", "above");
+    } finally {
+      raf.mockRestore();
+    }
+  });
+
   it("does not intercept Escape owned by a nested dialog", async () => {
     renderCard({}, false);
     const summary = screen.getByLabelText("Действия строки «Ловкость»");

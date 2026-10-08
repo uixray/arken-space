@@ -33,6 +33,50 @@ const REFERENCE_KIND_LABELS: Record<string, string> = {
   CHARACTER_ENTRY: "Способность персонажа",
 };
 
+/** Keep the inline native-details menu within every clipping viewport. */
+function syncStatMenuPlacement(menu: HTMLDetailsElement) {
+  const summary = menu.querySelector<HTMLElement>("summary");
+  const popup = menu.querySelector<HTMLElement>(".stat-field__menu-items");
+  if (!menu.open || !summary || !popup) {
+    menu.removeAttribute("data-menu-side");
+    menu.style.removeProperty("--stat-field-menu-max-height");
+    return;
+  }
+
+  const visualViewport = window.visualViewport;
+  let top = visualViewport?.offsetTop ?? 0;
+  let bottom = top + (visualViewport?.height ?? window.innerHeight);
+  for (
+    let ancestor = menu.parentElement;
+    ancestor && ancestor !== document.body;
+    ancestor = ancestor.parentElement
+  ) {
+    const overflowY = window.getComputedStyle(ancestor).overflowY;
+    if (!/(auto|scroll|hidden|clip)/.test(overflowY)) continue;
+    const rect = ancestor.getBoundingClientRect();
+    top = Math.max(top, rect.top + ancestor.clientTop);
+    bottom = Math.min(bottom, rect.top + ancestor.clientTop + ancestor.clientHeight);
+  }
+
+  const summaryRect = summary.getBoundingClientRect();
+  // Measure the un-clamped content so a previous short viewport cannot bias
+  // the next resize/scroll placement decision.
+  menu.style.removeProperty("--stat-field-menu-max-height");
+  const popupHeight = Math.max(popup.scrollHeight, popup.getBoundingClientRect().height);
+  const gap = 8;
+  const above = Math.max(0, summaryRect.top - top - gap);
+  const below = Math.max(0, bottom - summaryRect.bottom - gap);
+  let side: "above" | "below";
+  if (popupHeight <= below) side = "below";
+  else if (popupHeight <= above) side = "above";
+  else side = above > below ? "above" : "below";
+  const available = side === "above" ? above : below;
+
+  menu.dataset.menuSide = side;
+  if (popupHeight > available)
+    menu.style.setProperty("--stat-field-menu-max-height", `${available}px`);
+}
+
 /**
  * Разбирает отказ сервера. Список ссылок приходит только с
  * `STAT_ROW_REFERENCED`; всё остальное — обычная ошибка, и подавать её как
@@ -212,6 +256,49 @@ export function StatLayoutCard({
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
   }, [deleting, editing]);
+
+  useEffect(() => {
+    let frame: number | null = null;
+    const syncOpenMenus = () => {
+      frame = null;
+      for (const menu of cardRef.current?.querySelectorAll<HTMLDetailsElement>(
+        "details.stat-field__menu[open]",
+      ) ?? [])
+        syncStatMenuPlacement(menu);
+    };
+    const scheduleSync = () => {
+      if (
+        !cardRef.current?.querySelector("details.stat-field__menu[open]")
+      )
+        return;
+      if (frame === null) frame = window.requestAnimationFrame(syncOpenMenus);
+    };
+    const onToggle = (event: Event) => {
+      const target = event.target;
+      if (
+        !(target instanceof HTMLDetailsElement) ||
+        !target.matches("details.stat-field__menu") ||
+        !cardRef.current?.contains(target)
+      )
+        return;
+      if (target.open) scheduleSync();
+      else syncStatMenuPlacement(target);
+    };
+
+    document.addEventListener("toggle", onToggle, true);
+    document.addEventListener("scroll", scheduleSync, true);
+    window.addEventListener("resize", scheduleSync);
+    window.visualViewport?.addEventListener("resize", scheduleSync);
+    window.visualViewport?.addEventListener("scroll", scheduleSync);
+    return () => {
+      document.removeEventListener("toggle", onToggle, true);
+      document.removeEventListener("scroll", scheduleSync, true);
+      window.removeEventListener("resize", scheduleSync);
+      window.visualViewport?.removeEventListener("resize", scheduleSync);
+      window.visualViewport?.removeEventListener("scroll", scheduleSync);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, []);
 
   const askToDelete = (row: { key: string; label: string }) => {
     setRefusal(null);
