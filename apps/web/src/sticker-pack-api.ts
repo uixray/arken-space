@@ -40,6 +40,44 @@ export interface StickerUploadResult {
   provenanceType: StickerProvenance;
 }
 
+export interface StickerPackAdminSummary extends StickerPackMutationResult {
+  subject: StickerPackSubject;
+  subjectCharacterId: string | null;
+  subjectMembershipId: string | null;
+  subjectLabel: string | null;
+  audience: StickerPackAudience;
+  sendPolicy: StickerPackSendPolicy;
+  createdAt: string;
+  updatedAt: string;
+  playerConsentStatus: "GRANTED" | "REVOKED" | null;
+  stickerCount: number;
+}
+
+export interface StickerPackAdminSticker extends StickerUploadResult {
+  sourceReference: string | null;
+  authorCredit: string | null;
+  licenseNote: string | null;
+  sha256: string;
+  mimeType: string;
+  sizeBytes: number;
+  width: number;
+  height: number;
+}
+
+export interface StickerPackAdminDetail extends StickerPackAdminSummary {
+  stickers: StickerPackAdminSticker[];
+}
+
+export function listStickerPacks() {
+  return api<StickerPackAdminSummary[]>("/api/gm/sticker-packs");
+}
+
+export function getStickerPack(packId: string) {
+  return api<StickerPackAdminDetail>(
+    `/api/gm/sticker-packs/${encodeURIComponent(packId)}`,
+  );
+}
+
 export function createStickerPack(input: CreateStickerPackInput) {
   return api<StickerPackMutationResult>("/api/sticker-packs", {
     method: "POST",

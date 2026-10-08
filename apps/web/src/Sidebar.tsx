@@ -25,6 +25,7 @@ import { AppIcon } from "./ui/AppIcon";
 import { SidebarCollapseIcon } from "./ui/icons";
 import { SceneManagerDialog } from "./ui/SceneManagerDialog";
 import { StoryChannel } from "./StoryChannel";
+import { StoryAttachmentLibrary } from "./StoryAttachmentLibrary";
 import { useThreadHistory } from "./use-thread-history";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
@@ -541,6 +542,10 @@ function SidebarContent(props: Props) {
               </button>
             )}
             {storyHistory.error && <p role="alert">{storyHistory.error}</p>}
+            <StoryAttachmentLibrary
+              campaignId={props.snapshot.campaign.id}
+              isGm={isGm}
+            />
             <StoryChannel
               posts={props.storyPosts}
               nextCursor={props.storyNextCursor}

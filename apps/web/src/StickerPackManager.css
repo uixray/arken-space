@@ -9,6 +9,20 @@
   gap: var(--space-sm);
 }
 
+.sticker-pack-server-list {
+  display: grid;
+  gap: var(--space-xs);
+  margin-block: var(--space-sm);
+}
+
+.sticker-pack-server-list ul {
+  display: grid;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .sticker-pack-file-list {
   max-height: min(60vh, 720px);
   overflow: auto;

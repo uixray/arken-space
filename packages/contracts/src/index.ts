@@ -1,5 +1,7 @@
 import { z } from "zod";
 export * from "./fog-geometry.js";
+export * from "./story-attachment-lifecycle.js";
+export * from "./sticker-pack-admin.js";
 export * from "./fog-visibility.js";
 export * from "./spell-schools.js";
 import { fogGeometrySchema } from "./fog-geometry.js";

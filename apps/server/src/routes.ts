@@ -149,6 +149,8 @@ import {
 } from "./stat-layout.js";
 import { registerWorldMapRoutes } from "./world-map-routes.js";
 import { registerStoryRoutes } from "./story.js";
+import { registerStoryAttachmentLifecycleRoutes } from "./story-attachment-lifecycle.js";
+import { registerStickerPackAdminRoutes } from "./sticker-pack-admin.js";
 import { registerAssetLifecycleRoutes } from "./asset-usage.js";
 import { assetContentVersion, assetDto } from "./asset-lifecycle.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
@@ -933,6 +935,10 @@ export function registerRoutes(
     broadcastSnapshots(io, db, campaignId),
   );
   registerStoryRoutes(app, db, io);
+  registerStoryAttachmentLifecycleRoutes(app, db);
+  registerStickerPackAdminRoutes(app, db, (request, reply) =>
+    requireAuth(request, reply, db),
+  );
   registerOperatorFeedbackRoutes(app, db);
   registerPlayerRequestRoutes(app, db, io);
   registerCharacterMediaRoutes(app, db);
@@ -6702,6 +6708,7 @@ export function registerRoutes(
     try {
       saved = await db.transaction(async (tx) => {
         const attachmentIds = body.attachmentContentIds;
+        const claimNow = new Date();
         const staged = attachmentIds.length
           ? await tx
               .select()
@@ -6714,13 +6721,37 @@ export function registerRoutes(
                     auth.membershipId,
                   ),
                   eq(chatAttachmentUploads.status, "STAGED"),
-                  gt(chatAttachmentUploads.expiresAt, new Date()),
+                  gt(chatAttachmentUploads.expiresAt, claimNow),
                   inArray(chatAttachmentUploads.contentId, attachmentIds),
                 ),
               )
+              .for("update")
           : [];
         if (staged.length !== attachmentIds.length)
           throw new Error("CHAT_ATTACHMENT_NOT_FOUND");
+        if (staged.length) {
+          // Serialize claims against lifecycle deletion. The lock prevents a
+          // DELETE from expiring/removing the blob between validation and ref
+          // insertion; the guarded update also rejects stale/non-owned rows.
+          const claimed = await tx
+            .update(chatAttachmentUploads)
+            .set({ status: "CLAIMED" })
+            .where(
+              and(
+                eq(chatAttachmentUploads.campaignId, auth.campaignId),
+                eq(
+                  chatAttachmentUploads.uploadedByMembershipId,
+                  auth.membershipId,
+                ),
+                eq(chatAttachmentUploads.status, "STAGED"),
+                gt(chatAttachmentUploads.expiresAt, claimNow),
+                inArray(chatAttachmentUploads.contentId, attachmentIds),
+              ),
+            )
+            .returning({ contentId: chatAttachmentUploads.contentId });
+          if (claimed.length !== attachmentIds.length)
+            throw new Error("CHAT_ATTACHMENT_NOT_FOUND");
+        }
         const [row] = await tx
           .insert(chatMessages)
           .values({
@@ -6742,10 +6773,6 @@ export function registerRoutes(
               messageId: row.id,
             })),
           );
-          await tx
-            .update(chatAttachmentUploads)
-            .set({ status: "CLAIMED" })
-            .where(inArray(chatAttachmentUploads.contentId, attachmentIds));
         }
         const dto = {
           ...chatMessageDto(row, auth.displayName, null),

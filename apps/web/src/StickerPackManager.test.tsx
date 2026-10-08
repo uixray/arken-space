@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHash, webcrypto } from "node:crypto";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   renderComponent,
   screen,
@@ -13,12 +14,16 @@ import {
 import { ApiError } from "./api";
 import {
   createStickerPack,
+  getStickerPack,
+  listStickerPacks,
   publishStickerPack,
   uploadSticker,
 } from "./sticker-pack-api";
 
 vi.mock("./sticker-pack-api", () => ({
   createStickerPack: vi.fn(),
+  getStickerPack: vi.fn(),
+  listStickerPacks: vi.fn(),
   publishStickerPack: vi.fn(),
   uploadSticker: vi.fn(),
 }));
@@ -32,7 +37,15 @@ const packDraft = {
   revision: 0,
 };
 
-afterEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.mocked(listStickerPacks).mockResolvedValue([]);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  vi.resetAllMocks();
+});
 
 async function fillValidPackForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Название пака"), "Ночной дозор");
@@ -46,6 +59,169 @@ describe("StickerPackManager", () => {
 
     expect(screen.queryByRole("region", { name: "Пак кампании" })).toBeNull();
     expect(createStickerPack).not.toHaveBeenCalled();
+  });
+
+  it("resumes a server draft and marks its stickers uploaded without replay", async () => {
+    vi.mocked(listStickerPacks).mockResolvedValue([
+      {
+        ...packDraft,
+        subject: "NPC",
+        subjectCharacterId: null,
+        subjectMembershipId: null,
+        subjectLabel: "Смотритель",
+        audience: "GM_ONLY",
+        sendPolicy: "GM_ONLY",
+        createdAt: "2026-10-08T00:00:00.000Z",
+        updatedAt: "2026-10-08T00:00:00.000Z",
+        playerConsentStatus: null,
+        stickerCount: 1,
+      },
+    ]);
+    vi.mocked(getStickerPack).mockResolvedValue({
+      ...packDraft,
+      subject: "NPC",
+      subjectCharacterId: null,
+      subjectMembershipId: null,
+      subjectLabel: "Смотритель",
+      audience: "GM_ONLY",
+      sendPolicy: "GM_ONLY",
+      createdAt: "2026-10-08T00:00:00.000Z",
+      updatedAt: "2026-10-08T00:00:00.000Z",
+      playerConsentStatus: null,
+      stickerCount: 1,
+      stickers: [
+        {
+          id: "00000000-0000-4000-8000-000000000498",
+          packId: packDraft.id,
+          mediaId: "00000000-0000-4000-8000-000000000499",
+          name: "Смотритель машет",
+          altText: "Смотритель приветствует",
+          provenanceType: "ORIGINAL",
+          sourceReference: null,
+          authorCredit: null,
+          licenseNote: null,
+          sha256: "a".repeat(64),
+          mimeType: "image/webp",
+          sizeBytes: 42,
+          width: 16,
+          height: 16,
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    renderComponent(<StickerPackManager snapshot={gmSnapshot()} />);
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Открыть «Ночной дозор»/,
+      }),
+    );
+    expect(getStickerPack).toHaveBeenCalledWith(packDraft.id);
+    expect(
+      await screen.findByText("Загружен; повторно отправлен не будет."),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/нужно выбрать повторно/)).toBeInTheDocument();
+    expect(uploadSticker).not.toHaveBeenCalled();
+  });
+
+  it("shows deprecated packs as read-only and offers a new-pack path", async () => {
+    const deprecated = {
+      ...packDraft,
+      lifecycle: "DEPRECATED" as const,
+      revision: 2,
+      subject: "NPC" as const,
+      subjectCharacterId: null,
+      subjectMembershipId: null,
+      subjectLabel: "Смотритель",
+      audience: "GM_ONLY" as const,
+      sendPolicy: "GM_ONLY" as const,
+      createdAt: "2026-10-08T00:00:00.000Z",
+      updatedAt: "2026-10-08T00:00:00.000Z",
+      playerConsentStatus: null,
+      stickerCount: 0,
+    };
+    vi.mocked(listStickerPacks).mockResolvedValue([deprecated]);
+    vi.mocked(getStickerPack).mockResolvedValue({
+      ...deprecated,
+      stickers: [],
+    });
+    vi.mocked(createStickerPack).mockResolvedValue({
+      id: "00000000-0000-4000-8000-000000000520",
+      name: "Свежий пак",
+      lifecycle: "DRAFT",
+      revision: 0,
+    });
+    const user = userEvent.setup();
+    renderComponent(<StickerPackManager snapshot={gmSnapshot()} />);
+    await user.click(
+      await screen.findByRole("button", { name: /Открыть «Ночной дозор»/ }),
+    );
+    expect(
+      await screen.findByText(/устарел и доступен только для просмотра/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/Устаревший пак Ночной дозор/),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Создать ещё один пак" }),
+    );
+    await fillValidPackForm(user);
+    await user.clear(screen.getByLabelText("Название пака"));
+    await user.type(screen.getByLabelText("Название пака"), "Свежий пак");
+    await user.click(screen.getByRole("button", { name: "Создать черновик" }));
+    expect(
+      await screen.findByLabelText(/Черновик Свежий пак/),
+    ).toBeInTheDocument();
+    expect(createStickerPack).toHaveBeenCalledTimes(1);
+  });
+
+  it("isolates list responses when campaign or membership changes", async () => {
+    let resolveOld!: (
+      value: Awaited<ReturnType<typeof listStickerPacks>>,
+    ) => void;
+    const oldResponse = new Promise<
+      Awaited<ReturnType<typeof listStickerPacks>>
+    >((resolve) => {
+      resolveOld = resolve;
+    });
+    const newerPack = {
+      ...packDraft,
+      id: "00000000-0000-4000-8000-000000000510",
+      name: "Новый аккаунт",
+      subject: "NPC" as const,
+      subjectCharacterId: null,
+      subjectMembershipId: null,
+      subjectLabel: "Смотритель",
+      audience: "GM_ONLY" as const,
+      sendPolicy: "GM_ONLY" as const,
+      createdAt: "2026-10-08T00:00:00.000Z",
+      updatedAt: "2026-10-08T00:00:00.000Z",
+      playerConsentStatus: null,
+      stickerCount: 0,
+    };
+    vi.mocked(listStickerPacks)
+      .mockReturnValueOnce(oldResponse)
+      .mockResolvedValueOnce([newerPack]);
+    const oldSnapshot = gmSnapshot();
+    const newSnapshot = gmSnapshot();
+    newSnapshot.campaign.id = "00000000-0000-4000-8000-000000000511";
+    newSnapshot.me.id = "00000000-0000-4000-8000-000000000512";
+    const user = userEvent.setup();
+    const view = renderComponent(<StickerPackManager snapshot={oldSnapshot} />);
+    view.rerender(<StickerPackManager snapshot={newSnapshot} />);
+    expect(
+      await screen.findByRole("button", { name: /Новый аккаунт/ }),
+    ).toBeInTheDocument();
+    resolveOld([
+      {
+        ...newerPack,
+        id: packDraft.id,
+        name: "Старый аккаунт",
+      },
+    ]);
+    await waitFor(() =>
+      expect(screen.queryByText(/Старый аккаунт/)).toBeNull(),
+    );
+    expect(screen.getByText(/Новый аккаунт/)).toBeInTheDocument();
   });
 
   it("does not replay create after an ambiguous HTTP 500", async () => {
@@ -64,7 +240,46 @@ describe("StickerPackManager", () => {
     expect(createStickerPack).toHaveBeenCalledTimes(1);
   });
 
+  it("recovers an ambiguous create only by manually selecting a server pack", async () => {
+    const candidate = {
+      ...packDraft,
+      subject: "NPC" as const,
+      subjectCharacterId: null,
+      subjectMembershipId: null,
+      subjectLabel: "Смотритель",
+      audience: "GM_ONLY" as const,
+      sendPolicy: "GM_ONLY" as const,
+      createdAt: "2026-10-08T00:00:00.000Z",
+      updatedAt: "2026-10-08T00:00:00.000Z",
+      playerConsentStatus: null,
+      stickerCount: 0,
+    };
+    vi.mocked(listStickerPacks)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([candidate]);
+    vi.mocked(createStickerPack).mockRejectedValue(
+      new ApiError(500, "INTERNAL_ERROR", "response lost after commit"),
+    );
+    vi.mocked(getStickerPack).mockResolvedValue({
+      ...candidate,
+      stickers: [],
+    });
+    const user = userEvent.setup();
+    renderComponent(<StickerPackManager snapshot={gmSnapshot()} />);
+    await fillValidPackForm(user);
+    await user.click(screen.getByRole("button", { name: "Создать черновик" }));
+    await user.click(
+      await screen.findByRole("button", { name: /Открыть «Ночной дозор»/ }),
+    );
+    await waitFor(() =>
+      expect(getStickerPack).toHaveBeenCalledWith(packDraft.id),
+    );
+    expect(createStickerPack).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/восстановлен/)).toBeInTheDocument();
+  });
+
   it("blocks replay of an upload with an ambiguous HTTP 500 and keeps prior successes", async () => {
+    vi.stubGlobal("crypto", webcrypto);
     vi.mocked(createStickerPack).mockResolvedValue(packDraft);
     vi.mocked(uploadSticker)
       .mockResolvedValueOnce({
@@ -78,6 +293,56 @@ describe("StickerPackManager", () => {
       .mockRejectedValueOnce(
         new ApiError(500, "INTERNAL_ERROR", "response lost after commit"),
       );
+    const rawHashes = ["one", "two"].map((bytes) =>
+      createHash("sha256").update(bytes).digest("hex"),
+    );
+    vi.mocked(getStickerPack).mockResolvedValue({
+      ...packDraft,
+      subject: "NPC",
+      subjectCharacterId: null,
+      subjectMembershipId: null,
+      subjectLabel: "Смотритель",
+      audience: "GM_ONLY",
+      sendPolicy: "GM_ONLY",
+      createdAt: "2026-10-08T00:00:00.000Z",
+      updatedAt: "2026-10-08T00:00:00.000Z",
+      playerConsentStatus: null,
+      stickerCount: 2,
+      stickers: [
+        {
+          id: "00000000-0000-4000-8000-000000000498",
+          packId: packDraft.id,
+          mediaId: "00000000-0000-4000-8000-000000000499",
+          name: "Успех",
+          altText: "Стикер успешен",
+          provenanceType: "ORIGINAL",
+          sourceReference: null,
+          authorCredit: null,
+          licenseNote: null,
+          sha256: rawHashes[0]!,
+          mimeType: "image/webp",
+          sizeBytes: 42,
+          width: 16,
+          height: 16,
+        },
+        {
+          id: "00000000-0000-4000-8000-000000000500",
+          packId: packDraft.id,
+          mediaId: "00000000-0000-4000-8000-000000000501",
+          name: "Неизвестно",
+          altText: "Результат неизвестен",
+          provenanceType: "ORIGINAL",
+          sourceReference: null,
+          authorCredit: null,
+          licenseNote: null,
+          sha256: rawHashes[1]!,
+          mimeType: "image/webp",
+          sizeBytes: 42,
+          width: 16,
+          height: 16,
+        },
+      ],
+    });
     const user = userEvent.setup();
     renderComponent(<StickerPackManager snapshot={gmSnapshot()} />);
     await fillValidPackForm(user);
@@ -111,6 +376,19 @@ describe("StickerPackManager", () => {
     expect(
       screen.queryByRole("button", { name: "Повторить неуспешные загрузки" }),
     ).toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: "Сверить состояние с сервером" }),
+    );
+    await waitFor(() =>
+      expect(getStickerPack).toHaveBeenCalledWith(packDraft.id),
+    );
+    await user.upload(screen.getByLabelText("Добавить изображения"), [
+      new File(["one"], "Успех.png", { type: "image/png" }),
+      new File(["two"], "Неизвестно.png", { type: "image/png" }),
+    ]);
+    expect(
+      await screen.findByText(/совпал по SHA-256 с уже загруженным/),
+    ).toBeInTheDocument();
     expect(uploadSticker).toHaveBeenCalledTimes(2);
   });
 
@@ -127,6 +405,39 @@ describe("StickerPackManager", () => {
     vi.mocked(publishStickerPack).mockRejectedValue(
       new ApiError(500, "INTERNAL_ERROR", "response lost after commit"),
     );
+    vi.mocked(getStickerPack).mockResolvedValue({
+      ...packDraft,
+      lifecycle: "ACTIVE",
+      revision: 1,
+      subject: "NPC",
+      subjectCharacterId: null,
+      subjectMembershipId: null,
+      subjectLabel: "Смотритель",
+      audience: "GM_ONLY",
+      sendPolicy: "GM_ONLY",
+      createdAt: "2026-10-08T00:00:00.000Z",
+      updatedAt: "2026-10-08T00:00:00.000Z",
+      playerConsentStatus: null,
+      stickerCount: 1,
+      stickers: [
+        {
+          id: "00000000-0000-4000-8000-000000000498",
+          packId: packDraft.id,
+          mediaId: "00000000-0000-4000-8000-000000000499",
+          name: "Успех",
+          altText: "Стикер успешен",
+          provenanceType: "ORIGINAL",
+          sourceReference: null,
+          authorCredit: null,
+          licenseNote: null,
+          sha256: "a".repeat(64),
+          mimeType: "image/webp",
+          sizeBytes: 42,
+          width: 16,
+          height: 16,
+        },
+      ],
+    });
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const user = userEvent.setup();
     renderComponent(<StickerPackManager snapshot={gmSnapshot()} />);
@@ -155,6 +466,16 @@ describe("StickerPackManager", () => {
       expect(screen.getByText(/Пак мог перейти в ACTIVE/)).toBeInTheDocument(),
     );
     expect(publish).toBeDisabled();
+    expect(publishStickerPack).toHaveBeenCalledTimes(1);
+    await user.click(
+      screen.getByRole("button", { name: "Сверить состояние с сервером" }),
+    );
+    expect(
+      await screen.findByText(/уже опубликован.*Текущее состояние загружено/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Опубликовать пак…" }),
+    ).toBeNull();
     expect(publishStickerPack).toHaveBeenCalledTimes(1);
   });
 

@@ -1,14 +1,18 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameSnapshot } from "@arken/contracts";
 import { Button } from "./design-system/Button";
 import { ApiError, formatApiError } from "./api";
 import "./StickerPackManager.css";
 import {
   createStickerPack,
+  getStickerPack,
+  listStickerPacks,
   publishStickerPack,
   uploadSticker,
   type CreateStickerPackInput,
   type StickerPackAudience,
+  type StickerPackAdminDetail,
+  type StickerPackAdminSummary,
   type StickerPackMutationResult,
   type StickerPackSendPolicy,
   type StickerPackSubject,
@@ -20,7 +24,8 @@ type FileStatus =
   "pending" | "uploading" | "uploaded" | "failed" | "blocked" | "uncertain";
 interface StickerDraft extends StickerUploadMetadata {
   key: string;
-  file: File;
+  file: File | null;
+  fileLabel: string;
   nameReviewed: boolean;
   status: FileStatus;
   error: string;
@@ -52,6 +57,15 @@ function hasUncertainMutationOutcome(reason: unknown) {
   return !(reason instanceof ApiError) || reason.status >= 500;
 }
 
+function lifecycleLabel(lifecycle: StickerPackMutationResult["lifecycle"]) {
+  return {
+    DRAFT: "Черновик",
+    ACTIVE: "Опубликованный пак",
+    DEPRECATED: "Устаревший пак",
+    ARCHIVED: "Архивный пак",
+  }[lifecycle];
+}
+
 function formatStickerApiFailure(reason: unknown, fallback: string) {
   if (!(reason instanceof ApiError)) return formatApiError(reason, fallback);
   const explanations: Record<string, string> = {
@@ -73,6 +87,16 @@ function formatStickerApiFailure(reason: unknown, fallback: string) {
 }
 
 export function StickerPackManager({ snapshot }: { snapshot: GameSnapshot }) {
+  if (snapshot.me.role !== "GM") return null;
+  return (
+    <StickerPackManagerSession
+      key={`${snapshot.campaign.id}:${snapshot.me.id}`}
+      snapshot={snapshot}
+    />
+  );
+}
+
+function StickerPackManagerSession({ snapshot }: { snapshot: GameSnapshot }) {
   const isGm = snapshot.me.role === "GM";
   const [packName, setPackName] = useState("");
   const [subject, setSubject] = useState<StickerPackSubject>("CHARACTER");
@@ -83,6 +107,12 @@ export function StickerPackManager({ snapshot }: { snapshot: GameSnapshot }) {
   const [sendPolicy, setSendPolicy] =
     useState<StickerPackSendPolicy>("GM_ONLY");
   const [pack, setPack] = useState<StickerPackMutationResult | null>(null);
+  const [packDetail, setPackDetail] = useState<StickerPackAdminDetail | null>(
+    null,
+  );
+  const [serverPacks, setServerPacks] = useState<StickerPackAdminSummary[]>([]);
+  const [listLoaded, setListLoaded] = useState(false);
+  const [listBusy, setListBusy] = useState(false);
   const [files, setFiles] = useState<StickerDraft[]>([]);
   const [busy, setBusy] = useState<"create" | "upload" | "publish" | null>(
     null,
@@ -93,6 +123,79 @@ export function StickerPackManager({ snapshot }: { snapshot: GameSnapshot }) {
   const [publishUncertain, setPublishUncertain] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const nextKey = useRef(0);
+  const sessionActive = useRef(true);
+
+  useEffect(() => {
+    sessionActive.current = true;
+    return () => {
+      sessionActive.current = false;
+    };
+  }, []);
+
+  const refreshPackList = async () => {
+    setListBusy(true);
+    try {
+      const listed = await listStickerPacks();
+      if (!sessionActive.current) return;
+      setServerPacks(listed);
+      setListLoaded(true);
+      return listed;
+    } catch (reason) {
+      if (sessionActive.current)
+        setError(formatApiError(reason, "Не удалось обновить список паков."));
+      return undefined;
+    } finally {
+      if (sessionActive.current) setListBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshPackList();
+  }, []);
+
+  const resumePack = async (packId: string) => {
+    setBusy("create");
+    setError("");
+    setNotice("");
+    try {
+      const detail = await getStickerPack(packId);
+      if (!sessionActive.current) return;
+      setPack(detail);
+      setPackDetail(detail);
+      setAudience(detail.audience);
+      setSendPolicy(detail.sendPolicy);
+      setFiles(
+        detail.stickers.map((sticker) => ({
+          key: `server-${sticker.id}`,
+          file: null,
+          fileLabel: sticker.name,
+          name: sticker.name,
+          nameReviewed: true,
+          altText: sticker.altText,
+          provenanceType: sticker.provenanceType,
+          sourceReference: sticker.sourceReference ?? "",
+          authorCredit: sticker.authorCredit ?? "",
+          licenseNote: sticker.licenseNote ?? "",
+          status: "uploaded",
+          error: "",
+        })),
+      );
+      setNotice(
+        detail.lifecycle === "DRAFT"
+          ? `Черновик «${detail.name}» восстановлен. Загруженные файлы уже отмечены; ожидающие байты нужно выбрать повторно.`
+          : detail.lifecycle === "ACTIVE"
+            ? `Пак «${detail.name}» уже опубликован. Текущее состояние загружено с сервера.`
+            : detail.lifecycle === "DEPRECATED"
+              ? `Пак «${detail.name}» устарел и доступен только для просмотра. Создайте новый пак, чтобы продолжить.`
+              : `Пак «${detail.name}» архивирован и доступен только для просмотра. Создайте новый пак, чтобы продолжить.`,
+      );
+    } catch (reason) {
+      if (sessionActive.current)
+        setError(formatApiError(reason, "Не удалось открыть пак."));
+    } finally {
+      if (sessionActive.current) setBusy(null);
+    }
+  };
 
   const activeCharacters = useMemo(
     () =>
@@ -146,47 +249,76 @@ export function StickerPackManager({ snapshot }: { snapshot: GameSnapshot }) {
     setNotice("");
     try {
       const created = await createStickerPack(input);
+      if (!sessionActive.current) return;
       setPack(created);
+      setPackDetail(null);
       setNotice(
-        `Создан черновик «${created.name}». Он доступен только в этой вкладке; список черновиков на сервере не поддерживается.`,
+        `Создан черновик «${created.name}». Можно восстановить его из списка паков после перезагрузки.`,
       );
+      void refreshPackList();
     } catch (reason) {
+      if (!sessionActive.current) return;
       if (hasUncertainMutationOutcome(reason)) {
         setCreationUncertain(true);
         setError(
-          "Нет подтверждения ответа: черновик мог сохраниться. Не создавайте повторный пак вслепую — сервер пока не умеет показывать список черновиков.",
+          "Нет подтверждения ответа: черновик мог сохраниться. Не повторяйте создание вслепую; обновите список и вручную выберите соответствующий пак.",
         );
+        void refreshPackList();
       } else {
         setError(
           formatStickerApiFailure(reason, "Не удалось создать черновик."),
         );
       }
     } finally {
-      setBusy(null);
+      if (sessionActive.current) setBusy(null);
     }
   };
 
-  const addFiles = (selected: FileList | null) => {
+  const addFiles = async (selected: FileList | null) => {
     if (!selected) return;
     const additions: StickerDraft[] = [];
+    let matchedExisting = 0;
     for (const file of Array.from(selected)) {
+      let sha256: string | undefined;
+      if (packDetail?.stickers.length) {
+        if (!globalThis.crypto?.subtle) {
+          setError(
+            "Не удалось сверить файл с серверными стикерами: браузер не поддерживает локальный SHA-256.",
+          );
+          return;
+        }
+        const digest = await globalThis.crypto.subtle.digest(
+          "SHA-256",
+          await file.arrayBuffer(),
+        );
+        sha256 = Array.from(new Uint8Array(digest), (byte) =>
+          byte.toString(16).padStart(2, "0"),
+        ).join("");
+        if (packDetail.stickers.some((sticker) => sticker.sha256 === sha256)) {
+          matchedExisting += 1;
+          continue;
+        }
+      }
       const identity = `${file.name}:${file.size}:${file.lastModified}`;
       if (
         files.some(
           (existing) =>
+            existing.file !== null &&
             `${existing.file.name}:${existing.file.size}:${existing.file.lastModified}` ===
-            identity,
+              identity,
         ) ||
         additions.some(
           (existing) =>
+            existing.file !== null &&
             `${existing.file.name}:${existing.file.size}:${existing.file.lastModified}` ===
-            identity,
+              identity,
         )
       )
         continue;
       additions.push({
         key: `${nextKey.current++}-${identity}`,
         file,
+        fileLabel: file.name,
         name: filenameLabel(file.name),
         nameReviewed: false,
         altText: "",
@@ -200,7 +332,11 @@ export function StickerPackManager({ snapshot }: { snapshot: GameSnapshot }) {
     }
     setFiles((current) => [...current, ...additions]);
     setError("");
-    if (additions.length < selected.length)
+    if (matchedExisting > 0)
+      setNotice(
+        `${matchedExisting} повторно выбранный файл совпал по SHA-256 с уже загруженным стикером и не будет отправлен повторно.`,
+      );
+    if (additions.length < selected.length && matchedExisting === 0)
       setNotice("Повторно выбранные файлы не добавлены в список второй раз.");
     if (fileInput.current) fileInput.current.value = "";
   };
@@ -227,6 +363,8 @@ export function StickerPackManager({ snapshot }: { snapshot: GameSnapshot }) {
     setError("");
     setNotice("");
     for (const item of toUpload) {
+      if (!sessionActive.current) break;
+      if (!item.file) continue;
       if (
         !item.name.trim() ||
         !item.nameReviewed ||
@@ -250,8 +388,10 @@ export function StickerPackManager({ snapshot }: { snapshot: GameSnapshot }) {
           authorCredit: item.authorCredit?.trim() || undefined,
           licenseNote: item.licenseNote?.trim() || undefined,
         });
-        updateFile(item.key, { status: "uploaded", error: "" });
+        if (sessionActive.current)
+          updateFile(item.key, { status: "uploaded", error: "" });
       } catch (reason) {
+        if (!sessionActive.current) break;
         const uncertain = hasUncertainMutationOutcome(reason);
         const ambiguousUploadFailure =
           reason instanceof ApiError && reason.code === "UPLOAD_FAILED";
@@ -269,10 +409,12 @@ export function StickerPackManager({ snapshot }: { snapshot: GameSnapshot }) {
         });
       }
     }
-    setNotice(
-      "Загрузка завершена. Проверьте результаты и отдельно опубликуйте пак.",
-    );
-    setBusy(null);
+    if (sessionActive.current) {
+      setNotice(
+        "Загрузка завершена. Проверьте результаты и отдельно опубликуйте пак.",
+      );
+      setBusy(null);
+    }
   };
 
   const publish = async () => {
@@ -288,14 +430,18 @@ export function StickerPackManager({ snapshot }: { snapshot: GameSnapshot }) {
     setNotice("");
     try {
       const published = await publishStickerPack(pack.id);
+      if (!sessionActive.current) return;
       setPack(published);
+      void refreshPackList();
       setNotice(`Пак «${published.name}» опубликован.`);
     } catch (reason) {
+      if (!sessionActive.current) return;
       if (hasUncertainMutationOutcome(reason)) {
         setPublishUncertain(true);
         setError(
-          "Нет подтверждения ответа. Пак мог перейти в ACTIVE; не повторяйте публикацию. Сверка состояния черновика требует GM-запроса, которого пока нет.",
+          "Нет подтверждения ответа. Пак мог перейти в ACTIVE; не повторяйте публикацию вслепую — обновите состояние пакета.",
         );
+        void refreshPackList();
       } else {
         setError(
           formatStickerApiFailure(
@@ -305,12 +451,13 @@ export function StickerPackManager({ snapshot }: { snapshot: GameSnapshot }) {
         );
       }
     } finally {
-      setBusy(null);
+      if (sessionActive.current) setBusy(null);
     }
   };
 
   const reset = () => {
     setPack(null);
+    setPackDetail(null);
     setFiles([]);
     setPackName("");
     setNotice("");
@@ -332,9 +479,39 @@ export function StickerPackManager({ snapshot }: { snapshot: GameSnapshot }) {
         {pack && <span className="revision">{pack.lifecycle}</span>}
       </div>
       <p className="muted">
-        Здесь создаётся новый черновик в текущей кампании. Список и
-        восстановление черновиков после перезагрузки пока недоступны.
+        Список паков загружается из текущей кампании только для мастера. После
+        перезагрузки выберите пак вручную; локальные файлы нужно выбрать снова.
       </p>
+      <div className="sticker-pack-server-list" aria-label="Паки кампании">
+        <Button
+          view="outlined"
+          disabled={busy !== null || listBusy}
+          loading={listBusy}
+          onClick={() => void refreshPackList()}
+        >
+          Обновить список паков
+        </Button>
+        {!listLoaded ? (
+          <p className="muted">Загрузка списка…</p>
+        ) : serverPacks.length === 0 ? (
+          <p className="muted">В этой кампании пока нет паков.</p>
+        ) : (
+          <ul>
+            {serverPacks.map((serverPack) => (
+              <li key={serverPack.id}>
+                <Button
+                  view="flat-secondary"
+                  disabled={busy !== null}
+                  onClick={() => void resumePack(serverPack.id)}
+                >
+                  Открыть «{serverPack.name}» · {serverPack.lifecycle} ·{" "}
+                  {serverPack.stickerCount} стик.
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {!pack ? (
         <div className="sticker-pack-fields">
           <label>
@@ -434,6 +611,12 @@ export function StickerPackManager({ snapshot }: { snapshot: GameSnapshot }) {
             настраивается. Выбор персонажа/игрока не заменяет согласие игрока на
             использование его образа.
           </p>
+          {creationUncertain && (
+            <p className="field-error" role="alert">
+              Создание не подтверждено. Выберите возможный результат выше;
+              повторное создание заблокировано до ручной сверки списка.
+            </p>
+          )}
           <Button
             view="action"
             disabled={!packInputValid || busy !== null || creationUncertain}
@@ -446,11 +629,25 @@ export function StickerPackManager({ snapshot }: { snapshot: GameSnapshot }) {
       ) : (
         <div
           className="sticker-pack-draft"
-          aria-label={`Черновик ${pack.name}`}
+          aria-label={`${lifecycleLabel(pack.lifecycle)} ${pack.name}`}
         >
           <p>
-            <strong>{pack.name}</strong> · {pack.lifecycle}
+            <strong>{pack.name}</strong> · {lifecycleLabel(pack.lifecycle)}
           </p>
+          <Button
+            view="outlined"
+            disabled={busy !== null}
+            loading={busy === "create"}
+            onClick={() => void resumePack(pack.id)}
+          >
+            Сверить состояние с сервером
+          </Button>
+          {packDetail?.subject === "PLAYER" && (
+            <p className="muted">
+              Согласие на образ: {packDetail.playerConsentStatus ?? "не дано"}.
+              Сервер повторно проверит согласие при публикации.
+            </p>
+          )}
           <label>
             Добавить изображения
             <input
@@ -476,10 +673,11 @@ export function StickerPackManager({ snapshot }: { snapshot: GameSnapshot }) {
             <div className="sticker-pack-file-list">
               {files.map((file) => (
                 <fieldset className="sticker-pack-file" key={file.key}>
-                  <legend>{file.file.name}</legend>
+                  <legend>{file.file?.name ?? file.fileLabel}</legend>
                   <p className="muted">
-                    Имя из файла — только черновая подсказка; проверьте название
-                    перед загрузкой.
+                    {file.file
+                      ? "Имя из файла — только черновая подсказка; проверьте название перед загрузкой."
+                      : "Этот стикер уже записан на сервере; файл можно сверить повторным выбором по SHA-256."}
                   </p>
                   <label>
                     Название стикера
@@ -684,8 +882,8 @@ export function StickerPackManager({ snapshot }: { snapshot: GameSnapshot }) {
               </Button>
             </>
           )}
-          {pack.lifecycle === "ACTIVE" && (
-            <Button view="outlined" onClick={reset}>
+          {pack.lifecycle !== "DRAFT" && (
+            <Button view="outlined" disabled={busy !== null} onClick={reset}>
               Создать ещё один пак
             </Button>
           )}
