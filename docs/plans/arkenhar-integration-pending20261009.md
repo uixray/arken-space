@@ -37,3 +37,9 @@ TLS harness internal-network host forwarding failed connection-refused despite r
 Owner asked whether Yandex server data exists locally. A separate read-only Luna inventory now owns provenance classification of local real-server backups versus synthetic fixtures/code/images; no remote read/start, no private DB/token contents. Astra is identifying actionable remaining local AC without duplicating finished gates. Nodemailer/new dependency and signup policy decisions remain unanswered; registration stays disabled.
 
 Changed files this checkpoint: this document and candidate-build checkpoint U append. Verification: Git HEAD/status inspected; unrelated .tmp/map-ping-motion preserved. Next: accept bounded TLS/cleanup receipts, integrate inventory and next-local plan, update Linear only at completed stage gate. No publication or production loss assessment is claimed.
+
+## Owner decisions / resumed mail pool
+
+Owner explicitly approved Nodemailer dependency and OPEN registration for any visitor, retaining email verification and previous GM/PLAYER links. Prior dependency/signup-choice blockers superseded; invite-only must not be imposed. Production registration remains disabled until actual transport/key/provider/runtime readiness and explicit operational gate; open signup does not itself authorize remote/deploy or unlimited storage/campaign entitlements.
+
+Luna owns maintained SMTPadapter/config/dependencylock + finite localSMTP/TLS/error/timeout gates. Astra owns connected open-registration plan/review. Another Luna refreshes liveLinear remaining-count classification at owner request, read-only, without closing tasks. New product bytes require a new exact candidate;2c35435 evidence stays historical/source-specific. Preserve localstands and unrelateddirtyfiles. Next: integrate source+review gates then rebuild candidate once, not on every microchange.
