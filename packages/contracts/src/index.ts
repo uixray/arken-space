@@ -1325,12 +1325,24 @@ export const drawingPointsSchema = z
 export const createDrawingSchema = z.object({
   actionId: actionIdSchema,
   sceneId: z.string().uuid(),
+  kind: z.literal("FREEHAND").optional(),
   points: drawingPointsSchema,
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   strokeWidth: z.number().finite().min(1).max(100).default(3).optional(),
   x: z.number().finite().default(0),
   y: z.number().finite().default(0),
-});
+}).or(z.object({
+  actionId: actionIdSchema,
+  sceneId: z.string().uuid(),
+  kind: z.literal("STAMP"),
+  assetKey: z.enum(["forest", "mountains", "clouds"]),
+  packId: z.literal("builtin-terrain-v1"),
+  size: z.number().finite().min(16).max(1024),
+  rotation: z.number().finite().min(-360).max(360),
+  layer: z.enum(["PUBLIC", "GM"]),
+  x: z.number().finite().min(-32768).max(32768),
+  y: z.number().finite().min(-32768).max(32768),
+}));
 export const updateDrawingSchema = z.object({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),
@@ -1341,6 +1353,9 @@ export const updateDrawingSchema = z.object({
   strokeWidth: z.number().finite().min(1).max(100).optional(),
   x: z.number().finite().optional(),
   y: z.number().finite().optional(),
+  size: z.number().finite().min(16).max(1024).optional(),
+  rotation: z.number().finite().min(-360).max(360).optional(),
+  layer: z.enum(["PUBLIC", "GM"]).optional(),
 });
 export const drawingCommandSchema = z.object({
   actionId: actionIdSchema,
@@ -2437,6 +2452,14 @@ export interface DrawingDto {
   x: number;
   y: number;
   revision: number;
+  kind?: "FREEHAND" | "STAMP";
+  assetKey?: "forest" | "mountains" | "clouds";
+  packId?: "builtin-terrain-v1";
+  size?: number;
+  rotation?: number;
+  layer?: "PUBLIC" | "GM";
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /** Map rows are returned only after server-side lifecycle and visibility filtering. */

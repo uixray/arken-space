@@ -1381,8 +1381,26 @@ export const drawings = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    /** Missing values in pre-stamp rows migrate to FREEHAND. */
+    kind: text("kind").notNull().default("FREEHAND"),
+    /** Fixed server catalog key; never a path or URL supplied by a client. */
+    stampAssetKey: text("stamp_asset_key"),
+    stampPackId: text("stamp_pack_id"),
+    stampSize: doublePrecision("stamp_size"),
+    stampRotation: doublePrecision("stamp_rotation"),
+    stampLayer: text("stamp_layer"),
   },
-  (table) => [index("drawings_scene_idx").on(table.sceneId)],
+  (table) => [
+    index("drawings_scene_idx").on(table.sceneId),
+    check(
+      "drawings_kind_check",
+      sql`${table.kind} in ('FREEHAND', 'STAMP')`,
+    ),
+    check(
+      "drawings_stamp_fields_check",
+      sql`(${table.kind} = 'FREEHAND' and ${table.stampAssetKey} is null and ${table.stampPackId} is null and ${table.stampSize} is null and ${table.stampRotation} is null and ${table.stampLayer} is null) or (${table.kind} = 'STAMP' and ${table.stampAssetKey} is not null and ${table.stampAssetKey} in ('forest', 'mountains', 'clouds') and ${table.stampPackId} is not null and ${table.stampPackId} = 'builtin-terrain-v1' and ${table.stampSize} is not null and ${table.stampSize} between 16 and 1024 and ${table.stampRotation} is not null and ${table.stampRotation} between -360 and 360 and ${table.stampLayer} is not null and ${table.stampLayer} in ('PUBLIC', 'GM'))`,
+    ),
+  ],
 );
 
 export const invites = pgTable(

@@ -337,6 +337,13 @@
       "when": 1791036000000,
       "tag": "0047_global_sticker_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1791536569060,
+      "tag": "0048_sour_ultimatum",
+      "breakpoints": true
     }
   ]
 }

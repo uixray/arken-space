@@ -999,7 +999,13 @@ export async function buildSnapshot(
         revision: fog.revision,
       })),
     drawings: drawingRows
-      .filter(({ drawing }) => visibleSceneIds.has(drawing.sceneId))
+      .filter(
+        ({ drawing }) =>
+          visibleSceneIds.has(drawing.sceneId) &&
+          (auth.role === "GM" ||
+            drawing.kind !== "STAMP" ||
+            drawing.stampLayer === "PUBLIC"),
+      )
       .map(({ drawing }) => ({
         id: drawing.id,
         sceneId: drawing.sceneId,
@@ -1010,6 +1016,16 @@ export async function buildSnapshot(
         x: drawing.x,
         y: drawing.y,
         revision: drawing.revision,
+        kind: drawing.kind as "FREEHAND" | "STAMP",
+        ...(drawing.kind === "STAMP"
+          ? {
+              assetKey: drawing.stampAssetKey as "forest" | "mountains" | "clouds",
+              packId: drawing.stampPackId as "builtin-terrain-v1",
+              size: drawing.stampSize!,
+              rotation: drawing.stampRotation!,
+              layer: drawing.stampLayer as "PUBLIC" | "GM",
+            }
+          : {}),
       })),
     worldMaps: worldMapProjection.snapshot,
     playerRequests: playerRequestRows,
