@@ -1,4 +1,4 @@
-﻿-- Build the count query from the checked-in allowlist and only the tables that
+-- Build the count query from the checked-in allowlist and only the tables that
 -- exist in the live database. This lets a candidate checkout back up an older
 -- (valid migration-prefix) production database without referencing future
 -- tables. The restore report records sampled versus full coverage.
@@ -20,6 +20,9 @@ FROM (
     ('action_journal'),
     ('assets'),
     ('campaign_audio_tracks'),
+    ('campaign_sound_packs'),
+    ('campaign_soundpad_settings'),
+    ('campaign_sounds'),
     ('campaigns'),
     ('catalog_entries'),
     ('character_catalog_entries'),
