@@ -17,3 +17,13 @@ Next: get mail final receipt and Astra fingerprint; get successful edge→web sy
 Mail foundation committed 5a9766b: DB/server builds and server typecheck PASS; focused5files22tests PASS; migration generation no diff; Astra frozen-source review. This is not operational email delivery.
 Edge protection committed e256280: final worker cached-nginx syntax PASS and12/12 successful synthetic SPA responses200/no-referrer; ordinary200 logged at both hops; marker absent both edge/web logs. Query forwarding leak repaired by clearing internal rewrite query. Root source guard/diff check PASS.
 Next pools now active: Luna isolated real PostgreSQL two-connection tests using cached image only; Luna injected-adapter scheduler/privacy/queued UI copy; Astra exact-SHA release sequence. Nodemailer dependency permission requested, not yet granted; no install/external send. Installer and human/production gates remain distinct.
+
+## Candidate execution update
+
+Product candidate: 2c35435643e09a4dbbcb041889dbc727070536f0, tree07f69e1d38559679df649de7415cdd55ed726bbe. Root independently verified exported192server/316web file bytes and hashes. Existing unrelateddirty .tmp/map-ping-motion remains excluded.
+
+Offline build reached cachedbase and exactcontext but failed Corepack pnpm10.12.1 cache miss under networknone. Root subsequently authorized standard frozen-lock dependency downloads INSIDE isolated Docker build only, no hostinstall/newdeps/basepull/provider/production. One connected serverbuild remains live (worker-owned session19302); imagepair/runtime/restore not yet proven. Preserve initialofflinefailure receipt; do not mislabel network-enabled build as offline.
+
+Addressed browser gate initial3failures are retained: harness omitted runtime/key readiness and Origin mismatch. Worker owns corrective harness-only changes and finite rerun, no productdefect conclusion yet. Real mail transport still absent/defaultdisabled; Nodemailer dependency permission requested and unanswered.
+
+Next: finish same-SHA images+archive hashes; corrected actualHTTP/browser gate; synthetic fresh/upgrade/restore/preupgrade rollbacktuple checks. Full backlog/user/installer/provider/server gates stay open. No production/deploy/push/merge authority.
