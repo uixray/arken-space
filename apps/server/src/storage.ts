@@ -14,9 +14,9 @@ import sharp, { type Metadata, type OverlayOptions } from "sharp";
 import type { TokenFramePreset } from "@arken/contracts";
 import { env } from "./env.js";
 import { randomToken } from "./security.js";
+import { audioUploadFormat } from "./audio-upload-format.js";
 
 const imageMimes = new Set(["image/jpeg", "image/png", "image/webp"]);
-const audioMimes = new Set(["audio/mpeg", "audio/ogg", "application/ogg"]);
 
 function validatedAudioDuration(durationSeconds: number | undefined) {
   if (
@@ -111,20 +111,19 @@ export async function storeUpload(
     };
   }
 
-  if (!audioMimes.has(detected.mime)) throw new Error("UNSUPPORTED_AUDIO_TYPE");
+  const audioFormat = audioUploadFormat(detected.mime);
   if (buffer.length > env.MAX_AUDIO_BYTES) throw new Error("AUDIO_TOO_LARGE");
-  const extension = detected.mime === "audio/mpeg" ? ".mp3" : ".ogg";
   const metadata = await parseBuffer(
     buffer,
     { mimeType: detected.mime, size: buffer.length },
     { duration: true, skipCovers: true },
   );
   const durationSeconds = validatedAudioDuration(metadata.format.duration);
-  const storageKey = `${randomToken(18)}${extension}`;
+  const storageKey = `${randomToken(18)}${audioFormat.extension}`;
   await writeFile(resolve(mediaRoot(), storageKey), buffer, { flag: "wx" });
   return {
     storageKey,
-    mimeType: detected.mime === "application/ogg" ? "audio/ogg" : detected.mime,
+    mimeType: audioFormat.mimeType,
     sizeBytes: buffer.length,
     width: null,
     height: null,

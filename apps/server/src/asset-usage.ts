@@ -11,6 +11,7 @@ import type {
 import {
   assets,
   campaignAudioTracks,
+  campaignSounds,
   characters,
   characterMedia,
   gameEvents,
@@ -72,6 +73,7 @@ export async function resolveAssetUsages(
     characterMediaRows,
     mapRows,
     audioRows,
+    soundRows,
     worldContentCoverRows,
     worldContentMediaRows,
     provenanceRows,
@@ -168,6 +170,10 @@ export async function resolveAssetUsages(
         ),
       ),
     db
+      .select({ id: campaignSounds.id, label: campaignSounds.label })
+      .from(campaignSounds)
+      .where(and(eq(campaignSounds.campaignId, campaignId), eq(campaignSounds.assetId, assetId))),
+    db
       .select({ id: worldContent.id, name: worldContent.name })
       .from(worldContent)
       .where(eq(worldContent.coverAssetId, assetId)),
@@ -257,6 +263,14 @@ export async function resolveAssetUsages(
       label: `Аудиодорожка ${row.slotOrder + 1}`,
       location: "Музыка",
       visibility: "PUBLIC" as const,
+      deletionPolicy: "BLOCK" as const,
+    })),
+    ...soundRows.map((row) => ({
+      kind: "CAMPAIGN_SOUND" as const,
+      entityId: row.id,
+      label: row.label,
+      location: "Саундпад кампании",
+      visibility: "GM_ONLY" as const,
       deletionPolicy: "BLOCK" as const,
     })),
     ...worldContentCoverRows.map((row) => ({

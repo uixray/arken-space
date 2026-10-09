@@ -12,6 +12,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -2465,6 +2466,68 @@ export const campaignAudioTracks = pgTable(
       "campaign_audio_tracks_mix_volume_check",
       sql`${table.mixVolume} >= 0 AND ${table.mixVolume} <= 1`,
     ),
+  ],
+);
+
+/** UIX-512 durable campaign-owned soundpad packs; playback itself is ephemeral. */
+export const campaignSoundPacks = pgTable(
+  "campaign_sound_packs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    published: boolean("published").notNull().default(false),
+    audience: text("audience").notNull().default("ALL_MEMBERS"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("campaign_sound_packs_campaign_id_id_idx").on(table.campaignId, table.id),
+    uniqueIndex("campaign_sound_packs_campaign_name_idx").on(table.campaignId, table.name),
+    index("campaign_sound_packs_campaign_idx").on(table.campaignId, table.sortOrder),
+    check("campaign_sound_packs_audience_check", sql`${table.audience} IN ('ALL_MEMBERS','GM_ONLY')`),
+    check("campaign_sound_packs_name_check", sql`length(trim(${table.name})) BETWEEN 1 AND 80`),
+  ],
+);
+
+/** Campaign-wide PLAYER trigger permission; defaults to enabled for all players. */
+export const campaignSoundpadSettings = pgTable(
+  "campaign_soundpad_settings",
+  {
+    campaignId: uuid("campaign_id").primaryKey().references(() => campaigns.id, { onDelete: "cascade" }),
+    playerPlaybackEnabled: boolean("player_playback_enabled").notNull().default(true),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+
+/** Sounds reference campaign-local AUDIO assets and prevent dangling deletion. */
+export const campaignSounds = pgTable(
+  "campaign_sounds",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+    packId: uuid("pack_id").notNull(),
+    assetId: uuid("asset_id").notNull(),
+    label: text("label").notNull(),
+    icon: text("icon").notNull().default("🔊"),
+    category: text("category").notNull().default("Другое"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    defaultGain: doublePrecision("default_gain").notNull().default(0.5),
+    audience: text("audience").notNull().default("ALL_MEMBERS"),
+    sourceNote: text("source_note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("campaign_sounds_campaign_id_id_idx").on(table.campaignId, table.id),
+    uniqueIndex("campaign_sounds_pack_asset_idx").on(table.packId, table.assetId),
+    index("campaign_sounds_pack_order_idx").on(table.packId, table.sortOrder),
+    foreignKey({ name: "campaign_sounds_campaign_pack_fk", columns: [table.campaignId, table.packId], foreignColumns: [campaignSoundPacks.campaignId, campaignSoundPacks.id] }).onDelete("cascade"),
+    foreignKey({ name: "campaign_sounds_campaign_asset_fk", columns: [table.campaignId, table.assetId], foreignColumns: [assets.campaignId, assets.id] }).onDelete("restrict"),
+    check("campaign_sounds_audience_check", sql`${table.audience} IN ('ALL_MEMBERS','GM_ONLY')`),
+    check("campaign_sounds_gain_check", sql`${table.defaultGain} >= 0 AND ${table.defaultGain} <= 1`),
+    check("campaign_sounds_label_check", sql`length(trim(${table.label})) BETWEEN 1 AND 60`),
   ],
 );
 

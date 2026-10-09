@@ -32,6 +32,7 @@ import {
   workspaceReturnTarget,
 } from "./WorkspaceNav";
 import { MusicBar } from "./MusicBar";
+import { SoundpadWorkspace } from "./SoundpadWorkspace";
 import { AppModals } from "./AppModals";
 import { TokenTray } from "./TokenTray";
 import { CompactMenuSurface } from "./ui/CompactMenuSurface";
@@ -2068,6 +2069,16 @@ export function App() {
                 : headerMusicTarget
             }
           />
+          {!previewSnapshot && snapshot && (
+            <SoundpadWorkspace
+              campaignId={snapshot.campaign.id}
+              membershipId={snapshot.me.id}
+              role={snapshot.me.role}
+              assets={snapshot.assets}
+              socket={socket}
+              onUpload={handleUploadAudio}
+            />
+          )}
           {compact && (
             <CompactNavigation
               active={compactSurface}

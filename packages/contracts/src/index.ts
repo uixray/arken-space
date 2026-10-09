@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { soundpadTriggerSchema, type SoundpadTriggeredEvent } from "./soundpad.js";
+export * from "./soundpad.js";
 export * from "./account-auth.js";
 export * from "./fog-geometry.js";
 export * from "./story-attachment-lifecycle.js";
@@ -2240,6 +2242,7 @@ export const assetUsageKindSchema = z.enum([
   "CHARACTER_MEDIA",
   "WORLD_MAP_BACKGROUND",
   "AUDIO_TRACK",
+  "CAMPAIGN_SOUND",
   "WORLD_CONTENT_COVER",
   "WORLD_CONTENT_MEDIA",
   "GENERATED_TOKEN_SOURCE",
@@ -2998,6 +3001,11 @@ export interface ServerToClientEvents {
   "audio:track:state": (event: EventEnvelope<AudioTrackDto>) => void;
   /** UIX-382: broadcast when a track is removed from the mixer. */
   "audio:track:removed": (event: EventEnvelope<{ trackId: string }>) => void;
+  "soundpad:triggered": (event: SoundpadTriggeredEvent) => void;
+  "soundpad:stopped": (event: { generation: number }) => void;
+  "soundpad:policy": (event: { playerPlaybackEnabled: boolean }) => void;
+  /** Invalidation only; clients refetch the role-filtered catalogue over HTTP. */
+  "soundpad:catalog:changed": () => void;
   "map:ping": (ping: MapPing) => void;
   "ruler:updated": (
     ruler: z.infer<typeof rulerUpdateSchema> & {
@@ -3040,6 +3048,11 @@ export interface ClientToServerEvents {
     command: z.infer<typeof audioTrackCommandSchema>,
     ack?: (result: CommandAck<AudioTrackDto>) => void,
   ) => void;
+  "soundpad:trigger": (
+    command: z.infer<typeof soundpadTriggerSchema>,
+    ack?: (result: CommandAck<SoundpadTriggeredEvent>) => void,
+  ) => void;
+  "soundpad:stop": (ack?: (result: CommandAck<{ generation: number }>) => void) => void;
   "map:ping": (
     ping: { sceneId: string; x: number; y: number },
     ack?: (result: { ok: boolean; reason?: string }) => void,

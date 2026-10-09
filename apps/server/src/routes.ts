@@ -82,6 +82,8 @@ import {
 import { betaPlayerByHandle, uniqueBetaPlayerIdentity } from "@arken/contracts";
 import {
   assets,
+  campaignSounds,
+  campaignSoundPacks,
   actionJournal,
   catalogEntries,
   characterCatalogEntries,
@@ -157,6 +159,7 @@ import { registerStoryAttachmentLifecycleRoutes } from "./story-attachment-lifec
 import { registerStickerPackAdminRoutes } from "./sticker-pack-admin.js";
 import { registerGlobalStickerRoutes } from "./global-sticker-catalog.js";
 import { registerAssetLifecycleRoutes } from "./asset-usage.js";
+import { registerSoundpadRoutes } from "./soundpad-routes.js";
 import { assetContentVersion, assetDto } from "./asset-lifecycle.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
 import { registerPlayerRequestRoutes } from "./player-requests.js";
@@ -1117,6 +1120,7 @@ export function registerRoutes(
   registerSpellAssignmentRoutes(app, db);
   registerSpellProjectionRoutes(app, db);
   registerAssetLifecycleRoutes(app, db, io, broadcastSnapshots);
+  registerSoundpadRoutes(app, db, io);
 
   app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
     try {
@@ -8941,6 +8945,15 @@ export function registerRoutes(
       .limit(1);
     if (!asset) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
     if (auth.role !== "GM") {
+      const [soundUse] = await db.select({ id: campaignSounds.id }).from(campaignSounds)
+        .innerJoin(campaignSoundPacks, eq(campaignSoundPacks.id, campaignSounds.packId))
+        .where(and(eq(campaignSounds.campaignId, auth.campaignId), eq(campaignSounds.assetId, asset.id))).limit(1);
+      if (soundUse) {
+        const [publicSoundUse] = await db.select({ id: campaignSounds.id }).from(campaignSounds)
+          .innerJoin(campaignSoundPacks, eq(campaignSoundPacks.id, campaignSounds.packId))
+          .where(and(eq(campaignSounds.campaignId, auth.campaignId), eq(campaignSounds.assetId, asset.id), eq(campaignSounds.audience, "ALL_MEMBERS"), eq(campaignSoundPacks.published, true), eq(campaignSoundPacks.audience, "ALL_MEMBERS"))).limit(1);
+        if (!publicSoundUse) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
+      }
       const snapshot = await buildSnapshot(db, auth);
       if (!snapshot.assets.some((visible) => visible.id === asset.id))
         return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
