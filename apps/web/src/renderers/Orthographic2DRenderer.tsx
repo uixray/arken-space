@@ -29,7 +29,7 @@ import type { DrawingDto } from "@arken/contracts";
 import { rulerPolylineDistance } from "@arken/contracts";
 import { shouldIgnoreGlobalShortcut } from "../input-diagnostics";
 import { fogHiddenTokenIds, isRectFullyRevealed } from "./fog";
-import { useFogPattern } from "./useFogPattern";
+import { FogPatternOverlay } from "./FogPatternOverlay";
 import { paintFogBrushStroke } from "./fog-brush-stroke";
 import { centerRectAtScale, fitRect } from "./camera-fit";
 import { useLatestRef } from "../use-latest-ref";
@@ -438,7 +438,6 @@ function TokenImage({
 }
 
 function Orthographic2DRendererComponent(props: SceneRendererProps) {
-  const fogPatternImage = useFogPattern();
   const {
     canvasEditMode,
     onCanvasEditCancel,
@@ -1105,7 +1104,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       pixelRatio: 1,
     });
     mask.getLayer()?.batchDraw();
-  }, [fogPatternImage, orderedFogReveals, worldDraft.width, worldDraft.height]);
+  }, [orderedFogReveals, worldDraft.width, worldDraft.height]);
 
   const pointerInWorld = () => {
     const pointer = stageRef.current?.getPointerPosition();
@@ -2245,9 +2244,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
         <Rect
           width={worldDraft.width}
           height={worldDraft.height}
-          fill={fogPatternImage ? undefined : visual.color.fog}
-          fillPatternImage={fogPatternImage || undefined}
-          fillPatternRepeat="repeat"
+          fill={visual.color.fog}
         />
         {orderedFogReveals.map((fog) => {
           const compositeOperation =
@@ -2265,9 +2262,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
               <Group key={fog.id}>
                 <Rect
                   {...rect}
-                  fill={fogPatternImage ? undefined : visual.color.fogCover}
-                  fillPatternImage={fogPatternImage || undefined}
-                  fillPatternRepeat="repeat"
+                  fill={visual.color.fogCover}
                   globalCompositeOperation={compositeOperation}
                 />
               </Group>
@@ -2280,9 +2275,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                   x={geometry.center.x}
                   y={geometry.center.y}
                   radius={geometry.radius}
-                  fill={fogPatternImage ? undefined : visual.color.fogCover}
-                  fillPatternImage={fogPatternImage || undefined}
-                  fillPatternRepeat="repeat"
+                  fill={visual.color.fogCover}
                   globalCompositeOperation={compositeOperation}
                 />
               </Group>
@@ -2296,9 +2289,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                     point.y,
                   ])}
                   closed
-                  fill={fogPatternImage ? undefined : visual.color.fogCover}
-                  fillPatternImage={fogPatternImage || undefined}
-                  fillPatternRepeat="repeat"
+                  fill={visual.color.fogCover}
                   globalCompositeOperation={compositeOperation}
                 />
               </Group>
@@ -2313,9 +2304,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                   x={geometry.points[0]!.x}
                   y={geometry.points[0]!.y}
                   radius={geometry.radius}
-                  fill={fogPatternImage ? undefined : visual.color.fogCover}
-                  fillPatternImage={fogPatternImage || undefined}
-                  fillPatternRepeat="repeat"
+                  fill={visual.color.fogCover}
                   globalCompositeOperation={compositeOperation}
                 />
               </Group>
@@ -2328,7 +2317,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                     context,
                     geometry.points,
                     geometry.radius,
-                    fogPatternImage,
+                    null,
                     visual.color.fogCover,
                   )
                 }
@@ -2338,6 +2327,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           );
         })}
       </Group>
+      <FogPatternOverlay width={worldDraft.width} height={worldDraft.height} />
       {fogDraft && (
         <Rect
           {...fogDraft}

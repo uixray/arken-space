@@ -1,39 +1,33 @@
 import { useEffect, useState } from "react";
+import { createFogCloudAnimation } from "./fog-cloud-animation";
 
-const SVG_NOISE = `
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256">
-  <filter id="f" x="0" y="0" width="100%" height="100%">
-    <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="3" stitchTiles="stitch" result="noise"/>
-    <feColorMatrix type="matrix" values="
-      0 0 0 0 0.15
-      0 0 0 0 0.15
-      0 0 0 0 0.15
-      1 0 0 0 0" in="noise" />
-  </filter>
-  <rect width="256" height="256" fill="#050505"/>
-  <rect width="256" height="256" filter="url(#f)" opacity="0.7"/>
-</svg>
-`;
+export type FogPatternState = {
+  image: HTMLCanvasElement | null;
+  offset: { x: number; y: number };
+};
 
-let cachedPattern: HTMLImageElement | null = null;
-
-export function useFogPattern() {
-  const [pattern, setPattern] = useState<HTMLImageElement | null>(
-    cachedPattern,
-  );
+/** Owns the decorative tile lifecycle; a null tile leaves solid fog untouched. */
+export function useFogPattern(): FogPatternState {
+  const [state, setState] = useState<FogPatternState>({
+    image: null,
+    offset: { x: 0, y: 0 },
+  });
 
   useEffect(() => {
-    if (cachedPattern) return;
-    const img = new Image();
-    const blob = new Blob([SVG_NOISE], { type: "image/svg+xml" });
-    const url = URL.createObjectURL(blob);
-    img.onload = () => {
-      cachedPattern = img;
-      setPattern(img);
-      URL.revokeObjectURL(url);
-    };
-    img.src = url;
+    let animation: ReturnType<typeof createFogCloudAnimation> = null;
+    try {
+      animation = createFogCloudAnimation(
+        (offset) => setState((current) => ({ ...current, offset })),
+        () => setState((current) => ({ ...current, image: null })),
+      );
+      setState({ image: animation?.canvas ?? null, offset: { x: 0, y: 0 } });
+    } catch {
+      // Texture generation is non-authoritative. The renderer always keeps its
+      // opaque solid fill and simply omits the decorative overlay on failure.
+      setState((current) => ({ ...current, image: null }));
+    }
+    return () => animation?.dispose();
   }, []);
 
-  return pattern;
+  return state;
 }
