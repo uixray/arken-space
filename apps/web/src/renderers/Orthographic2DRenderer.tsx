@@ -25,6 +25,7 @@ import useImage from "use-image";
 import Konva from "konva";
 import { TokenConditionMenu } from "./TokenConditionMenu";
 import type { SceneRendererProps } from "./SceneRenderer";
+import type { DrawingDto } from "@arken/contracts";
 import { rulerPolylineDistance } from "@arken/contracts";
 import { shouldIgnoreGlobalShortcut } from "../input-diagnostics";
 import { fogHiddenTokenIds, isRectFullyRevealed } from "./fog";
@@ -91,6 +92,7 @@ import {
 } from "./token-drag-event";
 import { mapWorldPointFromDrop } from "../token-placement";
 import { getTokenImageMask } from "./token-image-mask";
+import type { TerrainStampKey } from "./TerrainStampControls";
 import { proportionalTokenSize } from "./token-resize";
 import {
   createTokenImageState,
@@ -98,6 +100,110 @@ import {
   type TokenImageAvailability,
 } from "./token-image-state";
 import { resolveResizeHandleDataAttributes } from "./resize-handle";
+
+function TerrainStampImage({
+  assetKey,
+  size,
+  listening,
+}: {
+  assetKey: TerrainStampKey;
+  size: number;
+  listening: boolean;
+}) {
+  const [image] = useImage(`/api/terrain-stamps/assets/${assetKey}`);
+  return image ? (
+    <Image
+      image={image}
+      x={-size / 2}
+      y={-size / 2}
+      width={size}
+      height={size}
+      listening={listening}
+    />
+  ) : (
+    <Rect
+      x={-size / 2}
+      y={-size / 2}
+      width={size}
+      height={size}
+      fill="rgba(120,150,100,.25)"
+      stroke="#668866"
+      listening={listening}
+    />
+  );
+}
+
+function StampDrawingNode({
+  drawing,
+  listening,
+  selected,
+  draggable,
+  scale,
+  onSelect,
+  onDragEnd,
+}: {
+  drawing: DrawingDto;
+  listening: boolean;
+  selected: boolean;
+  draggable: boolean;
+  scale: number;
+  onSelect: (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
+  onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => void;
+}) {
+  const key = drawing.assetKey ?? "forest";
+  const size = drawing.size ?? 96;
+  return (
+    <Group
+      name={`terrain-stamp ${drawing.id}`}
+      x={drawing.x}
+      y={drawing.y}
+      rotation={drawing.rotation ?? 0}
+      listening={listening}
+      draggable={draggable}
+      onClick={onSelect}
+      onTap={onSelect}
+      onDragEnd={onDragEnd}
+    >
+      <Rect
+        x={-size / 2}
+        y={-size / 2}
+        width={size}
+        height={size}
+        fill="rgba(0,0,0,0.001)"
+        stroke={selected ? "#f6d365" : undefined}
+        strokeWidth={selected ? 2 / scale : 0}
+        listening={listening}
+      />
+      <TerrainStampImage assetKey={key} size={size} listening={listening} />
+    </Group>
+  );
+}
+
+function drawingBounds(drawing: DrawingDto) {
+  if (drawing.kind === "STAMP") {
+    const half =
+      ((drawing.size ?? 96) *
+        (Math.abs(Math.cos(((drawing.rotation ?? 0) * Math.PI) / 180)) +
+          Math.abs(Math.sin(((drawing.rotation ?? 0) * Math.PI) / 180)))) /
+      2;
+    return {
+      x: drawing.x - half,
+      y: drawing.y - half,
+      width: half * 2,
+      height: half * 2,
+    };
+  }
+  const xs = drawing.points.filter((_, index) => index % 2 === 0);
+  const ys = drawing.points.filter((_, index) => index % 2 === 1);
+  const minX = Math.min(...xs),
+    minY = Math.min(...ys);
+  return {
+    x: drawing.x + minX,
+    y: drawing.y + minY,
+    width: Math.max(...xs) - minX,
+    height: Math.max(...ys) - minY,
+  };
+}
 import {
   CursorMoveBatcher,
   shouldBroadcastCursor,
@@ -620,6 +726,19 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   const [drawingPoints, setDrawingPoints] = useState<number[]>([]);
   const drawingPointsRef = useRef<number[]>([]);
   const drawingActiveRef = useRef(false);
+  const [stampPreviewPoint, setStampPreviewPoint] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const stampDraftRef = useRef<{ x: number; y: number } | null>(null);
+  const stampCreateRef = useLatestRef(props.onStampCreate);
+  const stampSettingsRef = useLatestRef(props.stampTool);
+  const finishStampRef = useRef<(commit: boolean) => void>(() => undefined);
+  useEffect(() => {
+    if (props.tool === "STAMP" && props.role === "GM") return;
+    stampDraftRef.current = null;
+    setStampPreviewPoint(null);
+  }, [props.tool, props.role, props.scene.id]);
   const [pendingDrawings, setPendingDrawings] = useState<
     { tempId: string; points: number[]; color: string; strokeWidth: number }[]
   >([]);
@@ -968,22 +1087,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     const revealed = new Set<string>();
     if (props.role === "GM") return revealed;
     for (const drawing of props.drawings) {
-      const xs = drawing.points.filter((_, index) => index % 2 === 0);
-      const ys = drawing.points.filter((_, index) => index % 2 === 1);
-      if (xs.length === 0 || ys.length === 0) continue;
-      const minX = Math.min(...xs);
-      const minY = Math.min(...ys);
-      if (
-        isRectFullyRevealed(
-          {
-            x: minX + drawing.x,
-            y: minY + drawing.y,
-            width: Math.max(...xs) - minX,
-            height: Math.max(...ys) - minY,
-          },
-          orderedFogReveals,
-        )
-      )
+      if (isRectFullyRevealed(drawingBounds(drawing), orderedFogReveals))
         revealed.add(drawing.id);
     }
     return revealed;
@@ -1398,6 +1502,8 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       setSelectedTokenIds([]);
       setSelectedDrawingIds([]);
       setSelectedDrawingId(null);
+      stampDraftRef.current = null;
+      setStampPreviewPoint(null);
       dispatchInteraction({ type: "clear-selection" });
       setTokenMenu(null);
       cancelPolygonDraft();
@@ -1761,6 +1867,23 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     if (event.evt.button === 0 && event.evt.ctrlKey) return;
     if (
       event.evt.button === 0 &&
+      props.tool === "STAMP" &&
+      props.role === "GM" &&
+      props.stampTool &&
+      props.onStampCreate
+    ) {
+      const point = pointerInWorld();
+      if (point) {
+        const bounded = clampToWorld(point);
+        stampDraftRef.current = bounded;
+        setStampPreviewPoint(bounded);
+        event.evt.preventDefault();
+        event.cancelBubble = true;
+      }
+      return;
+    }
+    if (
+      event.evt.button === 0 &&
       event.evt.shiftKey &&
       targetIsCanvas &&
       props.tool === "PAN"
@@ -1822,6 +1945,16 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   const handlePointerMove = (
     event?: Konva.KonvaEventObject<MouseEvent | PointerEvent>,
   ) => {
+    if (
+      props.tool === "STAMP" &&
+      props.role === "GM" &&
+      stampDraftRef.current
+    ) {
+      const point = pointerInWorld();
+      if (point) stampDraftRef.current = clampToWorld(point);
+    }
+    if (props.tool === "STAMP" && props.role === "GM" && !stampDraftRef.current)
+      setStampPreviewPoint(pointerInWorld());
     // UIX-470: контур будущей области кисти следует за курсором. Радиус берётся
     // из того же `brushRadius`, что уходит на сервер, — иначе показанное и
     // сделанное разойдутся ровно там, где мастер целится.
@@ -1943,16 +2076,9 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       );
       setSelectedDrawingIds(
         selectableObjects.drawings
-          .filter((drawing) => {
-            const xs = drawing.points.filter((_, index) => index % 2 === 0);
-            const ys = drawing.points.filter((_, index) => index % 2 === 1);
-            return rectanglesIntersect(marquee, {
-              x: drawing.x + Math.min(...xs),
-              y: drawing.y + Math.min(...ys),
-              width: Math.max(...xs) - Math.min(...xs),
-              height: Math.max(...ys) - Math.min(...ys),
-            });
-          })
+          .filter((drawing) =>
+            rectanglesIntersect(marquee, drawingBounds(drawing)),
+          )
           .map((drawing) => drawing.id),
       );
       dispatchInteraction({ type: "clear-selection" });
@@ -2008,6 +2134,29 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
 
   useEffect(() => {
     finishDrawingRef.current = () => void handlePointerUp();
+    finishStampRef.current = (commit) => {
+      const point = stampDraftRef.current;
+      const settings = stampSettingsRef.current;
+      stampDraftRef.current = null;
+      setStampPreviewPoint(null);
+      if (
+        !commit ||
+        !point ||
+        props.role !== "GM" ||
+        !settings ||
+        !stampCreateRef.current
+      )
+        return;
+      void stampCreateRef
+        .current({
+          kind: "STAMP",
+          packId: "builtin-terrain-v1",
+          ...settings,
+          x: point.x,
+          y: point.y,
+        })
+        .catch(() => undefined);
+    };
     trackDrawingRef.current = (event) => {
       if (!drawingActiveRef.current) return;
       stageRef.current?.setPointersPositions(event);
@@ -2028,11 +2177,14 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   useEffect(() => {
     const trackOutsideStage = (event: MouseEvent) =>
       trackDrawingRef.current(event);
-    const finishOutsideStage = () => {
+    const finishOutsideStage = (event: Event) => {
       // Pointer capture is not guaranteed for mouse right/middle drags. Always
       // terminate a pending pan when release/cancel happens outside the Stage,
       // otherwise the next hover move would resume the stale gesture.
       panStartRef.current = null;
+      if (event.type === "pointercancel" || event.type === "blur")
+        finishStampRef.current(false);
+      else if (event.type === "pointerup") finishStampRef.current(true);
       if (drawingActiveRef.current) finishDrawingRef.current();
       if (brushActiveRef.current) brushUpRef.current();
       finishRulerRef.current();
@@ -2732,6 +2884,9 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   return (
     <div
       className="map-viewport"
+      data-terrain-stamp-count={
+        props.drawings.filter((drawing) => drawing.kind === "STAMP").length
+      }
       data-token-image-states={tokenImageStateAttribute}
       {...(resizeHandleData ?? {})}
       ref={containerRef}
@@ -3333,6 +3488,48 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
         <Layer {...playerClip}>
           {props.drawings.map((drawing) => {
             const currentStrokeWidth = drawing.strokeWidth ?? 3;
+            const revealed =
+              props.role === "GM" || revealedDrawingIds.has(drawing.id);
+            if (drawing.kind === "STAMP") {
+              const listening = props.role === "GM" && revealed;
+              return (
+                <StampDrawingNode
+                  key={drawing.id}
+                  drawing={drawing}
+                  listening={listening}
+                  selected={selectedDrawingIds.includes(drawing.id)}
+                  draggable={props.tool === "PAN" && listening}
+                  scale={scale}
+                  onSelect={(event) =>
+                    selectObject(
+                      {
+                        kind: "drawing",
+                        objectId: drawing.id,
+                        revision: drawing.revision,
+                      },
+                      "shiftKey" in event.evt && event.evt.shiftKey,
+                    )
+                  }
+                  onDragEnd={(event) => {
+                    if (
+                      selectedDrawingIds.includes(drawing.id) &&
+                      selectedTokenIds.length + selectedDrawingIds.length > 1 &&
+                      props.onBulkMove
+                    ) {
+                      enqueueMove({
+                        x: event.target.x() - drawing.x,
+                        y: event.target.y() - drawing.y,
+                      });
+                      return;
+                    }
+                    void props.onDrawingUpdate?.(drawing.id, drawing.revision, {
+                      x: event.target.x(),
+                      y: event.target.y(),
+                    });
+                  }}
+                />
+              );
+            }
             const listening =
               (props.role === "GM" ||
                 (Boolean(props.membershipId) &&
@@ -3408,6 +3605,24 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
               </Group>
             );
           })}
+          {stampPreviewPoint &&
+            props.tool === "STAMP" &&
+            props.role === "GM" &&
+            props.stampTool && (
+              <Group
+                x={stampPreviewPoint.x}
+                y={stampPreviewPoint.y}
+                rotation={props.stampTool.rotation}
+                opacity={0.5}
+                listening={false}
+              >
+                <TerrainStampImage
+                  assetKey={props.stampTool.assetKey}
+                  size={props.stampTool.size}
+                  listening={false}
+                />
+              </Group>
+            )}
           {pendingDrawings
             .filter(
               (pending) =>
@@ -3862,7 +4077,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           (props.role === "GM" ||
             (!!props.membershipId &&
               drawing.authorMembershipId === props.membershipId));
-        if (!canEditDrawing && props.tool !== "DRAW") return null;
+        if (!drawing && props.tool !== "DRAW") return null;
 
         const activeColor = canEditDrawing ? drawing.color : drawingColor;
         const activeWidth = canEditDrawing
@@ -3908,54 +4123,111 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
             aria-label="Панель параметров рисунка"
           >
             <span className="drawing-color-controls">
-              <span className="drawing-control-group">
-                <label className="drawing-control-label">Цвет</label>
-                <span
-                  className="drawing-color-presets"
-                  role="group"
-                  aria-label="Готовые цвета"
-                >
-                  {DRAWING_COLOR_PRESETS.map(({ value, name }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className="drawing-color-swatch"
-                      aria-label={`${name}: ${value}`}
-                      aria-pressed={activeColor === value}
-                      style={{ backgroundColor: value }}
-                      onClick={() => updateColor(value)}
-                    />
-                  ))}
-                  <label className="drawing-color-picker">
+              {drawing?.kind === "STAMP" ? (
+                <span className="drawing-control-group">
+                  <label className="drawing-control-label">
+                    Размер штампа
                     <input
-                      type="color"
-                      aria-label="Выбрать свой цвет рисунка"
-                      title="Свой цвет"
-                      value={activeColor}
-                      onChange={(event) => updateColor(event.target.value)}
+                      aria-label="Размер выбранного штампа"
+                      type="range"
+                      min={16}
+                      max={1024}
+                      value={drawing.size ?? 96}
+                      onChange={(event) =>
+                        void props.onDrawingUpdate?.(
+                          drawing.id,
+                          drawing.revision,
+                          { size: Number(event.target.value) },
+                        )
+                      }
                     />
                   </label>
+                  <label className="drawing-control-label">
+                    Поворот
+                    <input
+                      aria-label="Поворот выбранного штампа"
+                      type="range"
+                      min={-180}
+                      max={180}
+                      value={drawing.rotation ?? 0}
+                      onChange={(event) =>
+                        void props.onDrawingUpdate?.(
+                          drawing.id,
+                          drawing.revision,
+                          { rotation: Number(event.target.value) },
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="drawing-control-label">
+                    Слой
+                    <select
+                      aria-label="Слой выбранного штампа"
+                      value={drawing.layer ?? "PUBLIC"}
+                      onChange={(event) =>
+                        void props.onDrawingUpdate?.(
+                          drawing.id,
+                          drawing.revision,
+                          { layer: event.target.value as "PUBLIC" | "GM" },
+                        )
+                      }
+                    >
+                      <option value="PUBLIC">Игрокам</option>
+                      <option value="GM">Только мастеру</option>
+                    </select>
+                  </label>
                 </span>
-              </span>
-
-              <span className="drawing-control-group">
-                <label className="drawing-control-label">
-                  Толщина: <strong>{activeWidth}px</strong>
-                </label>
-                <label className="drawing-stroke-width-picker">
-                  <input
-                    type="range"
-                    min="1"
-                    max="50"
-                    step="1"
-                    aria-label="Толщина линии"
-                    value={activeWidth}
-                    onChange={(event) =>
-                      updateWidth(Number(event.target.value))
-                    }
-                  />
-                </label>
-              </span>
+              ) : (
+                <>
+                  <span className="drawing-control-group">
+                    <label className="drawing-control-label">Цвет</label>
+                    <span
+                      className="drawing-color-presets"
+                      role="group"
+                      aria-label="Готовые цвета"
+                    >
+                      {DRAWING_COLOR_PRESETS.map(({ value, name }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          className="drawing-color-swatch"
+                          aria-label={`${name}: ${value}`}
+                          aria-pressed={activeColor === value}
+                          style={{ backgroundColor: value }}
+                          onClick={() => updateColor(value)}
+                        />
+                      ))}
+                      <label className="drawing-color-picker">
+                        <input
+                          type="color"
+                          aria-label="Выбрать свой цвет рисунка"
+                          title="Свой цвет"
+                          value={activeColor}
+                          onChange={(event) => updateColor(event.target.value)}
+                        />
+                      </label>
+                    </span>
+                  </span>
+                  <span className="drawing-control-group">
+                    <label className="drawing-control-label">
+                      Толщина: <strong>{activeWidth}px</strong>
+                    </label>
+                    <label className="drawing-stroke-width-picker">
+                      <input
+                        type="range"
+                        min="1"
+                        max="50"
+                        step="1"
+                        aria-label="Толщина линии"
+                        value={activeWidth}
+                        onChange={(event) =>
+                          updateWidth(Number(event.target.value))
+                        }
+                      />
+                    </label>
+                  </span>
+                </>
+              )}
 
               {canEditDrawing && (
                 <span className="drawing-panel-actions">

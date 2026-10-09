@@ -77,6 +77,7 @@ import {
   type CompactSurface,
 } from "./ui/useCompactNavigation";
 import { MapToolbar } from "./MapToolbar";
+import { type TerrainStampSettings } from "./renderers/TerrainStampControls";
 import { GamePauseOverlay } from "./GamePauseOverlay";
 import { useChatHistoryActions } from "./use-chat-history-actions";
 import { useStoryActions } from "./use-story-actions";
@@ -240,6 +241,12 @@ export function App() {
     Array<{ membershipId: string; online: boolean }>
   >([]);
   const [tool, setTool] = useState<MapTool>("PAN");
+  const [stampSettings, setStampSettings] = useState<TerrainStampSettings>({
+    assetKey: "forest",
+    size: 160,
+    rotation: 0,
+    layer: "PUBLIC",
+  });
   // UIX-313: shared brush radius (world units) for the circular fog brush,
   // reused for both FOG_BRUSH and COVER_BRUSH.
   const [fogBrushRadius, setFogBrushRadius] = useState(40);
@@ -1166,6 +1173,73 @@ export function App() {
     [activeScene?.id, run],
   );
 
+  const handleStampCreate = useCallback(
+    async (stamp: {
+      kind: "STAMP";
+      assetKey: "forest" | "mountains" | "clouds";
+      packId: "builtin-terrain-v1";
+      size: number;
+      rotation: number;
+      layer: "PUBLIC" | "GM";
+      x: number;
+      y: number;
+    }) => {
+      if (!activeScene || snapshot?.me.role !== "GM") return undefined;
+      const requestedSceneId = activeScene.id;
+      const requestedCampaignId = snapshot.campaign.id;
+      const requestedSnapshotVersion = snapshot.snapshotVersion;
+      let created: import("@arken/contracts").DrawingDto | undefined;
+      await run(async () => {
+        created = await api<import("@arken/contracts").DrawingDto>(
+          "/api/drawings",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              actionId: crypto.randomUUID(),
+              sceneId: requestedSceneId,
+              ...stamp,
+            }),
+          },
+        );
+      });
+      if (created) {
+        const reconciled = created;
+        setSnapshot((current) => {
+          // The API acknowledgement can arrive after a newer authoritative
+          // canvas snapshot has already created/deleted the drawing. Do not
+          // resurrect an item absent from that newer projection, nor append an
+          // old-scene result into the currently viewed scene/campaign.
+          if (
+            !current ||
+            current.campaign.id !== requestedCampaignId ||
+            current.snapshotVersion !== requestedSnapshotVersion ||
+            current.me.role !== "GM" ||
+            activeSceneRef.current?.id !== requestedSceneId ||
+            reconciled.sceneId !== requestedSceneId
+          )
+            return current;
+          if (
+            (current.drawings ?? []).some((item) => item.id === reconciled.id)
+          )
+            return current;
+          return {
+            ...current,
+            drawings: [...(current.drawings ?? []), reconciled],
+          };
+        });
+      }
+      return created;
+    },
+    [
+      activeScene,
+      activeSceneRef,
+      run,
+      snapshot?.campaign.id,
+      snapshot?.me.role,
+      snapshot?.snapshotVersion,
+    ],
+  );
+
   const handlePing = useCallback(
     (
       point: Parameters<
@@ -1778,6 +1852,8 @@ export function App() {
                   gmFogVisible={gmFogVisible}
                   onGmFogVisibleChange={setGmFogVisible}
                   gmGridVisible={gmGridVisible}
+                  stampSettings={stampSettings}
+                  onStampSettingsChange={setStampSettings}
                   onGmGridVisibleChange={(visible) => {
                     setGmGridVisible(visible);
                     localStorage.setItem(
@@ -1813,7 +1889,9 @@ export function App() {
                     membershipId={viewSnapshot.me.id}
                     onSelectionChange={setSelectedTokenIds}
                     socket={snapshot.campaign.paused ? null : socket}
-                    tool={snapshot.campaign.paused ? "PAN" : tool}
+                    tool={
+                      snapshot.campaign.paused || previewSnapshot ? "PAN" : tool
+                    }
                     onToolSelect={setTool}
                     pings={activePings}
                     rulers={activeRulers}
@@ -1832,6 +1910,10 @@ export function App() {
                     onCanvasPatch={handleCanvasPatch}
                     onFogCreate={handleFogCreate}
                     onDrawingCreate={handleDrawingCreate}
+                    onStampCreate={
+                      previewSnapshot ? undefined : handleStampCreate
+                    }
+                    stampTool={stampSettings}
                     onPing={handlePing}
                     onPlaceTokenDefinition={async (definitionId, point) => {
                       void placeOptimistically({

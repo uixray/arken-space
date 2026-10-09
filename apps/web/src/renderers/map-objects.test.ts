@@ -8,6 +8,7 @@ import {
   resolveTokenStacks,
   selectMapObjects,
 } from "./map-objects";
+import { rectanglesIntersect } from "./map-selection";
 
 const token = (patch: Partial<TokenDto> = {}): TokenDto => ({
   id: "token",
@@ -121,6 +122,37 @@ describe("canonical map object selection", () => {
       width: 20,
       height: 1,
     });
+  });
+
+  it("uses rotation-aware stamp bounds and keeps public stamps GM-selectable only", () => {
+    const stamp = drawing({
+      id: "stamp",
+      authorMembershipId: "gm",
+      points: [],
+      kind: "STAMP",
+      assetKey: "forest",
+      packId: "builtin-terrain-v1",
+      size: 100,
+      rotation: 45,
+      layer: "PUBLIC",
+      x: 50,
+      y: 50,
+    });
+    const bounds = drawingBounds(stamp);
+    expect(bounds?.x).toBeCloseTo(-20.7107, 3);
+    expect(bounds?.width).toBeCloseTo(141.4214, 3);
+    expect(
+      bounds &&
+        rectanglesIntersect({ x: 0, y: 0, width: 100, height: 100 }, bounds),
+    ).toBe(true);
+    expect(
+      bounds &&
+        rectanglesIntersect({ x: 140, y: 140, width: 20, height: 20 }, bounds),
+    ).toBe(false);
+    expect(
+      canSelectDrawing(stamp, { ...context, role: "GM", membershipId: "gm" }),
+    ).toBe(true);
+    expect(canSelectDrawing(stamp, context)).toBe(false);
   });
 
   it("returns the same bounded policy for bulk candidates", () => {

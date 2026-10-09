@@ -16,6 +16,10 @@ import {
 import { CursorPresenceMenu } from "./ui/CursorPresenceMenu";
 import type { CursorPreference } from "./cursor-preference";
 import { CanvasHistoryControls } from "./renderers/CanvasHistoryControls";
+import {
+  TerrainStampControls,
+  type TerrainStampSettings,
+} from "./renderers/TerrainStampControls";
 import { GridSettings } from "./renderers/GridSettings";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import { AppIcon } from "./ui/AppIcon";
@@ -64,6 +68,8 @@ export interface MapToolbarProps {
   onGmFogVisibleChange: (visible: boolean) => void;
   gmGridVisible: boolean;
   onGmGridVisibleChange: (visible: boolean) => void;
+  stampSettings?: TerrainStampSettings;
+  onStampSettingsChange?: (settings: TerrainStampSettings) => void;
 }
 
 export function MapToolbar({
@@ -92,6 +98,13 @@ export function MapToolbar({
   onGmFogVisibleChange,
   gmGridVisible,
   onGmGridVisibleChange,
+  stampSettings = {
+    assetKey: "forest",
+    size: 160,
+    rotation: 0,
+    layer: "PUBLIC",
+  },
+  onStampSettingsChange = () => undefined,
 }: MapToolbarProps) {
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
@@ -191,13 +204,13 @@ export function MapToolbar({
         );
         if (focusedTool && toolbarRef.current?.contains(focusedTool)) {
           const describedBy = focusedTool.getAttribute("aria-describedby");
-          const tooltipOwnsEscape = describedBy
-            ?.split(/\s+/)
-            .some((id) => {
-              const popup = document.getElementById(id);
-              return popup?.getAttribute("role") === "tooltip" &&
-                popup.hasAttribute("data-open");
-            });
+          const tooltipOwnsEscape = describedBy?.split(/\s+/).some((id) => {
+            const popup = document.getElementById(id);
+            return (
+              popup?.getAttribute("role") === "tooltip" &&
+              popup.hasAttribute("data-open")
+            );
+          });
           if (tooltipOwnsEscape) return;
           focusedTool.blur();
         }
@@ -236,6 +249,28 @@ export function MapToolbar({
           <AppIcon icon={PanIcon} />
           <span className="map-tool__label">Двигать</span>
         </ToolbarButton>
+
+        {!previewSnapshot && snapshot.me.role === "GM" && (
+          <>
+            <ToolbarButton
+              aria-label="Штамп рельефа"
+              title="Разместить штамп рельефа"
+              className="map-tool"
+              data-tool="STAMP"
+              aria-pressed={tool === "STAMP"}
+              onClick={() => onToolSelect("STAMP")}
+            >
+              <span aria-hidden="true">▧</span>
+              <span className="map-tool__label">Штамп</span>
+            </ToolbarButton>
+            {tool === "STAMP" && (
+              <TerrainStampControls
+                value={stampSettings}
+                onChange={onStampSettingsChange}
+              />
+            )}
+          </>
+        )}
 
         {!previewSnapshot && snapshot.me.role === "GM" && (
           <>

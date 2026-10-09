@@ -108,6 +108,22 @@ export interface SceneRendererProps {
     color: string;
     strokeWidth?: number;
   }) => Promise<DrawingDto | void>;
+  onStampCreate?: (stamp: {
+    kind: "STAMP";
+    assetKey: "forest" | "mountains" | "clouds";
+    packId: "builtin-terrain-v1";
+    size: number;
+    rotation: number;
+    layer: "PUBLIC" | "GM";
+    x: number;
+    y: number;
+  }) => Promise<DrawingDto | void>;
+  stampTool?: {
+    assetKey: "forest" | "mountains" | "clouds";
+    size: number;
+    rotation: number;
+    layer: "PUBLIC" | "GM";
+  };
   onPing: (point: { x: number; y: number }) => void;
   onPlaceTokenDefinition?: (
     definitionId: string,
@@ -138,7 +154,15 @@ export interface SceneRendererProps {
   onDrawingUpdate?: (
     drawingId: string,
     revision: number,
-    patch: { x?: number; y?: number; color?: string; strokeWidth?: number },
+    patch: {
+      x?: number;
+      y?: number;
+      color?: string;
+      strokeWidth?: number;
+      size?: number;
+      rotation?: number;
+      layer?: "PUBLIC" | "GM";
+    },
   ) => Promise<void>;
   onDrawingDelete?: (drawingId: string, revision: number) => Promise<void>;
   onDrawingCopy?: (drawingId: string, revision: number) => Promise<void>;
