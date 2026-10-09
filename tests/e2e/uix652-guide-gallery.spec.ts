@@ -25,7 +25,7 @@ for (const viewport of [
         mutations.push(request.url());
       return route.fulfill({
         status: request.url().endsWith("/api/bootstrap") ? 401 : 200,
-        json: request.url().endsWith("/api/account/capabilities") ? { accountAuthEnabled: false, registrationEnabled: false, legacyDevEnabled: true } : [],
+        json: request.url().endsWith("/api/account/capabilities") ? { accountAuthEnabled: false, registrationEnabled: false, legacyDevEnabled: true, campaignLinkAccessEnabled: false, campaignCreationEnabled: false } : [],
       });
     });
     page.on("response", (response) => {
@@ -65,4 +65,5 @@ for (const viewport of [
     });
   });
 }
+
 

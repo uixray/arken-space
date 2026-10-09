@@ -1,5 +1,12 @@
 # Real account authentication implementation plan — 2026-10-09
 
+## Owner correction — campaign links retained (2026-10-09)
+
+Owner explicitly requires former GM/PLAYER campaign links alongside classical account registration/login, and clarified this is not email magic login. Earlier blanket disabling of all legacy bearer campaign access in this document is superseded **only for explicitly enabled, freshly validated link authentication**. Public nickname/alias lookup and provenance-less historical sessions remain rejected; no automatic account ownership binding.
+
+Root freezes dual session identity: ACCOUNT parent session retains verified account/membership ownership checks; GM_LINK records campaign credential/revision and GM role; PLAYER_GRANT records active grant ID/revision with membership/campaign/PLAYER match; one-time legacy invite claim records consumed invite provenance and matching membership/campaign, expiry at issuance and finite session/revocation thereafter. Every HTTP/socket action revalidates source; rotation/revocation cannot retain a valid stale source. Add mutually exclusive provenance schema constraints, no plaintext tokens/copies, no historical backfill. Campaign link capability is explicit and independent of DEV alias access. Negative/revocation/concurrency tests required before public acceptance.
+
+Linear UIX-657 scope decision comment b4506a77-1dda-4278-972d-2bf83e2c9d11. Implementation in progress, no acceptance claim. Public mail queue, new-account creation policy and remote activation remain separate gates.
 ## Authorization and sequence
 
 Owner explicitly requests authentication **now**; earlier auth deferral is superseded. This authorizes local source implementation and disposable tests, not production migration, credentials, SMTP provisioning, deployment or remote access. Root is clarifying open verified-email registration versus invitation-only signup asynchronously. Implement mode-neutral verified-email/password/session foundations while that answer is pending; do not silently choose public signup policy or replace accounts with secret links.
@@ -129,3 +136,4 @@ This delivers the requested account-first core; product positioning, all onboard
 ## Checkpoint
 
 Decision: backend lifecycle A now; campaign B then frontend C, preserving parallel audio/item ownership. Verified-email/reset not omitted, account links not substituted by secret-link login. Revision d8e8b51 with listed dirty work. Changed only this plan. Evidence live657/525/527/524 + targeted auth/schema/routes/realtime/seed/frontend source; no runtime or security acceptance claimed. Next root dispatch backend Luna immediately and resolves signup policy asynchronously, then records API gate before App integration.
+
