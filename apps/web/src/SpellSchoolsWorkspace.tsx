@@ -6,6 +6,7 @@ import type {
   SpellProgressionGraph,
   SpellRequirementGroup,
   SpellSchool,
+  TransitionSpellPackLifecycleCommand,
   SpellUsageLimit,
 } from "@arken/contracts";
 import { ApiError, formatApiError } from "./api";
@@ -14,6 +15,7 @@ import {
   createSpellPackDraft,
   fetchSpellPackList,
   fetchSpellPackVersion,
+  promoteSpellPackToActive,
   validateSpellPackDraft,
   type SpellPackSummary,
 } from "./spell-schools-client";
@@ -59,6 +61,14 @@ export function SpellSchoolsWorkspace({
   const [versionConflict, setVersionConflict] = useState(false);
   const [conflictedDraft, setConflictedDraft] =
     useState<SpellProgressionGraph | null>(null);
+  const [activationPrompt, setActivationPrompt] = useState<{
+    packId: string;
+    versionId: string;
+    version: number;
+    warnings: Array<{ code: string; path: string; message: string }>;
+  } | null>(null);
+  const [pendingActivation, setPendingActivation] =
+    useState<TransitionSpellPackLifecycleCommand | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [packTitle, setPackTitle] = useState("");
@@ -71,13 +81,31 @@ export function SpellSchoolsWorkspace({
     mode: "ALL" as SpellRequirementGroup["mode"],
   });
   const pendingSave = useRef<PendingSave | null>(null);
-  const editorLocked = retryPending || versionConflict;
+  const savedGraphFingerprint = useRef<string | null>(null);
+  const graphIsDirty = Boolean(
+    graph && !isNew && savedGraphFingerprint.current !== JSON.stringify(graph),
+  );
+  const editorLocked =
+    retryPending || versionConflict || pendingActivation !== null;
   const hasRecoveryCopy = conflictedDraft !== null;
 
   useEffect(() => {
-    onPendingChange?.(busy || retryPending || versionConflict || hasRecoveryCopy);
+    onPendingChange?.(
+      busy ||
+        retryPending ||
+        versionConflict ||
+        hasRecoveryCopy ||
+        pendingActivation !== null,
+    );
     return () => onPendingChange?.(false);
-  }, [busy, hasRecoveryCopy, onPendingChange, retryPending, versionConflict]);
+  }, [
+    busy,
+    hasRecoveryCopy,
+    onPendingChange,
+    pendingActivation,
+    retryPending,
+    versionConflict,
+  ]);
 
   const loadPacks = async () => {
     setLoading(true);
@@ -100,6 +128,7 @@ export function SpellSchoolsWorkspace({
   ) => {
     if (editorLocked || busy) return;
     setGraph((current) => (current ? update(current) : current));
+    setActivationPrompt(null);
     pendingSave.current = null;
     setError("");
     setNotice("");
@@ -115,7 +144,9 @@ export function SpellSchoolsWorkspace({
         pack.latestVersionId,
       );
       setGraph(version.graph);
+      savedGraphFingerprint.current = JSON.stringify(version.graph);
       setIsNew(false);
+      setActivationPrompt(null);
       setVersionConflict(false);
       setPackTitle(version.graph.title);
       setSchoolName("");
@@ -138,7 +169,9 @@ export function SpellSchoolsWorkspace({
     }
     const empty = createEmptySpellDraft(title);
     setGraph({ ...empty, schools: [createSpellSchool(empty, name)] });
+    savedGraphFingerprint.current = null;
     setIsNew(true);
+    setActivationPrompt(null);
     setError("");
     setNotice("");
     pendingSave.current = null;
@@ -248,7 +281,7 @@ export function SpellSchoolsWorkspace({
   };
 
   const save = async () => {
-    if (!graph || busy) return;
+    if (!graph || busy || (editorLocked && !retryPending) || hasRecoveryCopy) return;
     setBusy(true);
     setError("");
     setNotice("");
@@ -281,10 +314,12 @@ export function SpellSchoolsWorkspace({
             pending.actionId,
           );
       setGraph(saved.graph);
+      savedGraphFingerprint.current = JSON.stringify(saved.graph);
       setIsNew(false);
       setRetryPending(false);
       setVersionConflict(false);
       setConflictedDraft(null);
+      setActivationPrompt(null);
       setPackTitle(saved.graph.title);
       pendingSave.current = null;
       setNotice(
@@ -307,6 +342,100 @@ export function SpellSchoolsWorkspace({
             "Не удалось сохранить черновик. Повторите проверку; если команда сохранения уже отправлялась, повтор будет идентичным.",
           ),
         );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const requestActivation = async () => {
+    if (
+      !graph ||
+      isNew ||
+      !["DRAFT", "REFERENCE"].includes(graph.lifecycle) ||
+      busy ||
+      pendingActivation
+    )
+      return;
+    if (graphIsDirty) {
+      setError(
+        "Сначала сохраните изменения новой версией, затем активируйте сохранённую версию.",
+      );
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const validation = await validateSpellPackDraft(graph);
+      if (!validation.valid) {
+        setError(validation.errors.map(issueText).join("\n"));
+        return;
+      }
+      setActivationPrompt({
+        packId: graph.packId,
+        versionId: graph.versionId,
+        version: graph.version,
+        warnings: validation.warnings,
+      });
+    } catch (reason) {
+      setError(
+        formatApiError(reason, "Не удалось проверить выбранную версию."),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmActivation = async () => {
+    if (!graph || !activationPrompt || busy) return;
+    if (
+      graphIsDirty ||
+      activationPrompt.packId !== graph.packId ||
+      activationPrompt.versionId !== graph.versionId ||
+      activationPrompt.version !== graph.version
+    ) {
+      setActivationPrompt(null);
+      setError(
+        "Выбранная версия изменилась. Сначала сохраните изменения и повторно проверьте активацию.",
+      );
+      return;
+    }
+    const command =
+      pendingActivation ?? {
+        actionId: id(),
+        expectedVersion: graph.version,
+        versionId: id(),
+        lifecycle: "ACTIVE" as const,
+      };
+    setPendingActivation(command);
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const activated = await promoteSpellPackToActive(graph.packId, command);
+      setGraph(activated.graph);
+      savedGraphFingerprint.current = JSON.stringify(activated.graph);
+      setPackTitle(activated.graph.title);
+      setPendingActivation(null);
+      setActivationPrompt(null);
+      setNotice(
+        `Создана активная версия ${activated.version}. Её школы доступны мастеру для явной выдачи персонажам; это не назначает школы автоматически.`,
+      );
+      await loadPacks();
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 409) {
+        setPendingActivation(null);
+        setError(
+          `Версия изменилась на сервере (${reason.code}). Черновик сохранён; загрузите актуальную версию и повторите отдельное решение об активации.`,
+        );
+      } else {
+        setError(
+          formatApiError(
+            reason,
+            "Не удалось подтвердить активацию. Повтор будет отправлен с тем же идентификатором и ожидаемой версией.",
+          ),
+        );
+      }
     } finally {
       setBusy(false);
     }
@@ -346,7 +475,9 @@ export function SpellSchoolsWorkspace({
         current.latestVersionId,
       );
       setGraph(latest.graph);
+      savedGraphFingerprint.current = JSON.stringify(latest.graph);
       setIsNew(false);
+      setActivationPrompt(null);
       setPackTitle(latest.graph.title);
       setVersionConflict(false);
       pendingSave.current = null;
@@ -404,7 +535,8 @@ export function SpellSchoolsWorkspace({
           <h1 id="spell-schools-title">Школы и ветки заклинаний</h1>
           <p>
             Редактирование создаёт новую неизменяемую версию. Публикация и
-            назначение здесь не выполняются.
+            выдача персонажу доступны только отдельными подтверждёнными
+            действиями.
           </p>
         </div>
         {onClose && (
@@ -446,6 +578,62 @@ export function SpellSchoolsWorkspace({
         <div className="spell-schools-message is-success" role="status">
           {notice}
         </div>
+      )}
+      {activationPrompt && graph && (
+        <section
+          className="spell-schools-conflict-actions"
+          aria-label="Подтверждение активации версии"
+        >
+          <h2>Активировать выбранную версию?</h2>
+          <p>
+            Будет создана новая неизменяемая ACTIVE-версия набора. Её школы
+            станут доступны мастерам для отдельной выдачи персонажам; существующие
+            выдачи не изменятся и не создадутся автоматически.
+          </p>
+          {activationPrompt.warnings.length > 0 && (
+            <div>
+              <p>Предупреждения проверки текущей версии:</p>
+              <ul>
+                {activationPrompt.warnings.map((warning, index) => (
+                  <li key={`${warning.code}:${warning.path}:${index}`}>
+                    {issueText(warning)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {activationPrompt.warnings.some(
+            (warning) => warning.code === "OPEN_IMPORT_WARNING",
+          ) && (
+            <p role="alert">
+              Неразрешённые предупреждения импорта блокируют активацию. Сначала
+              отметьте их разрешёнными в черновике.
+            </p>
+          )}
+          <button
+            type="button"
+            disabled={
+              busy ||
+              activationPrompt.warnings.some(
+                (warning) => warning.code === "OPEN_IMPORT_WARNING",
+              )
+            }
+            onClick={() => void confirmActivation()}
+          >
+            {pendingActivation
+              ? "Повторить ту же активацию"
+              : "Подтвердить создание ACTIVE-версии"}
+          </button>
+          {!pendingActivation && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setActivationPrompt(null)}
+            >
+              Отмена
+            </button>
+          )}
+        </section>
       )}
       {hasRecoveryCopy && !versionConflict && (
         <div
@@ -1077,6 +1265,8 @@ export function SpellSchoolsWorkspace({
                   onClick={() => void save()}
                   disabled={
                     busy ||
+                    (editorLocked && !retryPending) ||
+                    hasRecoveryCopy ||
                     versionConflict ||
                     (!isNew && graph.lifecycle !== "DRAFT")
                   }
@@ -1092,7 +1282,22 @@ export function SpellSchoolsWorkspace({
                 {!isNew && graph.lifecycle !== "DRAFT" && (
                   <span>Можно редактировать только черновую версию.</span>
                 )}
+                {!isNew &&
+                  ["DRAFT", "REFERENCE"].includes(graph.lifecycle) && (
+                    <button
+                      type="button"
+                      onClick={() => void requestActivation()}
+                      disabled={busy || editorLocked || hasRecoveryCopy || graphIsDirty}
+                    >
+                      Подготовить явную активацию
+                    </button>
+                  )}
               </div>
+              {graphIsDirty && !isNew && graph.lifecycle === "DRAFT" && (
+                <p role="status">
+                  Сначала сохраните изменения новой версией, затем активируйте её.
+                </p>
+              )}
             </>
           )}
         </div>

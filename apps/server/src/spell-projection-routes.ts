@@ -1,8 +1,16 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, gt, max } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
-import { spellProgressionQuerySchema } from "@arken/contracts";
-import { characterControllers, characters, spellPackVersions } from "@arken/db";
+import {
+  spellAssignmentSnapshotSchema,
+  spellProgressionQuerySchema,
+} from "@arken/contracts";
+import {
+  characterControllers,
+  characters,
+  characterSpellAssignmentVersions,
+  spellPackVersions,
+} from "@arken/db";
 import { requireAuth, type AuthContext } from "./auth.js";
 import {
   loadCurrentSpellAssignmentVersions,
@@ -176,6 +184,117 @@ export function registerSpellProjectionRoutes(
   app: FastifyInstance,
   db: Database,
 ) {
+  app.get(
+    "/api/characters/:characterId/spell-branches",
+    async (request, reply) => {
+      reply.header("Cache-Control", "private, no-store");
+      const auth = await requireAuth(request, reply, db);
+      if (!auth) return;
+      const params = characterParamsSchema.safeParse(request.params);
+      const query = z
+        .object({ afterAssignmentId: z.string().uuid().optional() })
+        .strict()
+        .safeParse(request.query);
+      if (!params.success || !query.success)
+        return fail(reply, 400, "INVALID_REQUEST");
+
+      const character = await loadCharacter(db, auth, params.data.characterId);
+      if (
+        !character ||
+        character.lifecycle !== "ACTIVE" ||
+        (auth.role === "PLAYER" && !playerCanReadCharacter(auth, character))
+      )
+        return fail(reply, 404, "CHARACTER_NOT_FOUND");
+
+      // Keyset over current assignment identities. The grouped subquery picks
+      // exactly the latest append-only version for each assignment; the
+      // cursor paginates assignments (including NODE-only rows) so no SCHOOL
+      // grant can be silently truncated by a fixed response cap.
+      const latestAssignments = db
+        .select({
+          assignmentId: characterSpellAssignmentVersions.assignmentId,
+          version: max(characterSpellAssignmentVersions.version).as(
+            "latest_version",
+          ),
+        })
+        .from(characterSpellAssignmentVersions)
+        .where(
+          and(
+            eq(characterSpellAssignmentVersions.campaignId, auth.campaignId),
+            eq(characterSpellAssignmentVersions.characterId, character.id),
+          ),
+        )
+        .groupBy(characterSpellAssignmentVersions.assignmentId)
+        .as("latest_spell_assignment");
+      const rowConditions = [
+        eq(characterSpellAssignmentVersions.campaignId, auth.campaignId),
+        eq(characterSpellAssignmentVersions.characterId, character.id),
+      ];
+      if (query.data.afterAssignmentId)
+        rowConditions.push(
+          gt(
+            characterSpellAssignmentVersions.assignmentId,
+            query.data.afterAssignmentId,
+          ),
+        );
+      const rows = await db
+        .select({ row: characterSpellAssignmentVersions })
+        .from(characterSpellAssignmentVersions)
+        .innerJoin(
+          latestAssignments,
+          and(
+            eq(
+              characterSpellAssignmentVersions.assignmentId,
+              latestAssignments.assignmentId,
+            ),
+            eq(
+              characterSpellAssignmentVersions.version,
+              latestAssignments.version,
+            ),
+          ),
+        )
+        .where(and(...rowConditions))
+        .orderBy(asc(characterSpellAssignmentVersions.assignmentId))
+        .limit(51);
+      const page = rows.slice(0, 50).map(({ row }) => row);
+      const branches = [];
+      for (const row of page) {
+        if (row.kind !== "SCHOOL") continue;
+        const snapshot = spellAssignmentSnapshotSchema.parse(row.snapshot);
+        if (snapshot.kind !== "SCHOOL") continue;
+        const loaded = await loadVersion(
+          db,
+          auth,
+          row.packId,
+          row.packVersionId,
+        );
+        if (
+          !loaded ||
+          loaded.row.lifecycle !== "ACTIVE" ||
+          loaded.graph.lifecycle !== "ACTIVE"
+        )
+          continue;
+        const school = loaded.graph.schools.find(
+          (candidate) => candidate.id === snapshot.schoolId,
+        );
+        if (!school || (auth.role === "PLAYER" && school.visibilityPolicy === "GM_ONLY"))
+          continue;
+        branches.push({
+          packId: row.packId,
+          packVersionId: row.packVersionId,
+          packVersion: loaded.row.version,
+          schoolId: school.id,
+          schoolName: school.displayName,
+        });
+      }
+      const hasMore = rows.length > 50;
+      return reply.send({
+        branches,
+        nextCursor: hasMore ? page.at(-1)?.assignmentId ?? null : null,
+      });
+    },
+  );
+
   app.get(
     "/api/characters/:characterId/spell-progression",
     async (request, reply) => {

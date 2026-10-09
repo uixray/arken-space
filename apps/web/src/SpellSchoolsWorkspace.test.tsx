@@ -235,4 +235,143 @@ describe("SpellSchoolsWorkspace", () => {
       ),
     ).toBe(false);
   });
+
+  it("activates only after explicit confirmation and displays validation warnings", async () => {
+    const draft = createEmptySpellDraft("Confirmed activation");
+    const versionId = "30000000-0000-4000-8000-000000000002";
+    const activated: SpellProgressionGraph = {
+      ...draft,
+      versionId,
+      version: 2,
+      lifecycle: "ACTIVE",
+    };
+    const activationCommands: unknown[] = [];
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/spell-packs" && (!init || init.method === "GET"))
+        return new Response(
+          JSON.stringify({
+            packs: [
+              {
+                id: draft.packId,
+                latestVersionId: draft.versionId,
+                latestVersion: draft.version,
+                lifecycle: draft.lifecycle,
+                title: draft.title,
+                createdAt: "2026-10-09T00:00:00.000Z",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      if (
+        url === `/api/spell-packs/${draft.packId}/versions/${draft.versionId}`
+      )
+        return new Response(
+          JSON.stringify({
+            packId: draft.packId,
+            versionId: draft.versionId,
+            version: draft.version,
+            lifecycle: draft.lifecycle,
+            graph: draft,
+            warnings: [],
+            createdAt: "2026-10-09T00:00:00.000Z",
+          }),
+          { status: 200 },
+        );
+      if (url === "/api/spell-packs/validate")
+        return new Response(
+          JSON.stringify({
+            valid: true,
+            errors: [],
+            warnings: [
+              {
+                code: "CYCLE",
+                path: "schools",
+                message: "Review this non-blocking warning.",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      if (url === `/api/spell-packs/${draft.packId}/lifecycle`) {
+        const command = JSON.parse(String(init?.body));
+        activationCommands.push(command);
+        return new Response(
+          JSON.stringify({
+            packId: draft.packId,
+            versionId,
+            version: 2,
+            lifecycle: "ACTIVE",
+            graph: activated,
+            warnings: [],
+            createdAt: "2026-10-09T00:00:00.000Z",
+          }),
+          { status: 201 },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    render(<SpellSchoolsWorkspace />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Confirmed activation/ }),
+    );
+    await screen.findByLabelText("Название набора");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Подготовить явную активацию" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Активировать выбранную версию?" }),
+    ).toBeTruthy();
+    expect(screen.getByText(/Review this non-blocking warning/)).toBeTruthy();
+    expect(activationCommands).toHaveLength(0);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Подтвердить создание ACTIVE-версии",
+      }),
+    );
+    await screen.findByText(/Создана активная версия 2/);
+    expect(activationCommands).toHaveLength(1);
+    expect(activationCommands[0]).toMatchObject({
+      expectedVersion: 1,
+      lifecycle: "ACTIVE",
+    });
+    expect(activationCommands[0]).toHaveProperty("versionId");
+    expect(activationCommands[0]).toHaveProperty("actionId");
+  });
+
+  it("does not activate persisted contents after the loaded draft has unsaved edits", async () => {
+    const empty = createEmptySpellDraft("Saved draft");
+    const graph = { ...empty, schools: [createSpellSchool(empty, "Custom school")] };
+    const activationCalls: string[] = [];
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/spell-packs" && (!init || init.method === "GET"))
+        return new Response(JSON.stringify({ packs: [{ id: graph.packId, latestVersionId: graph.versionId, latestVersion: graph.version, lifecycle: "DRAFT", title: graph.title, createdAt: new Date(0).toISOString() }] }), { status: 200 });
+      if (url === `/api/spell-packs/${graph.packId}/versions/${graph.versionId}`)
+        return new Response(JSON.stringify({ graph, version: graph.version }), { status: 200 });
+      if (url === "/api/spell-packs/validate")
+        return new Response(JSON.stringify({ valid: true, errors: [], warnings: [] }), { status: 200 });
+      if (url === `/api/spell-packs/${graph.packId}/lifecycle`) {
+        activationCalls.push(url);
+        return new Response(JSON.stringify({ error: "UNEXPECTED_ACTIVATION" }), { status: 500 });
+      }
+      return new Response(JSON.stringify({ packs: [] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    render(<SpellSchoolsWorkspace />);
+    const packButton = await screen.findByRole("button", { name: /Saved draft/ });
+    await waitFor(() => expect((packButton as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(packButton);
+    const description = await screen.findAllByLabelText("Описание");
+    fireEvent.change(description[0]!, { target: { value: "Unsaved change" } });
+    const activateButton = screen.getByRole("button", { name: "Подготовить явную активацию" });
+    expect((activateButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/Сначала сохраните изменения новой версией/)).toBeTruthy();
+    expect(activationCalls).toEqual([]);
+  });
 });

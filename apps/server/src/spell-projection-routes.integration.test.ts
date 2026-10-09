@@ -32,20 +32,38 @@ const ids = {
     other: uuid(),
     foreignGm: uuid(),
   },
-  character: { own: uuid(), foreign: uuid() },
-  pack: { own: uuid(), unassigned: uuid(), foreign: uuid() },
+  character: {
+    own: uuid(),
+    empty: uuid(),
+    nodeOnly: uuid(),
+    archived: uuid(),
+    foreign: uuid(),
+  },
+  pack: {
+    own: uuid(),
+    custom: uuid(),
+    unassigned: uuid(),
+    foreign: uuid(),
+  },
   version: {
     active: uuid(),
+    latestDraft: uuid(),
+    custom: uuid(),
     reference: uuid(),
     unassigned: uuid(),
     foreign: uuid(),
   },
-  school: { public: uuid(), hidden: uuid() },
+  school: { public: uuid(), hidden: uuid(), custom: uuid() },
   node: { root: uuid(), target: uuid(), hidden: uuid() },
   group: uuid(),
   edge: uuid(),
-  assignment: { school: uuid(), node: uuid() },
-  assignmentVersion: { school: uuid(), node: uuid() },
+  assignment: { school: uuid(), node: uuid(), nodeOnly: uuid(), custom: uuid() },
+  assignmentVersion: {
+    school: uuid(),
+    node: uuid(),
+    nodeOnly: uuid(),
+    custom: uuid(),
+  },
 };
 
 const secrets = {
@@ -194,6 +212,22 @@ function emptyGraph(
   };
 }
 
+function customSchoolGraph(): SpellProgressionGraph {
+  const graph = emptyGraph(ids.pack.custom, ids.version.custom, "ACTIVE");
+  graph.schools.push({
+    id: ids.school.custom,
+    packId: ids.pack.custom,
+    packVersionId: ids.version.custom,
+    slug: "custom-zero-node-school",
+    sourceName: "Custom zero-node school",
+    displayName: "Uncatalogued school",
+    description: "A custom school without progression nodes.",
+    visibilityPolicy: "DISCOVERED",
+    order: 0,
+  });
+  return graph;
+}
+
 function projectionUrl(
   characterId: string,
   packId = ids.pack.own,
@@ -203,6 +237,9 @@ function projectionUrl(
   const prefix = gm ? "/api/gm/characters" : "/api/characters";
   return `${prefix}/${characterId}/spell-progression?packId=${packId}&packVersionId=${packVersionId}`;
 }
+
+const branchUrl = (characterId: string) =>
+  `/api/characters/${characterId}/spell-branches`;
 
 beforeAll(async () => {
   database = new PGlite();
@@ -275,6 +312,27 @@ beforeAll(async () => {
       ownerMembershipId: ids.membership.owner,
     },
     {
+      id: ids.character.empty,
+      campaignId: ids.campaign.own,
+      name: "No branches",
+      ownerMembershipId: ids.membership.owner,
+    },
+    {
+      id: ids.character.nodeOnly,
+      campaignId: ids.campaign.own,
+      name: "Node only",
+      ownerMembershipId: ids.membership.owner,
+    },
+    {
+      id: ids.character.archived,
+      campaignId: ids.campaign.own,
+      name: "Archived branches",
+      lifecycle: "ARCHIVED",
+      archivedAt: new Date(),
+      archivedByMembershipId: ids.membership.gm,
+      ownerMembershipId: ids.membership.owner,
+    },
+    {
       id: ids.character.foreign,
       campaignId: ids.campaign.foreign,
       name: "Foreign projection character",
@@ -287,10 +345,19 @@ beforeAll(async () => {
 
   await db.insert(schema.spellPacks).values([
     { id: ids.pack.own, campaignId: ids.campaign.own },
+    { id: ids.pack.custom, campaignId: ids.campaign.own },
     { id: ids.pack.unassigned, campaignId: ids.campaign.own },
     { id: ids.pack.foreign, campaignId: ids.campaign.foreign },
   ]);
   const graph = activeGraph();
+  const customGraph = customSchoolGraph();
+  const latestDraftGraph = emptyGraph(
+    ids.pack.own,
+    ids.version.latestDraft,
+    "REFERENCE",
+  );
+  latestDraftGraph.version = 3;
+  latestDraftGraph.lifecycle = "DRAFT";
   await db.insert(schema.spellPackVersions).values([
     {
       id: ids.version.active,
@@ -299,6 +366,22 @@ beforeAll(async () => {
       version: 1,
       lifecycle: "ACTIVE",
       graph,
+    },
+    {
+      id: ids.version.latestDraft,
+      campaignId: ids.campaign.own,
+      packId: ids.pack.own,
+      version: 3,
+      lifecycle: "DRAFT",
+      graph: latestDraftGraph,
+    },
+    {
+      id: ids.version.custom,
+      campaignId: ids.campaign.own,
+      packId: ids.pack.custom,
+      version: 1,
+      lifecycle: "ACTIVE",
+      graph: customGraph,
     },
     {
       id: ids.version.reference,
@@ -338,6 +421,24 @@ beforeAll(async () => {
     },
     { kind: "SCHOOL", schoolId: ids.school.public },
   );
+  const customSchoolSnapshot = buildSpellAssignmentSnapshot(
+    { graph: customGraph, packVersion: 1 },
+    {
+      assignmentId: ids.assignment.custom,
+      assignmentVersionId: ids.assignmentVersion.custom,
+      assignmentVersion: 1,
+    },
+    { kind: "SCHOOL", schoolId: ids.school.custom },
+  );
+  const nodeOnlySnapshot = buildSpellAssignmentSnapshot(
+    { graph, packVersion: 1 },
+    {
+      assignmentId: ids.assignment.nodeOnly,
+      assignmentVersionId: ids.assignmentVersion.nodeOnly,
+      assignmentVersion: 1,
+    },
+    { kind: "NODE", schoolId: ids.school.public, nodeId: ids.node.root, rank: 1 },
+  );
   const originalNodeSnapshot = buildSpellAssignmentSnapshot(
     { graph, packVersion: 1 },
     {
@@ -375,6 +476,18 @@ beforeAll(async () => {
       characterId: ids.character.own,
       packId: ids.pack.own,
     },
+    {
+      id: ids.assignment.nodeOnly,
+      campaignId: ids.campaign.own,
+      characterId: ids.character.nodeOnly,
+      packId: ids.pack.own,
+    },
+    {
+      id: ids.assignment.custom,
+      campaignId: ids.campaign.own,
+      characterId: ids.character.own,
+      packId: ids.pack.custom,
+    },
   ]);
   await db.insert(schema.characterSpellAssignmentVersions).values([
     {
@@ -390,6 +503,38 @@ beforeAll(async () => {
       nodeId: null,
       rank: null,
       snapshot: schoolSnapshot,
+      overrideReason: null,
+      assignedByMembershipId: ids.membership.gm,
+    },
+    {
+      id: ids.assignmentVersion.nodeOnly,
+      campaignId: ids.campaign.own,
+      assignmentId: ids.assignment.nodeOnly,
+      characterId: ids.character.nodeOnly,
+      packId: ids.pack.own,
+      packVersionId: ids.version.active,
+      version: 1,
+      kind: "NODE",
+      schoolId: ids.school.public,
+      nodeId: ids.node.root,
+      rank: 1,
+      snapshot: nodeOnlySnapshot,
+      overrideReason: null,
+      assignedByMembershipId: ids.membership.gm,
+    },
+    {
+      id: ids.assignmentVersion.custom,
+      campaignId: ids.campaign.own,
+      assignmentId: ids.assignment.custom,
+      characterId: ids.character.own,
+      packId: ids.pack.custom,
+      packVersionId: ids.version.custom,
+      version: 1,
+      kind: "SCHOOL",
+      schoolId: ids.school.custom,
+      nodeId: null,
+      rank: null,
+      snapshot: customSchoolSnapshot,
       overrideReason: null,
       assignedByMembershipId: ids.membership.gm,
     },
@@ -423,6 +568,88 @@ afterAll(async () => {
 });
 
 describe("UIX-578 spell progression projection routes", () => {
+  it("returns only current ACTIVE SCHOOL grants, including custom zero-node schools and pinned old versions", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: branchUrl(ids.character.own),
+      headers: headers(secrets.owner),
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("private, no-store");
+    expect(response.json()).toEqual({
+      branches: expect.arrayContaining([
+        {
+          packId: ids.pack.own,
+          packVersionId: ids.version.active,
+          packVersion: 1,
+          schoolId: ids.school.public,
+          schoolName: "Public school",
+        },
+        {
+          packId: ids.pack.custom,
+          packVersionId: ids.version.custom,
+          packVersion: 1,
+          schoolId: ids.school.custom,
+          schoolName: "Uncatalogued school",
+        },
+      ]),
+      nextCursor: null,
+    });
+    expect(response.body).not.toContain("GRAPH_PRIVATE_SOURCE");
+    expect(response.body).not.toContain("HIDDEN_SCHOOL_DESCRIPTION");
+    expect(response.body).not.toContain("GRAPH_ROOT_MECHANICS");
+    expect(response.body).not.toContain("PRIVATE_GM_CONDITION");
+    expect(response.body).not.toContain("rawSourceText");
+
+    const nodeOnly = await app.inject({
+      method: "GET",
+      url: branchUrl(ids.character.nodeOnly),
+      headers: headers(secrets.owner),
+    });
+    expect(nodeOnly.statusCode).toBe(200);
+    expect(nodeOnly.json()).toEqual({ branches: [], nextCursor: null });
+
+    const empty = await app.inject({
+      method: "GET",
+      url: branchUrl(ids.character.empty),
+      headers: headers(secrets.owner),
+    });
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json()).toEqual({ branches: [], nextCursor: null });
+  });
+
+  it("uses the same character privacy rules for controller and GM while denying unrelated, archived and cross-campaign reads", async () => {
+    const authorized = await Promise.all(
+      [secrets.controller, secrets.gm].map((secret) =>
+        app.inject({
+          method: "GET",
+          url: branchUrl(ids.character.own),
+          headers: headers(secret),
+        }),
+      ),
+    );
+    expect(authorized.map((response) => response.statusCode)).toEqual([
+      200, 200,
+    ]);
+    expect(authorized[0]!.json()).toEqual(authorized[1]!.json());
+
+    const deniedCases = [
+      { secret: secrets.other, characterId: ids.character.own },
+      { secret: secrets.foreignGm, characterId: ids.character.own },
+      { secret: secrets.owner, characterId: ids.character.archived },
+      { secret: secrets.gm, characterId: ids.character.foreign },
+    ];
+    for (const denied of deniedCases) {
+      const response = await app.inject({
+        method: "GET",
+        url: branchUrl(denied.characterId),
+        headers: headers(denied.secret),
+      });
+      expect(response.statusCode).toBe(404);
+      expect(response.body).not.toContain("Public school");
+    }
+  });
+
   it("returns the same strict player-safe projection to owner, controller and GM", async () => {
     const responses = await Promise.all(
       [secrets.owner, secrets.controller, secrets.gm].map((secret) =>

@@ -246,6 +246,10 @@ test("UIX-458 ambiguous save keeps the actual workspace open until exact retry s
 }) => {
   const snapshot = gmSnapshot({ schemaVersion: 2 });
   const attempts: Array<{ actionId: string; graph: SpellProgressionGraph }> = [];
+  let releaseFirstSave!: () => void;
+  const firstSaveGate = new Promise<void>((resolve) => {
+    releaseFirstSave = resolve;
+  });
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const { pathname } = new URL(request.url());
@@ -267,11 +271,13 @@ test("UIX-458 ambiguous save keeps the actual workspace open until exact retry s
         graph: SpellProgressionGraph;
       };
       attempts.push(body);
-      if (attempts.length === 1)
+      if (attempts.length === 1) {
+        await firstSaveGate;
         return route.fulfill({
           status: 503,
           json: { error: "temporary transport uncertainty" },
         });
+      }
       expect(body).toEqual(attempts[0]);
       return route.fulfill({
         status: 201,
@@ -302,6 +308,12 @@ test("UIX-458 ambiguous save keeps the actual workspace open until exact retry s
   await page.getByLabel("Новый узел").fill("Свет");
   await page.getByRole("button", { name: "Добавить узел" }).click();
   await page.getByRole("button", { name: "Проверить и сохранить черновик" }).click();
+  await expect(page.getByRole("button", { name: "Проверка…" })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeVisible();
+  await page.mouse.click(8, 8);
+  await expect(dialog).toBeVisible();
+  releaseFirstSave();
   await expect(page.locator(".spell-schools-message.is-error")).toContainText(
     "Не удалось выполнить запрос",
   );

@@ -342,6 +342,104 @@ describe("UIX-580 spell-pack GM API", () => {
     expect(response.json().packs[0].id).toBe(rows[100]!.packId);
   });
 
+  it("discovers same-campaign ACTIVE schools by immutable version even behind a newer DRAFT", async () => {
+    const packId = id();
+    const activeVersionId = id();
+    const draftVersionId = id();
+    const schoolId = id();
+    const school = {
+      id: schoolId,
+      packId,
+      packVersionId: activeVersionId,
+      slug: "custom-no-nodes",
+      sourceName: "Custom zero-node school",
+      displayName: "Custom zero-node school",
+      description: "Custom school identity without any progression nodes.",
+      visibilityPolicy: "PUBLIC" as const,
+      order: 0,
+    };
+    const active = graph(packId, activeVersionId, {
+      version: 1,
+      lifecycle: "ACTIVE",
+      title: "Assignable source pack",
+      schools: [school],
+    });
+    const draft = graph(packId, draftVersionId, {
+      version: 2,
+      lifecycle: "DRAFT",
+      title: "Newer draft must not replace old ACTIVE discovery",
+      schools: [
+        { ...school, packVersionId: draftVersionId, displayName: "Draft only" },
+      ],
+    });
+    await db.insert(schema.spellPacks).values({
+      id: packId,
+      campaignId: ids.campaign.own,
+    });
+    await db.insert(schema.spellPackVersions).values([
+      {
+        id: activeVersionId,
+        campaignId: ids.campaign.own,
+        packId,
+        version: 1,
+        lifecycle: "ACTIVE",
+        graph: active,
+      },
+      {
+        id: draftVersionId,
+        campaignId: ids.campaign.own,
+        packId,
+        version: 2,
+        lifecycle: "DRAFT",
+        graph: draft,
+      },
+    ]);
+
+    const pages: Array<{
+      schools: Array<Record<string, unknown>>;
+      nextCursor: string | null;
+    }> = [];
+    let afterVersionId: string | null = null;
+    do {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/spell-assignable-schools${afterVersionId ? `?afterVersionId=${afterVersionId}` : ""}`,
+        headers: ownGmHeaders,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["cache-control"]).toBe("private, no-store");
+      const payload: {
+        schools: Array<Record<string, unknown>>;
+        nextCursor: string | null;
+      } = response.json();
+      pages.push(payload);
+      afterVersionId = payload.nextCursor;
+      if (pages.length > 100) throw new Error("ASSIGNABLE_SCHOOLS_CURSOR_LOOP");
+    } while (afterVersionId);
+    const discovered = pages.flatMap((page) => page.schools);
+    expect(discovered).toContainEqual({
+      packId,
+      packVersionId: activeVersionId,
+      packVersion: 1,
+      packTitle: "Assignable source pack",
+      schoolId,
+      schoolName: "Custom zero-node school",
+      visibilityPolicy: "PUBLIC",
+    });
+    expect(discovered).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ packVersionId: draftVersionId })]),
+    );
+    expect(JSON.stringify(discovered)).not.toContain("rawSourceText");
+
+    const player = await app.inject({
+      method: "GET",
+      url: "/api/spell-assignable-schools",
+      headers: playerHeaders,
+    });
+    expect(player.statusCode).toBe(403);
+    expect(JSON.stringify(pages)).not.toContain(ids.campaign.foreign);
+  });
+
   it("UIX-262 preserves an individually archived node through publication and assignment", async () => {
     const packId = id();
     const initialVersionId = id();

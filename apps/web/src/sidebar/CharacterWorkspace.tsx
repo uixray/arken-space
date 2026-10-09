@@ -42,6 +42,7 @@ import {
   type CharacterTemplateFields,
 } from "../character-workspace-state";
 import { CharacterMediaGallery } from "./CharacterMediaGallery";
+import { CharacterSpellBranches } from "../CharacterSpellBranches";
 import { CharacterActionCard } from "../SkillCards";
 import { humanizeFormula } from "../formula-display";
 import { rollModeFromEvent } from "../roll-modifier-keys";
@@ -1558,6 +1559,12 @@ export function CharacterPanel({
           )}
         </details>
       </header>
+
+      <CharacterSpellBranches
+        key={character.id}
+        character={character}
+        isGm={snapshot.me.role === "GM"}
+      />
 
       {/* Vital Stats Bar: ключевые показатели прямо под шапкой */}
       <div
