@@ -5,7 +5,7 @@ import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot
 
 const sceneId = "uix314-fog-scene";
 
-function snapshotForFog(role: "GM" | "PLAYER" = "PLAYER"): GameSnapshot {
+function snapshotForFog(role: "GM" | "PLAYER" = "PLAYER", manyOperations = false): GameSnapshot {
   const snapshot = buildGameSnapshot(role, {
     scenes: [
       {
@@ -28,7 +28,18 @@ function snapshotForFog(role: "GM" | "PLAYER" = "PLAYER"): GameSnapshot {
       },
     ],
   });
-  snapshot.fogReveals = [
+  snapshot.fogReveals = manyOperations
+    ? Array.from({ length: 180 }, (_, index) => ({
+        id: `uix314-op-${index}`,
+        sceneId,
+        x: 24 + ((index * 73) % 1080),
+        y: 20 + ((index * 41) % 720),
+        width: 38 + (index % 5) * 8,
+        height: 32 + (index % 7) * 6,
+        operation: (index % 3 === 1 ? "COVER" : "REVEAL") as "COVER" | "REVEAL",
+        sequence: index + 1,
+      }))
+    : [
     {
       id: "uix314-reveal",
       sceneId,
@@ -49,12 +60,12 @@ function snapshotForFog(role: "GM" | "PLAYER" = "PLAYER"): GameSnapshot {
       operation: "COVER",
       sequence: 2,
     },
-  ];
+      ];
   return snapshot;
 }
 
-async function bootFogScene(page: Page, role: "GM" | "PLAYER" = "PLAYER") {
-  const snapshot = snapshotForFog(role);
+async function bootFogScene(page: Page, role: "GM" | "PLAYER" = "PLAYER", manyOperations = false) {
+  const snapshot = snapshotForFog(role, manyOperations);
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/bootstrap") return route.fulfill({ json: snapshot });
@@ -65,6 +76,14 @@ async function bootFogScene(page: Page, role: "GM" | "PLAYER" = "PLAYER") {
       return route.fulfill({ json: [] });
     if (route.request().method() === "GET") return route.fulfill({ json: [] });
     return route.fulfill({ status: 204, body: "" });
+  });
+  await page.addInitScript(() => {
+    if (new URL(location.href).searchParams.get("uix314-fog-fallback") !== "1") return;
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type: string, ...args: unknown[]) {
+      if (type === "2d" && this.width === 128 && this.height === 128) return null;
+      return original.call(this, type, ...(args as []));
+    } as typeof HTMLCanvasElement.prototype.getContext;
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket: WebSocketRoute) => {
     socket.onMessage((message) => {
@@ -79,6 +98,38 @@ async function bootFogScene(page: Page, role: "GM" | "PLAYER" = "PLAYER") {
   await expect(map).toBeVisible();
   await expect.poll(() => map.locator("canvas").count()).toBeGreaterThan(0);
   return map;
+}
+
+async function captureFogAlphaMask(map: Locator) {
+  return map.locator("canvas").evaluateAll((canvases: HTMLCanvasElement[]) => {
+    // PLAYER render order puts the fog Layer fifth (background and three
+    // underlay layers precede it); unlike screen-point heuristics, the slot
+    // remains identifiable after pan/zoom even when reveal moves off-sample.
+    const index = 4;
+    const canvas = canvases[index];
+    if (!canvas) throw new Error(`Missing fog layer canvas ${index}; got ${canvases.length}`);
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Fog layer has no 2D context");
+    const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const alpha = new Uint8Array(canvas.width * canvas.height);
+    let fractionalAlphaPixels = 0;
+    let opaquePixels = 0;
+    for (let source = 3, target = 0; target < alpha.length; source += 4, target += 1) {
+      alpha[target] = data[source]!;
+      if (alpha[target]! > 0 && alpha[target]! < 255) fractionalAlphaPixels += 1;
+      else if (alpha[target] === 255) opaquePixels += 1;
+    }
+    let binary = "";
+    for (let offset = 0; offset < alpha.length; offset += 0x8000)
+      binary += String.fromCharCode(...alpha.subarray(offset, Math.min(offset + 0x8000, alpha.length)));
+    return {
+      index,
+      size: `${canvas.width}x${canvas.height}`,
+      opaqueRatio: opaquePixels / alpha.length,
+      fractionalAlphaPixels,
+      encoded: btoa(binary),
+    };
+  });
 }
 
 async function canvasHashes(map: Locator): Promise<Array<{ size: string; hash: number; centerAlpha: number; revealAlpha: number }>> {
@@ -206,17 +257,119 @@ test("UIX-314 keeps GM opacity on fog base while reveal geometry remains transpa
 });
 
 test("UIX-314 canvas allocation failure keeps the solid fog mask and reveal", async ({ page }) => {
-  await page.addInitScript(() => {
-    const original = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function (type: string, ...args: unknown[]) {
-      if (type === "2d" && this.width === 128 && this.height === 128) return null;
-      return original.call(this, type, ...(args as []));
-    } as typeof HTMLCanvasElement.prototype.getContext;
-  });
   await page.setViewportSize({ width: 390, height: 844 });
   const map = await bootFogScene(page);
   await page.waitForTimeout(180);
   const samples = await canvasHashes(map);
   const solidFog = samples.find((layer) => layer.centerAlpha === 255 && layer.revealAlpha === 0);
   expect(solidFog).toBeDefined();
+});
+
+async function compareMovingMaskToSolidFailure(page: Page, map: Locator) {
+  await page.waitForTimeout(300);
+  const animated = await captureFogAlphaMask(map);
+  await page.evaluate((mask) => sessionStorage.setItem("uix314-expected-fog-alpha", JSON.stringify(mask)), animated);
+  await page.goto("/?uix314-fog-fallback=1");
+  const reloadedMap = page.locator(".map-viewport");
+  await expect(reloadedMap).toBeVisible();
+  await expect.poll(() => reloadedMap.locator("canvas").count()).toBeGreaterThan(0);
+  await page.waitForTimeout(300);
+  const solid = await captureFogAlphaMask(reloadedMap);
+  const expected = await page.evaluate(() => sessionStorage.getItem("uix314-expected-fog-alpha"));
+  expect(expected).not.toBeNull();
+  const baseline = JSON.parse(expected!) as typeof animated;
+  expect(solid.size).toBe(baseline.size);
+  expect(solid.fractionalAlphaPixels).toBe(baseline.fractionalAlphaPixels);
+  expect(solid.encoded).toBe(baseline.encoded);
+  console.info(`UIX-314 exact full-layer alpha mask matched moving/failure at ${solid.size}; fractional boundary pixels=${solid.fractionalAlphaPixels}`);
+}
+
+test("UIX-314 animated and solid-fallback fog preserve the exact DPR1 base alpha mask", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const map = await bootFogScene(page);
+  await compareMovingMaskToSolidFailure(page, map);
+});
+
+test.describe("UIX-314 DPR2 alpha-mask parity", () => {
+  test.use({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+
+  test("preserves every alpha pixel through motion, fallback, reload, zoom, pan and resize", async ({ page }) => {
+    const map = await bootFogScene(page);
+    const viewTransform = async () => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.mouse.move(300, 300);
+      await page.mouse.wheel(0, -120);
+      await page.waitForTimeout(180);
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.waitForTimeout(180);
+      await page.mouse.move(360, 440);
+      await page.mouse.down();
+      await page.mouse.move(420, 470, { steps: 4 });
+      await page.mouse.up();
+      await page.waitForTimeout(180);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(180);
+    };
+    await viewTransform();
+    const animatedMask = await captureFogAlphaMask(map);
+    await page.evaluate((mask) => sessionStorage.setItem("uix314-expected-fog-alpha", JSON.stringify(mask)), animatedMask);
+    await page.goto("/?uix314-fog-fallback=1");
+    const reloadedMap = page.locator(".map-viewport");
+    await expect(reloadedMap).toBeVisible();
+    await expect.poll(() => reloadedMap.locator("canvas").count()).toBeGreaterThan(0);
+    await viewTransform();
+    const fallbackMask = await captureFogAlphaMask(reloadedMap);
+    const expected = await page.evaluate(() => sessionStorage.getItem("uix314-expected-fog-alpha"));
+    const baseline = JSON.parse(expected!) as typeof animatedMask;
+    expect(fallbackMask.size).toBe(baseline.size);
+    expect(fallbackMask.encoded).toBe(baseline.encoded);
+    console.info(`UIX-314 DPR2 exact mask parity after zoom/pan/resize: ${fallbackMask.size}, fractional boundary pixels=${fallbackMask.fractionalAlphaPixels}`);
+  });
+});
+
+test("UIX-314 bounded 180-operation scene records frame cost and cache rebuild activity", async ({ page }) => {
+  test.setTimeout(75_000);
+  await page.addInitScript(() => {
+    const state = { frames: 0, callbackDurations: [] as number[], fogCacheCanvasAllocations: 0 };
+    Object.defineProperty(window, "__uix314Stress", { value: state });
+    const originalSetInterval = window.setInterval.bind(window);
+    window.setInterval = ((handler: TimerHandler, delay?: number, ...args: unknown[]) => {
+      if (delay !== 84) return originalSetInterval(handler, delay, ...args);
+      const wrapped = () => {
+        const start = performance.now();
+        state.frames += 1;
+        if (typeof handler === "function") handler(...args);
+        state.callbackDurations.push(performance.now() - start);
+      };
+      return originalSetInterval(wrapped, delay);
+    }) as typeof window.setInterval;
+    const width = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, "width")!;
+    Object.defineProperty(HTMLCanvasElement.prototype, "width", {
+      ...width,
+      set(value: number) {
+        if (value === 1200) state.fogCacheCanvasAllocations += 1;
+        width.set!.call(this, value);
+      },
+    });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const map = await bootFogScene(page, "PLAYER", true);
+  await page.waitForTimeout(500);
+  const before = await page.evaluate(() => (window as Window & { __uix314Stress?: { frames: number; fogCacheCanvasAllocations: number } }).__uix314Stress);
+  const started = performance.now();
+  await page.waitForTimeout(60_000);
+  const after = await page.evaluate(() => (window as Window & { __uix314Stress?: { frames: number; fogCacheCanvasAllocations: number; callbackDurations: number[] } }).__uix314Stress);
+  const elapsedMs = performance.now() - started;
+  const frameDelta = (after?.frames ?? 0) - (before?.frames ?? 0);
+  const updateRate = frameDelta * 1000 / elapsedMs;
+  expect(updateRate).toBeGreaterThan(10.5);
+  expect(updateRate).toBeLessThanOrEqual(12.5);
+  expect(before?.fogCacheCanvasAllocations).toBeGreaterThan(0);
+  expect(after?.fogCacheCanvasAllocations).toBe(before?.fogCacheCanvasAllocations);
+  const durations = after?.callbackDurations ?? [];
+  const averageCallbackMs = durations.reduce((sum, duration) => sum + duration, 0) / Math.max(1, durations.length);
+  expect(averageCallbackMs).toBeLessThan(4);
+  const pixels = await canvasHashes(map);
+  expect(pixels.some((layer) => layer.hash >= 0 && layer.size !== "0x0")).toBe(true);
+  console.info(`UIX-314 180-op 60s run: frames=${frameDelta}, elapsed=${elapsedMs.toFixed(0)}ms (${updateRate.toFixed(1)} updates/s), producer callback avg=${averageCallbackMs.toFixed(3)}ms, max=${Math.max(...durations).toFixed(3)}ms; producer measurement excludes React/Konva rendering; mask cache-canvas allocations=${after?.fogCacheCanvasAllocations} (delta=0)`);
 });
