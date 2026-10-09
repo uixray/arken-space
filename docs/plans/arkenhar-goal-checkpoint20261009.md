@@ -289,3 +289,21 @@ Root visual review at e8fd4cb caught generatedPNG loaded but solidKonvafill mask
 - Root QA audit report arkenhar-backlog-qa-audit20261009.md. SixLinear stagecomments posted644/674/672/670/669/371 withimplementedcorevsremainingacceptance and outdatedchecklist corrections, nofalseclosure. Remainingbatchpendingreviewedreports.
 - Current347backend61/61 disposableHTTPPASS plusrootservertypecheckPASS; frontend5mockedChromiumPASS/14boundsunitPASS/webtscPASS reported, marquee/reconnect notaccepted. Help14unit+1mockedbrowserPASS, WASDdocs correctedtoexistingresolver. No cleanexactcandidate yet; no remote/auth/deploypushmerge.
 - Next finish35report, check76coverage, synchronizeeachissueactualstate/remainingnextaction atoneauditedstagegate, commitdocumentationseparately fromunfinishedproductpool. Resumeonlyactuallymissingwork.
+
+## Backlog synchronization complete; backend delivery committed
+- Audit index35b5613: all76 unique nonterminal/nonduplicate IDs verified against paginated271 inventory; zero missing/duplicate/unexpected. All76 Linear stagecomments completed (root6+batch70), batch70 returned noerrors. This means actualization, NOT76completedtasks. Statuses deliberately notclosed.
+- Backend product commitf450a64: protectedbuiltinassets, typedSTAMP/FREEHAND, generated0048schema+migration, GMmutation/hiddenprojection/contentACL/sharedhistory, exactscopedretryfix. Luna actual61/61 disposableHTTPPASS; rootservertscPASS; rootconnected28unit/fullworkspace+E2E/configtypecheck/buildPASS session72767terminal0. Existinglargechunkwarningretained. NoQA/prodmigration.
+- Frontend7mockedbrowserPASS/14boundsunitPASS includesactualmarqueebulk/canonicalbeforeackreplay/touchtypedpointercancel; true transportreconnect stillunproven. Frontendnotyetcommitted.
+- Rootguideconnectedreview found malformedURIhashthrow andTOCtargetmissingwhensearchfiltersit; Luna repairingwithregressions. PriorfullbuildPASS is notfinalcandidateafterthisrepair; no evidence relabeling.
+- Duplicatepingimplementationstopped; unintegratedmap-ping-motion.ts excludedfromproductcommit. Noauth/remote/deploypushmerge. Next finishguiderepair, reviewfrontend/helpcommit, freezeexactsourcecandidate and connectedbrowseracceptance.
+
+## Help delivered; final stamp acknowledgement race repair
+- CurrentHEAD19ec77c (helpdelivery), backendf450a64; sourceaudits35b5613. Root repaired-guidegate16unit/1mockedChromiumPASS, malformedhash+filteredTOC/back verified.652partialnotclosed, Lineardeliverycommentposted.
+- RootfinalAppreview identifiedlateSTAMPcreateack resurrection aftercanonicaldelete/undo andpossibleforeignsceneappend. Existing duplicateIDtestdoesnotcoverabsenceafterdelete. Luna repairingepoch/scene/campaign-safecanonicalreconciliation andactualracebrowserregressions; frontendcommit/candidatewaitingthisfinitepool.
+- Prior28unit/fulltypecheck/buildsession72767PASS doesnotprovepostrepairfinalcandidate. Keeptrace/sourceboundaries; no new backlogimplementationbeforethisgate. Unintegratedmap-ping-motion.ts excluded. Remote/auth/deploypushmergeunchanged.
+
+## Exact bf64877 connected gate — failure retained
+- Frontendstampcommitbf64877 includesactual canonicallateack/scene guards. Rootunit30/30PASS. Twoenginefocusedbrowser19/20PASS:34718/18 and652ChromePASS;652FirefoxfailedBack→TOC hashnavigation line42 (actualURLroot). Artifact .data/qa-prep/stamps-guide-bf64877-root-20261009; retries0.
+- Command57910 terminal1; subsequentfulltypecheck/build NOTREACHED. Do not labelcandidateaccepted orpromotepre-repairbuild. GuideLunaownsfiniteFFtrace/sourcevsnavigationraceresolution, rootwillrerunfailedcellonly;19acceptedcellsretained.
+- CandidatecaptureLunaverifiedwaitingexplicitGO, no rebuild/capture duringrepair. Astra nextplan arkenhar-audited-next-pools20261009.md:exactcandidatefirst, then real264GMinstanceUI, then652neutral screenshotscoverage.382/457decisionwait, nohiddenunexposedcoresubstitute.
+- Noauth/remote/start/deploypushmerge. NextrepairFFguide, failedcellgate, finaltypebuildsourcefreeze/capture; UIX347transportreconnect remainsdistinctunperformed.
