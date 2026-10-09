@@ -1,0 +1,23 @@
+.account-auth-shell { min-height: 100dvh; display: grid; place-items: center; padding: 1.25rem; color: var(--palette-ink-100, #eee9df); background: var(--palette-ink-950, #151513); }
+.account-auth-card { width: min(100%, 30rem); display: grid; gap: 1rem; padding: clamp(1.25rem, 5vw, 2rem); border: 1px solid var(--palette-ink-700, #45433c); border-radius: 1rem; background: var(--palette-ink-900, #1c1b19); }
+.account-auth-card h1, .account-auth-card h2, .account-auth-card p { margin: 0; }
+.account-auth-card h1 { font-size: clamp(1.5rem, 5vw, 2rem); }
+.account-auth-card h2 { margin-block: .5rem; font-size: 1.1rem; }
+.account-auth-kicker { color: var(--palette-clay-300, #d89a76); text-transform: uppercase; letter-spacing: .08em; font-size: .75rem; font-weight: 700; }
+.account-auth-brand { color: inherit; font-weight: 700; text-decoration: none; }
+.account-auth-email { overflow-wrap: anywhere; font-weight: 600; }
+.account-auth-note { color: var(--palette-ink-300, #b2aea3); line-height: 1.5; }
+.account-auth-card form { display: grid; gap: .9rem; }
+.account-auth-card label { display: grid; gap: .4rem; font-weight: 600; }
+.account-auth-error { color: #ffb4a9; }
+.account-auth-links { display: flex; flex-wrap: wrap; gap: .6rem 1rem; }
+.account-auth-links button { min-height: 44px; padding: .4rem; border: 0; background: transparent; color: var(--palette-clay-300, #d89a76); text-decoration: underline; cursor: pointer; }
+.account-auth-links button:disabled { opacity: .55; cursor: not-allowed; }
+.account-auth-card:has(.account-campaigns) { width: min(100%, 44rem); }
+.account-campaigns { display: grid; gap: 1rem; padding-block-start: 1rem; border-top: 1px solid var(--palette-ink-700, #45433c); }
+.account-campaigns ul { display: grid; gap: .75rem; margin: 0; padding: 0; list-style: none; }
+.account-campaigns li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: center; padding: .85rem; border: 1px solid var(--palette-ink-700, #45433c); border-radius: .65rem; }
+.account-campaigns li form { grid-column: 1 / -1; padding-top: .5rem; border-top: 1px solid var(--palette-ink-700, #45433c); }
+.account-invite-link { overflow-wrap: anywhere; }
+@media (max-width: 480px) { .account-campaigns li { grid-template-columns: 1fr; } .account-campaigns li form { grid-column: auto; } }
+@media (max-width: 480px) { .account-auth-shell { place-items: start center; padding: .75rem; } .account-auth-card { margin-top: 6vh; } }
