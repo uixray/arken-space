@@ -1,0 +1,10 @@
+# Local playable stand delivery checkpoint — 2026-10-09
+
+- Revision: product HEAD 89ea5e6 plus ongoing uncommitted account A/B/C source; this is not immutable release candidate acceptance.
+- Decision: keep dedicated synthetic legacy-link stand running for owner; new password/registration flows remain separately under integration. No network exposure, production mutation or retained fixtures touched.
+- Runtime: frontend http://127.0.0.1:14245, API http://127.0.0.1:4100. Root independently verified frontend/healthz/capabilities HTTP200 and live node PIDs40916/43404. Agent verified listeners loopback-only.
+- Synthetic data:1campaign,GM+PLAYER,1scene,1character/token,mapSVG+2sWAV,1audio track, catalog skill and published ITEM instance. No beta roster seeded. Both role bootstrap/login200; stamp catalog200,d20create201,protected media200. Root reviewed gm-desktop.png showing actual game map/token/control/sidebar/dice journal.
+- Evidence paths: .data/qa-prep/local-playable-stand-20261009/checkpoint.md and gm-desktop.png,gm-mobile.png,player-mobile.png. Private access instructions remain local owner-access.txt, not copied into source/chat. Owner file opened in Codex, queued UI status; do not claim the user saw/opened it yet.
+- Setup files: isolated .data directory only, custom seed import loader and local media/database; no product source edits for stand. Initial accidental beta seed was detected, own runtime stopped and only isolated generated DB removed before synthetic final run. Any exposed diagnostic test link was rotated by agent; current credentials not printed here.
+- Limitations: actual browser boot/role projection and HTTP checks are not human/device/public-host acceptance or account auth proof. Old immutable aca1436 component candidate predates current feature/auth work and is preserved unchanged.
+- Next: separate disposable full account HTTP/browser/socket harness, finish provenance/revocation/concurrent-selection checks and My campaigns UI, then connected whole-pool typecheck/build and exact candidate generation. Do not stop owner stand during ephemeral QA teardown.
