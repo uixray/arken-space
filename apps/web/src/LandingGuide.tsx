@@ -102,7 +102,10 @@ export function LandingGuide() {
     if (!open || query || !pendingAnchor) return;
     const frame = requestAnimationFrame(() => {
       const target = document.getElementById(pendingAnchor);
-      target?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+      // Instant navigation keeps TOC targets hit-test stable while browser
+      // history restores scroll; an in-flight smooth scroll can put a sibling
+      // link under the pointer before the next TOC click.
+      target?.scrollIntoView?.({ block: "start", behavior: "auto" });
       target?.focus({ preventScroll: true });
       setPendingAnchor(null);
     });
