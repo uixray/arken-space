@@ -235,14 +235,28 @@ export type UpdateWorldContentInput = {
   coverAssetId?: string | null;
 };
 
+export type UpdateWorldContentResult = WorldContentDto | { duplicate: true };
+
 export const updateWorldContent = (
   id: string,
   input: UpdateWorldContentInput,
+  actionId: string = crypto.randomUUID(),
 ) =>
-  api<WorldContentDto>(`/api/world-content/${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    body: JSON.stringify({ ...input, actionId: crypto.randomUUID() }),
-  });
+  api<UpdateWorldContentResult>(
+    `/api/world-content/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ ...input, actionId }),
+    },
+  );
+
+export const isDuplicateWorldContentUpdate = (
+  result: UpdateWorldContentResult,
+): result is { duplicate: true } =>
+  typeof result === "object" &&
+  result !== null &&
+  "duplicate" in result &&
+  result.duplicate === true;
 
 export const transitionWorldContentLifecycle = (
   id: string,

@@ -391,6 +391,7 @@ describe("world content HTTP: update", () => {
       payload,
     });
     expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({ name: "Once", revision: 1 });
     const retry = await app.inject({
       method: "PATCH",
       url: `/api/world-content/${created.id}`,
@@ -399,6 +400,18 @@ describe("world content HTTP: update", () => {
     });
     expect(retry.statusCode).toBe(200);
     expect(retry.json()).toEqual({ duplicate: true });
+
+    const authoritative = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${created.id}`,
+      headers: headers(secrets.gm),
+    });
+    expect(authoritative.json()).toMatchObject({ name: "Once", revision: 1 });
+    const actions = await db
+      .select()
+      .from(schema.worldContentActions)
+      .where(eq(schema.worldContentActions.actionId, actionId));
+    expect(actions).toHaveLength(1);
   });
 });
 
