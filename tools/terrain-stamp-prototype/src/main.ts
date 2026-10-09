@@ -101,21 +101,46 @@ function makeGlyph(
     rotation: stamp.rotation,
     opacity: options.preview ? 0.64 : 1,
   });
+  if (image) {
+    // Render the generated local motif as the actual stamp, not merely as a
+    // fill on shapes whose solid fill otherwise takes precedence.
+    group.add(
+      new Konva.Image({
+        image,
+        x: -half,
+        y: -half,
+        width: size,
+        height: size,
+        listening: false,
+      }),
+    );
+    group.add(
+      new Konva.Circle({
+        x: 0,
+        y: 0,
+        radius: half,
+        fill: "rgba(0,0,0,0.001)",
+        listening: true,
+      }),
+    );
+    if (options.selected)
+      group.add(
+        new Konva.Circle({
+          x: 0,
+          y: 0,
+          radius: half + 4,
+          stroke: "#ddf693",
+          strokeWidth: 2,
+          dash: [5, 4],
+          listening: false,
+        }),
+      );
+    return group;
+  }
   const accent = options.preview ? "#d4f28a" : "#c1d592";
   const shade = options.preview ? "#5e8150" : "#45664e";
   const snow = options.preview ? "#f0edda" : "#e0e2d5";
   const cloud = options.preview ? "#f2f4e9" : "#d3ded1";
-  const fillPattern = image
-    ? {
-        fillPatternImage: image,
-        fillPatternRepeat: "repeat" as const,
-        fillPatternScale: {
-          x: Math.max(0.06, size / image.width),
-          y: Math.max(0.06, size / image.height),
-        },
-      }
-    : {};
-
   if (stamp.stampId === "forest") {
     const trees = [
       { x: -half * 0.48, y: -half * 0.15, r: half * 0.39 },
@@ -132,7 +157,6 @@ function makeGlyph(
           fill: accent,
           stroke: "#25382b",
           strokeWidth: Math.max(1, size * 0.025),
-          ...fillPattern,
         }),
       );
       group.add(
@@ -165,7 +189,6 @@ function makeGlyph(
         stroke: "#303e36",
         strokeWidth: Math.max(1, size * 0.025),
         lineJoin: "round",
-        ...fillPattern,
       }),
     );
     group.add(
@@ -220,7 +243,6 @@ function makeGlyph(
         fill: cloud,
         stroke: "#879b91",
         strokeWidth: Math.max(1, size * 0.02),
-        ...fillPattern,
       }),
     );
     group.add(
@@ -382,6 +404,7 @@ function render() {
     group.draggable(mode === "select");
     world.add(group);
   }
+  stageHost.dataset.rasterStampCount = String(world.find("Image").length);
   worldLayer.draw();
   drawTime.textContent = `${(performance.now() - started).toFixed(2)} ms`;
   objectCount.textContent = String(model.stamps.length);

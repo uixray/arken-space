@@ -22,3 +22,10 @@ Pattern palette, placement preview, size/rotation, repeated placement, selection
 This is a working local prototype, not the server-authoritative UIX-347 MVP. Layer metadata does not enforce access. Persistence/reconnect, hidden-layer asset security, shared author/revision/undo, selection-area integration, touch/native acceptance and campaign API are not implemented. Built-in/uploaded packs, snap/free mode, instance/batch model and final imagery remain explicit integration decisions.
 
 Next: inspect generated pattern2×2 repeat and interactive prototype, select bounded product integration model and optimize measured redraw before adding authoritative contracts. No remote/start/deploy/push/merge or task completion. Linear UIX-347 is InProgress; prototype gate only.
+
+## Raster visual review correction
+Root screenshot review found that the earlier gate loaded the three PNGs but the canvas still drew vector fallback shapes: Konva solid fill priority masked the supplied pattern. The earlier measurements therefore describe that vector path, not generated-raster acceptance.
+
+Fixed: loaded patterns render as actual centered `Konva.Image` nodes; vectors are fallback only. Root final browser1/1PASS and screenshot visually verifies generated forest/mountains/clouds on canvas. Regression reads actual Konva image-node count (2 after placement,500 after sample load), not just asset-loading state. Final common E2E TypeScript PASS.
+
+Durable raster artifacts: `.data/qa-prep/terrain-stamp-raster-root-20261009-final/`. Actual100objects load12.00ms/draw10.50ms;500 load37.70ms/draw35.30ms;camera0.55msavg; payload15,795/79,189B unchanged. Single-run raw observations only; no production/hardware scaling claim. Perfect edge-to-edge tiling remains unaccepted.

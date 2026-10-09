@@ -49,6 +49,7 @@ test("terrain stamp prototype placement, editing, camera, round-trip and density
   await page.mouse.click(bounds.x + 140, bounds.y + 160);
   await page.mouse.click(bounds.x + 260, bounds.y + 190);
   await expect(page.locator("#object-count")).toHaveText("2");
+  await expect(stage).toHaveAttribute("data-raster-stamp-count", "2");
   await expect(page.locator("#detail-kind")).toHaveText("forest");
   await expect(page.locator("#detail-transform")).toHaveText("96 / 35°");
   await expect(page.locator("#detail-revision")).toContainText(
@@ -106,6 +107,7 @@ test("terrain stamp prototype placement, editing, camera, round-trip and density
   };
   await page.getByRole("button", { name: "Загрузить 500" }).click();
   await expect(page.locator("#object-count")).toHaveText("500");
+  await expect(stage).toHaveAttribute("data-raster-stamp-count", "500");
   await expect(page.locator("#load-time")).toContainText("ms");
   await expect(page.locator("#draw-time")).toContainText("ms");
   await expect(page.locator("#payload-size")).toContainText("B");
