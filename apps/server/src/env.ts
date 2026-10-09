@@ -42,6 +42,14 @@ export const env = z
     ACCOUNT_MAIL_ACTIVE_KEY_ID: z.string().default(""),
     ACCOUNT_MAIL_KEYRING: z.string().default(""),
     ACCOUNT_MAIL_RUNTIME_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+    ACCOUNT_MAIL_SMTP_HOST: z.string().default(""),
+    ACCOUNT_MAIL_SMTP_PORT: z.string().default(""),
+    ACCOUNT_MAIL_SMTP_USERNAME: z.string().default(""),
+    ACCOUNT_MAIL_SMTP_PASSWORD: z.string().default(""),
+    ACCOUNT_MAIL_SMTP_FROM: z.string().default(""),
+    ACCOUNT_MAIL_SMTP_CONNECT_TIMEOUT_MS: z.string().default(""),
+    ACCOUNT_MAIL_SMTP_GREETING_TIMEOUT_MS: z.string().default(""),
+    ACCOUNT_MAIL_SMTP_SOCKET_TIMEOUT_MS: z.string().default(""),
     RATE_LIMIT_MAX: z.coerce.number().int().min(60).max(10_000).default(600),
     GM_ACCESS_TOKEN: z
       .string()

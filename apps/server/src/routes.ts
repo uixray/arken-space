@@ -120,7 +120,7 @@ import {
 import { createStarterCharacter, RESOURCE_REGEN_STAT } from "@arken/system";
 import { createSession, requireAuth } from "./auth.js";
 import { registerAccountAuthRoutes } from "./account-auth-routes.js";
-import { parseMailKeyringConfig, unconfiguredMailAdapter } from "./account-mail.js";
+import { createAccountMailContext, type AccountMailContext } from "./account-mail-context.js";
 import { DiceFormulaError, rollFormulaWithMode } from "./dice.js";
 import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
@@ -1028,6 +1028,7 @@ export function registerRoutes(
   app: FastifyInstance<any, any, any, any>,
   db: Database,
   io: RealtimeServer,
+  mailContext: AccountMailContext = createAccountMailContext(env),
 ) {
   registerAccountAuthRoutes(app, db, io, {
     enabled: env.ACCOUNT_AUTH_ENABLED,
@@ -1042,9 +1043,9 @@ export function registerRoutes(
     csrfCookieName: env.ACCOUNT_CSRF_COOKIE_NAME,
     webOrigin: env.WEB_ORIGIN,
     publicUrl: env.PUBLIC_URL,
-    mailRuntimeEnabled: env.ACCOUNT_MAIL_RUNTIME_ENABLED,
-    mail: unconfiguredMailAdapter,
-    mailKeyring: parseMailKeyringConfig(env.ACCOUNT_MAIL_ACTIVE_KEY_ID, env.ACCOUNT_MAIL_KEYRING),
+    mailRuntimeEnabled: mailContext.runtimeEnabled,
+    mail: mailContext.adapter,
+    mailKeyring: mailContext.keyring,
   });
   registerAccountCampaignRoutes(app, db, io, {
     enabled: env.ACCOUNT_AUTH_ENABLED,
