@@ -34,6 +34,23 @@ describe("landing guide", () => {
     expect(screen.queryByText("Туман войны")).not.toBeInTheDocument();
   });
 
+  it("provides factual, dimensioned lazy-loaded guide screenshots", () => {
+    renderComponent(<LandingGuide />);
+    const gallery = screen.getByText("Снимки интерфейса").closest("details");
+    expect(gallery).not.toBeNull();
+    const images = gallery!.querySelectorAll("img");
+    expect(images).toHaveLength(3);
+    for (const image of images) {
+      expect(image).toHaveAttribute("alt");
+      expect(image.getAttribute("alt")).not.toBe("");
+      expect(image).toHaveAttribute("loading", "lazy");
+      expect(image).toHaveAttribute("decoding", "async");
+      expect(Number(image.getAttribute("width"))).toBeGreaterThan(0);
+      expect(Number(image.getAttribute("height"))).toBeGreaterThan(0);
+      expect(image.getAttribute("src")).toMatch(/^\/assets\/guide\/.+\.webp$/);
+    }
+  });
+
   it("reveals the shortcuts, and says which need a GM", async () => {
     renderComponent(<LandingGuide />);
     await userEvent.click(

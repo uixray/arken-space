@@ -65,6 +65,30 @@ function Section({ section }: { section: GuideSection }) {
   );
 }
 
+const guideScreenshots = [
+  {
+    src: "/assets/guide/desktop-guide-expanded.webp",
+    width: 1120,
+    height: 1214,
+    alt: "Снимок раскрытого руководства со списком разделов и сочетаний клавиш",
+    caption: "Все разделы",
+  },
+  {
+    src: "/assets/guide/desktop-guide-search-d20.webp",
+    width: 1120,
+    height: 262,
+    alt: "Снимок руководства с результатом поиска по команде /d20",
+    caption: "Поиск /d20",
+  },
+  {
+    src: "/assets/guide/mobile-guide-search-fog.webp",
+    width: 358,
+    height: 807,
+    alt: "Снимок мобильного руководства с результатом поиска «туман» и пометками для мастера",
+    caption: "Поиск «туман»",
+  },
+] as const;
+
 export function LandingGuide() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -171,6 +195,26 @@ export function LandingGuide() {
           </article>
         ))}
       </div>
+
+      <details className="guide-gallery">
+        <summary>Снимки интерфейса</summary>
+        <div className="guide-gallery__grid">
+          {guideScreenshots.map((screenshot) => (
+            <figure className="guide-gallery__item" key={screenshot.src}>
+              <img
+                src={screenshot.src}
+                alt={screenshot.alt}
+                width={screenshot.width}
+                height={screenshot.height}
+                loading="lazy"
+                decoding="async"
+                sizes="(max-width: 640px) calc(100vw - 2rem), (max-width: 1024px) 50vw, 32vw"
+              />
+              <figcaption>{screenshot.caption}</figcaption>
+            </figure>
+          ))}
+        </div>
+      </details>
 
       <button
         type="button"
