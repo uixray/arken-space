@@ -141,3 +141,8 @@ Progress classification: this goal turn changed authoritative local state (dispo
 - Root reviewed Gate1 orchestration and rejected runtimeGO: adapter bindings absent, fake-adapter tests prove sequencing only, not executable dump/restore or physical/logical fingerprints. No database created; no source/media modified.
 - Corrections required beforeGO: exact proposedname matching; campaign141/chat31/feedback1 missingclasses (not invented phases); actual protectedbefore/after hashes; fullrestoredF logicalsourcebaseline comparison; sourcearchive396sessions distinct from currentacceptedOID26493with398sessions. No oldbackup represented asfreshB0.
 - Next Luna implements actual local adapters and explicitno-op-defaultCLI, reviewed memoryonly credential/sameclientOID/contained139media/exclusivebackup bindings, then rootreview+separateGO. Fontownerchoice unanswered; no sourcefontchange. GoalACTIVE, fullrelease scope unchanged.
+
+## Exact capability denial classification — 2026-10-09
+- Root sourceattributionreview accepted: unauthbootstrap401 is expectedauthgate; olderbuilt403records remainendpointambiguous andunwaived. Newreadonlynote arkenhar-qa-denial-classification20261009.md.
+- Actualsingleexact currentQA GMprobe: auth200/bootstrap200rolecampaignmatch, GET/api/operator/feedback/capability403 OPERATOR_REQUIRED. ReceiptSHA5BEF9FC2C1EF211E0348855EA37129B940230B57819E4F160D186E552EF7E49C.1naturalQAauthsession,0domainwrites; no browserreplay/operatorpromotion/allowlistchange. Doesnotretrospectivelyidentifyold403s orclearwholebuiltgate.
+- Next: executableGate1localadapters implementation; capturecurrentQAprotectedbaseline afterthisauthsession, notoldcounts. Ownerfontchoicepending; nofontsourcechange. GoalACTIVE; publicationNOTREADY.
