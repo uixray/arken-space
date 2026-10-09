@@ -2,7 +2,7 @@
 
 ## Scope / revision
 - Isolated worktree: `C:\Users\UIXRay\.codex\worktrees\uix-512-soundpad\arken-space`.
-- Base/current `HEAD`: `bc6cec718f88d2169c293387bcf68afb1eb0ee13`; all work remains uncommitted.
+- Initial implementation base: `bc6cec718f88d2169c293387bcf68afb1eb0ee13`; initial partial slice committed in `4be0aea17fb235a64596f551f58f86a9a42c8af2`. Current `HEAD` is `4be0aea17fb235a64596f551f58f86a9a42c8af2`; the search/favorites follow-up below is uncommitted in this isolated worktree.
 - Release/publication worktree untouched; no commit, merge, push, deployment, remote server, or Linear mutation.
 - This is an initial bounded slice, not full UIX-512 acceptance.
 
@@ -37,5 +37,12 @@
 - Runtime dedupe/rate/cooldown is process-local; no multi-replica guarantee.
 - No claim that the whole UIX-512 issue is done.
 
-## Next action
-Owner reviews actual clips/copy; schedule separate scoped transport/browser acceptance and decide on trim/waveform work. Keep this worktree isolated until parent integration review.
+## Follow-up pool — search and favorites (uncommitted)
+
+- `apps/web/src/SoundpadWorkspace.tsx`, `SoundpadWorkspace.css`, and `SoundpadWorkspace.dom.test.tsx` are the only changed paths since `4be0aea`; no server, contracts, schema, or migration changes.
+- Search is case-insensitive substring matching over pack names and sound labels from the existing role-filtered API catalog.
+- Favorites persist only in this browser's localStorage under a campaign+membership-scoped key; they are neither shared nor synced.
+- Actionable cards derive only from the authorized catalog and currently available AUDIO assets with duration >0 and <=10s. Hidden/deleted/missing assets therefore cannot become playable through search or favorites.
+- Follow-up gate: focused 5-file Vitest suite 18/18 PASS; web TypeScript PASS; Vite build PASS (4,775 modules, existing main-chunk warning 1,192.16 kB); all 3 starter asset/provenance files remain present. Interaction evidence is jsdom/Testing Library with fetch/socket mocks, not a real browser or live campaign.
+
+Next: parent reviews this three-file delta separately. Whole UIX-512 remains open for human clip/copy acceptance, trim/waveform editing, and full live Socket.IO/browser, mobile/device, slow-network/performance acceptance. Keep release worktree untouched.

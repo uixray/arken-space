@@ -11,6 +11,13 @@ const DEFAULT_CLIPS = [
   { file: "surprise-oh-my.wav", label: "О, боже!", icon: "😮", category: "Реакции", sourceNote: "CC0 · rubenwardy — Oh My / Help Me (English voice) · OpenGameArt" },
 ] as const;
 
+function readFavoriteIds(storageKey: string) {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(storageKey) ?? "[]");
+    return new Set(Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : []);
+  } catch { return new Set<string>(); }
+}
+
 async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   const response = await fetch(path, { method, credentials: "same-origin", headers: body === undefined ? undefined : { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const value = await response.json().catch(() => ({}));
@@ -36,7 +43,26 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
   const [newPackName, setNewPackName] = useState("");
   const [selectedPack, setSelectedPack] = useState("");
   const [sourceNote, setSourceNote] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const favoriteStorageKey = `arken.soundpad.favorites.${campaignId}.${membershipId}`;
+  const [favoriteSnapshot, setFavoriteSnapshot] = useState(() => ({ key: favoriteStorageKey, ids: readFavoriteIds(favoriteStorageKey) }));
+  const favorites = favoriteSnapshot.key === favoriteStorageKey ? favoriteSnapshot.ids : readFavoriteIds(favoriteStorageKey);
   const assetsById = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
+  const filteredPacks = useMemo(() => {
+    const query = searchTerm.trim().toLocaleLowerCase();
+    return data.packs.map((pack) => {
+      const packMatches = query.length === 0 || pack.name.toLocaleLowerCase().includes(query);
+      const sounds = pack.sounds.filter((sound) => {
+        const asset = assetsById.get(sound.assetId);
+        const available = asset?.kind === "AUDIO" && asset.durationSeconds !== null && asset.durationSeconds > 0 && asset.durationSeconds <= 10;
+        const matchesQuery = query.length === 0 || packMatches || sound.label.toLocaleLowerCase().includes(query);
+        return available && matchesQuery && (!onlyFavorites || favorites.has(sound.id));
+      });
+      const showEmptyGmPack = role === "GM" && !onlyFavorites && pack.sounds.length === 0 && (!query || packMatches);
+      return { ...pack, sounds, show: sounds.length > 0 || showEmptyGmPack };
+    }).filter((pack) => pack.show);
+  }, [data.packs, assetsById, searchTerm, onlyFavorites, favorites, role]);
   const latestRef = useRef({ packs: data.packs, assetsById, unlocked, volume, muted });
   latestRef.current = { packs: data.packs, assetsById, unlocked, volume, muted };
   const loadInFlight = useRef<Promise<SoundpadResponse | null> | null>(null);
@@ -132,6 +158,12 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
   const setPackPublished = (packId: string, published: boolean) => mutate(() => request(`/api/soundpad/packs/${packId}`, "PATCH", { published }));
   const setPackAudience = (packId: string, audience: "ALL_MEMBERS" | "GM_ONLY") => mutate(() => request(`/api/soundpad/packs/${packId}`, "PATCH", { audience }));
   const setPlayerPolicy = (playerPlaybackEnabled: boolean) => mutate(() => request("/api/soundpad/player-policy", "PUT", { playerPlaybackEnabled }));
+  const toggleFavorite = (soundId: string) => {
+    const next = new Set(favorites);
+    if (next.has(soundId)) next.delete(soundId); else next.add(soundId);
+    setFavoriteSnapshot({ key: favoriteStorageKey, ids: next });
+    try { localStorage.setItem(favoriteStorageKey, JSON.stringify([...next])); } catch { setError("Не удалось сохранить избранное на этом устройстве."); }
+  };
   const enableEffects = () => {
     setUnlocked(true); bus.setConnected(Date.now());
     // A 1-sample silent WAV performs the unlock attempt inside the user's
@@ -160,6 +192,10 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
       {role === "GM" && <button type="button" onClick={() => socket?.emit("soundpad:stop")}>Остановить эффекты</button>}
     </header>
     {error && <p className="soundpad__error" role="alert">{error}</p>}
+    <div className="soundpad__discovery">
+      <label>Поиск по звукам и пакам <input type="search" aria-label="Поиск звуков и паков" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Название звука или пака" /></label>
+      <label className="soundpad__favorites-filter"><input type="checkbox" checked={onlyFavorites} onChange={(event) => setOnlyFavorites(event.target.checked)} /> Только избранное</label>
+    </div>
     {role === "GM" && <div className="soundpad__manager">
       <button type="button" disabled={busy} onClick={() => void installStarter()}>Добавить стартовый CC0-пак</button>
       <form onSubmit={(event) => { event.preventDefault(); void createPack(); }}>
@@ -176,16 +212,19 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
       <label className="soundpad__policy"><input type="checkbox" checked={data.playerPlaybackEnabled} onChange={(event) => void setPlayerPolicy(event.target.checked)} disabled={busy} /> Игрокам можно запускать звуки</label>
     </div>}
     {data.packs.length === 0 && <p className="soundpad__empty">Пока нет паков. Ведущий может создать пак или добавить стартовый CC0-пак.</p>}
-    {data.packs.map((pack) => <section className="soundpad__pack" key={pack.id} aria-label={pack.name}>
+    {data.packs.length > 0 && filteredPacks.length === 0 && <p className="soundpad__empty" role="status">Ничего не найдено. Измените поиск или фильтр избранного.</p>}
+    {filteredPacks.map((pack) => <section className="soundpad__pack" key={pack.id} aria-label={pack.name}>
       <div className="soundpad__pack-heading"><h3>{pack.name}</h3>{role === "GM" && <>
         <button type="button" disabled={busy} onClick={() => void setPackPublished(pack.id, !pack.published)}>{pack.published ? "Скрыть" : "Опубликовать"}</button>
         <select aria-label={`Кому доступен ${pack.name}`} value={pack.audience} disabled={busy} onChange={(event) => void setPackAudience(pack.id, event.target.value as "ALL_MEMBERS" | "GM_ONLY")}><option value="ALL_MEMBERS">Всем участникам</option><option value="GM_ONLY">Только ведущему</option></select>
       </>}</div>
-      {pack.sounds.length === 0 ? <p>В этом паке пока нет звуков.</p> : <div className="soundpad__grid">{pack.sounds.map((sound) => {
-        const asset = assetsById.get(sound.assetId);
-        return <button type="button" key={sound.id} className="soundpad__sound" disabled={!asset || !data.playerPlaybackEnabled && role !== "GM"} onClick={() => trigger(sound.id)} title={sound.sourceNote ?? undefined}>
-          <span aria-hidden="true">{sound.icon}</span><span>{sound.label}</span><small>{sound.category}</small>
-        </button>;
+      {pack.sounds.length === 0 ? <p>В этом паке пока нет доступных звуков.</p> : <div className="soundpad__grid">{pack.sounds.map((sound) => {
+        return <div className="soundpad__sound-card" key={sound.id}>
+          <button type="button" className="soundpad__sound" aria-label={`Запустить звук: ${sound.label}`} disabled={!data.playerPlaybackEnabled && role !== "GM"} onClick={() => trigger(sound.id)} title={sound.sourceNote ?? undefined}>
+            <span aria-hidden="true">{sound.icon}</span><span>{sound.label}</span><small>{sound.category}</small>
+          </button>
+          <button type="button" className="soundpad__favorite" aria-label={`${favorites.has(sound.id) ? "Убрать из" : "Добавить в"} избранное: ${sound.label}`} aria-pressed={favorites.has(sound.id)} onClick={() => toggleFavorite(sound.id)}>{favorites.has(sound.id) ? "★" : "☆"}</button>
+        </div>;
       })}</div>}
     </section>)}
     <p className="soundpad__limits">Предложенные лимиты первого среза: эффект до 10 с, не более 4 голосов на устройстве; более старый голос завершается первым. Эффекты не управляют музыкой.</p>

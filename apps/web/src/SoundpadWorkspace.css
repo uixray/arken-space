@@ -20,15 +20,23 @@
 .soundpad__pack-heading h3 { margin: 0 auto 0 0; }
 .soundpad__header label { display: inline-flex; align-items: center; gap: 0.5rem; }
 .soundpad__manager { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; padding: 0.75rem 0; border-block: 1px solid var(--border-subtle, #52606d55); }
+.soundpad__discovery { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; }
+.soundpad__discovery > label:first-child { display: grid; gap: 0.25rem; min-width: min(100%, 18rem); }
+.soundpad__favorites-filter { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 2.5rem; }
 .soundpad__manager label { display: grid; gap: 0.25rem; min-width: 11rem; }
 .soundpad__manager input:not([type="checkbox"], [type="range"], [type="file"]),
 .soundpad__manager select { max-width: 20rem; min-height: 2.4rem; }
 .soundpad__manager form { display: flex; align-items: end; gap: 0.5rem; }
 .soundpad__policy { display: flex !important; align-items: center; }
 .soundpad__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: 0.5rem; }
+.soundpad__sound-card { position: relative; min-width: 0; }
 .soundpad__sound { display: grid; justify-items: center; align-content: center; gap: 0.25rem; min-height: 5.5rem; padding: 0.625rem; border: 1px solid var(--border-subtle, #52606d55); border-radius: 0.625rem; background: var(--surface-base, #111820); color: inherit; cursor: pointer; }
+.soundpad__sound-card .soundpad__sound { width: 100%; padding-inline-end: 2.25rem; }
 .soundpad__sound span:first-child { font-size: 1.5rem; }
 .soundpad__sound small { opacity: 0.72; }
+.soundpad__favorite { position: absolute; inset-block-start: 0.35rem; inset-inline-end: 0.35rem; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; font-size: 1.25rem; cursor: pointer; }
+.soundpad__favorite[aria-pressed="true"] { color: #ffd166; }
+.soundpad__favorite:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .soundpad__sound:disabled { cursor: not-allowed; opacity: 0.55; }
 .soundpad__sound:focus-visible,
 .soundpad button:focus-visible,
