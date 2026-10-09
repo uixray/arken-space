@@ -43,3 +43,9 @@ Previously inventoried local `media/` in the main checkout is 309 files / 431,83
 ## Scope and next evidence
 
 This was a filename/metadata/provenance-doc search only, not a payload inventory. It did not scan unrelated file contents, inspect hidden database/media payload, enumerate Docker volume contents, inspect environment or credential stores, query a Restic repository, or establish whether other local directories/cloud copies exist. A definitive local production backup requires a safe manifest tying exact DB dump, 120-file/full media archive, hashes and capture time to the named snapshot. The scoped search found the receipt but no local dump/media payload pair. No file was changed, restored, moved or deleted.
+
+## Owner-visible backup bucket evidence
+
+2026-10-09 owner supplied console screenshot: ObjectStorage bucket arken-space-backups-uixray contains prefix arken-space and259.66MB usage. This establishes visible bucket/prefix/nonzero storage at screenshot time ONLY; repository structure/snapshotdate/integrity/passwordavailability still unverified. No external API/read/download or credentials accessed. Next owner action: inspectprefix and share nonsecretobjectlist; do not delete/publicize. Current19September localsearch located receipt, not payload. Candidate4dca5a1 build continues independently.
+
+Owner's second screenshot shows Restic-like config/data/index/keys/snapshots structure. Third screenshot shows snapshot-object modification timestamps including2026-10-06 13:03 (display timezone not independently verified). This supports repository writes afterSeptember but does NOT establish decrypted snapshot capturetime, full payload integrity or latestsnapshot. Passwordavailability unresolved; root offered local presence-only backupsecret-file search, not authorized/executed yet. No individualencryptedfile recoveryclaim.
