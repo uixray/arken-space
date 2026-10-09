@@ -260,3 +260,11 @@ Root actual approved Rentry8E59D.. command terminated exit1 startup_failed ENOEN
 
 ## UIX347 actual raster review correction
 Root visual review at e8fd4cb caught generatedPNG loaded but solidKonvafill masking actualcanvas textures. Earlier393ms redraw evidence belonged to vectorfallback. Replaced loadedimage path with actualKonva.Image nodes; vectoronlyfallback. Finalrootbrowser1PASS actualimagecount2/500 and visuallyconfirmed3patterns oncanvas; commonE2EtscPASS. Rastermetrics100 load12/draw10.5ms,500 load37.7/draw35.3ms,camera0.55msavg;payloadunchanged. Durable raster screenshot+metrics .data/qa-prep/terrain-stamp-raster-root-20261009-final. Stillprototype/notserverauthority, seamlessedgesnotaccepted; previousevidence retained.
+
+## Publication continuation: exact candidate and authoritative stamps
+- Starting revision abbfa7d; status only pre-existing .tmp. Previous reply only restated completed patterns (no progress); revalidated state and dispatched executable next pools.
+- Live Linear217 confirms GM+6 is post-test-publication, not shortened prepublication gate;649 fullpack is separate content iteration. Root corrected release index precedence: implemented Pragmatica, QA-only missing media, deferred auth, old candidate not current. No task closed.
+- Luna owns fresh full-build retained public code artifacts/manifest/archive roundtrip and dedicated candidate doc, no fixtures/data/credentials. Exact revision and dirty tracked state must be captured; not deployable image/production acceptance.
+- Astra inspected live347 and current contracts/snapshot: ordinary drawings are PLAYER-authorable and lack layer/asset metadata. Existing token snapshot/asset-content/history ACL is the implementation reference, not permission to leak public prototype assets.
+- Luna assigned actual backend-first FREEHAND/STAMP model, GM-only mutation, hidden snapshot/assets, authoritative shared history and isolated integration gate; new migration code/disposable tests only, retained DB untouched. App/renderer integration next after stable contract; prototype does not close347.
+- No remote/server/start/deploy/push/merge or auth activation. Root release-index changes owned separately; workers preserve each other. Next integrate candidate evidence and backend gate, then bounded frontend pool and Linear stage comments.

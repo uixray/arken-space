@@ -1,3 +1,10 @@
+> CURRENT SCOPE OVERRIDE — 2026-10-09, verified at abbfa7d.
+> The historical matrix below is retained evidence, not the current mandatory gate list. Pragmatica Next is implemented and its connected local gate passed (34 unit tests, full workspace typecheck/build, four font browser cells); see arkenhar-pragmatica-controls20261009.md. Old Inter/font-decision statements are superseded.
+> Live Linear UIX-217 explicitly places GM+6 rehearsal AFTER test publication. The shortened test-publication gate is changed critical flows, GM/PLAYER entry, data preservation, fresh backup and available rollback. Do not require the historical full multi-browser marathon or GM+6 session beforehand.
+> Live UIX-649 makes the full sticker pack a separate content iteration, not a prerequisite to test publication. Its 115-pack and UIX-497's 24-pack remain locally verified/In Review; production publication remains separately authorized.
+> The 173 unavailable objects are only a local QA-copy limitation, NOT established production loss and NOT a global release-development blocker. Public-service authentication remains required by the owner's full objective but explicitly deferred; do not infer secret-link substitution or implementation.
+> Current product code includes font commit 8d37735; isolated stamp prototype has actual raster verification at 54f8a07 and documentation at abbfa7d. The older retained 691d352 build is not the current candidate. A fresh exact local code-artifact bundle is being prepared; no production image/host/deploy/ancestry acceptance is implied.
+> Remaining native/manual acceptance is scoped separately; no blanket additional prepublication requirement is invented. Remote access/start, push, merge and production deployment still need separate explicit owner permission.
 # ArkenHar release evidence index — current status, 2026-10-09
 
 ## Release decision
