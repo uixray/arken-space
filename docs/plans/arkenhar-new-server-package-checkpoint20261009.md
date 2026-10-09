@@ -56,3 +56,13 @@ Changed only this document, no commit. Verification: read accepted image manifes
 - Disabled-mail template fields now empty: placeholder keyring/SMTP values could otherwise fail validation even when runtime disabled.
 - Astra found remaining concrete configuration gaps: no API/WebSocket TLS gateway, internal network blocks SMTP egress, hardcoded Compose false values need explicit activation override, and operator instructions must restore verified named volumes before normal server startup. These are open package tasks, not successful deploy evidence.
 - Recovery failure reclassified by worker: isolated harness supplied the wrong connection username; no dump role defect established. Worker corrects only harness connection against a new empty DB; no roles/dump rewritten.
+
+## Connected recovery/runtime stage — 2026-10-09
+
+- Candidate product unchanged: 4dca5a1; documentation HEAD 28a8ce3.
+- Production-derived worker completed baseline restore, migration twice and fresh migrated export replay. Original 155 files unchanged. Baseline 55/55 count entries and ledger 45/45 match; migrated ledger 54/54 and all 55 existing counts unchanged, 10 new tables empty; fresh replay 65/65 counts match. Validated 140 FK and 65 CHECK constraints. All 151 media references verified, zero missing/unsafe/size/hash mismatches. This is database/file integrity acceptance, not all-user gameplay.
+- Exact-image SMTP A/B/C/D2 gate complete and scoped checkpoint committed 28a8ce3: synthetic signup/SMTP/verification/replay/login and graceful held-DATA shutdown; no provider inbox/browser TLS or socket-close-before-complete claim.
+- Package config static/parser gate passed; Astra found sensitive upstream rewrite404 despite syntax PASS. Root repaired explicit /index.html? upstream target and switched gateway to packaged web image. Focused actual request/privacy validation and member rehash active; old 13-member hash is superseded, not final.
+- Old link hash records preserved, but hashes alone cannot supply raw bearer URLs. Bounded known-project credential lookup/private hash-match allowed; no password store, desktop or history search. Runtime re-entry pending genuine backed link input; no credential replacement to manufacture PASS.
+- 2GB purchase gate: bounded Astra plan ready; Luna prepares synthetic 7-client workload. Benchmark starts only after accepted gateway receipt; no hardware/VPS guarantee, no multiple-server purchases.
+- Next: accept worker recovery checkpoint and finite gateway proof, execute constrained capacity gate, then aggregate immutable package receipts. Real host/domain/TLS/SMTP and transfer permission remain open.
