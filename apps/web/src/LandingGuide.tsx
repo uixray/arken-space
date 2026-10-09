@@ -11,6 +11,7 @@ import {
   resolveGuideHash,
   searchGuide,
 } from "./landing-guide-search";
+import { guideFaq, guideWorkflows } from "./landing-guide-workflows";
 import "./landing-guide.css";
 
 /**
@@ -139,10 +140,10 @@ export function LandingGuide() {
   const reveal = useCallback(
     (hash = window.location.hash) => {
       const id = resolveGuideHash(hash, sections);
-    if (!id) {
-      setPendingAnchor(null);
-      return;
-    }
+      if (!id) {
+        setPendingAnchor(null);
+        return;
+      }
       setQuery("");
       setOpen(true);
       setPendingAnchor(id);
@@ -195,6 +196,49 @@ export function LandingGuide() {
           </article>
         ))}
       </div>
+
+      <section
+        className="guide-procedures"
+        aria-labelledby="guide-procedures-title"
+      >
+        <h3 id="guide-procedures-title">Как сделать</h3>
+        <div className="guide-procedures__grid">
+          {guideWorkflows.map((workflow) => (
+            <article className="guide-procedure" key={workflow.id}>
+              <h4>{workflow.title}</h4>
+              <p className="guide-procedure__roles">
+                {workflow.roles.join(" · ")}
+              </p>
+              <p>
+                <strong>Перед началом:</strong> {workflow.prerequisite}
+              </p>
+              <ol>
+                {workflow.steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+              <p>
+                <strong>Результат:</strong> {workflow.outcome}
+              </p>
+              <a href={workflow.helpHref}>Подсказка по клавишам и командам</a>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="guide-faq" aria-labelledby="guide-faq-title">
+        <h3 id="guide-faq-title">Короткие ответы</h3>
+        <dl>
+          {guideFaq.map((item) => (
+            <div className="guide-faq__item" key={item.id}>
+              <dt>{item.question}</dt>
+              <dd>
+                {item.answer} <a href={item.helpHref}>К разделу шпаргалки</a>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
 
       <details className="guide-gallery">
         <summary>Снимки интерфейса</summary>

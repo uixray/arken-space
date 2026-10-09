@@ -1,6 +1,47 @@
 .landing-guide .guide-shortcuts {
   scroll-margin-top: 1rem;
 }
+.landing-guide .guide-procedures,
+.landing-guide .guide-faq {
+  margin: 1.5rem 0;
+}
+.landing-guide .guide-procedures__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.landing-guide .guide-procedure,
+.landing-guide .guide-faq__item {
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-radius: 0.5rem;
+}
+.landing-guide .guide-procedure h4 {
+  margin: 0 0 0.35rem;
+}
+.landing-guide .guide-procedure__roles {
+  margin-top: 0;
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+.landing-guide .guide-procedure ol {
+  padding-left: 1.25rem;
+}
+.landing-guide .guide-faq dl {
+  display: grid;
+  gap: 0.5rem;
+}
+.landing-guide .guide-faq__item dt {
+  font-weight: 650;
+}
+.landing-guide .guide-faq__item dd {
+  margin: 0.35rem 0 0;
+}
+.landing-guide .guide-procedure a,
+.landing-guide .guide-faq a {
+  text-underline-offset: 0.15em;
+}
 .landing-guide .guide-toc {
   display: flex;
   flex-wrap: wrap;
@@ -68,6 +109,9 @@
   margin-top: 0.35rem;
 }
 @media (max-width: 640px) {
+  .landing-guide .guide-procedures__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .landing-guide .guide-gallery__grid {
     grid-template-columns: minmax(0, 1fr);
   }

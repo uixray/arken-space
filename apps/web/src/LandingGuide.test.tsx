@@ -23,6 +23,23 @@ describe("landing guide", () => {
     expect(
       screen.getByRole("heading", { name: "Персонажи" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Как сделать" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Короткие ответы" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Показать точку на карте" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Предложить действие мастеру" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", {
+        name: "Подсказка по клавишам и командам",
+      })[0],
+    ).toHaveAttribute("href", "#guide-камера");
   });
 
   it("keeps the key list collapsed until asked", () => {
@@ -97,5 +114,25 @@ describe("landing guide", () => {
       expect(document.getElementById("guide-камера")).toHaveFocus(),
     );
     expect(search).toHaveValue("");
+  });
+
+  it("keeps guide procedures keyboard reachable and preserves the existing guide entry points", async () => {
+    history.replaceState(null, "", window.location.pathname);
+    renderComponent(<LandingGuide />);
+    const links = screen.getAllByRole("link", { name: "К разделу шпаргалки" });
+    expect(links.length).toBeGreaterThan(0);
+    links[0]!.focus();
+    expect(links[0]).toHaveFocus();
+    await userEvent.click(links[0]!);
+    expect(decodeURIComponent(window.location.hash)).toBe("#guide-туман-войны");
+    expect(
+      screen.getByRole("button", { name: "Свернуть управление" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Туман войны" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Снимки интерфейса").closest("details"),
+    ).not.toHaveAttribute("open");
   });
 });
