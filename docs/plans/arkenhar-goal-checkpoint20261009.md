@@ -206,3 +206,9 @@ Root actual approved Rentry8E59D.. command terminated exit1 startup_failed ENOEN
 - Health/auth200;2packs24+115/139uniqueIDs;139fullpayload10518668bytes storedhash/header/fullSharpdecode+dimensionsPASS, anon401. Full58domainTables879rows/storage312/media139beforeafter unchanged; naturalRsession396→397 (+1) explicit, noPLAYERclaim/import/publish/seed/migration.
 - Owned80685 stoppedCtrlC wrapperterminal1, elevated14186listener0; HTTPexit0 preserved. F/R/B0/media retained; original/protecteduntouched. Actualfailure→freshB0restoreNEWtarget→appreadability boundedmechanismPASS, notproduction/full173/originalPNG/human/auth readiness.
 - Files: readabilitydoc+checkpoint; next reconcilefullreleaseevidence andLinearstagegate, then authorizedremainingpool gaps ratherthanreplayingacceptedgate. GoalACTIVE/publicationNOTREADY; ownerfontchoice/human/missingmedia/authactivation/main/remote remainopen.
+
+## Final local QA scope after rollback — 2026-10-09
+- Release evidence index replaced stale pendingclaims with current exactsource/build/runtime tiers; no productdelta52013d4→698d86a. Localrollbackcomplete notfullrelease readiness. Acceptedgates immutable/no replay.
+- Astra final finitepool plan: five PlayerRequests selectors +characterintermediatefocus using actualfocusedoption/Home/ArrowDown, ScenePickerdismissal/editentry no scene selection/save, fourbrowserviewportcells. NativeOSpopup/truebrowserzoom/human cannot be fabricated with DOM/CSS/CDPscale.
+- Luna assigned boundedhelper PREPONLY REST+Socket denyguard, existingBauthmemoryonly, nofixture/domainwrites. Singleactualattempt +atmostone evidencedinstrumentationcorrection failedassertionsonly; stopautomaticQA afterscope. Fontownerchoice asked; no fontsourcechange. Authimplementation stillownerdeferred; historicalmedia173/main/remote/human gates open.
+- Files index+AstralocalQAplan+checkpoint; nextrootreviewfrozenhelper thenfiniteauthorizedruntime. GoalACTIVE/publicationNOTREADY, no issueclosure.
