@@ -221,3 +221,14 @@ Root actual approved Rentry8E59D.. command terminated exit1 startup_failed ENOEN
 ## UIX473 task-side reconciliation — 2026-10-09
 - LiveLinear473Backlog/318InReview rechecked. Luna mapped9historicalreports to8themes existing491–494/467Done;495/496/347Backlog. No newduplicatetasks; DoneLinear doesnotproveactualreportread/queueupdated. ActualreportIDs/statuses uninspected, remoteoff.
 - Artifactuix473-existing-issue-map20261009.md; parentstagecomment recordsboundedmapping/no closure. Nexttrustedhost+owner-authorizedactualdata gate, notproductionDBaccess inferred. LastlocalQAhelper nowbeingprepared, no runtimeyet.
+
+## Final local P/S first actual attempt — 2026-10-09
+- Rootreviewhelper274114.. +7/7offlinePASS, actualexec64271terminal0 but statusPARTIAL; onlyChromedesktop startup, noP/Sassertions reached. Receipt7461e7842999998eac9d7c7d43b47b002760e7b62b0ab191f8a50d742845a29a retained.
+- Auth2/readmarker2, blockedDomain0; initialNull0 due websocketguard protocol/route instrumentation mismatch,4sourcecanvasGETreads blocked asunreviewed; externalfontsblocked/operators403/errors retained, notwaived. No productdefect/PASS inferredfromstartuptimeout.
+- ExactlyONE permitted instrumentationcorrection assignedLuna (ws/http loopbackequivalence, exactsourcecanvasGET paths, exactoperatorfamily), source/fixture/dataunchanged. Afterrootreview onefailed/unobservedassertionrerun only; ifstillblocked stopautomaticQA ratherthananothergenericprep loop. Historical92ledger/ROFAILopen, goalACTIVE/publicationNOTREADY.
+
+## Final finite local QA pool stopped PARTIAL — 2026-10-09
+- Exactlyone reviewedinstrumentationcorrection helper89241D.. +8/8root offlinePASS; finalrealcommandexit0 PARTIAL receipt606c8742b0dfa0828b1633a5bbaccd5fe48f08377e6511e39185ecc098bde804. Chrome desktoponly, P/Sassertioncount0;4cells unobserved.
+- Auth2/readmarker2/initialnullsocket2/operatorcapability4032;canvasreadnowallowed, blockedHTTPdomain0. SixunreviewedWS+2genericsocketevents blocked, causeunknown—notclaimeddomainfree. Externalfontsblocked/errorsretained. NoDBbeforeafterproofinthispool.
+- CorrectionbudgetEXHAUSTED; stopautomaticQA/no thirdretry/allowlistwidening/sourcefix. Workerfinaldocsourceonly. UIX644stagecomment recordsPARTIAL/noledgerpromotion; historical50/92 27PASS2FAIL21BLOCKEDoverallINCOMPLETE/ROFAILopen.
+- Owner asked authactivation now(localprepcompletebutQA/human/remoteopen) and exactmissingmedia/originalPNGsource; fontchoicepending. Noauth/source/remoteactions inferred. Next genuinelyrequiresowneranswers/verifiedtoolscope or humanacceptance, notanothergenericprep loop. GoalACTIVE, notcomplete.

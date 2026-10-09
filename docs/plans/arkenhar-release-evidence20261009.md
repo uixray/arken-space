@@ -58,3 +58,6 @@ Do not mark publication ready until the owner-approved auth and typography contr
 - **Verification:** reconciled against the latest goal checkpoint and committed per-gate docs; checked current HEAD and product-source diff. No runtime/source/Linear/remote action.
 - **Open:** 173 missing objects/original PNG; font and public-auth decisions; native/true-zoom/human acceptance; unresolved RO FAIL; UIX-318/473; main ancestry and remote/production permissions.
 - **Next:** pursue only the bounded local actions above after their stated prerequisites; owner/external gates remain separate.
+
+## Final bounded P/S observation update — 2026-10-09
+The last finite local P/S pool is PARTIAL, not accepted: final receipt606c8742b0dfa0828b1633a5bbaccd5fe48f08377e6511e39185ecc098bde804 reached zero feature assertions in Chrome desktop startup; all four P/S cells remain unobserved. One permitted instrumentation correction fixed WS protocol/canvas GET guards but unreviewed websocket/socket events still stopped the cell. No third attempt or scope widening; no DB-unchanged claim from request counters. Historical UIX644 ledger/RO failure unchanged. See uix644-last-local-gate20261009.md. Owner auth activation/font/missing-source decisions and human/remote gates remain open.
