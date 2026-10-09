@@ -111,6 +111,20 @@
     }
   },
   "evidence": {
+    "compactReachableControls20261009": {
+      "status": "PARTIAL",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifact": "docs/plans/uix644-reachable-controls-gate20261009.md",
+      "receiptSha256": "AC81BED7D8DBD8385A0E53AC72CD1FDBD035D14808F42847B111287A13D6219C",
+      "scope": "Root elevated missing-cases gate: GM Chrome/Firefox compact actual Sections→Files, manager pointer/Enter/Escape/focus and parent preserved, DOM filter alternative/restoration, Character+Setup StatLayout disclosures passed. PLAYER Chrome/Firefox compact current-role Files/stat-menu absence observed. Native pack selects still unproved: nested-label caption/option-text resolver counts0 are not absence proof. Measured104GET/6auth/4readmarker/0domain/pageerrors; Chrome9 resource errors correlate initial bootstrap401 and other403, final family interpretation open. Not native OS popup, full registry or true zoom."
+    },
+    "reachableControls20261009": {
+      "status": "PARTIAL",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifact": "docs/plans/uix644-reachable-controls-gate20261009.md",
+      "receiptSha256": "740CB91C4310F89FE3582F7B5118472AEE84E17266EBBCA70EFB4CA77D067859",
+      "scope": "Six connected cells: GM Chrome/Firefox desktop Files disclosure and DOM filter, Character and Setup StatLayout disclosures; listed TokenTray summary tooltips. Compact workspace traversal and native pack draft/owned selects unresolved by harness locators, not proven absent. Measured domain writes0/pageerrors0; Chrome12 resource-load console errors unresolved, Firefox0. Native OS popup, all toolbar callers, full lifecycle and whole registry not accepted. Prior invalid audits and failed receipts preserved."
+    },
     "ownedCharacterSelect20261009": {
       "status": "PARTIAL",
       "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
