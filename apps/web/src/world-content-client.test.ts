@@ -7,7 +7,23 @@ import {
   parseTagList,
   slugifyWorldContentName,
   sortWorldContentMedia,
+  worldContentListQueryString,
 } from "./world-content-client";
+
+describe("world content list query", () => {
+  it("serializes relatedTo alongside existing conjunctive filters", () => {
+    expect(
+      worldContentListQueryString({
+        type: "PERSON",
+        tags: ["ally", "harbor"],
+        q: "Mira Vale",
+        relatedTo: "11111111-1111-4111-8111-111111111111",
+      }),
+    ).toBe(
+      "?type=PERSON&tags=ally%2Charbor&q=Mira+Vale&relatedTo=11111111-1111-4111-8111-111111111111",
+    );
+  });
+});
 
 function media(id: string, ordering: number): WorldContentMediaDto {
   return {

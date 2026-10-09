@@ -149,20 +149,26 @@ export type WorldContentListQuery = {
   type?: WorldContentType;
   tags?: string[];
   q?: string;
+  relatedTo?: string;
 };
 
-function listQueryString(query: WorldContentListQuery): string {
+export function worldContentListQueryString(
+  query: WorldContentListQuery,
+): string {
   const params = new URLSearchParams();
   if (query.type) params.set("type", query.type);
   if (query.tags && query.tags.length > 0)
     params.set("tags", query.tags.join(","));
   if (query.q) params.set("q", query.q);
+  if (query.relatedTo) params.set("relatedTo", query.relatedTo);
   const qs = params.toString();
   return qs ? `?${qs}` : "";
 }
 
 export const fetchWorldContentList = (query: WorldContentListQuery = {}) =>
-  api<WorldContentDto[]>(`/api/world-content${listQueryString(query)}`);
+  api<WorldContentDto[]>(
+    `/api/world-content${worldContentListQueryString(query)}`,
+  );
 
 export const fetchWorldContentDetail = (id: string) =>
   api<WorldContentDto>(`/api/world-content/${encodeURIComponent(id)}`);
@@ -179,7 +185,9 @@ export const fetchWorldContentDetail = (id: string) =>
 export const fetchWorldContentPlayerList = (
   query: WorldContentListQuery = {},
 ) =>
-  api<WorldContentPlayerDto[]>(`/api/world-content${listQueryString(query)}`);
+  api<WorldContentPlayerDto[]>(
+    `/api/world-content${worldContentListQueryString(query)}`,
+  );
 
 export const fetchWorldContentPlayerDetail = (id: string) =>
   api<WorldContentPlayerDto>(`/api/world-content/${encodeURIComponent(id)}`);
