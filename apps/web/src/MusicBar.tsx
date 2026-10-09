@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AssetDto, AudioStateDto, Role } from "@arken/contracts";
+import type { AssetDto, AudioStateDto, AudioTrackDto, AudioTrackCommand, CommandAck, Role } from "@arken/contracts";
 import { Checkbox } from "./design-system/Checkbox";
 import { Loader } from "./design-system/Loader";
 import { Button } from "./design-system/Button";
@@ -48,8 +48,96 @@ const formatBytes = (value: number) =>
 
 type PendingAudio = { file: File; url: string; duration: number | null };
 
+/** One stable media element per authoritative track. Local gain is deliberately
+ * kept out of transport reconciliation, so a mixer fader cannot seek/restart. */
+function AudioTrackPlayback({ track, asset, enabled, masterVolume, retryToken, onBlocked }: {
+  track: AudioTrackDto;
+  asset: AssetDto | undefined;
+  enabled: boolean;
+  masterVolume: number;
+  retryToken: number;
+  onBlocked: (trackId: string | null) => void;
+}) {
+  const ref = useRef<HTMLAudioElement>(null);
+  const blocked = useRef(false);
+  const lastPlaybackKey = useRef<string | null>(null);
+  const lastRetryToken = useRef(0);
+  useEffect(() => {
+    if (ref.current) ref.current.volume = volumeSliderToGain(masterVolume * track.mixVolume);
+  }, [masterVolume, track.mixVolume]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const playbackKey = JSON.stringify([enabled, track.assetId, asset?.url, track.playing]);
+    const transportChanged = lastPlaybackKey.current !== playbackKey;
+    lastPlaybackKey.current = playbackKey;
+    const retryRequested = retryToken > lastRetryToken.current;
+    if (retryRequested) lastRetryToken.current = retryToken;
+    el.loop = track.loop;
+    if (!enabled || !track.playing || !asset) { el.pause(); return; }
+    const duration = el.duration > 0 ? el.duration : asset.durationSeconds ?? 0;
+    const elapsed = track.startedAt ? Math.max(0, (Date.now() - Date.parse(track.startedAt)) / 1000) : 0;
+    const raw = track.positionSeconds + elapsed;
+    const expected = track.loop && duration > 0 ? raw % duration : raw;
+    if (Math.abs(el.currentTime - expected) > 0.75) el.currentTime = expected;
+    if ((!blocked.current || retryRequested) && ((transportChanged && track.playing) || retryRequested)) {
+      try {
+        void Promise.resolve(el.play()).then(() => onBlocked(null), (error: unknown) => {
+          if (isAudioConsentError(error)) { blocked.current = true; onBlocked(track.id); }
+        });
+      } catch (error) {
+        if (isAudioConsentError(error)) { blocked.current = true; onBlocked(track.id); }
+      }
+    }
+  }, [track.id, track.playing, track.positionSeconds, track.startedAt, track.loop, asset?.id, asset?.url, enabled, retryToken, onBlocked]);
+  useEffect(() => {
+    if (enabled) blocked.current = false;
+  }, [enabled, retryToken]);
+  useEffect(() => {
+    if (!enabled || !track.playing || !asset) return;
+    const retry = (event: Event) => {
+      if (event.target instanceof Element && event.target.closest(".music-volume-control, .music-enable-button")) return;
+      const el = ref.current;
+      if (!el || !blocked.current) return;
+      blocked.current = false;
+      void Promise.resolve(el.play()).then(() => onBlocked(null), (error: unknown) => { if (isAudioConsentError(error)) blocked.current = true; });
+    };
+    document.addEventListener("pointerdown", retry, true);
+    document.addEventListener("keydown", retry, true);
+    return () => { document.removeEventListener("pointerdown", retry, true); document.removeEventListener("keydown", retry, true); };
+  }, [enabled, track.id, track.playing, asset?.id, onBlocked]);
+  useEffect(() => {
+    const el = ref.current;
+    return () => { el?.pause(); if (el) { el.removeAttribute("src"); el.load(); } };
+  }, []);
+  return <audio ref={ref} src={asset?.url} preload="auto" aria-label={asset?.name ?? "Аудиодорожка"} />;
+}
+
+function MixerTrackControls({ track, asset, onCommand }: {
+  track: AudioTrackDto;
+  asset: AssetDto | undefined;
+  onCommand: (track: AudioTrackDto, command: { command: "PLAY" | "PAUSE" | "END" } | { command: "SEEK"; positionSeconds: number } | { command: "SET_LOOP"; loop: boolean } | { command: "SET_MIX_VOLUME"; mixVolume: number } | { command: "SELECT"; assetId: string | null } | { command: "REMOVE_TRACK" }) => void;
+}) {
+  const [mix, setMix] = useState(track.mixVolume);
+  const [position, setPosition] = useState(track.positionSeconds);
+  useEffect(() => setMix(track.mixVolume), [track.mixVolume]);
+  useEffect(() => setPosition(track.positionSeconds), [track.positionSeconds]);
+  const commitMix = () => onCommand(track, { command: "SET_MIX_VOLUME", mixVolume: mix });
+  const commitPosition = () => onCommand(track, { command: "SEEK", positionSeconds: position });
+  const duration = asset?.durationSeconds ?? Math.max(track.positionSeconds, 1);
+  return <div className="music-mixer-track" key={track.id}>
+    <strong>{asset?.name ?? "Без аудио"}</strong>
+    <Button disabled={!asset} onClick={() => onCommand(track, { command: track.playing ? "PAUSE" : "PLAY" })}>{track.playing ? "Пауза" : "Играть"}</Button>
+    <label>Позиция дорожки <input aria-label={`Позиция дорожки ${asset?.name ?? track.id}`} type="range" min="0" max={Math.max(1, duration)} step="1" value={Math.min(position, duration)} disabled={!asset} onChange={(event) => setPosition(Number(event.target.value))} onPointerUp={commitPosition} onKeyUp={commitPosition} /></label>
+    <Checkbox checked={track.loop} onUpdate={(loop) => onCommand(track, { command: "SET_LOOP", loop })}>Повтор</Checkbox>
+    <label>Громкость дорожки <input aria-label={`Громкость дорожки ${asset?.name ?? track.id}`} type="range" min="0" max="1" step="0.05" value={mix} onChange={(event) => setMix(Number(event.target.value))} onPointerUp={commitMix} onKeyUp={commitMix} /></label>
+    <Button onClick={() => onCommand(track, { command: "REMOVE_TRACK" })}>Убрать</Button>
+  </div>;
+}
+
 export function MusicBar({
   audio,
+  audioTracks,
   assets,
   role,
   socket,
@@ -57,6 +145,7 @@ export function MusicBar({
   controlsTarget,
 }: {
   audio: AudioStateDto;
+  audioTracks: AudioTrackDto[];
   assets: AssetDto[];
   role: Role;
   socket: GameSocket | null;
@@ -75,6 +164,8 @@ export function MusicBar({
     () => localStorage.getItem(ENABLED_KEY) !== "false",
   );
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
+  const [blockedTrackId, setBlockedTrackId] = useState<string | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
   const playbackBlockedRef = useRef(false);
   const [volume, setVolume] = useState(() => {
     const stored = localStorage.getItem(VOLUME_KEY);
@@ -91,7 +182,10 @@ export function MusicBar({
     () => assets.filter((asset) => asset.kind === "AUDIO"),
     [assets],
   );
+  const mixerTracks = audioTracks.slice().sort((a, b) => a.slotOrder - b.slotOrder).slice(0, 4);
   const current = tracks.find((asset) => asset.id === audio.assetId);
+  const activeTrack = mixerTracks[0];
+  const activeAsset = tracks.find((asset) => asset.id === activeTrack?.assetId);
 
   const pendingUrl = pending?.url;
   useEffect(
@@ -250,6 +344,17 @@ export function MusicBar({
   useDismissibleDetails(volumeRef);
   useDismissibleDetails(overflowRef);
 
+  const sendTrackCommand = (track: AudioTrackDto, command: { command: "PLAY" | "PAUSE" | "END" } | { command: "SEEK"; positionSeconds: number } | { command: "SET_LOOP"; loop: boolean } | { command: "SELECT"; assetId: string | null } | { command: "SET_MIX_VOLUME"; mixVolume: number } | { command: "REMOVE_TRACK" }) =>
+    socket?.emit("audio:track:set", {
+      actionId: crypto.randomUUID(), revision: track.revision, trackId: track.id, ...command,
+    } as AudioTrackCommand, (result: CommandAck<AudioTrackDto>) => {
+      if (!result.ok) notify({ title: "Не удалось изменить дорожку", message: audioCommandErrors.get(result.reason ?? "") ?? "Сервер отклонил команду", tone: "danger" });
+    });
+
+  const addTrack = (assetId: string) => socket?.emit("audio:track:set", {
+    actionId: crypto.randomUUID(), command: "ADD_TRACK", assetId,
+  }, (result: CommandAck<AudioTrackDto>) => { if (!result.ok) notify({ title: "Не удалось добавить дорожку", message: result.reason ?? "Повторите команду", tone: "danger" }); });
+
   const sendCommand = (
     command:
       | { command: "SELECT"; assetId: string | null }
@@ -264,7 +369,7 @@ export function MusicBar({
         revision: audio.revision,
         ...command,
       },
-      (result) => {
+      (result: CommandAck<AudioStateDto>) => {
         if (!result.ok)
           notify({
             title: "Не удалось изменить музыку",
@@ -287,7 +392,8 @@ export function MusicBar({
     setUploadError(null);
     try {
       const asset = await onUpload(pending.file, "AUDIO");
-      sendCommand({ command: "SELECT", assetId: asset.id });
+      if (activeTrack) sendTrackCommand(activeTrack, { command: "SELECT", assetId: asset.id });
+      else addTrack(asset.id);
       setPending(null);
       notify({ title: "Трек загружен", message: asset.name, tone: "success" });
     } catch (error) {
@@ -298,22 +404,21 @@ export function MusicBar({
       setUploading(false);
     }
   };
-  const togglePlayback = () =>
-    sendCommand({ command: audio.playing ? "PAUSE" : "PLAY" });
+  const togglePlayback = () => activeTrack && sendTrackCommand(activeTrack, { command: activeTrack.playing ? "PAUSE" : "PLAY" });
 
   const controls = (
     <section className="music-topbar" aria-label="Музыка">
       <strong
         className="music-topbar__title"
-        title={current?.name ?? "Композиция 4'33"}
+        title={activeAsset?.name ?? current?.name ?? "Композиция 4'33"}
       >
-        {current?.name ?? "Композиция 4'33"}
+        {activeAsset?.name ?? current?.name ?? "Композиция 4'33"}
       </strong>
-      {playbackBlocked && enabled && audio.playing && current ? (
+      {((playbackBlocked && enabled && audio.playing && current) || (blockedTrackId && activeTrack?.id === blockedTrackId)) ? (
         <button
           type="button"
           className="music-enable-button"
-          onClick={retryPlayback}
+          onClick={() => { setRetryToken((value) => value + 1); retryPlayback(); }}
         >
           Включить звук
         </button>
@@ -321,9 +426,9 @@ export function MusicBar({
       <button
         type="button"
         className="music-icon-button"
-        aria-label={audio.playing ? "Пауза" : "Играть"}
-        title={audio.playing ? "Пауза" : "Играть"}
-        disabled={role !== "GM" || !current}
+        aria-label={activeTrack?.playing ? "Пауза" : "Играть"}
+        title={activeTrack?.playing ? "Пауза" : "Играть"}
+        disabled={role !== "GM" || !activeTrack}
         onClick={togglePlayback}
       >
         <AppIcon icon={audio.playing ? PauseIcon : PlayIcon} />
@@ -373,7 +478,7 @@ export function MusicBar({
                     track.id === current?.id ? "is-selected" : undefined
                   }
                   onClick={() => {
-                    sendCommand({ command: "SELECT", assetId: track.id });
+                    if (activeTrack) sendTrackCommand(activeTrack, { command: "SELECT", assetId: track.id }); else addTrack(track.id);
                     if (overflowRef.current) {
                       overflowRef.current.open = false;
                       overflowRef.current
@@ -412,16 +517,7 @@ export function MusicBar({
 
   return (
     <>
-      <audio
-        ref={element}
-        src={current?.url}
-        preload="auto"
-        onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
-        onTimeUpdate={(event) => setPosition(event.currentTarget.currentTime)}
-        onEnded={() => {
-          if (role === "GM" && !audio.loop) sendCommand({ command: "END" });
-        }}
-      />
+      {mixerTracks.map((track) => <AudioTrackPlayback key={`${track.id}:${track.assetId ?? "none"}`} track={track} asset={tracks.find((item) => item.id === track.assetId)} enabled={enabled} masterVolume={volume} retryToken={blockedTrackId === track.id ? retryToken : 0} onBlocked={setBlockedTrackId} />)}
       {controlsTarget ? createPortal(controls, controlsTarget) : controls}
       {role === "GM" ? (
         <ArkenDialog
@@ -434,11 +530,11 @@ export function MusicBar({
             <section className="music-library-player">
               <div>
                 <span>Сейчас играет</span>
-                <strong>{current?.name ?? "Трек не выбран"}</strong>
+                <strong>{activeAsset?.name ?? current?.name ?? "Трек не выбран"}</strong>
               </div>
               <div className="music-library-controls">
-                <Button disabled={!current} onClick={togglePlayback}>
-                  {audio.playing ? "Пауза" : "Играть"}
+                <Button disabled={!activeTrack} onClick={togglePlayback}>
+                  {activeTrack?.playing ? "Пауза" : "Играть"}
                 </Button>
                 <span>
                   {formatTime(position)} / {formatTime(duration)}
@@ -482,6 +578,16 @@ export function MusicBar({
                   })
                 }
               />
+            </section>
+            <section>
+              <h3>Микшер · до 4 дорожек</h3>
+              <div className="music-mixer-list">
+                {mixerTracks.map((track) => {
+                  const asset = tracks.find((item) => item.id === track.assetId);
+                  return <MixerTrackControls key={track.id} track={track} asset={asset} onCommand={sendTrackCommand} />;
+                })}
+              </div>
+              {mixerTracks.length < 4 && tracks.length > 0 ? <label>Добавить дорожку <select aria-label="Добавить дорожку" value="" onChange={(event) => { if (event.target.value) addTrack(event.target.value); }}><option value="">Выберите аудио</option>{tracks.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}</select></label> : null}
             </section>
             <section>
               <h3>Треки</h3>

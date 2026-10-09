@@ -501,6 +501,7 @@ export function App() {
   const { socket, setSocket, connection, setConnection } =
     useGameSocketSubscriptions({
       campaignId: campaignId ?? null,
+      initialSnapshotVersion: snapshot?.snapshotVersion,
       authRequired,
       ownMembershipId: snapshot?.me.id,
       viewedSceneId,
@@ -2056,6 +2057,7 @@ export function App() {
           </div>
           <MusicBar
             audio={snapshot.audio}
+            audioTracks={snapshot.audioTracks}
             assets={snapshot.assets}
             role={snapshot.me.role}
             socket={socket}

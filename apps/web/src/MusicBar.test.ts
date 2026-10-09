@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { createElement } from "react";
-import type { AssetDto, AudioStateDto, CommandAck } from "@arken/contracts";
+import type { AssetDto, AudioStateDto, AudioTrackDto, CommandAck } from "@arken/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isAudioConsentError } from "./audio-playback";
 import { volumeSliderToGain } from "./audio-volume";
@@ -17,7 +17,17 @@ vi.mock("@gravity-ui/uikit", () => ({
 vi.mock("./ui/ArkenDialog", () => ({ ArkenDialog: () => null }));
 vi.mock("./ui/notifications", () => ({ notify: vi.fn() }));
 
-const { MusicBar } = await import("./MusicBar");
+const { MusicBar: ActualMusicBar } = await import("./MusicBar");
+type MusicBarProps = Parameters<typeof ActualMusicBar>[0];
+type LegacyTestProps = Omit<MusicBarProps, "audioTracks"> & { audioTracks?: AudioTrackDto[] };
+function trackFromAudio(audio: AudioStateDto): AudioTrackDto {
+  return { id: "test-track", assetId: audio.assetId, mixVolume: 1, playing: audio.playing, positionSeconds: audio.positionSeconds, loop: audio.loop, startedAt: audio.startedAt, slotOrder: 0, revision: audio.revision, updatedAt: audio.updatedAt };
+}
+// Test compatibility adapter: every test now gets an explicit canonical track
+// derived from its singular fixture; production never infers tracks from audio.
+function MusicBar(props: LegacyTestProps) {
+  return createElement(ActualMusicBar, { ...props, audioTracks: props.audioTracks ?? [trackFromAudio(props.audio)] });
+}
 
 const audioAsset: AssetDto = {
   id: "audio-under-test",
@@ -126,16 +136,17 @@ describe("UIX-417 audio acknowledgement copy", () => {
       fireEvent.click(screen.getByRole("button", { name: "Играть" }));
 
       expect(emit).toHaveBeenCalledExactlyOnceWith(
-        "audio:set",
+        "audio:track:set",
         {
           command: "PLAY",
           revision: playingAudio.revision,
+          trackId: "test-track",
           actionId: expect.any(String),
         },
         expect.any(Function),
       );
       expect(notify).toHaveBeenCalledExactlyOnceWith({
-        title: "Не удалось изменить музыку",
+        title: "Не удалось изменить дорожку",
         message,
         tone: "danger",
       });
@@ -150,6 +161,38 @@ describe("UIX-417 audio acknowledgement copy", () => {
 });
 
 describe("personal music volume", () => {
+  it("plays two canonical tracks while player master remains local-only and gain does not restart them", () => {
+    const secondAsset = { ...audioAsset, id: "audio-second", name: "Second track" };
+    const tracks = [trackFromAudio(playingAudio), { ...trackFromAudio(playingAudio), id: "track-second", assetId: secondAsset.id, slotOrder: 1 }];
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    const emit = vi.fn();
+    const view = renderComponent(createElement(MusicBar, {
+      audio: playingAudio, audioTracks: tracks, assets: [audioAsset, secondAsset],
+      role: "PLAYER", socket: { emit } as unknown as GameSocket, onUpload: vi.fn(),
+    }));
+    expect(view.container.querySelectorAll("audio")).toHaveLength(2);
+    expect(play).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByLabelText("Громкость"));
+    fireEvent.change(screen.getByRole("slider", { name: "Личная громкость" }), { target: { value: "0.25" } });
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it("disposes an audio element when its authoritative track disappears", () => {
+    const track = trackFromAudio(playingAudio);
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    const load = vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+    const props = { audio: playingAudio, audioTracks: [track], assets: [audioAsset], role: "PLAYER" as const, socket: null, onUpload: vi.fn() };
+    const view = renderComponent(createElement(MusicBar, props));
+    expect(view.container.querySelectorAll("audio")).toHaveLength(1);
+    view.rerender(createElement(MusicBar, { ...props, audioTracks: [] }));
+    expect(view.container.querySelectorAll("audio")).toHaveLength(0);
+    expect(pause).toHaveBeenCalled();
+    expect(load).toHaveBeenCalled();
+  });
+
   it("tries shared playback on a fresh profile without saving consent as a mute", () => {
     const play = vi
       .spyOn(HTMLMediaElement.prototype, "play")

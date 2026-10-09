@@ -498,6 +498,12 @@ html[data-player-theme="light"] .brand__mark {
   max-height: 280px;
   overflow: auto;
 }
+
+.music-mixer-list { display: grid; gap: .75rem; }
+.music-mixer-track { display: grid; grid-template-columns: minmax(8rem, 1fr) auto minmax(8rem, 1fr) auto; align-items: center; gap: .75rem; padding: .75rem; border: 1px solid var(--border); border-radius: .75rem; }
+.music-mixer-track label { display: grid; gap: .25rem; font-size: .8rem; }
+.music-mixer-track input[type="range"] { width: 100%; }
+@media (max-width: 600px) { .music-mixer-track { grid-template-columns: 1fr auto; } }
 .music-track {
   display: flex;
   justify-content: space-between;
