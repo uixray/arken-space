@@ -14,6 +14,7 @@ import { AssetPicker } from "./ui/AssetPicker";
 import type { AssetActions } from "./use-asset-actions";
 import { ApiError, formatApiError } from "./api";
 import { WORLD_EDITOR_TITLE } from "./world-workspace-labels";
+import { WorldContentInstancesPanel } from "./WorldContentInstancesPanel";
 import { AppIcon } from "./ui/AppIcon";
 import { MoveDownIcon, MoveUpIcon } from "./ui/icons";
 import {
@@ -267,15 +268,21 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
         </section>
         <section className="world-content-workspace__detail-pane">
           {selected ? (
-            <EntityDetail
-              key={selected.id}
-              entity={selected}
-              allEntities={items}
-              assets={assets}
-              onUpload={onUpload}
-              onSaved={applyUpdated}
-              onConflict={() => void refetchSelected(selected.id)}
-            />
+            <>
+              <EntityDetail
+                key={selected.id}
+                entity={selected}
+                allEntities={items}
+                assets={assets}
+                onUpload={onUpload}
+                onSaved={applyUpdated}
+                onConflict={() => void refetchSelected(selected.id)}
+              />
+              <WorldContentInstancesPanel
+                key={selected.id}
+                canonical={{ id: selected.id, name: selected.name }}
+              />
+            </>
           ) : (
             <p className="muted">
               Выберите сущность слева, чтобы просмотреть или отредактировать её.
