@@ -7,7 +7,7 @@ import { api } from "./api";
 
 export type WorldContentInstanceFields = Pick<
   WorldContentInstanceDto,
-  "displayNameOverride" | "currentState" | "gmNotes"
+  "displayNameOverride" | "currentState" | "gmNotes" | "quantity" | "condition"
 >;
 
 export const fetchWorldContentInstances = (worldContentId: string) =>
@@ -20,9 +20,7 @@ export const fetchWorldContentInstance = (id: string) =>
     `/api/world-content-instances/${encodeURIComponent(id)}`,
   );
 
-export const createWorldContentInstance = (
-  input: CreateWorldContentInstance,
-) =>
+export const createWorldContentInstance = (input: CreateWorldContentInstance) =>
   api<WorldContentInstanceDto | { duplicate: true }>(
     "/api/world-content-instances",
     { method: "POST", body: JSON.stringify(input) },

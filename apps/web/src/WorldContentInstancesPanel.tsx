@@ -20,30 +20,44 @@ type Draft = {
   displayNameOverride: string;
   currentState: string;
   gmNotes: string;
+  quantity: string;
+  condition: string;
 };
 
 const emptyDraft = (): Draft => ({
   displayNameOverride: "",
   currentState: "",
   gmNotes: "",
+  quantity: "",
+  condition: "",
 });
 
 const fieldsFrom = (instance: WorldContentInstanceDto): Draft => ({
   displayNameOverride: instance.displayNameOverride ?? "",
   currentState: instance.currentState ?? "",
   gmNotes: instance.gmNotes ?? "",
+  quantity: instance.quantity === null ? "" : String(instance.quantity),
+  condition: instance.condition ?? "",
 });
 
 const editableFields = [
   "displayNameOverride",
   "currentState",
   "gmNotes",
+  "quantity",
+  "condition",
 ] as const satisfies readonly (keyof Draft)[];
 
-const draftValues = (draft: Draft): WorldContentInstanceFields => ({
+const draftValues = (
+  draft: Draft,
+  item: boolean,
+): WorldContentInstanceFields => ({
   displayNameOverride: draft.displayNameOverride.trim() || null,
   currentState: draft.currentState.trim() || null,
   gmNotes: draft.gmNotes.trim() || null,
+  quantity:
+    item && draft.quantity.trim() !== "" ? Number(draft.quantity) : null,
+  condition: item ? draft.condition.trim() || null : null,
 });
 
 function actionId() {
@@ -53,8 +67,9 @@ function actionId() {
 export function WorldContentInstancesPanel({
   canonical,
 }: {
-  canonical: { id: string; name: string };
+  canonical: { id: string; name: string; type: string };
 }) {
+  const isItem = canonical.type === "ITEM";
   const [instances, setInstances] = useState<WorldContentInstanceDto[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [base, setBase] = useState<WorldContentInstanceDto | null>(null);
@@ -141,13 +156,25 @@ export function WorldContentInstancesPanel({
 
   const dirty = useMemo(() => {
     if (!base) return {};
-    const normalized = draftValues(draft);
+    const normalized = draftValues(draft, isItem);
     return Object.fromEntries(
       editableFields
+        .filter(
+          (field) => isItem || (field !== "quantity" && field !== "condition"),
+        )
         .filter((field) => normalized[field] !== base[field])
         .map((field) => [field, normalized[field]]),
     ) as Partial<WorldContentInstanceFields>;
-  }, [base, draft]);
+  }, [base, draft, isItem]);
+  const quantityInvalid =
+    isItem &&
+    draft.quantity.trim() !== "" &&
+    (!/^\d+$/.test(draft.quantity.trim()) ||
+      Number(draft.quantity) > 2_147_483_647);
+  const conditionInvalid =
+    isItem &&
+    draft.condition.trim() !== "" &&
+    draft.condition.trim().length > 200;
   const retryPending =
     (mode === "create" && createActionRef.current !== null) ||
     (mode === "edit" && updateActionRef.current !== null);
@@ -185,6 +212,7 @@ export function WorldContentInstancesPanel({
   };
 
   const handleCreate = async () => {
+    if (quantityInvalid || conditionInvalid) return;
     setSaving(true);
     setError("");
     setNotice("");
@@ -194,6 +222,7 @@ export function WorldContentInstancesPanel({
       displayNameOverride: draft.displayNameOverride.trim() || null,
       currentState: draft.currentState.trim() || null,
       gmNotes: draft.gmNotes.trim() || null,
+      ...(isItem ? draftValues(draft, true) : {}),
     });
     try {
       const result = await createWorldContentInstance(request);
@@ -205,13 +234,17 @@ export function WorldContentInstancesPanel({
             row.worldContentId === canonical.id &&
             row.displayNameOverride === request.displayNameOverride &&
             row.currentState === request.currentState &&
-            row.gmNotes === request.gmNotes,
+            row.gmNotes === request.gmNotes &&
+            row.quantity === (request.quantity ?? null) &&
+            row.condition === (request.condition ?? null),
         );
         createActionRef.current = null;
         setMode("view");
         if (createdCandidates?.length === 1) {
           selectInstance(createdCandidates[0]!);
-          setNotice("Повтор запроса распознан; существующий экземпляр загружен.");
+          setNotice(
+            "Повтор запроса распознан; существующий экземпляр загружен.",
+          );
         } else {
           setNotice(
             "Запрос уже обработан. Список обновлён; выберите созданный экземпляр.",
@@ -234,6 +267,7 @@ export function WorldContentInstancesPanel({
   };
 
   const saveDraft = async (revision = base?.revision) => {
+    if (quantityInvalid || conditionInvalid) return;
     if (!base || revision === undefined || Object.keys(dirty).length === 0)
       return;
     setSaving(true);
@@ -245,7 +279,10 @@ export function WorldContentInstancesPanel({
     };
     updateActionRef.current = pending;
     try {
-      const result = await updateWorldContentInstance(pending.id, pending.payload);
+      const result = await updateWorldContentInstance(
+        pending.id,
+        pending.payload,
+      );
       if ("duplicate" in result) {
         const latest = await fetchWorldContentInstance(base.id);
         setInstances((current) =>
@@ -304,25 +341,44 @@ export function WorldContentInstancesPanel({
             изменяется.
           </p>
         </div>
-        <Button view="action" disabled={loading || saving || retryPending} onClick={startCreate}>
+        <Button
+          view="action"
+          disabled={loading || saving || retryPending}
+          onClick={startCreate}
+        >
           Создать экземпляр
         </Button>
       </header>
-      {error && <p className="field-error" role="alert">{error}</p>}
-      {notice && <p className="world-content-instances__notice" role="status">{notice}</p>}
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p className="world-content-instances__notice" role="status">
+          {notice}
+        </p>
+      )}
       {loading ? (
         <p className="muted">Загрузка экземпляров…</p>
       ) : instances.length === 0 ? (
-        <p className="muted">В этой кампании пока нет экземпляров этой сущности.</p>
+        <p className="muted">
+          В этой кампании пока нет экземпляров этой сущности.
+        </p>
       ) : (
-        <ul className="world-content-instances__list" aria-label="Экземпляры сущности">
+        <ul
+          className="world-content-instances__list"
+          aria-label="Экземпляры сущности"
+        >
           {instances.map((instance) => (
             <li key={instance.id}>
               <button
                 type="button"
                 disabled={saving || retryPending}
                 aria-pressed={instance.id === selectedId}
-                className={instance.id === selectedId ? "is-selected" : undefined}
+                className={
+                  instance.id === selectedId ? "is-selected" : undefined
+                }
                 onClick={() => selectInstance(instance)}
               >
                 <span>{instance.displayNameOverride || canonical.name}</span>
@@ -338,9 +394,13 @@ export function WorldContentInstancesPanel({
 
       {(mode === "create" || mode === "edit") && (
         <div className="world-content-instances__form">
-          <h4>{mode === "create" ? "Новый экземпляр" : "Изменить экземпляр"}</h4>
+          <h4>
+            {mode === "create" ? "Новый экземпляр" : "Изменить экземпляр"}
+          </h4>
           {mode === "edit" && base && (
-            <p className="muted">Каноническая сущность: {canonical.name} · ревизия {base.revision}</p>
+            <p className="muted">
+              Каноническая сущность: {canonical.name} · ревизия {base.revision}
+            </p>
           )}
           <label className="field">
             Имя в этой кампании
@@ -348,7 +408,12 @@ export function WorldContentInstancesPanel({
               value={draft.displayNameOverride}
               maxLength={200}
               disabled={saving || retryPending}
-              onChange={(event) => setDraft((current) => ({ ...current, displayNameOverride: event.target.value }))}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  displayNameOverride: event.target.value,
+                }))
+              }
             />
           </label>
           <label className="field">
@@ -357,7 +422,12 @@ export function WorldContentInstancesPanel({
               value={draft.currentState}
               maxLength={4000}
               disabled={saving || retryPending}
-              onChange={(event) => setDraft((current) => ({ ...current, currentState: event.target.value }))}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  currentState: event.target.value,
+                }))
+              }
             />
           </label>
           <label className="field">
@@ -366,25 +436,101 @@ export function WorldContentInstancesPanel({
               value={draft.gmNotes}
               maxLength={20000}
               disabled={saving || retryPending}
-              onChange={(event) => setDraft((current) => ({ ...current, gmNotes: event.target.value }))}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  gmNotes: event.target.value,
+                }))
+              }
             />
           </label>
+          {isItem && (
+            <>
+              <label className="field">
+                Количество{" "}
+                <span className="muted">
+                  (пусто — не указано; 0 — явно ноль)
+                </span>
+                <FormInput
+                  type="number"
+                  min={0}
+                  max={2_147_483_647}
+                  step={1}
+                  inputMode="numeric"
+                  value={draft.quantity}
+                  disabled={saving || retryPending}
+                  aria-invalid={quantityInvalid}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      quantity: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                Состояние предмета
+                <FormInput
+                  value={draft.condition}
+                  maxLength={200}
+                  disabled={saving || retryPending}
+                  aria-invalid={conditionInvalid}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      condition: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              {(quantityInvalid || conditionInvalid) && (
+                <p className="field-error" role="alert">
+                  {quantityInvalid
+                    ? "Количество должно быть целым числом от 0 до 2 147 483 647 или оставаться пустым."
+                    : "Состояние предмета должно содержать не более 200 символов."}
+                </p>
+              )}
+            </>
+          )}
           {mode === "edit" && conflictLatest && (
             <div className="world-content-instances__conflict" role="alert">
-              <strong>Актуальная версия — ревизия {conflictLatest.revision}.</strong>
+              <strong>
+                Актуальная версия — ревизия {conflictLatest.revision}.
+              </strong>
               <p>Имя: {conflictLatest.displayNameOverride || canonical.name}</p>
               <p>Состояние: {conflictLatest.currentState || "не указано"}</p>
               <p>Заметки мастера: {conflictLatest.gmNotes || "нет"}</p>
-              <p>Ваш текст остаётся в полях выше. Повторная запись затронет только изменённые поля.</p>
+              {isItem && (
+                <>
+                  <p>Количество: {conflictLatest.quantity ?? "не указано"}</p>
+                  <p>
+                    Состояние предмета:{" "}
+                    {conflictLatest.condition || "не указано"}
+                  </p>
+                </>
+              )}
+              <p>
+                Ваш текст остаётся в полях выше. Повторная запись затронет
+                только изменённые поля.
+              </p>
             </div>
           )}
           <div className="world-content-instances__actions">
-            <Button disabled={saving || retryPending} onClick={cancelDraft}>Отмена</Button>
+            <Button disabled={saving || retryPending} onClick={cancelDraft}>
+              Отмена
+            </Button>
             <Button
               view="action"
               loading={saving}
-              disabled={saving || (mode === "edit" && Object.keys(dirty).length === 0)}
-              onClick={() => mode === "create" ? void handleCreate() : void saveDraft()}
+              disabled={
+                saving ||
+                quantityInvalid ||
+                conditionInvalid ||
+                (mode === "edit" && Object.keys(dirty).length === 0)
+              }
+              onClick={() =>
+                mode === "create" ? void handleCreate() : void saveDraft()
+              }
             >
               {retryPending
                 ? "Повторить тот же запрос"
@@ -407,8 +553,12 @@ export function WorldContentInstancesPanel({
 
       {mode === "view" && selected && (
         <div className="world-content-instances__actions">
-          <Button view="action" onClick={() => setMode("edit")}>Изменить выбранный экземпляр</Button>
-          <Button onClick={() => void load()} disabled={loading}>Обновить список</Button>
+          <Button view="action" onClick={() => setMode("edit")}>
+            Изменить выбранный экземпляр
+          </Button>
+          <Button onClick={() => void load()} disabled={loading}>
+            Обновить список
+          </Button>
         </div>
       )}
     </section>

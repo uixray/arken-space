@@ -280,7 +280,11 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
               />
               <WorldContentInstancesPanel
                 key={selected.id}
-                canonical={{ id: selected.id, name: selected.name }}
+                canonical={{
+                  id: selected.id,
+                  name: selected.name,
+                  type: selected.type,
+                }}
               />
             </>
           ) : (
