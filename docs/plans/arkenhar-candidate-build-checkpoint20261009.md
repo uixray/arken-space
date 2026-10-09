@@ -13,3 +13,11 @@ Build boundary: first network-none attempt failed missing Corepack pnpm10.12.1 c
 Verification beyond images: local source41tests/type/build gate, addressed account HTTP/Chromium lifecycle and retainedGM/PLAYER bootstrap3scenarios passed with fake mail/no-op socketfixture. Socket revocation/PG concurrency prior receipts remain separately scoped. ProductionSMTP absent/registrationdisabled. Current-image freshmigration/media/auth/runtime/restore/rollback gate active in separate synthetic disposable arm, not yet accepted.
 
 Blockers/next: finish exact-image fresh/upgrade/restore/preupgrade tuple checks and scoped browser/runtime; provider/dependency approval/key operational setup/public policy/server availability and explicit deploy permission still required. Installer/human/backlog remaining AC are not solved by an image pair. No production/push/merge/deploy performed. Preserve oldACA artifacts and owner playable stands.
+
+## Upgrade/data rollback-tuple checkpoint
+
+Local synthetic U arm completed using oldACA migrationCLI only and exactcurrentserverID. Baseline49→candidate54 migrations; candidatehealth200. Preserved campaign/membership/character/asset/media/canon IDs and explicit PLAYER owner/controller. users0 and legacy memberships.user_idNULL: no automatic account binding/no seed.
+
+Preupgrade49-entry owned fixture dump restored into a separate DB; same ledger/counts/owner/controller. Media digest preserved in upgrade, but rollback media was reconstructed from known synthetic payload, NOT restored from an archive; do not call this full media recovery or oldbinaryrollback. Private dump/checkpoint retained `.data/qa-prep/release-upgrade-u-2c35435-20261009/`; U resources removed by verifiedexactIDs.
+
+CurrentF/R/TLS arm remains active separately. Freshimage ledger all54 orderedSQLhashes/timestamps matches exactfrozencontextbytes (Windowsworktree CRLF discrepancy explained, not schema failure). No production/SMTP activation. Nodemailer dependency decision presented to owner; no install without response.

@@ -27,3 +27,13 @@ Offline build reached cachedbase and exactcontext but failed Corepack pnpm10.12.
 Addressed browser gate initial3failures are retained: harness omitted runtime/key readiness and Origin mismatch. Worker owns corrective harness-only changes and finite rerun, no productdefect conclusion yet. Real mail transport still absent/defaultdisabled; Nodemailer dependency permission requested and unanswered.
 
 Next: finish same-SHA images+archive hashes; corrected actualHTTP/browser gate; synthetic fresh/upgrade/restore/preupgrade rollbacktuple checks. Full backlog/user/installer/provider/server gates stay open. No production/deploy/push/merge authority.
+
+## Current orchestration checkpoint
+
+Revision3062fb1; exact product candidate remains2c35435/image pair recorded above. Upgrade49→54 and preupgrade DB-tuple restore have safe receipts; synthetic rollback media was reconstructed, so full media-archive/oldbinary rollback remains unproven. Fresh/restore runtime completed scoped API/ledger/reference/media checks; TLS/browser executor is still live, not accepted yet.
+
+TLS harness internal-network host forwarding failed connection-refused despite running gateway. Root authorized an additional disposable bridge network for gateway only and loopback publication; DB/backend remain internal, no external requests/global certificate trust. Executor continues; do not restart from observation timeout.
+
+Owner asked whether Yandex server data exists locally. A separate read-only Luna inventory now owns provenance classification of local real-server backups versus synthetic fixtures/code/images; no remote read/start, no private DB/token contents. Astra is identifying actionable remaining local AC without duplicating finished gates. Nodemailer/new dependency and signup policy decisions remain unanswered; registration stays disabled.
+
+Changed files this checkpoint: this document and candidate-build checkpoint U append. Verification: Git HEAD/status inspected; unrelated .tmp/map-ping-motion preserved. Next: accept bounded TLS/cleanup receipts, integrate inventory and next-local plan, update Linear only at completed stage gate. No publication or production loss assessment is claimed.
