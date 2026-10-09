@@ -51,7 +51,19 @@ export function parseAccountMailSmtpConfig(source: AccountMailSmtpEnvironment): 
   const password = source.ACCOUNT_MAIL_SMTP_PASSWORD ?? "";
   const from = source.ACCOUNT_MAIL_SMTP_FROM?.trim() ?? "";
   const portText = source.ACCOUNT_MAIL_SMTP_PORT?.trim() ?? "";
-  const anySet = Object.values(source).some(Boolean);
+  // The caller may pass the full process environment. Only SMTP-owned fields
+  // indicate SMTP configuration; unrelated runtime/database settings must not
+  // turn an otherwise disabled adapter into a partial-config error.
+  const anySet = [
+    source.ACCOUNT_MAIL_SMTP_HOST,
+    source.ACCOUNT_MAIL_SMTP_PORT,
+    source.ACCOUNT_MAIL_SMTP_USERNAME,
+    source.ACCOUNT_MAIL_SMTP_PASSWORD,
+    source.ACCOUNT_MAIL_SMTP_FROM,
+    source.ACCOUNT_MAIL_SMTP_CONNECT_TIMEOUT_MS,
+    source.ACCOUNT_MAIL_SMTP_GREETING_TIMEOUT_MS,
+    source.ACCOUNT_MAIL_SMTP_SOCKET_TIMEOUT_MS,
+  ].some((value) => Boolean(value));
   if (!anySet) return null;
   const hostIsDns = host.length > 0 && host.length <= 253 && (isIP(host) !== 0
     || /^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?))*\.?$/.test(host));

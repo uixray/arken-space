@@ -113,6 +113,20 @@ afterAll(() => rmSync(dataDirectory, { recursive: true, force: true }));
 describe("account SMTP adapter", () => {
   it("is disabled with absent config and rejects partial, malformed, or header-injecting config", () => {
     expect(createAccountMailSmtpAdapter(parseAccountMailSmtpConfig({})).ready).toBe(false);
+    const fullLikeEnvironment = {
+      ACCOUNT_MAIL_SMTP_HOST: "",
+      ACCOUNT_MAIL_SMTP_PORT: "",
+      ACCOUNT_MAIL_SMTP_USERNAME: "",
+      ACCOUNT_MAIL_SMTP_PASSWORD: "",
+      ACCOUNT_MAIL_SMTP_FROM: "",
+      ACCOUNT_MAIL_SMTP_CONNECT_TIMEOUT_MS: "",
+      ACCOUNT_MAIL_SMTP_GREETING_TIMEOUT_MS: "",
+      ACCOUNT_MAIL_SMTP_SOCKET_TIMEOUT_MS: "",
+      DATABASE_URL: "postgres://synthetic.invalid/db",
+      ACCOUNT_MAIL_RUNTIME_ENABLED: true,
+      OTHER_RUNTIME_SETTING: "enabled",
+    };
+    expect(parseAccountMailSmtpConfig(fullLikeEnvironment)).toBeNull();
     expect(() => parseAccountMailSmtpConfig({ ACCOUNT_MAIL_SMTP_HOST: "smtp.example.test" })).toThrow("MAIL_SMTP_CONFIG_INVALID");
     expect(() => parseAccountMailSmtpConfig({ ACCOUNT_MAIL_SMTP_HOST: "smtp.example.test\r\nX: y" })).toThrow("MAIL_SMTP_CONFIG_INVALID");
     expect(() => parseAccountMailSmtpConfig({
@@ -133,6 +147,28 @@ describe("account SMTP adapter", () => {
     });
     expect(context.runtimeEnabled).toBe(false);
     expect(context.adapter.ready).toBe(true);
+    expect(context.keyring).toBeNull();
+  });
+
+  it.each([false, true])("keeps blank SMTP unconfigured with a full environment (runtime=%s)", (runtimeEnabled) => {
+    const fullLikeEnvironment = {
+      ACCOUNT_MAIL_RUNTIME_ENABLED: runtimeEnabled,
+      ACCOUNT_MAIL_ACTIVE_KEY_ID: "",
+      ACCOUNT_MAIL_KEYRING: "",
+      ACCOUNT_MAIL_SMTP_HOST: "",
+      ACCOUNT_MAIL_SMTP_PORT: "",
+      ACCOUNT_MAIL_SMTP_USERNAME: "",
+      ACCOUNT_MAIL_SMTP_PASSWORD: "",
+      ACCOUNT_MAIL_SMTP_FROM: "",
+      ACCOUNT_MAIL_SMTP_CONNECT_TIMEOUT_MS: "",
+      ACCOUNT_MAIL_SMTP_GREETING_TIMEOUT_MS: "",
+      ACCOUNT_MAIL_SMTP_SOCKET_TIMEOUT_MS: "",
+      DATABASE_URL: "postgres://synthetic.invalid/db",
+      NODE_ENV: "production",
+    };
+    const context = createAccountMailContext(fullLikeEnvironment);
+    expect(context.runtimeEnabled).toBe(runtimeEnabled);
+    expect(context.adapter.ready).toBe(false);
     expect(context.keyring).toBeNull();
   });
 
