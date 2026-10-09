@@ -111,6 +111,20 @@
     }
   },
   "evidence": {
+    "ownedCharacterSelect20261009": {
+      "status": "PARTIAL",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifact": "docs/plans/uix644-select-contract-gate20261009.md",
+      "receiptSha256": "3D0D9A2AFD1CDF8E7DB00E162DD15098297C1F9D8055C17E724BCCE7074D6D70",
+      "scope": "Chrome/Firefox desktop/compact retained PLAYER owned-character accessible pointer selection, trigger label and reopened aria-selected; final selection after Home/ArrowDown/Enter, Escape preserving selection and outside-field focus/reopen observed. Intermediate active-option indices unproved because unsupported aria-activedescendant probe returned -1. No request submission. Not all six FormSelect callers, outside-pointer dismissal, native zoom or registration acceptance. Prior failed receipts preserved."
+    },
+    "compactSceneRestore20261009": {
+      "status": "SCOPED_PASS",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifact": "docs/plans/uix644-select-contract-gate20261009.md",
+      "receiptSha256": "6CDF56ADDE430F20A92407B131220916B9BA67046D6FEE154C1605087A40F5D4",
+      "scope": "Firefox compact non-modal GM scene workspace: Shift+Tab twice from body then Enter restores original viewed scene; actual scene:view and four unchanged published-identity snapshots. Resolves only prior compact keyboard-restore gap, not forward-Tab wrap, whole scene lifecycle or zoom. No product focus edit warranted by broader impossibility hypothesis."
+    },
     "sceneSelection20261009": {
       "status": "PARTIAL",
       "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
@@ -429,8 +443,8 @@
       "count": 6,
       "status": "BLOCKED",
       "classification": "reachable",
-      "scope": "Six controls migrated from native select to FormSelect in UIX-674. Prior native browser evidence no longer proves the new popup lifecycle; local screenshot only confirms arrow inset/open state.",
-      "evidence": ["requestsCurrent", "requestsBuilt"],
+      "scope": "Six controls migrated from native select to FormSelect in UIX-674. Retained PLAYER owned-character caller has exact-source partial four-cell pointer/final keyboard selection and dismissal evidence; no whole six-control PASS. Prior native evidence does not prove new popup lifecycle.",
+      "evidence": ["requestsCurrent", "requestsBuilt", "ownedCharacterSelect20261009"],
       "next": "Run current-revision keyboard, dismissal, focus return and narrow viewport FormSelect lifecycle before marking PASS."
     },
     {
