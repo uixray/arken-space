@@ -19,12 +19,14 @@ import {
   assets,
   gameEvents,
   scenes,
+  worldContent,
   worldMapLocations,
   worldMapLocationScenes,
   worldMapPartyPosition,
   worldMaps,
 } from "@arken/db";
 import { requireAuth, type AuthContext } from "./auth.js";
+import { worldContentByIdVisibleTo } from "./world-content.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type Broadcast = (campaignId: string) => Promise<void>;
@@ -56,6 +58,7 @@ function locationDto(location: typeof worldMapLocations.$inferSelect) {
   return {
     id: location.id,
     mapId: location.mapId,
+    canonicalLocationId: location.canonicalLocationId,
     name: location.name,
     kind: location.kind,
     summary: location.summary,
@@ -87,6 +90,18 @@ function isGameEventActionConflict(error: unknown) {
     ("constraint_name" in error && error.constraint_name) ||
     ("constraint" in error && error.constraint);
   return constraint === "game_events_campaign_action_idx";
+}
+
+function isCanonicalLocationForeignKeyViolation(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "23503" &&
+    "constraint_name" in error &&
+    error.constraint_name ===
+      "world_map_locations_canonical_location_id_world_content_id_fk"
+  );
 }
 
 async function replayEvent(
@@ -231,6 +246,24 @@ async function draftLocation(
     )
     .limit(1);
   return row && row.map.lifecycle === "DRAFT" ? row : null;
+}
+
+async function validCanonicalLocation(
+  db: Database,
+  auth: AuthContext,
+  id: string,
+) {
+  const [row] = await db
+    .select({ id: worldContent.id })
+    .from(worldContent)
+    .where(
+      and(
+        worldContentByIdVisibleTo(auth, id),
+        eq(worldContent.type, "LOCATION"),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
 }
 
 async function approvedMapAsset(
@@ -813,40 +846,57 @@ export function registerWorldMapRoutes(
     }
     if (!(await draftMap(db, auth.campaignId, body.mapId)))
       return reply.code(404).send({ error: "WORLD_MAP_NOT_FOUND" });
-    const mutation = await runWorldMapMutation(
-      db,
-      auth,
-      body.actionId,
-      "world_map.location_created",
-      async (tx) => {
-        const [location] = await tx
-          .insert(worldMapLocations)
-          .values({
+    if (
+      body.canonicalLocationId &&
+      !(await validCanonicalLocation(db, auth, body.canonicalLocationId))
+    )
+      return reply
+        .code(400)
+        .send({ error: "WORLD_MAP_CANONICAL_LOCATION_INVALID" });
+    let mutation: WorldMapMutation<typeof worldMapLocations.$inferSelect>;
+    try {
+      mutation = await runWorldMapMutation(
+        db,
+        auth,
+        body.actionId,
+        "world_map.location_created",
+        async (tx) => {
+          const [location] = await tx
+            .insert(worldMapLocations)
+            .values({
+              campaignId: auth.campaignId,
+              mapId: body.mapId,
+              canonicalLocationId: body.canonicalLocationId ?? null,
+              name: body.name,
+              kind: body.kind,
+              summary: body.summary,
+              gmNotes: body.gmNotes,
+              visibility: body.visibility,
+              x: body.x,
+              y: body.y,
+            })
+            .returning();
+          if (!location) throw new Error("WORLD_MAP_LOCATION_CREATE_FAILED");
+          await tx.insert(gameEvents).values({
             campaignId: auth.campaignId,
-            mapId: body.mapId,
-            name: body.name,
-            kind: body.kind,
-            summary: body.summary,
-            gmNotes: body.gmNotes,
-            visibility: body.visibility,
-            x: body.x,
-            y: body.y,
-          })
-          .returning();
-        if (!location) throw new Error("WORLD_MAP_LOCATION_CREATE_FAILED");
-        await tx.insert(gameEvents).values({
-          campaignId: auth.campaignId,
-          actionId: body.actionId,
-          membershipId: auth.membershipId,
-          type: "world_map.location_created",
-          entityType: "WORLD_MAP_LOCATION",
-          entityId: location.id,
-          entityRevision: location.revision,
-          payload: { mapId: location.mapId, locationId: location.id },
-        });
-        return location;
-      },
-    );
+            actionId: body.actionId,
+            membershipId: auth.membershipId,
+            type: "world_map.location_created",
+            entityType: "WORLD_MAP_LOCATION",
+            entityId: location.id,
+            entityRevision: location.revision,
+            payload: { mapId: location.mapId, locationId: location.id },
+          });
+          return location;
+        },
+      );
+    } catch (error) {
+      if (isCanonicalLocationForeignKeyViolation(error))
+        return reply
+          .code(400)
+          .send({ error: "WORLD_MAP_CANONICAL_LOCATION_INVALID" });
+      throw error;
+    }
     if ("replay" in mutation) {
       const location = await locationForReplay(
         db,
@@ -898,49 +948,71 @@ export function registerWorldMapRoutes(
         error: "WORLD_MAP_LOCATION_CONFLICT",
         current: locationDto(row.location),
       });
-    const mutation = await runWorldMapMutation(
-      db,
-      auth,
-      body.actionId,
-      "world_map.location_updated",
-      async (tx) => {
-        const [updated] = await tx
-          .update(worldMapLocations)
-          .set({
-            ...(body.name !== undefined ? { name: body.name } : {}),
-            ...(body.kind !== undefined ? { kind: body.kind } : {}),
-            ...(body.summary !== undefined ? { summary: body.summary } : {}),
-            ...(body.gmNotes !== undefined ? { gmNotes: body.gmNotes } : {}),
-            ...(body.visibility !== undefined
-              ? { visibility: body.visibility }
-              : {}),
-            ...(body.x !== undefined ? { x: body.x } : {}),
-            ...(body.y !== undefined ? { y: body.y } : {}),
-            revision: row.location.revision + 1,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(worldMapLocations.id, id),
-              eq(worldMapLocations.campaignId, auth.campaignId),
-              eq(worldMapLocations.revision, row.location.revision),
-            ),
-          )
-          .returning();
-        if (!updated) return null;
-        await tx.insert(gameEvents).values({
-          campaignId: auth.campaignId,
-          actionId: body.actionId,
-          membershipId: auth.membershipId,
-          type: "world_map.location_updated",
-          entityType: "WORLD_MAP_LOCATION",
-          entityId: id,
-          entityRevision: updated.revision,
-          payload: { mapId: updated.mapId, locationId: id },
-        });
-        return updated;
-      },
-    );
+    if (
+      body.canonicalLocationId &&
+      body.canonicalLocationId !== row.location.canonicalLocationId &&
+      !(await validCanonicalLocation(db, auth, body.canonicalLocationId))
+    )
+      return reply
+        .code(400)
+        .send({ error: "WORLD_MAP_CANONICAL_LOCATION_INVALID" });
+    let mutation: WorldMapMutation<
+      typeof worldMapLocations.$inferSelect | null
+    >;
+    try {
+      mutation = await runWorldMapMutation(
+        db,
+        auth,
+        body.actionId,
+        "world_map.location_updated",
+        async (tx) => {
+          const [updated] = await tx
+            .update(worldMapLocations)
+            .set({
+              ...(body.name !== undefined ? { name: body.name } : {}),
+              ...(body.kind !== undefined ? { kind: body.kind } : {}),
+              ...(body.summary !== undefined ? { summary: body.summary } : {}),
+              ...(body.gmNotes !== undefined ? { gmNotes: body.gmNotes } : {}),
+              ...(body.visibility !== undefined
+                ? { visibility: body.visibility }
+                : {}),
+              ...(body.x !== undefined ? { x: body.x } : {}),
+              ...(body.y !== undefined ? { y: body.y } : {}),
+              ...(body.canonicalLocationId !== undefined
+                ? { canonicalLocationId: body.canonicalLocationId }
+                : {}),
+              revision: row.location.revision + 1,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(worldMapLocations.id, id),
+                eq(worldMapLocations.campaignId, auth.campaignId),
+                eq(worldMapLocations.revision, row.location.revision),
+              ),
+            )
+            .returning();
+          if (!updated) return null;
+          await tx.insert(gameEvents).values({
+            campaignId: auth.campaignId,
+            actionId: body.actionId,
+            membershipId: auth.membershipId,
+            type: "world_map.location_updated",
+            entityType: "WORLD_MAP_LOCATION",
+            entityId: id,
+            entityRevision: updated.revision,
+            payload: { mapId: updated.mapId, locationId: id },
+          });
+          return updated;
+        },
+      );
+    } catch (error) {
+      if (isCanonicalLocationForeignKeyViolation(error))
+        return reply
+          .code(400)
+          .send({ error: "WORLD_MAP_CANONICAL_LOCATION_INVALID" });
+      throw error;
+    }
     if ("replay" in mutation) {
       const location = await locationForReplay(
         db,

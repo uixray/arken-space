@@ -15,6 +15,13 @@ import {
 import { buildGameSnapshot } from "./test-support/game-snapshot-fixtures";
 import type { ArkenDialogProps } from "./ui/ArkenDialog";
 
+vi.mock("./world-map-canonical-location-client", () => ({
+  fetchCanonicalLocationsForMap: vi.fn().mockResolvedValue([
+    { id: "canon-location", name: "Канонический маяк" },
+    { id: "canon-other", name: "Другой канон" },
+  ]),
+}));
+
 // Retain actual workspace/form content; modal positioning/focus is a separate gate.
 vi.mock("./ui/ArkenDialog", () => ({
   ArkenDialog: ({
@@ -70,6 +77,7 @@ function maps(lifecycle: "DRAFT" | "PUBLISHED"): WorldMapsSnapshotDto {
     locations: kinds.map(([kind], index) => ({
       id: `place-${index}`,
       mapId: "map",
+      canonicalLocationId: index === 0 ? "canon-location" : null,
       name: `Neverwinter ${index}`,
       kind,
       summary: "",
@@ -284,9 +292,48 @@ describe("world map localized display copy", () => {
         summary: "",
         gmNotes: "",
         visibility: "GM_ONLY",
+        canonicalLocationId: null,
         x: 0.5,
         y: 0.5,
       }),
+    );
+  });
+
+  it("preserves an existing canonical association on unrelated edits and lets the GM change it", async () => {
+    const { props } = setup("GM", "DRAFT");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Редактировать" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Локация" });
+    const picker = within(dialog).getByRole("combobox", {
+      name: "Каноническая локация",
+    });
+    await waitFor(() => expect(picker).toHaveValue("canon-location"));
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Сохранить" }),
+    );
+    await waitFor(() =>
+      expect(props.onUpdateLocation).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "place-0" }),
+        expect.objectContaining({ canonicalLocationId: "canon-location" }),
+      ),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Редактировать" }),
+    );
+    const reopened = screen.getByRole("dialog", { name: "Локация" });
+    await userEvent.selectOptions(
+      within(reopened).getByRole("combobox", { name: "Каноническая локация" }),
+      "canon-other",
+    );
+    await userEvent.click(
+      within(reopened).getByRole("button", { name: "Сохранить" }),
+    );
+    await waitFor(() =>
+      expect(props.onUpdateLocation).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: "place-0" }),
+        expect.objectContaining({ canonicalLocationId: "canon-other" }),
+      ),
     );
   });
 });

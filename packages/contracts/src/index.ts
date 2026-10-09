@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { soundpadTriggerSchema, type SoundpadTriggeredEvent } from "./soundpad.js";
+import {
+  soundpadTriggerSchema,
+  type SoundpadTriggeredEvent,
+} from "./soundpad.js";
 export * from "./soundpad.js";
 export * from "./account-auth.js";
 export * from "./fog-geometry.js";
@@ -1325,27 +1328,31 @@ export const drawingPointsSchema = z
   .min(4)
   .max(4096)
   .refine((points) => points.length % 2 === 0, "points must be x/y pairs");
-export const createDrawingSchema = z.object({
-  actionId: actionIdSchema,
-  sceneId: z.string().uuid(),
-  kind: z.literal("FREEHAND").optional(),
-  points: drawingPointsSchema,
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  strokeWidth: z.number().finite().min(1).max(100).default(3).optional(),
-  x: z.number().finite().default(0),
-  y: z.number().finite().default(0),
-}).or(z.object({
-  actionId: actionIdSchema,
-  sceneId: z.string().uuid(),
-  kind: z.literal("STAMP"),
-  assetKey: z.enum(["forest", "mountains", "clouds"]),
-  packId: z.literal("builtin-terrain-v1"),
-  size: z.number().finite().min(16).max(1024),
-  rotation: z.number().finite().min(-360).max(360),
-  layer: z.enum(["PUBLIC", "GM"]),
-  x: z.number().finite().min(-32768).max(32768),
-  y: z.number().finite().min(-32768).max(32768),
-}));
+export const createDrawingSchema = z
+  .object({
+    actionId: actionIdSchema,
+    sceneId: z.string().uuid(),
+    kind: z.literal("FREEHAND").optional(),
+    points: drawingPointsSchema,
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+    strokeWidth: z.number().finite().min(1).max(100).default(3).optional(),
+    x: z.number().finite().default(0),
+    y: z.number().finite().default(0),
+  })
+  .or(
+    z.object({
+      actionId: actionIdSchema,
+      sceneId: z.string().uuid(),
+      kind: z.literal("STAMP"),
+      assetKey: z.enum(["forest", "mountains", "clouds"]),
+      packId: z.literal("builtin-terrain-v1"),
+      size: z.number().finite().min(16).max(1024),
+      rotation: z.number().finite().min(-360).max(360),
+      layer: z.enum(["PUBLIC", "GM"]),
+      x: z.number().finite().min(-32768).max(32768),
+      y: z.number().finite().min(-32768).max(32768),
+    }),
+  );
 export const updateDrawingSchema = z.object({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),
@@ -1893,6 +1900,7 @@ export const createWorldMapLocationSchema = z
   .object({
     actionId: actionIdSchema,
     mapId: z.string().uuid(),
+    canonicalLocationId: z.string().uuid().nullable().optional(),
     name: z.string().trim().min(1).max(120),
     kind: worldMapLocationKindSchema.default("OTHER"),
     /** Player-safe location-card text. */
@@ -1920,6 +1928,7 @@ export const updateWorldMapLocationSchema = z
     visibility: worldMapLocationVisibilitySchema.optional(),
     x: worldMapCoordinateSchema.optional(),
     y: worldMapCoordinateSchema.optional(),
+    canonicalLocationId: z.string().uuid().nullable().optional(),
   })
   .strict()
   .refine(
@@ -1930,7 +1939,8 @@ export const updateWorldMapLocationSchema = z
       command.gmNotes !== undefined ||
       command.visibility !== undefined ||
       command.x !== undefined ||
-      command.y !== undefined,
+      command.y !== undefined ||
+      command.canonicalLocationId !== undefined,
     "At least one location field is required",
   );
 export type UpdateWorldMapLocation = z.infer<
@@ -1991,8 +2001,22 @@ export const createStickerMessageSchema = z.union([
   createStickerMessageBaseSchema
     .extend({ stream: z.enum(["TABLE", "STORY"]) })
     .strict(),
-  z.object({ actionId: actionIdSchema, scope: z.literal("GLOBAL"), globalStickerId: z.string().uuid(), threadId: z.string().uuid() }).strict(),
-  z.object({ actionId: actionIdSchema, scope: z.literal("GLOBAL"), globalStickerId: z.string().uuid(), stream: z.enum(["TABLE", "STORY"]) }).strict(),
+  z
+    .object({
+      actionId: actionIdSchema,
+      scope: z.literal("GLOBAL"),
+      globalStickerId: z.string().uuid(),
+      threadId: z.string().uuid(),
+    })
+    .strict(),
+  z
+    .object({
+      actionId: actionIdSchema,
+      scope: z.literal("GLOBAL"),
+      globalStickerId: z.string().uuid(),
+      stream: z.enum(["TABLE", "STORY"]),
+    })
+    .strict(),
 ]);
 export type CreateStickerMessage = z.infer<typeof createStickerMessageSchema>;
 
@@ -2482,6 +2506,8 @@ export interface WorldMapDto {
 export interface WorldMapLocationDto {
   id: string;
   mapId: string;
+  /** Omitted when the associated canonical location is not visible to this viewer. */
+  canonicalLocationId?: string | null;
   name: string;
   kind: WorldMapLocationKind;
   /** Player-safe card text. */
@@ -3052,7 +3078,9 @@ export interface ClientToServerEvents {
     command: z.infer<typeof soundpadTriggerSchema>,
     ack?: (result: CommandAck<SoundpadTriggeredEvent>) => void,
   ) => void;
-  "soundpad:stop": (ack?: (result: CommandAck<{ generation: number }>) => void) => void;
+  "soundpad:stop": (
+    ack?: (result: CommandAck<{ generation: number }>) => void,
+  ) => void;
   "map:ping": (
     ping: { sceneId: string; x: number; y: number },
     ack?: (result: { ok: boolean; reason?: string }) => void,
