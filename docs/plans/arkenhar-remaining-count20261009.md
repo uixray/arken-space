@@ -33,3 +33,14 @@ Latest accepted release evidence is local and synthetic. Exact candidate build/r
 - `docs/plans/arkenhar-backlog-audit-index20261009.md` and exclusive QA/product/implementation reports.
 - `docs/plans/arkenhar-goal-checkpoint20261009.md` (latest candidate/F-R-TLS/U appendices), `arkenhar-candidate-build-checkpoint20261009.md`, `arkenhar-candidate-evidence-review20261009.md`.
 - Git history through HEAD at inspection `1644be807abbacad3e4c05a2cc54cb5fd5c9ef2b`; current worktree status checked. No source was modified.
+
+## Evidence refresh — 2026-10-09, documentation HEAD 4cb0041
+
+This appendix supersedes stale candidate/download/password statements above; it does not recalculate the live Linear count or close any issue.
+
+- Nodemailer/shared bootstrap is committed in exact product candidate `4dca5a19d3b6b7ca17464825b893dfc276185462`, not uncommitted or still awaiting implementation. Exact server/web builds and archive SHA/size acceptance are recorded in the package checkpoint. The actual-image SMTP/bootstrap finite gate is running; provider/inbox acceptance remains unproved.
+- Yandex Restic download completed: 701 files, 272271426 bytes, 174 snapshot objects. Owner unlocked and restored selected production snapshot `0b1b0140`, capture `2026-10-06T10:03:48.737168028Z`. Read-only dump checksum and all 151 paired media checksum entries passed. Therefore production backup is no longer merely unknown/unlocated; DB semantic restore/migration/replay and executable rollback remain pending. Later production writes are not guaranteed.
+- Local software staging now contains accepted server/web/PostgreSQL image archives, identities and SHA/size receipts, plus nine-member positive list. Package review identified gateway/SMTP-egress/activation-override/restore-sequencing gaps; Luna executes a bounded Astra plan. Staging is not yet ready for authorized transfer.
+- Existing 77 nonterminal issue count is the earlier live inventory, not a newly refreshed count or 77 missing functions. Full remaining AC denominator still unknown. Product/policy/human gates above remain distinct; no completed feature should be rebuilt from this historical audit.
+
+Next connected gate: consume current SMTP, production-derived recovery and package-config receipts; record precise open operational requirements. No remote start, deploy, upload, push or merge authorized.
