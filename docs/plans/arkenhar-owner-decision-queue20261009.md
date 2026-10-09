@@ -38,3 +38,11 @@ Next owner conversation: first resolve campaign entitlement and minimum operatio
 ## Checkpoint
 
 Changed only this file. Inputs are existing audit/crosswalk documents, with explicit supersession of known approved scopes. No precise AC total, live issue status refresh, testing, private content access or external write claimed.
+
+## Owner resolution — creation entitlement, 2026-10-09
+
+Owner approved: any email-verified account may create campaigns, maximum 3 per account. Row 1 creation entitlement is no longer pending. This is explicit approval of the existing three-campaign limit, not inference from a default. Preserve old campaigns/GM/PLAYER links and do not infer ownership from legacy memberships. Storage/media quota and real SMTP/provider/activation readiness remain separate. Public activation/deploy is not authorized by this decision. Root instructed packaging worker to document approved limit and update manifest while retaining safe default-off base.
+
+## Owner resolution — replacement access links, 2026-10-09
+
+Owner opted to create new GM/PLAYER links rather than locate old raw URLs. Root scopes this to a fresh transfer/runtime copy with canonical rotation and confidential local link file; original backup and previously accepted migrated export remain intact. The old-link-input request is superseded, not a blocker. Link-based access feature remains supported alongside accounts; new link values replace previous credentials in the revised transfer tuple. No production/remote mutation authorized.

@@ -59,3 +59,7 @@ PASS supports only “this exact local constrained stack sustained this declared
 ## Checkpoint
 
 Only this plan changed. Bounded source pointers confirmed installed-client manifest and existing real-socket fixtures; no runtime, benchmark or hardware promise. Next: root resolves packaging gate and dispatches one finite synthetic capacity run with exact resources; no repeated old54/65auth/recovery matrix.
+
+## Pre-run scope update — added player, 2026-10-09
+
+Owner added Илья as one additional player to the recovered six-player party. Before timed measurement begins, freeze capacity workload at eight synthetic authenticated clients: 1 GM + 7 PLAYER (rather than the initial seven total). Resource limits, duration, thresholds and scope limitations stay unchanged. Additional synthetic identity/token control must pass preflight; do not count seven-client results as eight-client evidence. Actual recovered party data is not used in this capacity fixture.

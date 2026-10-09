@@ -13,3 +13,11 @@ Run only after accepted migrated export fresh-replay PASS, against a fourth disp
 
 ## Nonclaims
 This proves finite local access compatibility, not all users/gameplay, physical device latency, target deployment, post-October6 data or old browser-session continuity. Executable old-version rollback remains separate.
+
+## Owner scope change — 2026-10-09
+
+Owner explicitly chose newly generated GM/PLAYER links instead of recovering old bearer URLs. Root explained they replace old links in the transfer copy. Create a fresh R copy from verified M, leave original/B/M unchanged, rotate only existing valid backed GM/player credentials using canonical hash/revision/session semantics, never revive revoked/expired grants or infer account ownership. Save URLs only in a private local owner-access file, excluded from Git/software archive. Runtime gate uses these new links and must label them newly issued, not preserved old-bearer re-entry. Produce a separately identified revised export with expected credential changes and unchanged gameplay/media proof. Old source snapshot remains rollback evidence; deploying revised tuple invalidates old links as documented.
+
+## Owner additional player — 2026-10-09
+
+Add a new PLAYER membership named Илья in the fresh revised transfer copy, with a separate new link. No invented email, account or preverified identity; no character/controller assigned by inference. Existing 1 GM + 6 PLAYER becomes 1 GM + 7 PLAYER. Expected membership/grant count deltas must be documented, old roles/assets remain intact, and new-player campaign/role scope checked by the bounded runtime gate. Ordinary account signup remains available independently.
