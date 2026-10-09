@@ -315,3 +315,20 @@ Root visual review at e8fd4cb caught generatedPNG loaded but solidKonvafill mask
 - Parallel Luna inspecting local Docker/image readiness and safe exact-SHA context only; no image pull/build/container/server start or remote work authorized by this assignment.
 - Blockers to publication remain server/image/migration/rollback gates and separate owner permission; auth owner-deferred. Other executable local work continues, goal active.
 - Next integrate264 connected gate and checkpoint; prepare deployment prerequisites without starting remote server. Unintegrated map-ping-motion.ts remains excluded.
+
+## Local image gate and UIX264 review
+- Docker elevated read-only inspection confirms local Linux daemon available; no remote access. Exact76fc9cc allowlisted web/server contexts prepared and private-path audited; image readiness doc records hashes. Root now assigned local image build/base pull inside isolated Docker build contexts, no container runtime/migrations/push.
+- Root source review found264 changed-payload actionId reuse after unknown failure and async responses after canonical switch; 2/2 initial unit/webtsc do not cover them. Worker instructed to implement immutable unresolved request retry and canonical-scope guards plus regressions/browser QA; feature not accepted yet.
+- Third Luna collecting actual652 screenshots/coverage. Local frontend Vite start is permitted teststand work; remote-server prohibition is not a localhost frontend blocker. No private fixtures or author-copy rewriting.
+- Next inspect build receipts and264 repaired gate, then integrate bounded changes; publication still unproven, goal active.
+
+## One-hour local release deadline / image builds accepted
+- Owner requested local preparation within one hour; root clock09:55:21UTC2026-10-09, target10:55UTC (13:55Moscow). Conditional gate target, not permission to waive failures or deploy.
+- Luna reports both exact76fc9cc local Docker builds exit0. web image sha256:e6749f37484461a3f9960f825805f95d542e9eddcfdd0e3a2d8aac9adad4e9f1; server sha256:f551e09e7ffaa31a7c5ecf05d45e2efdf166ff40d8e1ff9ea72c1796a57e9ec2. Build logs retained; isolated runtime/migration/restore gate next, unrelated Docker resources untouched.
+- UIX264 five focused regressions PASS reported, browser gate outstanding. CUA unavailable is not browser blocker: existing local Playwright CLI is supported; assigned actual finite390/1280 mock gate.
+- No legacy reruns, remote/start/deploy/pushmerge. Candidate76fc9cc does not contain in-flight264; delivery proceeds independently.
+
+## Guide evidence stage gate and local runtime first receipt
+- UIX652 source coverage map +3 synthetic guide-only screenshots delivered; root visually inspected mobile crop. No page errors/390px horizontal overflow; no private campaign payload. Linear stage comment1476e712-04b5-4341-a57d-70c284f1ee7f, issue remains open. Product asset optimization/integration and full scenario coverage not claimed.
+- Luna local exact76fc9cc runtime first gate: dedicated internal Docker network/fresh Postgres healthy8.19s, server127.0.0.1:14176 health200/databaseok/revision76fc9cc10.59s,49migrations/59publictables. Private synthetic envfiles confined ignored.data; do not print. Backup/restore and routing next, no retained data/remote access.
+- UIX2645focusedtests+webtscPASS reported; new targeted Playwright spec inprogress, source not accepted/committed yet. No fulllegacy runs.
