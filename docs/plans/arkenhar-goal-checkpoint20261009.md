@@ -363,3 +363,17 @@ Root visual review at e8fd4cb caught generatedPNG loaded but solidKonvafill mask
 - Astra livereconciliation of293/318/473/644/497/649: no unconditionalnewimplementationpool;293Done,318/473remotetrust/actualqueue,497/649publication,644native/causalremaining.382mixerneedsownertransport/count/consentdecision;457framesneedsassetpolicy. See post-candidate-next-pool plan, do not inventduplicatework.
 - Hostpurchase discussion: Master2GiB/50GBbudget estimate, Uber4GiB/75GBheadroom; no real2GiBloadtestclaim, no purchase/migrationpermission. Newhostcannotrecoveroldcampaignwithoutactualbackup/data.
 - Next preservepackage+awaitownercloud/hostdecision and explicitremoteaccess/releasegateauthorization; authdeferred. Goalnotcomplete.
+
+## Full-backlog goal active; authorization activated by owner
+- Ownerrequestednewgoal entirebacklogpublicationprep; activeobjective preserves alltasks/evidence/gates, no falseclosures. Owner nowexplicitlyactivatedauthorization, supersedingpriorhold; UIX657stagecomment65004a12-3c5c-4997-b766-78725f3a4ea1. Localimplementation only, no productionmigration/remote/deploy permission.
+- Parallel Luna382: up to4independentGMtracks/localPLAYERmaster/consent ownerapproved; actualclienttracksubscriptions/helper nowinprogress.11newhelpertestsPASS;27legacyMusicBartests failed thenbeingadaptedwithoutdroppingvolume/consentcoverage. Elevatedchecks corrected initialsandboxdependencyfalsebaselineclaim; no acceptedmixer yet.
+- Parallel264ITEMquantity/condition:7unitPASS, browser/typegate beingrevalidatedelevatedexistingtools; no scopedfilter substitute. Preserve dirtysource; oldaca1436packageimmutable.
+- Astraauthplanningfound membership-onlysessions/noaccounts andpublicnickname bypass despite524Done; exactgapmustfix inaccountmode. Seed currentlytargetsoldestcampaign; publicselfserve mustnotreusebetaseed. Noautobindlegacybyname/weaksession. Verifiedemail/recovery+transactionaladapter localoutbox+productionmailfailclosed retained; ownerregistrationpolicyquestionpending.
+- Guideimageintegration temporarilyinterrupted tofreeauthslot, preserveownwork; no claimsnewimagesintegrated. Nextdeliverfiniteauthbackendplan/assignLuna, finishconnected382/264gates then commit pools/checkpoints.
+
+## Backend auth execution / ITEM slice delivery
+- ITEMsourcecommit66334ff: quantitynullable/0 distinction, int32boundedinput,trimcondition200, ITEM-onlycontrols/patches;7unit+3mockChromium390/1280PASS. Fullwebtypegate atworkerreceipt failedparallelMusicBartestnewprop mismatch; don'tlabelcleanuntilconnectedgate. Full264stillopen.
+- Astraauthplan arkenhar-auth-implementation20261009.md delivered; LunaPoolAownsserver/db/contracts lifecycle, nofrontend. Passwordscryptboundedworker/testmailadapterfiles inprogress, actualHTTP/schema integrationnext. Ownerpublicsignupchoicepending; verification/reset notreplaced/omitted, productionmailfailclosed.
+- Music40focusedPASSreported, browserpending; rootreviewflagged initialcanonicalfloor absent-track resurrectioncase, correctivetestassigned. No basicmusicduplicate/replaylegacyall.
+- Guideworker optimizing existingprivacysafe screenshots in scoped productassets/help; noauthorcopyrewrite; noacceptedimageintegrationyet.
+- Next finishconnectedmusic/guidegate, PoolAauthHTTPsecurity/migration; integrateboundedcommits/Linear onlyatdeliverygates. Coherentaca1436release remainsimmutable/predatesallthesechanges.
