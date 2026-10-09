@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { expect, test } from "./react-console-guard";
 import type { BrowserContext, Page } from "@playwright/test";
-import Fastify from "fastify";
+import Fastify, { type FastifyRequest, type FastifyReply } from "fastify";
 import cookie from "@fastify/cookie";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
@@ -40,7 +40,7 @@ test.beforeAll(async () => {
   mailKeyring = createTestMailKeyring();
   apiServer = Fastify();
   await apiServer.register(cookie);
-  apiServer.get("/api/bootstrap", async (_request, reply) => reply.code(401).send({ error: "AUTH_REQUIRED" }));
+  apiServer.get("/api/bootstrap", async (_request: FastifyRequest, reply: FastifyReply) => reply.code(401).send({ error: "AUTH_REQUIRED" }));
   const realtime = { in: (_room: string) => ({ disconnectSockets: () => undefined }) };
   registerAccountAuthRoutes(apiServer as never, db as never, realtime, {
     enabled: true, registrationEnabled: true, legacyDevEnabled: false,
@@ -73,6 +73,7 @@ async function deliverQueuedMail() {
 }
 
 test("real local HTTP account lifecycle and campaign create/select in browser", async ({ page, browser }) => {
+  test.setTimeout(60_000);
   await connectLocalApi(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Войти в аккаунт" })).toBeVisible();
@@ -110,8 +111,9 @@ test("real local HTTP account lifecycle and campaign create/select in browser", 
   const inviteUrl = await inviteLink.getAttribute("href");
   const inviteToken = inviteUrl ? new URL(inviteUrl).hash.slice("#token=".length) : "";
   expect(inviteToken.length).toBeGreaterThan(20);
-  playerContext = await browser.newContext();
-  const playerPage = await playerContext.newPage();
+  const context = await browser.newContext();
+  playerContext = context;
+  const playerPage = await context.newPage();
   await connectLocalApi(playerPage);
   await playerPage.goto(webOrigin);
   await expect(playerPage.getByRole("heading", { name: "Войти в аккаунт" })).toBeVisible();
@@ -139,4 +141,4 @@ test("real local HTTP account lifecycle and campaign create/select in browser", 
   await expect(playerPage.getByText("Вы присоединились к кампании. Выберите её, чтобы открыть игровой стол.")).toBeVisible();
   await expect(playerPage.getByText("Local synthetic table", { exact: true })).toBeVisible();
   await expect(playerPage.getByRole("button", { name: "Открыть кампанию" })).toBeVisible();
-}, { timeout: 60_000 });
+});

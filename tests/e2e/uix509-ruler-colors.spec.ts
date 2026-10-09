@@ -112,7 +112,9 @@ test("UIX-509 deterministic ruler colors render on synthetic light, dark and bus
   ];
   const pixelCounts = await map.locator("canvas").evaluateAll((canvases, params) => params.points.map((point) => {
     let count = 0;
-    for (const canvas of canvases) {
+    for (const element of canvases) {
+      if (!(element instanceof HTMLCanvasElement)) continue;
+      const canvas = element;
       const bounds = canvas.getBoundingClientRect();
       const x = Math.round((point.x - bounds.left) * canvas.width / bounds.width);
       const y = Math.round((point.y - bounds.top) * canvas.height / bounds.height);

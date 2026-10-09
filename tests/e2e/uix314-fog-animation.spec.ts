@@ -80,7 +80,7 @@ async function bootFogScene(page: Page, role: "GM" | "PLAYER" = "PLAYER", manyOp
   await page.addInitScript(() => {
     if (new URL(location.href).searchParams.get("uix314-fog-fallback") !== "1") return;
     const original = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function (type: string, ...args: unknown[]) {
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...args: unknown[]) {
       if (type === "2d" && this.width === 128 && this.height === 128) return null;
       return original.call(this, type, ...(args as []));
     } as typeof HTMLCanvasElement.prototype.getContext;
