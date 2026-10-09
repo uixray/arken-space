@@ -61,3 +61,10 @@ Do not mark publication ready until the owner-approved auth and typography contr
 
 ## Final bounded P/S observation update — 2026-10-09
 The last finite local P/S pool is PARTIAL, not accepted: final receipt606c8742b0dfa0828b1633a5bbaccd5fe48f08377e6511e39185ecc098bde804 reached zero feature assertions in Chrome desktop startup; all four P/S cells remain unobserved. One permitted instrumentation correction fixed WS protocol/canvas GET guards but unreviewed websocket/socket events still stopped the cell. No third attempt or scope widening; no DB-unchanged claim from request counters. Historical UIX644 ledger/RO failure unchanged. See uix644-last-local-gate20261009.md. Owner auth activation/font/missing-source decisions and human/remote gates remain open.
+
+## Owner scope correction — 2026-10-09 (takes precedence over earlier next actions)
+Public authentication remains explicitly deferred. Typography decision is now local variable Pragmatica Next supplied by the owner, not system-only or remote Inter. Implementation and a connected gate are in progress.
+
+The 173 unavailable objects belong to the local QA copy: they do not establish production loss and are NOT a global development or unrelated task-closure blocker. Original PNG availability is likewise not a prerequisite to unrelated application work. Retain the scoped recovery limitation without demanding test files from the owner.
+
+Owner explicitly directed continuing executable non-auth tasks today. Preserve the retired P/S helper and receipts; a new focused mocked-browser control spec can provide real UI evidence without backend credentials or writes. Do not promote this to live backend, OS-native or production evidence. Remote start/access, production deploy, push and merge remain separately unauthorized.

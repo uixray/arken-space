@@ -1,3 +1,12 @@
+@font-face {
+  font-family: "Pragmatica Next";
+  src: url("/assets/pragmatica-next_vf.woff") format("woff");
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 10% 400%;
+  font-display: swap;
+}
+
 :root {
   /* Токены приходят из `design-system/tokens.generated.css`, который собран из
    * `tokens/*.tokens.json` командой `pnpm tokens:build`. Здесь остаются только
@@ -38,6 +47,18 @@
   font-size: var(--font-size-root);
   color: var(--color-text);
   background: var(--color-canvas);
+}
+
+/* Gravity UI defines its typography on each .g-root, shadowing inherited
+   :root values. Override that component scope so portals and controls use the
+   same local variable font as the app shell. */
+.g-root {
+  --g-font-family-sans: var(--font-family-sans);
+  --g-text-body-font-family: var(--font-family-sans);
+  --g-text-caption-font-family: var(--font-family-sans);
+  --g-text-header-font-family: var(--font-family-sans);
+  --g-text-subheader-font-family: var(--font-family-sans);
+  --g-text-display-font-family: var(--font-family-sans);
 }
 
 /* UIX-387: documented overlay layer order (lowest to highest), gathered by
