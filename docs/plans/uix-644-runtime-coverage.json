@@ -111,6 +111,19 @@
     }
   },
   "evidence": {
+    "sceneSelection20261009": {
+      "status": "PARTIAL",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifact": "docs/plans/uix644-scene-diagnostics20261009.md",
+      "receiptSha256": "392BCBAC38DE30FE4A04633E6800204B5E527105FEDD82CE9383A04CEA2BC57A",
+      "scope": "Actual retained B fixture: Chrome desktop and compact and Firefox desktop pointer/keyboard scene selection/restoration with scene:view/server snapshot and unchanged broadcast passed. Desktop header menu and compact scene-manager route are distinct callers. Firefox compact keyboard restore remains unresolved. Does not prove edit action, full dismissal/zoom contract or causal ResizeObserver."
+    },
+    "globalManagerSummaryEscape": {
+      "status": "PASS",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifact": "docs/plans/uix644-global-manager-escape20261008.md",
+      "scope": "Partial lifecycle only: real local B GM Chrome/Firefox desktop/compact summary open, owned Escape close/focus, held repeat suppression, keyup and next deliberate parent Escape. Connected 25 unit tests/typecheck passed. Native select/input passthrough is unit-only; native OS popup, geometry/scroll/zoom and broader manager selection acceptance remain open."
+    },
     "compactSectionsBreakpoint": {
       "status": "PASS",
       "revision": "ecf66e62bb2c5cfb9fa679074bc7cdbfe2f176f2",
@@ -362,9 +375,9 @@
       "count": 1,
       "status": "BLOCKED",
       "classification": "reachable",
-      "scope": "GM-only GlobalStickerPackManager disclosure, mounted from MediaPanel. Static source confirms a native in-flow details/summary control; no runtime lifecycle evidence is recorded.",
-      "evidence": [],
-      "next": "Verify actual GM rendering, pointer/keyboard open-close, Escape/outside behavior, focus and visible placement in desktop/compact browser contexts before status change."
+      "scope": "GM-only in-flow GlobalStickerPackManager disclosure mounted from MediaPanel. Partial current-source runtime evidence proves summary open/owned Escape close/focus/held repeat and next parent Escape in four browser cells, not whole lifecycle/placement acceptance.",
+      "evidence": ["globalManagerSummaryEscape"],
+      "next": "Reuse exact-source Escape slice; complete appropriate keyboard open, geometry/scroll/resize/zoom and actual pack selection. In-flow disclosure outside-click behavior must follow its contract, not a generic popup assumption. Whole bucket remains BLOCKED."
     },
     {
       "file": "apps/web/src/GlobalStickerPackManager.tsx",
@@ -427,8 +440,8 @@
       "status": "BLOCKED",
       "classification": "reachable",
       "scope": "UIX-674 changed the inner scene list from listbox/options to menu/menuitemradio with a separate menuitem edit action. Earlier listbox evidence is historical and does not prove the new role contract.",
-      "evidence": ["scenePicker"],
-      "next": "Run scoped current-revision keyboard, focus-return, dismissal and edit-action browser checks before claiming this role bucket PASS."
+      "evidence": ["scenePicker", "sceneSelection20261009"],
+      "next": "Retain historical role evidence separately; actual current desktop pointer/keyboard scene selection is now scoped evidence. Complete focus-return/dismissal/edit action and Firefox compact's distinct manager restore before full acceptance."
     },
     {
       "file": "apps/web/src/ScenePicker.tsx",
