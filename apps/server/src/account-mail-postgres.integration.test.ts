@@ -75,7 +75,7 @@ pgDescribe("account mail outbox — real PostgreSQL two-connection gates", () =>
       campaignLinkAccessEnabled: false, campaignCreationEnabled: false,
       sessionTtlDays: 3, cookieSecure: false, accountCookieName: "test_account",
       gameCookieName: "test_game", csrfCookieName: "test_csrf", webOrigin: origin,
-      publicUrl: origin, mail: testMail.adapter, mailKeyring: keyring,
+      publicUrl: origin, mailRuntimeEnabled: true, mail: testMail.adapter, mailKeyring: keyring,
     });
     await app.ready();
   }, 60_000);

@@ -41,6 +41,7 @@ export const env = z
     CAMPAIGN_LINK_ACCESS_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
     ACCOUNT_MAIL_ACTIVE_KEY_ID: z.string().default(""),
     ACCOUNT_MAIL_KEYRING: z.string().default(""),
+    ACCOUNT_MAIL_RUNTIME_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
     RATE_LIMIT_MAX: z.coerce.number().int().min(60).max(10_000).default(600),
     GM_ACCESS_TOKEN: z
       .string()

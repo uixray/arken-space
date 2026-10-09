@@ -23,7 +23,8 @@ describe("AccountAuthWorkspace", () => {  it("registers without creating a sessi
     fireEvent.change(screen.getByLabelText(/Пароль/), { target: { value: "a secure pass phrase" } });
     fireEvent.change(screen.getByLabelText("Повторите пароль"), { target: { value: "a secure pass phrase" } });
     fireEvent.click(screen.getByRole("button", { name: "Зарегистрироваться" }));
-    await screen.findByText(/письмо для подтверждения уже отправлено/);
+    await screen.findByText("Если адрес можно зарегистрировать, запрос на подтверждение принят. Проверьте почту позже.");
+    expect(screen.getByRole("status")).not.toHaveTextContent(/отправлено|доставлено/i);
     expect(apiMock).toHaveBeenCalledWith("/api/account/register", expect.objectContaining({ method: "POST" }));
     expect(localStorage.length).toBe(0);
   });
@@ -89,6 +90,18 @@ describe("AccountAuthWorkspace", () => {  it("registers without creating a sessi
     fireEvent.click(screen.getByRole("button", { name: "Войти" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Проверьте email и пароль");
     expect(screen.getByRole("button", { name: "Отправить письмо для подтверждения" })).toBeInTheDocument();
+  });
+  it("describes verification resend and reset as accepted requests, not delivered mail", async () => {
+    apiMock.mockImplementation((path: string) => path === "/api/account/session" ? Promise.resolve({ authenticated: false }) : Promise.resolve({ accepted: true }));
+    renderComponent(<AccountAuthWorkspace onAuthenticated={vi.fn()} capabilities={capabilities} />);
+    fireEvent.change(await screen.findByLabelText("Email"), { target: { value: "person@example.test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Отправить письмо для подтверждения" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Если аккаунту требуется подтверждение, запрос принят.");
+    expect(screen.getByRole("status")).not.toHaveTextContent(/отправлено|доставлено/i);
+    fireEvent.click(screen.getByRole("button", { name: "Забыли пароль?" }));
+    fireEvent.click(screen.getByRole("button", { name: "Отправить инструкцию" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Если аккаунт существует, запрос принят.");
+    expect(screen.getByRole("status")).not.toHaveTextContent(/отправлено|доставлено/i);
   });
   it("renders expired action token errors without echoing the token", async () => {    window.history.replaceState({}, "", `/account/verify#token=${verifyToken}`);
     apiMock.mockImplementation((path: string) => path === "/api/account/session" ? Promise.resolve({ authenticated: false }) : Promise.reject(new ApiError(400, "INVALID_OR_EXPIRED_ACCOUNT_TOKEN", "Expired")));

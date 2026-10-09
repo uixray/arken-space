@@ -46,6 +46,7 @@ beforeEach(async () => {
     csrfCookieName: "arken_account_csrf",
     webOrigin: origin,
     publicUrl: origin,
+    mailRuntimeEnabled: true,
     mail: outbox.adapter,
     mailKeyring: createTestMailKeyring(),
   });

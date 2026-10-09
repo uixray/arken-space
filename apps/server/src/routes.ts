@@ -1042,6 +1042,7 @@ export function registerRoutes(
     csrfCookieName: env.ACCOUNT_CSRF_COOKIE_NAME,
     webOrigin: env.WEB_ORIGIN,
     publicUrl: env.PUBLIC_URL,
+    mailRuntimeEnabled: env.ACCOUNT_MAIL_RUNTIME_ENABLED,
     mail: unconfiguredMailAdapter,
     mailKeyring: parseMailKeyringConfig(env.ACCOUNT_MAIL_ACTIVE_KEY_ID, env.ACCOUNT_MAIL_KEYRING),
   });

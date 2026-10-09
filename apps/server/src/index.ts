@@ -18,6 +18,8 @@ import { requestActionId } from "./telemetry.js";
 import { isCampaignCanvasGuardError } from "./campaign-pause-guard.js";
 import { accountErrorLogDetails } from "./account-error-logging.js";
 import { installGracefulShutdown } from "./graceful-shutdown.js";
+import { createAccountMailRuntime } from "./account-mail-runtime.js";
+import { parseMailKeyringConfig, unconfiguredMailAdapter } from "./account-mail.js";
 
 const app = Fastify({
   logger: { level: env.NODE_ENV === "production" ? "info" : "debug" },
@@ -92,10 +94,22 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(app.server, {
   },
 });
 
+const accountMailRuntime = createAccountMailRuntime({
+  enabled: env.ACCOUNT_MAIL_RUNTIME_ENABLED,
+  db,
+  keyring: parseMailKeyringConfig(env.ACCOUNT_MAIL_ACTIVE_KEY_ID, env.ACCOUNT_MAIL_KEYRING),
+  // No transport is approved/configured yet. Even an explicit runtime flag
+  // cannot make delivery or registration readiness true with this adapter.
+  adapter: unconfiguredMailAdapter,
+  workerId: `server-${process.pid}`,
+  logger: app.log,
+});
+
 registerRealtime(io, db, app.log);
 registerRoutes(app, db, io);
 
 app.addHook("onClose", async () => {
+  await accountMailRuntime.stop();
   await io.close();
   await client.end();
 });
@@ -139,3 +153,6 @@ app.setErrorHandler((error, request, reply) => {
 
 installGracefulShutdown(() => app.close(), app.log);
 await app.listen({ host: "0.0.0.0", port: env.PORT });
+// Start only after the listener is live. Default config and current transport
+// are both disabled, so this schedules no background work today.
+accountMailRuntime.start();

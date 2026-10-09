@@ -45,6 +45,7 @@ beforeEach(async () => {
     csrfCookieName: "arken_account_csrf",
     webOrigin: origin,
     publicUrl: origin,
+    mailRuntimeEnabled: true,
     mail: outbox.adapter,
     mailKeyring,
   });
@@ -150,7 +151,7 @@ describe("account authentication HTTP lifecycle", () => {
       campaignLinkAccessEnabled: false, campaignCreationEnabled: false,
       sessionTtlDays: 3, cookieSecure: false, accountCookieName: "guard_account",
       gameCookieName: "guard_game", csrfCookieName: "guard_csrf", webOrigin: origin,
-      publicUrl: origin, mail: unconfiguredMailAdapter, mailKeyring: null,
+      publicUrl: origin, mailRuntimeEnabled: true, mail: unconfiguredMailAdapter, mailKeyring: null,
     });
     await guarded.ready();
     try {

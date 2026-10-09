@@ -40,6 +40,7 @@ export type AccountAuthOptions = {
   csrfCookieName: string;
   webOrigin: string;
   publicUrl: string;
+  mailRuntimeEnabled: boolean;
   mail: MailAdapter;
   mailKeyring: MailKeyring | null;
 };
@@ -93,7 +94,7 @@ function cookieOptions(options: AccountAuthOptions) {
   return { httpOnly: true, secure: options.cookieSecure, sameSite: "strict" as const, path: "/" };
 }
 
-function mailReady(options: AccountAuthOptions) { return options.mail.ready && Boolean(options.mailKeyring?.keys.get(options.mailKeyring.activeKeyId)); }
+function mailReady(options: AccountAuthOptions) { return options.mailRuntimeEnabled && options.mail.ready && Boolean(options.mailKeyring?.keys.get(options.mailKeyring.activeKeyId)); }
 
 async function getDummyVerifier() {
   dummyVerifier ??= hashPassword(randomToken(48));
@@ -231,6 +232,15 @@ export function registerAccountAuthRoutes(
   io: RealtimeSessions,
   options: AccountAuthOptions,
 ) {
+  // Account/session/token responses must never enter a browser or intermediary
+  // cache. onSend also covers validation, 404, and error-handler responses.
+  app.addHook("onSend", async (request, reply, payload) => {
+    const pathname = request.url.split("?", 1)[0] ?? request.url;
+    if (/^\/api\/(?:account|auth)(?:\/|$)/.test(pathname))
+      reply.header("Cache-Control", "no-store");
+    return payload;
+  });
+
   const unavailable = (reply: import("fastify").FastifyReply) => reply.code(404).send({ error: "ACCOUNT_AUTH_DISABLED" });
   const requireEnabled = () => options.enabled;
   const requireWriteOrigin = async (request: FastifyRequest, reply: import("fastify").FastifyReply) => {

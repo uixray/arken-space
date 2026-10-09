@@ -139,7 +139,7 @@ export function AccountAuthWorkspace({ onAuthenticated, capabilities }: { onAuth
         if ([...password].length < MIN_PASSWORD || [...password].length > 128) throw new LocalValidationError("Пароль должен содержать от 12 до 128 символов.");
         await registerAccount(email, password);
         setPassword(""); setPasswordAgain(""); setView("login");
-        setNotice("Если адрес можно зарегистрировать, письмо для подтверждения уже отправлено.");
+        setNotice("Если адрес можно зарегистрировать, запрос на подтверждение принят. Проверьте почту позже.");
       } else if (view === "login") {
         const next = await loginAccount(email, password); setSession(next); setPassword("");
         if (actionFlow.current && token) await claimInvite(next);
@@ -152,7 +152,7 @@ export function AccountAuthWorkspace({ onAuthenticated, capabilities }: { onAuth
         await confirmVerification(token); setToken(""); setView("login");
         setNotice("Email подтверждён. Теперь войдите в аккаунт.");
       } else if (view === "reset-request") {
-        await requestPasswordReset(email); setNotice("Если аккаунт существует, инструкция отправлена на его email.");
+        await requestPasswordReset(email); setNotice("Если аккаунт существует, запрос принят. Проверьте почту позже.");
       } else if (view === "reset-confirm") {
         if (!token) throw new LocalValidationError("В ссылке нет кода сброса.");
         if (password !== passwordAgain) throw new LocalValidationError("Пароли не совпадают.");
@@ -221,7 +221,7 @@ export function AccountAuthWorkspace({ onAuthenticated, capabilities }: { onAuth
   const resend = async () => {
     if (!email || busy) return;
     setBusy(true); setError(""); setNotice("");
-    try { await requestVerification(email); setNotice("Если аккаунту требуется подтверждение, письмо отправлено."); }
+    try { await requestVerification(email); setNotice("Если аккаунту требуется подтверждение, запрос принят. Проверьте почту позже."); }
     catch (reason) { setError(friendlyError(reason)); }
     finally { setBusy(false); }
   };
