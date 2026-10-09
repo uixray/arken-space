@@ -5,6 +5,11 @@ import path from "node:path";
 const restoreProjectPattern = /^arken-restore-[a-z0-9][a-z0-9_-]*$/;
 
 const applicationCountTableNames = [
+  "account_action_tokens",
+  "account_campaign_creations",
+  "account_campaign_invites",
+  "account_mail_outbox",
+  "account_sessions",
   "action_journal",
   "assets",
   "campaign_audio_tracks",
@@ -28,6 +33,9 @@ const applicationCountTableNames = [
   "feedback_reports",
   "fog_reveals",
   "game_events",
+  "global_sticker_media",
+  "global_sticker_packs",
+  "global_stickers",
   "gm_access_credentials",
   "invites",
   "memberships",
@@ -51,6 +59,7 @@ const applicationCountTableNames = [
   "token_controllers",
   "token_definitions",
   "tokens",
+  "users",
   "world_content",
   "world_content_actions",
   "world_content_instance_actions",

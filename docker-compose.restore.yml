@@ -19,6 +19,14 @@ services:
       dockerfile: Dockerfile.server
     environment:
       NODE_ENV: production
+      ACCOUNT_AUTH_ENABLED: "true"
+      ACCOUNT_REGISTRATION_ENABLED: "false"
+      ACCOUNT_REGISTRATION_POLICY_APPROVED: "false"
+      LEGACY_DEV_AUTH_ENABLED: "false"
+      ACCOUNT_CAMPAIGN_CREATION_ENABLED: "false"
+      ACCOUNT_CAMPAIGN_CREATION_POLICY_APPROVED: "false"
+      CAMPAIGN_LINK_ACCESS_ENABLED: "false"
+      ACCOUNT_MAIL_RUNTIME_ENABLED: "false"
       APP_VERSION: 0.2.0-restore
       BUILD_REVISION: ${RESTORE_BUILD_REVISION:?Set RESTORE_BUILD_REVISION}
       SCHEMA_VERSION: 2

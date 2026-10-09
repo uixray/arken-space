@@ -12,6 +12,11 @@ SELECT string_agg(
 ) || E'\nORDER BY 1;'
 FROM (
   VALUES
+    ('account_action_tokens'),
+    ('account_campaign_creations'),
+    ('account_campaign_invites'),
+    ('account_mail_outbox'),
+    ('account_sessions'),
     ('action_journal'),
     ('assets'),
     ('campaign_audio_tracks'),
@@ -35,6 +40,9 @@ FROM (
     ('feedback_reports'),
     ('fog_reveals'),
     ('game_events'),
+    ('global_sticker_media'),
+    ('global_sticker_packs'),
+    ('global_stickers'),
     ('gm_access_credentials'),
     ('invites'),
     ('memberships'),
@@ -58,6 +66,7 @@ FROM (
     ('token_controllers'),
     ('token_definitions'),
     ('tokens'),
+    ('users'),
     ('world_content'),
     ('world_content_actions'),
     ('world_content_instance_actions'),
