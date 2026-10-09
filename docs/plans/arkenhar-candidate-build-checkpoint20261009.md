@@ -21,3 +21,11 @@ Local synthetic U arm completed using oldACA migrationCLI only and exactcurrents
 Preupgrade49-entry owned fixture dump restored into a separate DB; same ledger/counts/owner/controller. Media digest preserved in upgrade, but rollback media was reconstructed from known synthetic payload, NOT restored from an archive; do not call this full media recovery or oldbinaryrollback. Private dump/checkpoint retained `.data/qa-prep/release-upgrade-u-2c35435-20261009/`; U resources removed by verifiedexactIDs.
 
 CurrentF/R/TLS arm remains active separately. Freshimage ledger all54 orderedSQLhashes/timestamps matches exactfrozencontextbytes (Windowsworktree CRLF discrepancy explained, not schema failure). No production/SMTP activation. Nodemailer dependency decision presented to owner; no install without response.
+
+## Exact-image F/R/TLS stage gate accepted
+
+Product2c35435643e09a4dbbcb041889dbc727070536f0 and recorded exact image pair unchanged. Root inspected safe runtime checkpoint, restore-comparison and tls-browser receipts. Fresh54 ledger matches frozencontext; synthetic restore65tablecounts/ledger/reference/outbox/media digests equal. Chrome real login→campaignselect→expectedscene/bootstrap→protectedmedia200/68B; Secure+HttpOnly accountcookie not in document.cookie and one Socket.IO websocket observed. Local selfsigned trust bypass only; NOT production TLS or full gameplay proof. Fake mail only, no SMTP.
+
+Executor reports exact-ID cleanup9containers/4volumes/3networks and closed54443. Private dump/keys/harness remain ignored and excluded from publication archives. Local owner stands preserved. U media archive actual-restore followup remains active; oldbinaryrollback not proven. Local server-data inventory cannot establish current production DB+media copy;309rootmediafiles have unknown provenance.
+
+Changed: checkpoint appendix and local inventory doc. Verification: sanitized receipts and Gitstatus; no source changes/reruns. Next: actual U paired archive gate, SMTP dependency/public policy decisions, external server/data recovery and explicit deployment gate. No tasks closed from these synthetic proofs.
