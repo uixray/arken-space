@@ -28,7 +28,17 @@ export const env = z
       .default("postgres://arken:arken@localhost:5432/arken"),
     DEV_DATABASE_DRIVER: z.enum(["postgres", "pglite"]).default("postgres"),
     SESSION_COOKIE_NAME: z.string().default("arken_session"),
+    ACCOUNT_SESSION_COOKIE_NAME: z.string().default("arken_account"),
+    ACCOUNT_CSRF_COOKIE_NAME: z.string().default("arken_account_csrf"),
     SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+    ACCOUNT_AUTH_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+    ACCOUNT_REGISTRATION_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+    ACCOUNT_REGISTRATION_POLICY_APPROVED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+    LEGACY_DEV_AUTH_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+    ACCOUNT_CAMPAIGN_CREATION_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+    ACCOUNT_CAMPAIGN_CREATION_LIMIT: z.coerce.number().int().min(1).max(10).default(3),
+    ACCOUNT_CAMPAIGN_CREATION_POLICY_APPROVED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+    CAMPAIGN_LINK_ACCESS_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
     RATE_LIMIT_MAX: z.coerce.number().int().min(60).max(10_000).default(600),
     GM_ACCESS_TOKEN: z
       .string()
@@ -69,6 +79,18 @@ export const env = z
         message: "DEV_DATABASE_DRIVER=pglite разрешён только в development",
       });
     if (value.NODE_ENV !== "production") return;
+    if (!value.ACCOUNT_AUTH_ENABLED)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["ACCOUNT_AUTH_ENABLED"],
+        message: "ACCOUNT_AUTH_ENABLED=true обязателен в production; legacy alias-login отключается только в account mode",
+      });
+    if (value.ACCOUNT_REGISTRATION_ENABLED && !value.ACCOUNT_REGISTRATION_POLICY_APPROVED)
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ACCOUNT_REGISTRATION_POLICY_APPROVED"], message: "Public registration requires an explicitly approved policy" });
+    if (value.ACCOUNT_CAMPAIGN_CREATION_ENABLED && !value.ACCOUNT_CAMPAIGN_CREATION_POLICY_APPROVED)
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ACCOUNT_CAMPAIGN_CREATION_POLICY_APPROVED"], message: "Public campaign creation requires an explicitly approved policy" });
+    if (value.CAMPAIGN_LINK_ACCESS_ENABLED && !value.ACCOUNT_AUTH_ENABLED)
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["CAMPAIGN_LINK_ACCESS_ENABLED"], message: "Campaign links can only run alongside account auth" });
     for (const key of ["DATABASE_URL", "GM_ACCESS_TOKEN"] as const)
       if (!process.env[key]?.trim())
         ctx.addIssue({

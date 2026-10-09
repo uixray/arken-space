@@ -20,7 +20,8 @@ import { installGracefulShutdown } from "./graceful-shutdown.js";
 
 const app = Fastify({
   logger: { level: env.NODE_ENV === "production" ? "info" : "debug" },
-  trustProxy: true,
+  // Never trust forwarded headers by default. Public auth rate limits use the
+  // direct TCP peer; proxy trust needs an explicit peer allow-list first.
   bodyLimit: env.MAX_AUDIO_BYTES + 1024,
 });
 
@@ -70,11 +71,13 @@ if (env.DEV_DATABASE_DRIVER === "pglite") {
   app.log.info("database.postgres_connected");
 }
 
-try {
-  await ensureSeed(db);
-} catch {
-  await client.end().catch(() => undefined);
-  throw new Error("Не удалось подготовить базу данных при запуске сервера");
+if (!env.ACCOUNT_AUTH_ENABLED) {
+  try {
+    await ensureSeed(db);
+  } catch {
+    await client.end().catch(() => undefined);
+    throw new Error("Не удалось подготовить базу данных при запуске сервера");
+  }
 }
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(app.server, {
@@ -82,6 +85,9 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(app.server, {
   connectionStateRecovery: {
     maxDisconnectionDuration: 120_000,
     skipMiddlewares: false,
+  },
+  allowRequest: (request, callback) => {
+    callback(null, request.headers.origin === env.WEB_ORIGIN);
   },
 });
 

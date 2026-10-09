@@ -333,6 +333,73 @@ export const campaigns = pgTable("campaigns", {
     .notNull(),
 });
 
+/** Authenticated people are distinct from campaign-scoped memberships/roles. */
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    emailNormalized: text("email_normalized").notNull(),
+    emailDisplay: text("email_display").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("users_email_normalized_idx").on(table.emailNormalized)],
+);
+
+/** Account authentication sessions are separate from selected game memberships. */
+export const accountSessions = pgTable(
+  "account_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    csrfHash: text("csrf_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("account_sessions_token_hash_idx").on(table.tokenHash),
+    index("account_sessions_user_active_idx").on(table.userId, table.revokedAt),
+  ],
+);
+
+export const accountActionTokens = pgTable(
+  "account_action_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    purpose: text("purpose").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("account_action_tokens_token_hash_idx").on(table.tokenHash),
+    index("account_action_tokens_user_purpose_idx").on(table.userId, table.purpose),
+    check("account_action_tokens_purpose_check", sql`${table.purpose} in ('VERIFY_EMAIL','RESET_PASSWORD')`),
+  ],
+);
+
+/** Stable idempotency result for self-service campaign creation. */
+export const accountCampaignCreations = pgTable(
+  "account_campaign_creations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("account_campaign_creations_user_key_idx").on(table.userId, table.idempotencyKey)],
+);
+
 /**
  * Stable campaign-scoped identity of a spell pack. Every content or lifecycle
  * change is appended to `spellPackVersions`; this row is never rewritten.
@@ -424,6 +491,7 @@ export const memberships = pgTable(
   "memberships",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
     campaignId: uuid("campaign_id")
       .notNull()
       .references(() => campaigns.id, { onDelete: "cascade" }),
@@ -442,6 +510,10 @@ export const memberships = pgTable(
   },
   (table) => [
     index("memberships_campaign_idx").on(table.campaignId),
+    index("memberships_user_idx").on(table.userId),
+    uniqueIndex("memberships_campaign_user_idx")
+      .on(table.campaignId, table.userId)
+      .where(sql`${table.userId} is not null`),
     uniqueIndex("memberships_campaign_id_id_idx").on(
       table.campaignId,
       table.id,
@@ -454,6 +526,28 @@ export const memberships = pgTable(
       "memberships_selected_theme_id_check",
       sql`${table.selectedThemeId} is null or ${table.selectedThemeId} in ('system','forest','dragons','ice','fire','gold','silver','light','classic-v1')`,
     ),
+  ],
+);
+
+/** Account-backed campaign invitations are separate from character-bound legacy invites. */
+export const accountCampaignInvites = pgTable(
+  "account_campaign_invites",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+    createdByMembershipId: uuid("created_by_membership_id").notNull().references(() => memberships.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    label: text("label").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    claimedByUserId: uuid("claimed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("account_campaign_invites_token_hash_idx").on(table.tokenHash),
+    index("account_campaign_invites_campaign_idx").on(table.campaignId, table.createdAt),
+    check("account_campaign_invites_label_check", sql`length(trim(${table.label})) between 1 and 80`),
   ],
 );
 
@@ -1420,6 +1514,7 @@ export const invites = pgTable(
     ),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -1462,6 +1557,13 @@ export const sessions = pgTable(
     membershipId: uuid("membership_id")
       .notNull()
       .references(() => memberships.id, { onDelete: "cascade" }),
+    accountSessionId: uuid("account_session_id").references(() => accountSessions.id, { onDelete: "cascade" }),
+    authSource: text("auth_source"),
+    gmCredentialCampaignId: uuid("gm_credential_campaign_id").references(() => gmAccessCredentials.campaignId, { onDelete: "cascade" }),
+    gmCredentialRevision: integer("gm_credential_revision"),
+    playerAccessGrantId: uuid("player_access_grant_id").references(() => playerAccessGrants.id, { onDelete: "cascade" }),
+    playerAccessGrantRevision: integer("player_access_grant_revision"),
+    legacyInviteId: uuid("legacy_invite_id").references(() => invites.id, { onDelete: "cascade" }),
     tokenHash: text("token_hash").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -1471,7 +1573,18 @@ export const sessions = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [uniqueIndex("sessions_token_hash_idx").on(table.tokenHash)],
+  (table) => [
+    uniqueIndex("sessions_token_hash_idx").on(table.tokenHash),
+    index("sessions_player_grant_idx").on(table.playerAccessGrantId),
+    index("sessions_legacy_invite_idx").on(table.legacyInviteId),
+    check("sessions_auth_source_check", sql`COALESCE((
+      (${table.authSource} is null and ${table.accountSessionId} is null and ${table.gmCredentialCampaignId} is null and ${table.gmCredentialRevision} is null and ${table.playerAccessGrantId} is null and ${table.playerAccessGrantRevision} is null and ${table.legacyInviteId} is null)
+      or (${table.authSource} = 'ACCOUNT' and ${table.accountSessionId} is not null and ${table.gmCredentialCampaignId} is null and ${table.gmCredentialRevision} is null and ${table.playerAccessGrantId} is null and ${table.playerAccessGrantRevision} is null and ${table.legacyInviteId} is null)
+      or (${table.authSource} = 'GM_LINK' and ${table.accountSessionId} is null and ${table.gmCredentialCampaignId} is not null and ${table.gmCredentialRevision} is not null and ${table.playerAccessGrantId} is null and ${table.playerAccessGrantRevision} is null and ${table.legacyInviteId} is null)
+      or (${table.authSource} = 'PLAYER_GRANT' and ${table.accountSessionId} is null and ${table.gmCredentialCampaignId} is null and ${table.gmCredentialRevision} is null and ${table.playerAccessGrantId} is not null and ${table.playerAccessGrantRevision} is not null and ${table.legacyInviteId} is null)
+      or (${table.authSource} = 'LEGACY_INVITE' and ${table.accountSessionId} is null and ${table.gmCredentialCampaignId} is null and ${table.gmCredentialRevision} is null and ${table.playerAccessGrantId} is null and ${table.playerAccessGrantRevision} is null and ${table.legacyInviteId} is not null)
+    ), false)`),
+  ],
 );
 
 export const stickerPacks = pgTable(

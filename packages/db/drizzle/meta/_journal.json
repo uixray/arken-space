@@ -344,6 +344,34 @@
       "when": 1791536569060,
       "tag": "0048_sour_ultimatum",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1791545684495,
+      "tag": "0049_account_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1791546708240,
+      "tag": "0050_cuddly_nightshade",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1791547265993,
+      "tag": "0051_thick_saracen",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1791547582618,
+      "tag": "0052_safe_maverick",
+      "breakpoints": true
     }
   ]
 }

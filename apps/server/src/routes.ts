@@ -1,5 +1,5 @@
 import { createHash, randomInt, randomUUID } from "node:crypto";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Server } from "socket.io";
 import {
   and,
@@ -16,6 +16,7 @@ import {
 import { z } from "zod";
 import { canonicalizeFogGeometry, FogGeometryError } from "./fog-geometry.js";
 import { registerPublicRoadmapVoteRoutes } from "./roadmap-votes.js";
+import { registerAccountCampaignRoutes } from "./account-campaigns.js";
 import {
   activateSceneSchema,
   actionIdSchema,
@@ -118,6 +119,8 @@ import {
 } from "@arken/db";
 import { createStarterCharacter, RESOURCE_REGEN_STAT } from "@arken/system";
 import { createSession, requireAuth } from "./auth.js";
+import { registerAccountAuthRoutes } from "./account-auth-routes.js";
+import { unconfiguredMailAdapter } from "./account-mail.js";
 import { DiceFormulaError, rollFormulaWithMode } from "./dice.js";
 import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
@@ -776,6 +779,22 @@ export async function claimInviteOwnership(
   displayName: string,
 ) {
   return db.transaction(async (tx) => {
+    const [lockedInvite] = await tx.select({ id: invites.id }).from(invites)
+      .where(and(eq(invites.id, invite.id), eq(invites.campaignId, invite.campaignId)))
+      .for("update").limit(1);
+    if (!lockedInvite) throw new Error("INVITE_UNAVAILABLE");
+    const [claimed] = await tx
+      .update(invites)
+      .set({ claimedAt: new Date() })
+      .where(and(
+        eq(invites.id, invite.id),
+        eq(invites.campaignId, invite.campaignId),
+        isNull(invites.claimedAt),
+        isNull(invites.revokedAt),
+        sql`${invites.expiresAt} > clock_timestamp()`,
+      ))
+      .returning({ id: invites.id });
+    if (!claimed) throw new Error("INVITE_UNAVAILABLE");
     const membershipId = randomUUID();
     const [member] = await tx
       .insert(memberships)
@@ -806,12 +825,9 @@ export async function claimInviteOwnership(
       where d.character_id = ${invite.characterId} and d.campaign_id = ${invite.campaignId}
       and not exists (select 1 from token_controllers c where c.token_definition_id = d.id)
       on conflict do nothing`);
-    const [claimed] = await tx
-      .update(invites)
-      .set({ claimedAt: new Date(), claimedByMembershipId: member.id })
-      .where(and(eq(invites.id, invite.id), isNull(invites.claimedAt)))
-      .returning();
-    if (!claimed) throw new Error("INVITE_ALREADY_CLAIMED");
+    await tx.update(invites)
+      .set({ claimedByMembershipId: member.id })
+      .where(eq(invites.id, invite.id));
     return member;
   });
 }
@@ -1009,10 +1025,56 @@ const scaledGridCoordinate = (
 ) => roundedCanvasValue(nextOffset + (value - previousOffset) * scale);
 
 export function registerRoutes(
-  app: FastifyInstance,
+  app: FastifyInstance<any, any, any, any>,
   db: Database,
   io: RealtimeServer,
 ) {
+  registerAccountAuthRoutes(app, db, io, {
+    enabled: env.ACCOUNT_AUTH_ENABLED,
+    registrationEnabled: env.ACCOUNT_REGISTRATION_ENABLED,
+    legacyDevEnabled: env.NODE_ENV === "development" && env.LEGACY_DEV_AUTH_ENABLED,
+    campaignLinkAccessEnabled: env.CAMPAIGN_LINK_ACCESS_ENABLED,
+    campaignCreationEnabled: env.ACCOUNT_CAMPAIGN_CREATION_ENABLED,
+    sessionTtlDays: env.SESSION_TTL_DAYS,
+    cookieSecure: env.NODE_ENV === "production",
+    accountCookieName: env.ACCOUNT_SESSION_COOKIE_NAME,
+    gameCookieName: env.SESSION_COOKIE_NAME,
+    csrfCookieName: env.ACCOUNT_CSRF_COOKIE_NAME,
+    webOrigin: env.WEB_ORIGIN,
+    publicUrl: env.PUBLIC_URL,
+    mail: unconfiguredMailAdapter,
+  });
+  registerAccountCampaignRoutes(app, db, io, {
+    enabled: env.ACCOUNT_AUTH_ENABLED,
+    creationEnabled: env.ACCOUNT_CAMPAIGN_CREATION_ENABLED,
+    creationLimit: env.ACCOUNT_CAMPAIGN_CREATION_LIMIT,
+    sessionTtlDays: env.SESSION_TTL_DAYS,
+    cookieSecure: env.NODE_ENV === "production",
+    accountCookieName: env.ACCOUNT_SESSION_COOKIE_NAME,
+    gameCookieName: env.SESSION_COOKIE_NAME,
+    csrfCookieName: env.ACCOUNT_CSRF_COOKIE_NAME,
+    webOrigin: env.WEB_ORIGIN,
+  });
+  const requireCampaignLinkOrigin = async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!env.CAMPAIGN_LINK_ACCESS_ENABLED) {
+      await reply.code(410).send({ error: "CAMPAIGN_LINK_ACCESS_DISABLED" });
+      return false;
+    }
+    if (request.headers.origin !== env.WEB_ORIGIN) {
+      await reply.code(403).send({ error: "ORIGIN_FORBIDDEN" });
+      return false;
+    }
+    return true;
+  };
+  const rotateCurrentGameCookieSession = async (request: FastifyRequest) => {
+    const token = request.cookies[env.SESSION_COOKIE_NAME];
+    if (!token) return;
+    const [old] = await db.select({ id: sessions.id }).from(sessions)
+      .where(eq(sessions.tokenHash, hashToken(token))).limit(1);
+    if (!old) return;
+    await db.update(sessions).set({ expiresAt: new Date(0) }).where(eq(sessions.id, old.id));
+    io.in(sessionRoom(old.id)).disconnectSockets(true);
+  };
   registerPublicRoadmapVoteRoutes(app, db);
   const canvasTx = (campaignId: string) =>
     campaignCanvasDatabase(db, campaignId);
@@ -1075,10 +1137,13 @@ export function registerRoutes(
   });
 
   app.post("/api/auth/gm", async (request, reply) => {
+    if (!(await requireCampaignLinkOrigin(request, reply))) return;
     const body = gmLoginSchema.parse(request.body);
     const credentials = await db
       .select({
         membershipId: memberships.id,
+        campaignId: gmAccessCredentials.campaignId,
+        credentialRevision: gmAccessCredentials.revision,
         tokenHash: gmAccessCredentials.tokenHash,
       })
       .from(gmAccessCredentials)
@@ -1091,15 +1156,17 @@ export function registerRoutes(
       safeEqual(hashToken(body.token), credential.tokenHash),
     );
     if (!gm) return reply.code(403).send({ error: "INVALID_MASTER_TOKEN" });
-    await createSession(db, reply, gm.membershipId);
+    await rotateCurrentGameCookieSession(request);
+    await createSession(db, reply, gm.membershipId, { source: "GM_LINK", campaignId: gm.campaignId, credentialRevision: gm.credentialRevision });
     return { ok: true };
   });
 
   app.post("/api/auth/invite", async (request, reply) => {
+    if (!(await requireCampaignLinkOrigin(request, reply))) return;
     const body = inviteClaimSchema.parse(request.body);
     const tokenHash = hashToken(body.token);
     const [grant] = await db
-      .select({ membershipId: playerAccessGrants.membershipId })
+      .select({ membershipId: playerAccessGrants.membershipId, id: playerAccessGrants.id, campaignId: playerAccessGrants.campaignId, revision: playerAccessGrants.revision })
       .from(playerAccessGrants)
       .innerJoin(
         memberships,
@@ -1118,7 +1185,8 @@ export function registerRoutes(
           .update(memberships)
           .set({ displayName: body.displayName })
           .where(eq(memberships.id, grant.membershipId));
-      await createSession(db, reply, grant.membershipId);
+      await rotateCurrentGameCookieSession(request);
+      await createSession(db, reply, grant.membershipId, { source: "PLAYER_GRANT", grantId: grant.id, grantRevision: grant.revision });
       return { ok: true };
     }
 
@@ -1129,51 +1197,30 @@ export function registerRoutes(
         and(
           eq(invites.tokenHash, tokenHash),
           isNull(invites.claimedAt),
+          isNull(invites.revokedAt),
           gt(invites.expiresAt, new Date()),
         ),
       )
       .limit(1);
     if (!invite) return reply.code(410).send({ error: "INVITE_EXPIRED" });
 
-    const result = await claimInviteOwnership(
-      db,
-      invite,
-      body.displayName ?? invite.label,
-    );
-    await createSession(db, reply, result.id);
+    let result: Awaited<ReturnType<typeof claimInviteOwnership>>;
+    try {
+      result = await claimInviteOwnership(db, invite, body.displayName ?? invite.label);
+    } catch (error) {
+      if (errorMessage(error).includes("INVITE_UNAVAILABLE"))
+        return reply.code(410).send({ error: "INVITE_EXPIRED" });
+      throw error;
+    }
+    await rotateCurrentGameCookieSession(request);
+    await createSession(db, reply, result.id, { source: "LEGACY_INVITE", inviteId: invite.id });
     return { ok: true };
   });
 
   // Temporary closed-beta shortcut. This intentionally authenticates by a
   // public alias and must be removed when UIX-232's recorded debt is paid.
   app.post("/api/auth/player/:handle", async (request, reply) => {
-    const handle = z
-      .object({ handle: z.string().min(1).max(40) })
-      .parse(request.params).handle;
-    const player = betaPlayerByHandle(handle);
-    if (!player) return reply.code(404).send({ error: "PLAYER_NOT_FOUND" });
-    const activeGrants = await db
-      .select({
-        membershipId: playerAccessGrants.membershipId,
-        label: playerAccessGrants.label,
-        displayName: memberships.displayName,
-      })
-      .from(playerAccessGrants)
-      .innerJoin(
-        memberships,
-        eq(playerAccessGrants.membershipId, memberships.id),
-      )
-      .where(
-        and(
-          isNull(playerAccessGrants.revokedAt),
-          eq(memberships.role, "PLAYER"),
-          eq(playerAccessGrants.campaignId, memberships.campaignId),
-        ),
-      );
-    const grant = uniqueBetaPlayerIdentity(player, activeGrants);
-    if (!grant) return reply.code(404).send({ error: "PLAYER_NOT_FOUND" });
-    await createSession(db, reply, grant.membershipId);
-    return { ok: true };
+    return reply.code(410).send({ error: "PUBLIC_ALIAS_LOGIN_DISABLED" });
   });
 
   app.post("/api/auth/logout", async (request, reply) => {
@@ -2205,6 +2252,40 @@ export function registerRoutes(
       created: access.created,
       url: access.token ? `${env.PUBLIC_URL}/join/${access.token}` : null,
     });
+  });
+
+  app.post("/api/invites/:id/revoke", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM") return reply.code(403).send({ error: "GM_REQUIRED" });
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = revokePlayerAccessSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(409).send({ error: "ACTION_ALREADY_APPLIED" });
+    const now = new Date();
+    const revoked = await db.transaction(async (tx) => {
+      const [invite] = await tx.update(invites).set({ revokedAt: now }).where(and(
+        eq(invites.id, id),
+        eq(invites.campaignId, auth.campaignId),
+        isNull(invites.revokedAt),
+      )).returning({ id: invites.id });
+      if (!invite) return null;
+      const stale = await tx.select({ id: sessions.id }).from(sessions).where(eq(sessions.legacyInviteId, invite.id));
+      if (stale.length)
+        await tx.update(sessions).set({ expiresAt: now }).where(eq(sessions.legacyInviteId, invite.id));
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "invite.revoked",
+        entityType: "invite",
+        entityId: invite.id,
+      });
+      return { invite, sessionIds: stale.map((session) => session.id) };
+    });
+    if (!revoked) return reply.code(404).send({ error: "INVITE_NOT_FOUND" });
+    for (const sessionId of revoked.sessionIds) io.in(sessionRoom(sessionId)).disconnectSockets(true);
+    return reply.send({ ok: true });
   });
 
   app.get("/api/player-access", async (request, reply) => {
