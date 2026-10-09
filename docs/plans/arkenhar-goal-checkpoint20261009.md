@@ -212,3 +212,12 @@ Root actual approved Rentry8E59D.. command terminated exit1 startup_failed ENOEN
 - Astra final finitepool plan: five PlayerRequests selectors +characterintermediatefocus using actualfocusedoption/Home/ArrowDown, ScenePickerdismissal/editentry no scene selection/save, fourbrowserviewportcells. NativeOSpopup/truebrowserzoom/human cannot be fabricated with DOM/CSS/CDPscale.
 - Luna assigned boundedhelper PREPONLY REST+Socket denyguard, existingBauthmemoryonly, nofixture/domainwrites. Singleactualattempt +atmostone evidencedinstrumentationcorrection failedassertionsonly; stopautomaticQA afterscope. Fontownerchoice asked; no fontsourcechange. Authimplementation stillownerdeferred; historicalmedia173/main/remote/human gates open.
 - Files index+AstralocalQAplan+checkpoint; nextrootreviewfrozenhelper thenfiniteauthorizedruntime. GoalACTIVE/publicationNOTREADY, no issueclosure.
+
+## Final local QA source-contract gate — 2026-10-09
+- Root fresh elevated localQA audit:14182PID23636 healthok/source3ed0f5;14183PID11648, one listener each. No restart/auth/domainwrite. This proves current localruntimepresence/sourcebridge, notfreshproductionimage.
+- Source-faithful scope correction: ScenePicker useDismissibleDetails defaultlistboxfalse dismisses onoutsidepointer, notfocusin; focusoutside dismissal unsupported/open, notinventedPASS. Sourceinitialsocket scene:view is automatic (null→existingcurrent), realtime handler onlySELECT+socketlocalviewedsnapshot, no persistentdomainwrite. Permit bounded connectioninitializationbeforeassertions, then freeze baseline; any new/useraction scene:view blockedbeforedispatch. Do notdrop initialpacket tofakecleantraffic.
+- Luna preparing onefinitetestbundle; no runtimeGO yet, no acceptedgate replay. Nextfrozenhelperreview/execution. GoalACTIVE; ownerfontchoice/authactivation/nativehuman/missingmedia/mainremote remainopen.
+
+## UIX473 task-side reconciliation — 2026-10-09
+- LiveLinear473Backlog/318InReview rechecked. Luna mapped9historicalreports to8themes existing491–494/467Done;495/496/347Backlog. No newduplicatetasks; DoneLinear doesnotproveactualreportread/queueupdated. ActualreportIDs/statuses uninspected, remoteoff.
+- Artifactuix473-existing-issue-map20261009.md; parentstagecomment recordsboundedmapping/no closure. Nexttrustedhost+owner-authorizedactualdata gate, notproductionDBaccess inferred. LastlocalQAhelper nowbeingprepared, no runtimeyet.
