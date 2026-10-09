@@ -5,6 +5,7 @@ import type {
   WorldContentLifecycle,
   WorldContentMediaDto,
   MembershipDto,
+  WorldMapsSnapshotDto,
   WorldContentRelationEdgeDto,
   WorldContentType,
 } from "@arken/contracts";
@@ -59,25 +60,22 @@ const safeError = "Не удалось выполнить операцию. По
  * World Content still has no dedicated upload endpoint (its assetId has no FK).
  *
  * UIX-395: memoized — the entity list/detail/relations/media all self-fetch
- * (see above); `assets` is the only prop sourced from `GameSnapshot`
- * (`snapshot.assets`, passed through from `Sidebar.tsx`), and its array
- * reference stays stable across realtime events that don't touch assets
- * (App.tsx's handlers only replace `snapshot.assets` when an asset is
- * actually uploaded/changed, never as an incidental side effect of an
- * unrelated `setSnapshot` spread). Combined with a stable `onClose` (see
- * `closeWorkspace` in `Sidebar.tsx`), this panel is inert to unrelated
- * realtime snapshot events and only re-renders when assets actually change.
+ * (see above); `assets`, `members` and `worldMaps` are narrowly sourced from
+ * `GameSnapshot` in `Sidebar.tsx` for the instance editor's authorized
+ * selectors. Stable snapshot fields avoid unrelated panel refreshes.
  */
 export const WorldContentWorkspace = memo(function WorldContentWorkspace({
   open,
   assets,
   members = [],
+  worldMaps,
   onUpload,
   onClose,
 }: {
   open: boolean;
   assets: AssetDto[];
   members?: readonly MembershipDto[];
+  worldMaps?: WorldMapsSnapshotDto;
   onUpload?: AssetActions["uploadAsset"];
   onClose: () => void;
 }) {
@@ -289,6 +287,13 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
                   type: selected.type,
                 }}
                 members={members}
+                assets={assets}
+                maps={worldMaps?.maps ?? []}
+                locations={[
+                  ...(worldMaps?.locations ?? []),
+                  ...(worldMaps?.gmLocations ?? []),
+                ]}
+                onUpload={onUpload}
               />
             </>
           ) : (

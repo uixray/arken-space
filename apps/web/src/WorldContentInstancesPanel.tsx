@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CreateWorldContentInstance,
+  AssetDto,
   MembershipDto,
   UpdateWorldContentInstance,
   WorldContentInstanceDto,
+  WorldMapDto,
+  WorldMapLocationDto,
 } from "@arken/contracts";
 import { ApiError, formatApiError } from "./api";
 import { Button } from "./design-system/Button";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
+import { AssetPicker } from "./ui/AssetPicker";
+import type { AssetActions } from "./use-asset-actions";
 import {
   createWorldContentInstance,
   fetchWorldContentInstance,
@@ -24,6 +29,8 @@ type Draft = {
   quantity: string;
   condition: string;
   ownerMembershipId: string;
+  portraitAssetId: string;
+  currentLocationId: string;
 };
 
 const emptyDraft = (): Draft => ({
@@ -33,6 +40,8 @@ const emptyDraft = (): Draft => ({
   quantity: "",
   condition: "",
   ownerMembershipId: "",
+  portraitAssetId: "",
+  currentLocationId: "",
 });
 
 const fieldsFrom = (instance: WorldContentInstanceDto): Draft => ({
@@ -42,6 +51,8 @@ const fieldsFrom = (instance: WorldContentInstanceDto): Draft => ({
   quantity: instance.quantity === null ? "" : String(instance.quantity),
   condition: instance.condition ?? "",
   ownerMembershipId: instance.ownerMembershipId ?? "",
+  portraitAssetId: instance.portraitAssetId ?? "",
+  currentLocationId: instance.currentLocationId ?? "",
 });
 
 const editableFields = [
@@ -51,6 +62,8 @@ const editableFields = [
   "quantity",
   "condition",
   "ownerMembershipId",
+  "portraitAssetId",
+  "currentLocationId",
 ] as const satisfies readonly (keyof Draft)[];
 
 const draftValues = (
@@ -64,6 +77,8 @@ const draftValues = (
     item && draft.quantity.trim() !== "" ? Number(draft.quantity) : null,
   condition: item ? draft.condition.trim() || null : null,
   ownerMembershipId: draft.ownerMembershipId || null,
+  portraitAssetId: draft.portraitAssetId || null,
+  currentLocationId: draft.currentLocationId || null,
 });
 
 function actionId() {
@@ -73,9 +88,17 @@ function actionId() {
 export function WorldContentInstancesPanel({
   canonical,
   members = [],
+  assets = [],
+  maps = [],
+  locations = [],
+  onUpload,
 }: {
   canonical: { id: string; name: string; type: string };
   members?: readonly MembershipDto[];
+  assets?: readonly AssetDto[];
+  maps?: readonly Pick<WorldMapDto, "id" | "name">[];
+  locations?: readonly Pick<WorldMapLocationDto, "id" | "mapId" | "name">[];
+  onUpload?: AssetActions["uploadAsset"];
 }) {
   const isItem = canonical.type === "ITEM";
   const [instances, setInstances] = useState<WorldContentInstanceDto[]>([]);
@@ -87,6 +110,7 @@ export function WorldContentInstancesPanel({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [failedPreviewId, setFailedPreviewId] = useState<string | null>(null);
   const [conflictLatest, setConflictLatest] =
     useState<WorldContentInstanceDto | null>(null);
   const createActionRef = useRef<CreateWorldContentInstance | null>(null);
@@ -147,6 +171,35 @@ export function WorldContentInstancesPanel({
 
   const selected =
     instances.find((instance) => instance.id === selectedId) ?? null;
+  const mapNames = new Map(maps.map((map) => [map.id, map.name]));
+  const locationChoices = Array.from(
+    new Map(locations.map((location) => [location.id, location])).values(),
+  );
+  const portraitAssets = assets.filter(
+    (asset) =>
+      (asset.kind === "IMAGE" || asset.kind === "PORTRAIT") &&
+      asset.mimeType.startsWith("image/"),
+  );
+  const portraitById = new Map(
+    portraitAssets.map((asset) => [asset.id, asset]),
+  );
+  const sortedLocations = [...locationChoices].sort((left, right) => {
+    const leftMap = mapNames.get(left.mapId) ?? "Карта недоступна";
+    const rightMap = mapNames.get(right.mapId) ?? "Карта недоступна";
+    return (
+      leftMap.localeCompare(rightMap, "ru") ||
+      left.name.localeCompare(right.name, "ru")
+    );
+  });
+  const locationLabel = (locationId: string | null) => {
+    if (!locationId) return "не указано";
+    const location = locationChoices.find(
+      (candidate) => candidate.id === locationId,
+    );
+    if (!location) return "место недоступно";
+    const mapName = mapNames.get(location.mapId) ?? "карта недоступна";
+    return `${mapName} — ${location.name}`;
+  };
 
   useEffect(() => {
     if (mode !== "view") return;
@@ -231,6 +284,8 @@ export function WorldContentInstancesPanel({
       currentState: draft.currentState.trim() || null,
       gmNotes: draft.gmNotes.trim() || null,
       ownerMembershipId: draft.ownerMembershipId || null,
+      portraitAssetId: draft.portraitAssetId || null,
+      currentLocationId: draft.currentLocationId || null,
       ...(isItem ? draftValues(draft, true) : {}),
     });
     try {
@@ -246,7 +301,9 @@ export function WorldContentInstancesPanel({
             row.gmNotes === request.gmNotes &&
             row.quantity === (request.quantity ?? null) &&
             row.condition === (request.condition ?? null) &&
-            row.ownerMembershipId === (request.ownerMembershipId ?? null),
+            row.ownerMembershipId === (request.ownerMembershipId ?? null) &&
+            row.portraitAssetId === (request.portraitAssetId ?? null) &&
+            row.currentLocationId === (request.currentLocationId ?? null),
         );
         createActionRef.current = null;
         setMode("view");
@@ -402,6 +459,7 @@ export function WorldContentInstancesPanel({
                         )?.displayName ?? "участник недоступен")
                       : "не назначен"}
                   </span>
+                  <span>{` · место: ${locationLabel(instance.currentLocationId)}`}</span>
                   <span> · ревизия {instance.revision}</span>
                 </small>
               </button>
@@ -462,6 +520,73 @@ export function WorldContentInstancesPanel({
               }
             />
           </label>
+          <div className="field">
+            <span>Портрет экземпляра</span>
+            <AssetPicker
+              aria-label="Портрет экземпляра"
+              value={draft.portraitAssetId || null}
+              onUpload={
+                onUpload
+                  ? async (file) => (await onUpload(file, "IMAGE")).id
+                  : undefined
+              }
+              noneLabel="Без портрета"
+              disabled={saving || retryPending}
+              assets={portraitAssets}
+              onChange={(assetId) =>
+                setDraft((current) => ({
+                  ...current,
+                  portraitAssetId: assetId ?? "",
+                }))
+              }
+            />
+            {draft.portraitAssetId &&
+              !portraitById.has(draft.portraitAssetId) && (
+                <p className="muted" role="status">
+                  Сохранённый портрет недоступен. Выберите другой или снимите
+                  выбор.
+                </p>
+              )}
+          </div>
+          <div className="field">
+            <span>Текущее место на карте кампании</span>
+            <FormSelect
+              aria-label="Текущее место на карте кампании"
+              value={draft.currentLocationId}
+              disabled={saving || retryPending}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  currentLocationId: event.target.value,
+                }))
+              }
+            >
+              <option value="">Не указано</option>
+              {draft.currentLocationId &&
+                !locationChoices.some(
+                  (location) => location.id === draft.currentLocationId,
+                ) && (
+                  <option value={draft.currentLocationId}>
+                    Место недоступно
+                  </option>
+                )}
+              {sortedLocations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {mapNames.get(location.mapId) ?? "Карта недоступна"} —{" "}
+                  {location.name}
+                </option>
+              ))}
+            </FormSelect>
+            {draft.currentLocationId &&
+              !locationChoices.some(
+                (location) => location.id === draft.currentLocationId,
+              ) && (
+                <p className="muted" role="status">
+                  Сохранённое место недоступно. Выберите другое или снимите
+                  выбор.
+                </p>
+              )}
+          </div>
           <label className="field">
             Владелец в этой кампании
             <FormSelect
@@ -548,6 +673,15 @@ export function WorldContentInstancesPanel({
                     )?.displayName ?? "участник недоступен")
                   : "не назначен"}
               </p>
+              <p>
+                Портрет:{" "}
+                {conflictLatest.portraitAssetId
+                  ? portraitById.has(conflictLatest.portraitAssetId)
+                    ? "изображение сохранено"
+                    : "изображение недоступно"
+                  : "не указан"}
+              </p>
+              <p>Место: {locationLabel(conflictLatest.currentLocationId)}</p>
               {isItem && (
                 <>
                   <p>Количество: {conflictLatest.quantity ?? "не указано"}</p>
@@ -596,6 +730,21 @@ export function WorldContentInstancesPanel({
               </Button>
             )}
           </div>
+        </div>
+      )}
+
+      {mode === "view" && selected?.portraitAssetId && (
+        <div className="world-content-instances__portrait-preview">
+          {portraitById.has(selected.portraitAssetId) &&
+          failedPreviewId !== selected.portraitAssetId ? (
+            <img
+              src={portraitById.get(selected.portraitAssetId)!.url}
+              alt={`Портрет: ${selected.displayNameOverride || canonical.name}`}
+              onError={() => setFailedPreviewId(selected.portraitAssetId)}
+            />
+          ) : (
+            <span role="status">Предпросмотр портрета недоступен.</span>
+          )}
         </div>
       )}
 

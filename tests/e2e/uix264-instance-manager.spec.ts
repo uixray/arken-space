@@ -25,6 +25,80 @@ for (const width of [390, 1280]) {
     page,
   }) => {
     const snapshot = gmSnapshot({ schemaVersion: 2 });
+    const portraitA = "50000000-0000-4000-8000-000000000264";
+    const portraitB = "50000000-0000-4000-8000-000000000265";
+    const mapId = "60000000-0000-4000-8000-000000000264";
+    const locationA = "70000000-0000-4000-8000-000000000264";
+    const locationB = "70000000-0000-4000-8000-000000000265";
+    snapshot.assets = [
+      {
+        id: portraitA,
+        kind: "PORTRAIT",
+        name: "Портрет A",
+        mimeType: "image/gif",
+        sizeBytes: 34,
+        width: 1,
+        height: 1,
+        durationSeconds: null,
+        url: `/api/assets/${portraitA}/content`,
+        createdAt: new Date(0).toISOString(),
+      },
+      {
+        id: portraitB,
+        kind: "IMAGE",
+        name: "Портрет B",
+        mimeType: "image/gif",
+        sizeBytes: 34,
+        width: 1,
+        height: 1,
+        durationSeconds: null,
+        url: `/api/assets/${portraitB}/content`,
+        createdAt: new Date(0).toISOString(),
+      },
+    ];
+    snapshot.worldMaps = {
+      maps: [
+        {
+          id: mapId,
+          name: "Береговая карта",
+          scope: "REGION",
+          visibility: "CAMPAIGN",
+          lifecycle: "PUBLISHED",
+          backgroundAssetId: null,
+          revision: 1,
+        },
+      ],
+      locations: [
+        {
+          id: locationA,
+          mapId,
+          name: "Старая пристань",
+          kind: "LANDMARK",
+          summary: "",
+          visibility: "PUBLIC",
+          x: 0.2,
+          y: 0.3,
+          revision: 1,
+          sceneIds: [],
+        },
+      ],
+      gmLocations: [
+        {
+          id: locationB,
+          mapId,
+          name: "Туманный маяк",
+          kind: "LANDMARK",
+          summary: "",
+          visibility: "GM_ONLY",
+          x: 0.6,
+          y: 0.7,
+          revision: 1,
+          sceneIds: [],
+          gmNotes: "",
+        },
+      ],
+      partyPosition: null,
+    };
     const otherMember = {
       ...snapshot.me,
       id: "00000000-0000-4000-8000-000000000264",
@@ -38,6 +112,7 @@ for (const width of [390, 1280]) {
     let failConflictOnce = true;
     let failCreateOnce = true;
     const writes: string[] = [];
+    const patchBodies: Array<Record<string, unknown>> = [];
     await page.route("**/api/**", async (route) => {
       const request = route.request();
       const url = new URL(request.url());
@@ -48,6 +123,12 @@ for (const width of [390, 1280]) {
       if (path === "/api/soundpad")
         return route.fulfill({
           json: { packs: [], playerPlaybackEnabled: true },
+        });
+      if (path.startsWith("/api/assets/") && path.endsWith("/content"))
+        return route.fulfill({
+          status: 200,
+          contentType: "image/gif",
+          body: Buffer.from("R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=", "base64"),
         });
       if (path === "/api/world-content")
         return route.fulfill({ json: [canonical] });
@@ -80,9 +161,9 @@ for (const width of [390, 1280]) {
           displayNameOverride: body.displayNameOverride,
           currentState: body.currentState,
           gmNotes: body.gmNotes,
-          portraitAssetId: null,
+          portraitAssetId: body.portraitAssetId ?? null,
           ownerMembershipId: body.ownerMembershipId ?? null,
-          currentLocationId: null,
+          currentLocationId: body.currentLocationId ?? null,
           condition: body.condition ?? null,
           quantity: body.quantity ?? null,
           discovered: false,
@@ -108,6 +189,7 @@ for (const width of [390, 1280]) {
         request.method() === "PATCH"
       ) {
         const body = request.postDataJSON();
+        patchBodies.push(body);
         if (body.gmNotes === "Изменено мастером" && failConflictOnce) {
           failConflictOnce = false;
           return route.fulfill({
@@ -149,6 +231,13 @@ for (const width of [390, 1280]) {
     await panel.getByLabel("Заметки мастера").fill("Ключ у смотрителя");
     await panel.getByLabel("Количество").fill("0");
     await panel.getByLabel("Состояние предмета").fill("Целое");
+    await panel.getByRole("button", { name: "Портрет A" }).click();
+    await panel.getByLabel("Текущее место на карте кампании").click();
+    await page
+      .getByRole("option", {
+        name: "Береговая карта — Старая пристань",
+      })
+      .click();
     await panel.getByLabel("Владелец в этой кампании").click();
     await page
       .getByRole("option", {
@@ -167,6 +256,9 @@ for (const width of [390, 1280]) {
     await expect(
       panel.getByRole("button", { name: /Северный порт/ }),
     ).toBeVisible();
+    await expect(
+      panel.getByRole("img", { name: "Портрет: Северный порт" }),
+    ).toBeVisible();
     await panel
       .getByRole("button", { name: "Изменить выбранный экземпляр" })
       .click();
@@ -175,14 +267,30 @@ for (const width of [390, 1280]) {
     await expect(panel.getByLabel("Владелец в этой кампании")).toContainText(
       snapshot.me.displayName,
     );
+    await expect(panel.getByLabel("Портрет экземпляра")).toBeVisible();
+    await expect(
+      panel.getByLabel("Текущее место на карте кампании"),
+    ).toContainText("Старая пристань");
     await panel.getByLabel("Владелец в этой кампании").click();
     await page.getByRole("option", { name: "Другой игрок (Игрок)" }).click();
+    await panel.getByRole("button", { name: "Портрет B" }).click();
+    await panel.getByLabel("Текущее место на карте кампании").click();
+    await page
+      .getByRole("option", {
+        name: "Береговая карта — Туманный маяк",
+      })
+      .click();
     await panel.getByRole("button", { name: /^Сохранить$/ }).click();
     await expect(panel.getByText("Изменения сохранены.")).toBeVisible();
     await panel.getByRole("button", { name: "Отмена" }).click();
     await panel.getByRole("button", { name: "Обновить список" }).click();
     await expect(
       panel.getByRole("button", { name: /владелец: Другой игрок/ }),
+    ).toBeVisible();
+    await expect(
+      panel.getByRole("button", {
+        name: /место: Береговая карта — Туманный маяк/,
+      }),
     ).toBeVisible();
     await panel
       .getByRole("button", { name: "Изменить выбранный экземпляр" })
@@ -192,6 +300,9 @@ for (const width of [390, 1280]) {
     );
     await panel.getByLabel("Владелец в этой кампании").click();
     await page.getByRole("option", { name: "Не назначен" }).click();
+    await panel.getByRole("button", { name: "Без портрета" }).click();
+    await panel.getByLabel("Текущее место на карте кампании").click();
+    await page.getByRole("option", { name: "Не указано" }).click();
     await panel.getByRole("button", { name: /^Сохранить$/ }).click();
     await expect(panel.getByText("Изменения сохранены.")).toBeVisible();
     await panel.getByRole("button", { name: "Отмена" }).click();
@@ -202,6 +313,21 @@ for (const width of [390, 1280]) {
     await expect(panel.getByLabel("Владелец в этой кампании")).toContainText(
       "Не назначен",
     );
+    await expect(
+      panel.getByRole("combobox", {
+        name: "Текущее место на карте кампании",
+      }),
+    ).toContainText("Не указано");
+    expect(patchBodies[0]).toMatchObject({
+      ownerMembershipId: otherMember.id,
+      portraitAssetId: portraitB,
+      currentLocationId: locationB,
+    });
+    expect(patchBodies[1]).toMatchObject({
+      ownerMembershipId: null,
+      portraitAssetId: null,
+      currentLocationId: null,
+    });
     await panel.getByLabel("Состояние предмета").fill("Поцарапано");
     await panel.getByRole("button", { name: /^Сохранить$/ }).click();
     await expect(panel.getByText("Изменения сохранены.")).toBeVisible();

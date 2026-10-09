@@ -13,6 +13,8 @@ export type WorldContentInstanceFields = Pick<
   | "quantity"
   | "condition"
   | "ownerMembershipId"
+  | "portraitAssetId"
+  | "currentLocationId"
 >;
 
 export const fetchWorldContentInstances = (worldContentId: string) =>

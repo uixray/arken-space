@@ -102,7 +102,7 @@ export type Props = {
     | "player-requests"
     | "world-encyclopedia"
     | "spell-schools"
-  | "world-codex"
+    | "world-codex"
     | null;
   operatorFeedbackAllowed: boolean;
 };
@@ -564,13 +564,23 @@ function SidebarContent(props: Props) {
             open
             assets={props.snapshot.assets}
             members={props.snapshot.members}
+            worldMaps={props.snapshot.worldMaps}
             onUpload={assetActions.uploadAsset}
             onClose={closeWorkspace}
           />
         )}
         {props.workspace === "spell-schools" && isGm && (
-          <ArkenDialog open footer={false} title="Школы заклинаний" variant="workspace" onClose={closeSpellWorkspace}>
-            <SpellSchoolsWorkspace onClose={closeSpellWorkspace} onPendingChange={setSpellSavePending} />
+          <ArkenDialog
+            open
+            footer={false}
+            title="Школы заклинаний"
+            variant="workspace"
+            onClose={closeSpellWorkspace}
+          >
+            <SpellSchoolsWorkspace
+              onClose={closeSpellWorkspace}
+              onPendingChange={setSpellSavePending}
+            />
           </ArkenDialog>
         )}
         {props.workspace === "world-codex" && (

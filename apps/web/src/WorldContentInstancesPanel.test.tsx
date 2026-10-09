@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  AssetDto,
   CreateWorldContentInstance,
   UpdateWorldContentInstance,
   WorldContentInstanceDto,
@@ -42,6 +43,18 @@ const members = [
     characterId: null,
   },
 ];
+const portrait = (id: string, name: string): AssetDto => ({
+  id,
+  kind: "PORTRAIT",
+  name,
+  mimeType: "image/png",
+  sizeBytes: 128,
+  width: 1,
+  height: 1,
+  durationSeconds: null,
+  url: "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=",
+  createdAt: "2026-10-09T00:00:00.000Z",
+});
 const row = (id: string, overrides: Partial<WorldContentInstanceDto> = {}) => ({
   ...instance(id),
   ...overrides,
@@ -122,6 +135,185 @@ describe("WorldContentInstancesPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: /^Сохранить$/ }));
     await waitFor(() => expect(stored.ownerMembershipId).toBeNull());
     expect(stored.worldContentId).toBe(canonical.id);
+  });
+
+  it("creates, changes, clears and previews instance portrait and map location", async () => {
+    const assets = [
+      portrait("portrait-a", "Портрет A"),
+      portrait("portrait-b", "Портрет B"),
+    ];
+    const maps = [{ id: "map-a", name: "Берег" }];
+    const locations = [
+      { id: "location-a", mapId: "map-a", name: "Причал" },
+      { id: "location-b", mapId: "map-a", name: "Маяк" },
+    ];
+    let stored = row("instance-new");
+    vi.mocked(fetchWorldContentInstances).mockResolvedValue([]);
+    vi.mocked(createWorldContentInstance).mockImplementation(
+      async (input: CreateWorldContentInstance) => {
+        stored = row("instance-new", input);
+        return stored;
+      },
+    );
+    vi.mocked(updateWorldContentInstance).mockImplementation(
+      async (id: string, input: UpdateWorldContentInstance) => {
+        stored = row(id, {
+          ...stored,
+          ...input,
+          portraitAssetId:
+            input.portraitAssetId === undefined
+              ? stored.portraitAssetId
+              : input.portraitAssetId,
+          currentLocationId:
+            input.currentLocationId === undefined
+              ? stored.currentLocationId
+              : input.currentLocationId,
+          revision: stored.revision + 1,
+        });
+        return stored;
+      },
+    );
+
+    renderComponent(
+      <WorldContentInstancesPanel
+        canonical={canonical}
+        assets={assets}
+        maps={maps}
+        locations={locations}
+      />,
+    );
+    await screen.findByText(
+      "В этой кампании пока нет экземпляров этой сущности.",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Создать экземпляр" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Портрет A" }));
+    await userEvent.click(
+      screen.getByRole("combobox", {
+        name: "Текущее место на карте кампании",
+      }),
+    );
+    await userEvent.click(
+      screen.getByRole("option", { name: "Берег — Причал" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /^Создать$/ }));
+    await screen.findByRole("img", { name: "Портрет: Порт" });
+    expect(createWorldContentInstance).toHaveBeenCalledWith(
+      expect.objectContaining({
+        portraitAssetId: "portrait-a",
+        currentLocationId: "location-a",
+      }),
+    );
+    expect(stored.worldContentId).toBe(canonical.id);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Изменить выбранный экземпляр" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Портрет B" }));
+    await userEvent.click(
+      screen.getByRole("combobox", {
+        name: "Текущее место на карте кампании",
+      }),
+    );
+    await userEvent.click(screen.getByRole("option", { name: "Берег — Маяк" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Сохранить$/ }));
+    await waitFor(() => expect(stored.portraitAssetId).toBe("portrait-b"));
+    expect(updateWorldContentInstance).toHaveBeenLastCalledWith(
+      "instance-new",
+      expect.objectContaining({
+        portraitAssetId: "portrait-b",
+        currentLocationId: "location-b",
+      }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Без портрета" }));
+    await userEvent.click(
+      screen.getByRole("combobox", {
+        name: "Текущее место на карте кампании",
+      }),
+    );
+    await userEvent.click(screen.getByRole("option", { name: "Не указано" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Сохранить$/ }));
+    await waitFor(() => expect(stored.portraitAssetId).toBeNull());
+    expect(updateWorldContentInstance).toHaveBeenLastCalledWith(
+      "instance-new",
+      expect.objectContaining({
+        portraitAssetId: null,
+        currentLocationId: null,
+      }),
+    );
+    expect(stored.worldContentId).toBe(canonical.id);
+  });
+
+  it("keeps unavailable saved references distinct from empty and omits them on unrelated edits", async () => {
+    const orphan = row("orphan-instance", {
+      portraitAssetId: "old-portrait-id",
+      currentLocationId: "old-location-id",
+      quantity: 2,
+      condition: "Целый",
+    });
+    vi.mocked(fetchWorldContentInstances).mockResolvedValue([orphan]);
+    let stored = orphan;
+    vi.mocked(updateWorldContentInstance).mockImplementation(
+      async (id: string, input: UpdateWorldContentInstance) => {
+        stored = row(id, {
+          ...stored,
+          ...input,
+          revision: stored.revision + 1,
+        });
+        return stored;
+      },
+    );
+    renderComponent(
+      <WorldContentInstancesPanel
+        canonical={{ id: canonical.id, name: "Зелье", type: "ITEM" }}
+      />,
+    );
+    await screen.findByRole("button", { name: /место: место недоступно/ });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Изменить выбранный экземпляр" }),
+    );
+    expect(
+      screen.getByText(/Сохранённый портрет недоступен/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Сохранённое место недоступно/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", {
+        name: "Текущее место на карте кампании",
+      }),
+    ).toHaveTextContent("Место недоступно");
+
+    await userEvent.clear(screen.getByLabelText(/Количество/));
+    await userEvent.type(screen.getByLabelText(/Количество/), "3");
+    await userEvent.click(screen.getByRole("button", { name: /^Сохранить$/ }));
+    await waitFor(() => expect(stored.quantity).toBe(3));
+    const unrelated = vi.mocked(updateWorldContentInstance).mock.calls[0]![1];
+    expect(unrelated).not.toHaveProperty("portraitAssetId");
+    expect(unrelated).not.toHaveProperty("currentLocationId");
+    expect(stored).toMatchObject({
+      portraitAssetId: "old-portrait-id",
+      currentLocationId: "old-location-id",
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Без портрета" }));
+    await userEvent.click(
+      screen.getByRole("combobox", {
+        name: "Текущее место на карте кампании",
+      }),
+    );
+    await userEvent.click(screen.getByRole("option", { name: "Не указано" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Сохранить$/ }));
+    await waitFor(() => expect(stored.currentLocationId).toBeNull());
+    expect(updateWorldContentInstance).toHaveBeenLastCalledWith(
+      "orphan-instance",
+      expect.objectContaining({
+        portraitAssetId: null,
+        currentLocationId: null,
+      }),
+    );
   });
 
   it("creates and edits ITEM quantity and condition, preserving zero and explicit unset", async () => {
@@ -310,13 +502,26 @@ describe("WorldContentInstancesPanel", () => {
   it("retains a draft on 409 and requires an explicit rebase onto the latest revision", async () => {
     const original = row("instance-1", {
       displayNameOverride: "Крепость",
+      portraitAssetId: "portrait-a",
+      currentLocationId: "location-a",
       revision: 4,
     });
     const latest = row("instance-1", {
       displayNameOverride: "Новая крепость",
       currentState: "Осаждена",
+      portraitAssetId: "portrait-a",
+      currentLocationId: "location-a",
       revision: 5,
     });
+    const assets = [
+      portrait("portrait-a", "Портрет A"),
+      portrait("portrait-b", "Портрет B"),
+    ];
+    const maps = [{ id: "map-a", name: "Берег" }];
+    const locations = [
+      { id: "location-a", mapId: "map-a", name: "Причал" },
+      { id: "location-b", mapId: "map-a", name: "Маяк" },
+    ];
     vi.mocked(fetchWorldContentInstances).mockResolvedValue([original]);
     vi.mocked(updateWorldContentInstance)
       .mockRejectedValueOnce(
@@ -326,12 +531,21 @@ describe("WorldContentInstancesPanel", () => {
         row("instance-1", {
           ...latest,
           gmNotes: "Ключ у капитана",
+          portraitAssetId: "portrait-b",
+          currentLocationId: "location-b",
           revision: 6,
         }),
       );
     vi.mocked(fetchWorldContentInstance).mockResolvedValue(latest);
 
-    renderComponent(<WorldContentInstancesPanel canonical={canonical} />);
+    renderComponent(
+      <WorldContentInstancesPanel
+        canonical={canonical}
+        assets={assets}
+        maps={maps}
+        locations={locations}
+      />,
+    );
     await screen.findByRole("button", { name: /Крепость/ });
     await userEvent.click(
       screen.getByRole("button", { name: "Изменить выбранный экземпляр" }),
@@ -340,12 +554,23 @@ describe("WorldContentInstancesPanel", () => {
       screen.getByLabelText("Заметки мастера"),
       "Ключ у капитана",
     );
+    await userEvent.click(screen.getByRole("button", { name: "Портрет B" }));
+    const locationPicker = screen.getByRole("combobox", {
+      name: "Текущее место на карте кампании",
+    });
+    await userEvent.click(locationPicker);
+    await userEvent.click(screen.getByRole("option", { name: "Берег — Маяк" }));
     await userEvent.click(screen.getByRole("button", { name: /^Сохранить$/ }));
     await screen.findByText(/Актуальная версия — ревизия 5/);
     expect(screen.getByLabelText("Заметки мастера")).toHaveValue(
       "Ключ у капитана",
     );
     expect(screen.getByText("Состояние: Осаждена")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Портрет B" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(locationPicker).toHaveTextContent("Берег — Маяк");
 
     await userEvent.click(
       screen.getByRole("button", {
@@ -357,7 +582,12 @@ describe("WorldContentInstancesPanel", () => {
     );
     expect(updateWorldContentInstance).toHaveBeenLastCalledWith(
       "instance-1",
-      expect.objectContaining({ revision: 5, gmNotes: "Ключ у капитана" }),
+      expect.objectContaining({
+        revision: 5,
+        gmNotes: "Ключ у капитана",
+        portraitAssetId: "portrait-b",
+        currentLocationId: "location-b",
+      }),
     );
     const rebased = vi.mocked(updateWorldContentInstance).mock.calls[1]![1];
     expect(rebased).not.toHaveProperty("currentState");
@@ -446,7 +676,21 @@ describe("WorldContentInstancesPanel", () => {
   });
 
   it("retries an uncertain update with the exact same id and immutable payload", async () => {
-    const initial = row("instance-1", { currentState: "Открыта", revision: 3 });
+    const initial = row("instance-1", {
+      currentState: "Открыта",
+      portraitAssetId: "portrait-a",
+      currentLocationId: "location-a",
+      revision: 3,
+    });
+    const assets = [
+      portrait("portrait-a", "Портрет A"),
+      portrait("portrait-b", "Портрет B"),
+    ];
+    const maps = [{ id: "map-a", name: "Берег" }];
+    const locations = [
+      { id: "location-a", mapId: "map-a", name: "Причал" },
+      { id: "location-b", mapId: "map-a", name: "Маяк" },
+    ];
     let rejectUpdate!: (reason: Error) => void;
     vi.mocked(fetchWorldContentInstances).mockResolvedValue([initial]);
     vi.mocked(updateWorldContentInstance)
@@ -457,15 +701,33 @@ describe("WorldContentInstancesPanel", () => {
           }),
       )
       .mockResolvedValueOnce(
-        row("instance-1", { currentState: "Закрыта", revision: 4 }),
+        row("instance-1", {
+          currentState: "Закрыта",
+          portraitAssetId: "portrait-b",
+          currentLocationId: "location-b",
+          revision: 4,
+        }),
       );
-    renderComponent(<WorldContentInstancesPanel canonical={canonical} />);
+    renderComponent(
+      <WorldContentInstancesPanel
+        canonical={canonical}
+        assets={assets}
+        maps={maps}
+        locations={locations}
+      />,
+    );
     await screen.findByRole("button", { name: /Открыта/ });
     await userEvent.click(
       screen.getByRole("button", { name: "Изменить выбранный экземпляр" }),
     );
     await userEvent.clear(screen.getByLabelText("Состояние"));
     await userEvent.type(screen.getByLabelText("Состояние"), "Закрыта");
+    await userEvent.click(screen.getByRole("button", { name: "Портрет B" }));
+    const locationPicker = screen.getByRole("combobox", {
+      name: "Текущее место на карте кампании",
+    });
+    await userEvent.click(locationPicker);
+    await userEvent.click(screen.getByRole("option", { name: "Берег — Маяк" }));
     await userEvent.click(screen.getByRole("button", { name: /^Сохранить$/ }));
     await waitFor(() =>
       expect(updateWorldContentInstance).toHaveBeenCalledTimes(1),
@@ -481,5 +743,14 @@ describe("WorldContentInstancesPanel", () => {
     expect(vi.mocked(updateWorldContentInstance).mock.calls[1]).toEqual(
       snapshot,
     );
+    expect(snapshot[1]).toMatchObject({
+      portraitAssetId: "portrait-b",
+      currentLocationId: "location-b",
+    });
+    expect(screen.getByRole("button", { name: "Портрет B" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(locationPicker).toHaveTextContent("Берег — Маяк");
   });
 });
