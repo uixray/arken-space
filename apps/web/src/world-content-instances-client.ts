@@ -1,5 +1,6 @@
 import type {
   CreateWorldContentInstance,
+  DeleteWorldContentInstance,
   UpdateWorldContentInstance,
   WorldContentInstanceDto,
 } from "@arken/contracts";
@@ -40,4 +41,17 @@ export const updateWorldContentInstance = (
   api<WorldContentInstanceDto | { duplicate: true }>(
     `/api/world-content-instances/${encodeURIComponent(id)}`,
     { method: "PATCH", body: JSON.stringify(input) },
+  );
+
+export const deleteWorldContentInstance = (
+  id: string,
+  input: DeleteWorldContentInstance,
+) =>
+  api<{ duplicate: true } | null>(
+    `/api/world-content-instances/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+      headers: { "x-action-id": input.actionId },
+      body: JSON.stringify(input),
+    },
   );

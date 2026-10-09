@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CreateWorldContentInstance,
+  DeleteWorldContentInstance,
   AssetDto,
   MembershipDto,
   UpdateWorldContentInstance,
@@ -10,11 +11,13 @@ import type {
 } from "@arken/contracts";
 import { ApiError, formatApiError } from "./api";
 import { Button } from "./design-system/Button";
+import { Dialog } from "./design-system/Dialog";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 import { AssetPicker } from "./ui/AssetPicker";
 import type { AssetActions } from "./use-asset-actions";
 import {
   createWorldContentInstance,
+  deleteWorldContentInstance,
   fetchWorldContentInstance,
   fetchWorldContentInstances,
   type WorldContentInstanceFields,
@@ -43,6 +46,13 @@ const emptyDraft = (): Draft => ({
   portraitAssetId: "",
   currentLocationId: "",
 });
+
+type DeleteIntent = DeleteWorldContentInstance & {
+  instanceId: string;
+  canonicalId: string;
+  displayName: string;
+  dirtyEdit: boolean;
+};
 
 const fieldsFrom = (instance: WorldContentInstanceDto): Draft => ({
   displayNameOverride: instance.displayNameOverride ?? "",
@@ -113,12 +123,20 @@ export function WorldContentInstancesPanel({
   const [failedPreviewId, setFailedPreviewId] = useState<string | null>(null);
   const [conflictLatest, setConflictLatest] =
     useState<WorldContentInstanceDto | null>(null);
+  const [deletePrompt, setDeletePrompt] = useState<DeleteIntent | null>(null);
+  const [pendingDelete, setPendingDelete] =
+    useState<DeleteIntent | null>(null);
   const createActionRef = useRef<CreateWorldContentInstance | null>(null);
   const updateActionRef = useRef<{
     id: string;
     payload: UpdateWorldContentInstance;
   } | null>(null);
   const knownIdsAtCreateRef = useRef<Set<string>>(new Set());
+  const canonicalIdRef = useRef(canonical.id);
+  canonicalIdRef.current = canonical.id;
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
+  const pendingDeletesByCanonicalRef = useRef(new Map<string, DeleteIntent>());
+  const skipSelectionResetRef = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -147,7 +165,15 @@ export function WorldContentInstancesPanel({
     setBase(null);
     setMode("view");
     setDraft(emptyDraft());
+    setSaving(false);
     setConflictLatest(null);
+    skipSelectionResetRef.current = false;
+    setDeletePrompt(
+      pendingDeletesByCanonicalRef.current.get(canonical.id) ?? null,
+    );
+    setPendingDelete(
+      pendingDeletesByCanonicalRef.current.get(canonical.id) ?? null,
+    );
     setNotice("");
     setLoading(true);
     setError("");
@@ -203,6 +229,8 @@ export function WorldContentInstancesPanel({
 
   useEffect(() => {
     if (mode !== "view") return;
+    const preserveOutcomeMessage = skipSelectionResetRef.current;
+    skipSelectionResetRef.current = false;
     if (selected) {
       setBase(selected);
       setDraft(fieldsFrom(selected));
@@ -211,8 +239,10 @@ export function WorldContentInstancesPanel({
       setDraft(emptyDraft());
     }
     setConflictLatest(null);
-    setError("");
-    setNotice("");
+    if (!preserveOutcomeMessage) {
+      setError("");
+      setNotice("");
+    }
   }, [mode, selected]);
 
   const dirty = useMemo(() => {
@@ -238,7 +268,8 @@ export function WorldContentInstancesPanel({
     draft.condition.trim().length > 200;
   const retryPending =
     (mode === "create" && createActionRef.current !== null) ||
-    (mode === "edit" && updateActionRef.current !== null);
+    (mode === "edit" && updateActionRef.current !== null) ||
+    pendingDelete !== null;
 
   const selectInstance = (instance: WorldContentInstanceDto) => {
     setSelectedId(instance.id);
@@ -392,6 +423,151 @@ export function WorldContentInstancesPanel({
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const beginDelete = () => {
+    if (!selected || mode === "create" || saving || pendingDelete) return;
+    const target = mode === "edit" ? (base ?? selected) : selected;
+    setDeletePrompt({
+      instanceId: target.id,
+      canonicalId: canonical.id,
+      actionId: actionId(),
+      revision: target.revision,
+      displayName: target.displayNameOverride || canonical.name,
+      dirtyEdit: mode === "edit" && Object.keys(dirty).length > 0,
+    });
+    setError("");
+  };
+
+  const runDelete = async (intent = pendingDelete ?? deletePrompt) => {
+    if (!intent || saving) return;
+    const request = {
+      actionId: intent.actionId,
+      revision: intent.revision,
+    };
+    pendingDeletesByCanonicalRef.current.set(intent.canonicalId, intent);
+    setPendingDelete(intent);
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await deleteWorldContentInstance(intent.instanceId, request);
+      if (canonicalIdRef.current !== intent.canonicalId) {
+        pendingDeletesByCanonicalRef.current.delete(intent.canonicalId);
+        return;
+      }
+      pendingDeletesByCanonicalRef.current.delete(intent.canonicalId);
+      setPendingDelete(null);
+      setDeletePrompt(null);
+      // The server has confirmed deletion. Remove the known-deleted selection
+      // before reconciliation so a failed list refresh cannot expose stale edit
+      // or delete actions for it.
+      skipSelectionResetRef.current = true;
+      setInstances((current) =>
+        current.filter((row) => row.id !== intent.instanceId),
+      );
+      setSelectedId(null);
+      setBase(null);
+      setDraft(emptyDraft());
+      setMode("view");
+      setConflictLatest(null);
+      try {
+        const rows = await fetchWorldContentInstances(intent.canonicalId);
+        if (canonicalIdRef.current !== intent.canonicalId) return;
+        skipSelectionResetRef.current = true;
+        setInstances(rows);
+        const survivor = rows[0] ?? null;
+        setSelectedId(survivor?.id ?? null);
+        setBase(survivor);
+        setDraft(survivor ? fieldsFrom(survivor) : emptyDraft());
+        setMode("view");
+        setConflictLatest(null);
+        setNotice(
+          result?.duplicate
+            ? "Подтверждённый повтор: экземпляр удалён текущим действием."
+            : "Экземпляр удалён из этой кампании. Каноническая сущность и другие экземпляры не изменены.",
+        );
+      } catch {
+        if (canonicalIdRef.current !== intent.canonicalId) return;
+        setNotice(
+          "Запрос на удаление подтверждён, но список не обновлён. Нажмите «Обновить список».",
+        );
+      }
+    } catch (reason) {
+      if (canonicalIdRef.current !== intent.canonicalId) return;
+      if (reason instanceof ApiError && reason.status === 409) {
+        pendingDeletesByCanonicalRef.current.delete(intent.canonicalId);
+        setPendingDelete(null);
+        setDeletePrompt(null);
+        try {
+          const latest = await fetchWorldContentInstance(intent.instanceId);
+          if (canonicalIdRef.current !== intent.canonicalId) return;
+          skipSelectionResetRef.current = true;
+          setInstances((current) =>
+            current.map((row) => (row.id === latest.id ? latest : row)),
+          );
+          setBase(latest);
+          setConflictLatest(latest);
+          setError(
+            `Экземпляр изменился и не удалён. Загружена ревизия ${latest.revision}; проверьте данные и отдельно подтвердите удаление новой версии.`,
+          );
+        } catch (refreshError) {
+          if (canonicalIdRef.current !== intent.canonicalId) return;
+          setError(
+            `Экземпляр изменился и не удалён. Актуальную версию загрузить не удалось: ${formatApiError(refreshError)}`,
+          );
+        }
+      } else if (reason instanceof ApiError && reason.status === 404) {
+        pendingDeletesByCanonicalRef.current.delete(intent.canonicalId);
+        setPendingDelete(null);
+        setDeletePrompt(null);
+        try {
+          const rows = await fetchWorldContentInstances(intent.canonicalId);
+          if (canonicalIdRef.current !== intent.canonicalId) return;
+          skipSelectionResetRef.current = true;
+          setInstances(rows);
+          setSelectedId((current) =>
+            current && rows.some((row) => row.id === current)
+              ? current
+              : (rows[0]?.id ?? null),
+          );
+        } catch {
+          if (canonicalIdRef.current !== intent.canonicalId) return;
+          // Keep the non-success 404 message; never present it as our deletion.
+        }
+        setError(
+          "Экземпляр недоступен или уже удалён. Этот ответ не подтверждает, что его удалил данный запрос.",
+        );
+      } else {
+        // The request may have committed. Refresh for current state, but retain
+        // and expose the exact command until an exact replay or 404/409 settles it.
+        let targetIsPresent = true;
+        try {
+          const rows = await fetchWorldContentInstances(intent.canonicalId);
+          if (canonicalIdRef.current !== intent.canonicalId) return;
+          targetIsPresent = rows.some((row) => row.id === intent.instanceId);
+          skipSelectionResetRef.current = true;
+          setInstances(rows);
+          setSelectedId((current) =>
+            current && rows.some((row) => row.id === current)
+              ? current
+              : (rows[0]?.id ?? null),
+          );
+        } catch {
+          if (canonicalIdRef.current !== intent.canonicalId) return;
+          // Retain the retry envelope even when reconciliation is unavailable.
+        }
+        setPendingDelete(intent);
+        setDeletePrompt(intent);
+        setError(
+          targetIsPresent
+            ? "Ответ на удаление не подтверждён. Повтор отправит ту же команду с теми же ID и ревизией."
+            : "Экземпляр сейчас отсутствует, но это не подтверждает, что его удалил данный запрос. Повторите ту же команду для сверки.",
+        );
+      }
+    } finally {
+      if (canonicalIdRef.current === intent.canonicalId) setSaving(false);
     }
   };
 
@@ -729,6 +905,16 @@ export function WorldContentInstancesPanel({
                 Сохранить черновик поверх ревизии {conflictLatest.revision}
               </Button>
             )}
+            {mode === "edit" && base && (
+              <Button
+                ref={deleteTriggerRef}
+                view="action-danger"
+                disabled={saving || retryPending}
+                onClick={beginDelete}
+              >
+                Удалить экземпляр…
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -753,11 +939,68 @@ export function WorldContentInstancesPanel({
           <Button view="action" onClick={() => setMode("edit")}>
             Изменить выбранный экземпляр
           </Button>
+          <Button
+            ref={deleteTriggerRef}
+            view="action-danger"
+            disabled={saving || retryPending}
+            onClick={beginDelete}
+          >
+            Удалить экземпляр…
+          </Button>
           <Button onClick={() => void load()} disabled={loading}>
             Обновить список
           </Button>
         </div>
       )}
+      <Dialog
+        open={deletePrompt !== null}
+        title="Удаление экземпляра"
+        danger
+        aria-describedby="world-content-instance-delete-description"
+        onClose={() => {
+          if (!saving && !pendingDelete) setDeletePrompt(null);
+        }}
+      >
+        <div id="world-content-instance-delete-description">
+          {deletePrompt && (
+            <>
+              <p>
+                Удалить экземпляр «{deletePrompt.displayName}» из этой кампании
+                навсегда?
+              </p>
+              <p>Каноническая сущность и другие экземпляры не изменятся.</p>
+              {deletePrompt.dirtyEdit && (
+                <p role="alert">
+                  Несохранённые изменения этого экземпляра будут отброшены только
+                  после подтверждения удаления.
+                </p>
+              )}
+            </>
+          )}
+        </div>
+        <Dialog.Footer>
+          <div className="world-content-instances__actions">
+            <Button
+              disabled={saving || pendingDelete !== null}
+              onClick={() => setDeletePrompt(null)}
+            >
+              Отмена
+            </Button>
+            <Button
+              view="action-danger"
+              loading={saving}
+              disabled={saving || !deletePrompt}
+              onClick={() => void runDelete()}
+            >
+              {pendingDelete
+                ? "Повторить то же удаление"
+                : deletePrompt?.dirtyEdit
+                  ? "Отбросить изменения и удалить"
+                  : "Удалить экземпляр"}
+            </Button>
+          </div>
+        </Dialog.Footer>
+      </Dialog>
     </section>
   );
 }
