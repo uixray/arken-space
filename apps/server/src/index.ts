@@ -16,6 +16,7 @@ import { registerRoutes } from "./routes.js";
 import { ensureSeed } from "./seed.js";
 import { requestActionId } from "./telemetry.js";
 import { isCampaignCanvasGuardError } from "./campaign-pause-guard.js";
+import { installGracefulShutdown } from "./graceful-shutdown.js";
 
 const app = Fastify({
   logger: { level: env.NODE_ENV === "production" ? "info" : "debug" },
@@ -88,7 +89,7 @@ registerRealtime(io, db, app.log);
 registerRoutes(app, db, io);
 
 app.addHook("onClose", async () => {
-  io.close();
+  await io.close();
   await client.end();
 });
 
@@ -128,4 +129,5 @@ app.setErrorHandler((error, request, reply) => {
   });
 });
 
+installGracefulShutdown(() => app.close(), app.log);
 await app.listen({ host: "0.0.0.0", port: env.PORT });
