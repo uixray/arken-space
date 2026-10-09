@@ -30,3 +30,11 @@
 4. Only after local package is assembled, ask for the concrete missing auth timing, human acceptance, main/push/merge and remote release-preparation scope. Separate production deploy approval and completed gate remain mandatory.
 
 Progress classification: this goal turn changed authoritative local state (disposable restore/migration and owned-character fixture), produced immutable evidence and stage-gate updates. Publication completion remains unproven; goal stays active.
+
+## Continuation gate — 2026-10-09
+- Incoming HEAD 84641ce; product source unchanged 52013d4. Goal ACTIVE, not publication acceptance.
+- Paired restore now proved for captured DB and 139 present blobs; active-root provenance established. 173 DB-referenced objects missing; exact known historical sources do not prove their bytes. See arkenhar-paired-recovery20261009.md. No reconstruction/deletion or remote action.
+- Firefox compact scene restore passes supported Shift+Tab/Enter route; no focus product edit warranted by prior broad hypothesis. Select identity passes but option pointer-selection remains harness-blocked; Luna read-only DOM probe running. See uix644-select-contract-gate20261009.md (working checkpoint).
+- Original RO Git revisions and trace/checkpoint located; executable causal comparison remains open. See uix644-ro-prerequisite-audit20261009.md.
+- Linear Validate/recovery stage gates recorded, UIX644 InProgress / UIX649 InReview unchanged. No task closure. No source test rerun needed for this docs-only pool; git diff --check passed. Private receipts and unrelated .tmp retained unstaged.
+- Next: correct evidenced Select QA locator before one connected gate; request exact missing-media source only if none locally proven. Authorization timing, native/human QA, ancestry and remote/publication permissions still separate release gates.
