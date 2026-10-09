@@ -210,6 +210,7 @@ import {
   CURSOR_INACTIVITY_MS,
 } from "./cursor-broadcast";
 import { cursorColorForMembership } from "./cursor-color";
+import { rulerColorForMembership } from "./ruler-colors";
 import {
   mapViewportAriaKeyShortcuts,
   regionCommitTarget,
@@ -3716,6 +3717,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
 
         <Layer listening={false}>
           {displayRulers.map((ruler) => {
+            const rulerColor = rulerColorForMembership(ruler.membershipId);
             // UIX-381: `points` is the committed waypoints plus (while a
             // local drag is live) the in-progress segment following the
             // pointer. A lone point (drag just started, no movement yet) has
@@ -3730,7 +3732,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                   x={only.x}
                   y={only.y}
                   radius={4 / scale}
-                  fill={visual.color.selection}
+                  fill={rulerColor}
                 />
               ) : null;
             }
@@ -3758,7 +3760,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                       points={points
                         .slice(0, -1)
                         .flatMap((point) => [point.x, point.y])}
-                      stroke={visual.color.selection}
+                      stroke={rulerColor}
                       strokeWidth={2.5 / scale}
                       dash={[6 / scale, 4 / scale]}
                       lineJoin="round"
@@ -3776,8 +3778,8 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                 />
                 <Arrow
                   points={[beforeLast.x, beforeLast.y, last.x, last.y]}
-                  stroke={visual.color.selection}
-                  fill={visual.color.selection}
+                  stroke={rulerColor}
+                  fill={rulerColor}
                   strokeWidth={2.5 / scale}
                   dash={[6 / scale, 4 / scale]}
                   pointerLength={10 / scale}
@@ -3787,7 +3789,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                   x={first.x}
                   y={first.y}
                   radius={4 / scale}
-                  fill={visual.color.selection}
+                  fill={rulerColor}
                 />
                 {points.slice(1, -1).map((waypoint, index) => (
                   <Circle
@@ -3795,7 +3797,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                     x={waypoint.x}
                     y={waypoint.y}
                     radius={3 / scale}
-                    fill={visual.color.selection}
+                    fill={rulerColor}
                   />
                 ))}
                 <Group x={last.x + 8 / scale} y={last.y - 14 / scale}>
@@ -3810,7 +3812,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                   />
                   <Text
                     text={labelText}
-                    fill="#f8fafc"
+                    fill={rulerColor}
                     fontSize={13 / scale}
                     fontStyle="bold"
                   />
