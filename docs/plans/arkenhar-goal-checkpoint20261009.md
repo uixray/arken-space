@@ -80,3 +80,15 @@ Progress classification: this goal turn changed authoritative local state (dispo
 - Stage gate UIX-644 recorded in Linear comment81458d67-f2aa-4aed-84d7-1fda1b433a69; status unchanged. Evidence hashes independently rechecked.
 - Per-file fixture write: one official B NPC DRAFT POST201, list/detail verified emptyDRAFT revision0; no retry/upload/publish. Fresh pre-write DB dump was NOT obtained (only historical10/08 backup and immediate list baseline). This is an explicit recovery-baseline limitation, not PASS; post-write snapshot authorized, cannot replace missing pre-write evidence. No more domain writes.
 - Disposable-readability preflight first credential-free sameclient connection returned28P01, failed closed with no writes. Authorized exact local QA container POSTGRES credentials private in-memory read for one read-only OID check; no broad env search/remote/runtime launch.
+
+## Retained fresh build package gate — 2026-10-09
+- Built identity691d352/product52013d4 unchanged; no rebuild for docs commit cfa5cb6.
+- Root retained all23 output files from available web/server/contracts/db/system dist roots into ignored `.data/qa-prep/arkenhar-built-candidate-691d352-20261009`; source hashes rechecked after copy, count stable, file reparse-point check clean. Each retained file and independently extracted ZIP roundtrip matches the existing build-output manifest.
+- Archive SHA2564AE3392A21F536A202EE7B7080350961289207EDFCBCE4704556D55A81258AC0. Private diagnostic only, including source maps; not share-reviewed, deployable server image, served byte identity or browser acceptance.
+- Next: follow Astra built-candidate plan, inspect HTML refs/package boundaries and coordinate isolated14233 preview with explicit origin contract before browser smoke. Existing API/Vite not changed by packaging.
+
+## Built static HTTP gate — 2026-10-09
+- Root fresh retained web output served via locked Vite preview `configFile:false`, isolated127.0.0.1:14233, proxy empty, no backend/browser/auth/write. All11 web files returned200 and exact byte length/SHA; all3 HTML src/href references exist; no source/HMR entry in retainedHTML. MIME independently inspected: HTML/text, CSS/text, JS/text/javascript, maps/application/json, PNG/WebP correct.
+- Private receipt `.data/qa-prep/arkenhar-built-candidate-691d352-20261009/served-static-receipt.json`, SHA c095ff92ab899069120b9b868fd97b506dfb34ef51ba90d89c7694fa29fc64b0. Owned preview closed in finally; elevated listener check returned no14233 listener (PowerShell command exit1 from absent Get-NetTCPConnection, not failed serving).
+- Scope PASS: static served-byte identity only. Authenticated built browser smoke NOT RUN; production package/share review/deploy NOT RUN. Source maps retained privately, not authorised for publication.
+- Next: Luna built-candidate preparation including exact API origin mapping review; concurrent Luna restored-readability sameclient OID preflight and per-file provenance fixture backup/helper preparation. No product changes; historical173missing/auth/human gates stay open.
