@@ -19,6 +19,7 @@ import { useThreadHistory } from "./use-thread-history";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
 import { WorldContentWorkspace } from "./WorldContentWorkspace";
+import { SpellSchoolsWorkspace } from "./SpellSchoolsWorkspace";
 import { WorldEncyclopediaWorkspace } from "./WorldEncyclopediaWorkspace";
 import { PlayerRequestsWorkspace } from "./PlayerRequestsWorkspace";
 import {
@@ -100,7 +101,8 @@ export type Props = {
     | "operator-feedback"
     | "player-requests"
     | "world-encyclopedia"
-    | "world-codex"
+    | "spell-schools"
+  | "world-codex"
     | null;
   operatorFeedbackAllowed: boolean;
 };
@@ -184,6 +186,10 @@ function SidebarContent(props: Props) {
   // inline at each usage site would be a fresh function every Sidebar
   // render (which happens on every realtime snapshot event), defeating
   // React.memo's shallow prop comparison on those panels.
+  const [spellSavePending, setSpellSavePending] = useState(false);
+  const closeSpellWorkspace = useCallback(() => {
+    if (!spellSavePending) onWorkspaceChange(null);
+  }, [spellSavePending, onWorkspaceChange]);
   const closeWorkspace = useCallback(
     () => onWorkspaceChange(null),
     [onWorkspaceChange],
@@ -561,6 +567,11 @@ function SidebarContent(props: Props) {
             onUpload={assetActions.uploadAsset}
             onClose={closeWorkspace}
           />
+        )}
+        {props.workspace === "spell-schools" && isGm && (
+          <ArkenDialog open footer={false} title="Школы заклинаний" variant="workspace" onClose={closeSpellWorkspace}>
+            <SpellSchoolsWorkspace onClose={closeSpellWorkspace} onPendingChange={setSpellSavePending} />
+          </ArkenDialog>
         )}
         {props.workspace === "world-codex" && (
           <WorldEncyclopediaWorkspace

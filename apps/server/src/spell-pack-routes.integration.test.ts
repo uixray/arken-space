@@ -228,6 +228,120 @@ afterAll(async () => {
 });
 
 describe("UIX-580 spell-pack GM API", () => {
+  it("lists a bounded own-campaign summary and reads only an explicit own version as GM", async () => {
+    const ownPackId = id();
+    const ownVersionId = id();
+    const foreignPackId = id();
+    const foreignVersionId = id();
+    const ownCreated = await createPack(
+      ownGmHeaders,
+      graph(ownPackId, ownVersionId, { title: "Own draft" }),
+    );
+    const foreignCreated = await createPack(
+      foreignGmHeaders,
+      graph(foreignPackId, foreignVersionId, { title: "Foreign draft" }),
+    );
+    expect(ownCreated.statusCode).toBe(201);
+    expect(foreignCreated.statusCode).toBe(201);
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/spell-packs",
+      headers: ownGmHeaders,
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.headers["cache-control"]).toBe("private, no-store");
+    expect(list.json()).toEqual({
+      packs: [
+        expect.objectContaining({
+          id: ownPackId,
+          latestVersionId: ownVersionId,
+          latestVersion: 1,
+          lifecycle: "DRAFT",
+          title: "Own draft",
+        }),
+      ],
+    });
+    expect(JSON.stringify(list.json())).not.toContain(foreignPackId);
+    expect(list.json().packs[0]).not.toHaveProperty("campaignId");
+    expect(list.json().packs[0]).not.toHaveProperty("graph");
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/spell-packs/${ownPackId}/versions/${ownVersionId}`,
+      headers: ownGmHeaders,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.headers["cache-control"]).toBe("private, no-store");
+    expect(detail.json().graph.title).toBe("Own draft");
+
+    const playerList = await app.inject({
+      method: "GET",
+      url: "/api/spell-packs",
+      headers: playerHeaders,
+    });
+    expect(playerList.statusCode).toBe(403);
+    expect(playerList.json()).toEqual({ error: "GM_REQUIRED" });
+
+    const guessedForeign = await app.inject({
+      method: "GET",
+      url: `/api/spell-packs/${foreignPackId}/versions/${foreignVersionId}`,
+      headers: ownGmHeaders,
+    });
+    expect(guessedForeign.statusCode).toBe(404);
+    expect(guessedForeign.json()).toEqual({
+      error: "SPELL_PACK_VERSION_NOT_FOUND",
+    });
+    const mismatchedPack = await app.inject({
+      method: "GET",
+      url: `/api/spell-packs/${ownPackId}/versions/${foreignVersionId}`,
+      headers: ownGmHeaders,
+    });
+    expect(mismatchedPack.statusCode).toBe(404);
+  });
+
+  it("caps campaign pack discovery at 100 rows", async () => {
+    const createdAt = Date.now();
+    const rows = Array.from({ length: 101 }, (_, index) => {
+      const packId = id();
+      const versionId = id();
+      const stamp = new Date(createdAt + index);
+      return {
+        packId,
+        versionId,
+        createdAt: stamp,
+        graph: graph(packId, versionId, { title: `Bounded pack ${index}` }),
+      };
+    });
+    await db.insert(schema.spellPacks).values(
+      rows.map(({ packId, createdAt: stamp }) => ({
+        id: packId,
+        campaignId: ids.campaign.own,
+        createdAt: stamp,
+      })),
+    );
+    await db.insert(schema.spellPackVersions).values(
+      rows.map(({ packId, versionId, createdAt: stamp, graph: snapshot }) => ({
+        id: versionId,
+        campaignId: ids.campaign.own,
+        packId,
+        version: 1,
+        lifecycle: "DRAFT" as const,
+        graph: snapshot,
+        createdAt: stamp,
+      })),
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/spell-packs",
+      headers: ownGmHeaders,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().packs).toHaveLength(100);
+    expect(response.json().packs[0].id).toBe(rows[100]!.packId);
+  });
+
   it("UIX-262 preserves an individually archived node through publication and assignment", async () => {
     const packId = id();
     const initialVersionId = id();

@@ -123,6 +123,7 @@ type WorkspaceDestination =
   | "operator-feedback"
   | "player-requests"
   | "world-encyclopedia"
+  | "spell-schools"
   | "world-codex";
 
 function replacePersonalTheme(

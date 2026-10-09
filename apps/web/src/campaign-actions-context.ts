@@ -104,7 +104,8 @@ export interface CampaignActions {
         | "operator-feedback"
         | "player-requests"
         | "world-encyclopedia"
-        | "world-codex"
+        | "spell-schools"
+  | "world-codex"
         | null,
     ) => void;
   };
