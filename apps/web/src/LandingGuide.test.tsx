@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { renderComponent, screen, userEvent } from "./test-support/render";
+import {
+  renderComponent,
+  screen,
+  userEvent,
+  waitFor,
+} from "./test-support/render";
 import { LandingGuide } from "./LandingGuide";
 
 /**
@@ -35,7 +40,9 @@ describe("landing guide", () => {
       screen.getByRole("button", { name: "Показать все клавиши и команды" }),
     );
 
-    expect(screen.getByText("Туман войны")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Туман войны" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Перемещение и выделение")).toBeInTheDocument();
     // UIX-621: бой отключён; доступны только шесть мастерских инструментов тумана.
     expect(screen.queryByText("Бой")).not.toBeInTheDocument();
@@ -53,5 +60,25 @@ describe("landing guide", () => {
       screen.getByRole("button", { name: "Свернуть управление" }),
     );
     expect(screen.queryByText("Туман войны")).not.toBeInTheDocument();
+  });
+
+  it("clears a filtering query before revealing a TOC target hidden by search", async () => {
+    history.replaceState(null, "", window.location.pathname);
+    renderComponent(<LandingGuide />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Показать все клавиши и команды" }),
+    );
+    const search = screen.getByRole("searchbox", {
+      name: "Найти клавишу или действие",
+    });
+    await userEvent.type(search, "туман");
+    expect(
+      screen.queryByRole("heading", { name: "Камера" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("link", { name: "Камера" }));
+    await waitFor(() =>
+      expect(document.getElementById("guide-камера")).toHaveFocus(),
+    );
+    expect(search).toHaveValue("");
   });
 });

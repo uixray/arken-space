@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   canvasSections,
   chatCommands,
@@ -6,6 +6,12 @@ import {
   guideFeatures,
   type GuideSection,
 } from "./landing-guide-content";
+import {
+  guideAnchor,
+  resolveGuideHash,
+  searchGuide,
+} from "./landing-guide-search";
+import "./landing-guide.css";
 
 /**
  * UIX-415: what the app does and which keys do it, shown before login.
@@ -33,8 +39,12 @@ function Keys({ keys }: { keys: string[] }) {
 
 function Section({ section }: { section: GuideSection }) {
   return (
-    <section className="guide-section">
-      <h4 className="guide-section__title">{section.title}</h4>
+    <section
+      className="guide-section"
+      id={guideAnchor(section.title)}
+      tabIndex={-1}
+    >
+      <h3 className="guide-section__title">{section.title}</h3>
       {section.hint && <p className="guide-section__hint">{section.hint}</p>}
       <dl className="guide-list">
         {section.shortcuts.map((shortcut) => (
@@ -57,6 +67,86 @@ function Section({ section }: { section: GuideSection }) {
 
 export function LandingGuide() {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [focusSearchOnOpen, setFocusSearchOnOpen] = useState(false);
+  const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const sections = useMemo(
+    () => [
+      ...canvasSections,
+      chatSection,
+      {
+        title: "Команды в чате",
+        hint: "Начните сообщение со слэша — появится подсказка со списком.",
+        shortcuts: chatCommands.map(({ command, description }) => ({
+          keys: [command],
+          action: description,
+        })),
+      },
+    ],
+    [],
+  );
+  const filteredSections = useMemo(
+    () => searchGuide(sections, query),
+    [sections, query],
+  );
+
+  useEffect(() => {
+    if (open && focusSearchOnOpen) {
+      searchRef.current?.focus();
+      setFocusSearchOnOpen(false);
+    }
+  }, [focusSearchOnOpen, open]);
+
+  useEffect(() => {
+    if (!open || query || !pendingAnchor) return;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(pendingAnchor);
+      target?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+      target?.focus({ preventScroll: true });
+      setPendingAnchor(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open, pendingAnchor, query]);
+
+  const reveal = useCallback(
+    (hash = window.location.hash) => {
+      const id = resolveGuideHash(hash, sections);
+    if (!id) {
+      setPendingAnchor(null);
+      return;
+    }
+      setQuery("");
+      setOpen(true);
+      setPendingAnchor(id);
+    },
+    [sections],
+  );
+
+  useEffect(() => {
+    if (window.location.hash.startsWith("#guide-")) reveal();
+    const onHashChange = () => reveal();
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [reveal]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.ctrlKey || event.altKey || event.metaKey)
+        return;
+      const target = event.target as HTMLElement;
+      if (
+        target.isContentEditable ||
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
+      )
+        return;
+      setOpen(true);
+      setFocusSearchOnOpen(true);
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   return (
     <section
@@ -91,31 +181,57 @@ export function LandingGuide() {
 
       {open && (
         <div className="guide-shortcuts" id="guide-shortcuts">
-          <p className="guide-section__hint guide-shortcuts__preface">
-            Клавиши на карте работают, когда карта в фокусе — щёлкните по ней
-            один раз. Сочетания с Ctrl и Alt не перехватываются, так что
-            привычные браузерные остаются на месте.
+          <nav className="guide-toc" aria-label="Разделы руководства">
+            {sections.map((section) => (
+              <a
+                key={section.title}
+                href={`#${guideAnchor(section.title)}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  history.pushState(null, "", `#${guideAnchor(section.title)}`);
+                  reveal(`#${guideAnchor(section.title)}`);
+                }}
+              >
+                {section.title}
+              </a>
+            ))}
+          </nav>
+          <label className="guide-search-label" htmlFor="guide-search">
+            Найти клавишу или действие
+          </label>
+          <div className="guide-search">
+            <input
+              ref={searchRef}
+              id="guide-search"
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Например: туман, /d20, отменить"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  searchRef.current?.focus();
+                }}
+              >
+                Сбросить поиск
+              </button>
+            )}
+          </div>
+          <p className="guide-search-status" aria-live="polite">
+            {query
+              ? `Разделов найдено: ${filteredSections.length}`
+              : "Поиск по разделам и действиям"}
           </p>
-          {canvasSections.map((section) => (
-            <Section section={section} key={section.title} />
-          ))}
-          <Section section={chatSection} />
-          <section className="guide-section">
-            <h4 className="guide-section__title">Команды в чате</h4>
-            <p className="guide-section__hint">
-              Начните сообщение со слэша — появится подсказка со списком.
-            </p>
-            <dl className="guide-list">
-              {chatCommands.map((item) => (
-                <div className="guide-row" key={item.command}>
-                  <dt>
-                    <code className="guide-command">{item.command}</code>
-                  </dt>
-                  <dd>{item.description}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
+          {filteredSections.length ? (
+            filteredSections.map((section) => (
+              <Section section={section} key={section.title} />
+            ))
+          ) : (
+            <p role="status">Ничего не найдено. Попробуйте другое слово.</p>
+          )}
         </div>
       )}
     </section>

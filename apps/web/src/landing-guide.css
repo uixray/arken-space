@@ -1,0 +1,49 @@
+.landing-guide .guide-shortcuts {
+  scroll-margin-top: 1rem;
+}
+.landing-guide .guide-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+.landing-guide .guide-toc a {
+  padding: 0.35rem 0.65rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+}
+.landing-guide .guide-search-label {
+  display: block;
+  margin: 0.75rem 0 0.35rem;
+}
+.landing-guide .guide-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.landing-guide .guide-search input {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.landing-guide .guide-search-status {
+  min-height: 1.5em;
+}
+.landing-guide .guide-section {
+  scroll-margin-top: 1rem;
+}
+.landing-guide .guide-section:focus {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
+}
+@media (max-width: 420px) {
+  .landing-guide .guide-toc {
+    gap: 0.35rem;
+  }
+  .landing-guide .guide-toc a {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  .landing-guide .guide-search button {
+    width: 100%;
+  }
+}
