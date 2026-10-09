@@ -64,6 +64,16 @@ it("stores favorites per campaign and membership and filters to only authorized 
   expect(screen.queryByRole("button", { name: "Запустить звук: Злодейский смех" })).toBeNull();
 });
 
+it("pins favorites first while preserving the relative order of other authorized sounds", async () => {
+  const secondSound = { ...sound, id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", assetId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", label: "Шорох ветра", sortOrder: 1 };
+  const secondAsset = { ...asset, id: secondSound.assetId, name: "wind.ogg" };
+  renderCatalog([{ ...pack, sounds: [sound, secondSound] }], [asset, secondAsset]);
+  await screen.findByRole("button", { name: "Запустить звук: Злодейский смех" });
+  fireEvent.click(screen.getByRole("button", { name: "Добавить в избранное: Шорох ветра" }));
+  const labels = screen.getAllByRole("button", { name: /^Запустить звук:/ }).map((button) => button.getAttribute("aria-label"));
+  expect(labels).toEqual(["Запустить звук: Шорох ветра", "Запустить звук: Злодейский смех"]);
+});
+
 it("refetches the role-filtered catalogue after reconnect/change and then plays a newly published sound", async () => {
   const callbacks = new Map<string, (event?: any) => void>();
   let current = { packs: [] as typeof pack[], playerPlaybackEnabled: true };

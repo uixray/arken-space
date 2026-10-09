@@ -58,7 +58,7 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
         const available = asset?.kind === "AUDIO" && asset.durationSeconds !== null && asset.durationSeconds > 0 && asset.durationSeconds <= 10;
         const matchesQuery = query.length === 0 || packMatches || sound.label.toLocaleLowerCase().includes(query);
         return available && matchesQuery && (!onlyFavorites || favorites.has(sound.id));
-      });
+      }).sort((left, right) => Number(favorites.has(right.id)) - Number(favorites.has(left.id)));
       const showEmptyGmPack = role === "GM" && !onlyFavorites && pack.sounds.length === 0 && (!query || packMatches);
       return { ...pack, sounds, show: sounds.length > 0 || showEmptyGmPack };
     }).filter((pack) => pack.show);
