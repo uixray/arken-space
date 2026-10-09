@@ -364,6 +364,36 @@
       "artifact": "selection-closure-2026-09-18/ci-e67bacc-summary.json",
       "workflowRuns": ["35412873275", "35412873288", "35412873306"],
       "scope": "Exact checks, four-shard Chrome/Firefox E2E and multiplayer SUCCESS. E2E1063 PASS/29 existing SKIP/0 FAIL/0 FLAKY; includes both real-server personal-theme persistence cases. Individual component pending/error/CAS coverage is also included in exact checks. Not full UIX-644 or production acceptance."
+    },
+    "uix644NativeSelectDom24": {
+      "status": "PASS",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifact": ".data/qa-prep/uix644-reachable-controls-20261009/reachable-controls-missing-cases-20261009-042937736Z.json",
+      "receiptSha256": "9b845600f6302075b5d6d444766fe6c6119582d7499896b4c8386a3a1d117464",
+      "scope": "Exactly 24/24 named native-select DOM-value assertions: global owned-pack selector plus campaign subject PLAYER/CHARACTER branch, audience and send policy across GM Chrome/Firefox desktop/compact. Each source-direct label/select resolved uniquely, was focused, changed and restored. Revision is the exact product source commit. 80 API GETs, 4 auth writes, 4 read-marker writes, 0 domain writes/page errors. Does not prove native OS popup/keyboard chooser, true zoom, visual/device acceptance, creation/upload or publish. Chrome console/resource and auth/feedback HTTP statuses remain scoped diagnostics, not waived errors."
+    },
+    "uix644PerFileProvenanceDom4of4": {
+      "status": "PARTIAL",
+      "scopedAssertionStatus": "PASS",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifacts": [
+        {
+          "artifact": ".data/qa-prep/uix644-per-file-provenance-20261009/per-file-provenance-4cell-20261009-044131982Z.json",
+          "receiptSha256": "29c9cd3fccd6ffdfd704acb9603d49e3e7df0063fe2e18e0741adef0bd148658",
+          "cell": "GM Chrome desktop; local per-file assertion passed, but containing run stopped after this cell on an unclassified blocked GET. Do not call the four-cell run complete or waive that request."
+        },
+        {
+          "artifact": ".data/qa-prep/uix644-per-file-provenance-20261009/per-file-provenance-4cell-20261009-044546591Z.json",
+          "receiptSha256": "f2f7d260d6faea125838ccdc2e1d1bd5dfd9b098927876de2a68c0c86d779108",
+          "cells": "GM Firefox desktop, Chrome compact, Firefox compact; Firefox desktop and compact per-file assertions passed; initial Chrome compact draft target was unresolved due async list-loading race and is superseded only for that scoped assertion by the follow-up receipt below. Whole cells are partial where external font GET was blocked."
+        },
+        {
+          "artifact": ".data/qa-prep/uix644-per-file-provenance-20261009/per-file-provenance-4cell-20261009-044823267Z.json",
+          "receiptSha256": "81b7ee7859d52afa2796d37749b53817e250482905f77db44a6805a9c271c12f",
+          "cell": "GM Chrome compact follow-up only; source-synchronized async list wait, per-file assertion passed; whole cell partial because the external font GET remained blocked."
+        }
+      ],
+      "scope": "Union of named local per-file provenance assertions passes in all four GM browser/viewport contexts at exact source revision 52013d43e6f2fca1bb268c38608afde9cd76424a: one local synthetic PNG, unique direct Происхождение label, focus verified, IMPORTED→ORIGINAL→IMPORTED, pending row restored then removed locally, final server detail unchanged at DRAFT revision 0 with 0 stickers. No upload/publish/delete. All receipts measure 0 domain writes/attempts; auth and read-marker writes are separate. Overall per-file pool remains PARTIAL: the initial Chrome desktop run stopped after an unclassified blocked GET; the other three whole cells observed blocked external HTTPS stylesheet from fonts.googleapis.com, which remains blocked and is not allowlisted. The Chrome compact follow-up fixes only harness list readiness; it does not waive the external read. `setInputFiles` is not native OS file chooser evidence. No external visual/font acceptance, upload, publication, or release readiness is claimed."
     }
   },
   "sites": [
