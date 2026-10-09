@@ -332,3 +332,21 @@ Root visual review at e8fd4cb caught generatedPNG loaded but solidKonvafill mask
 - UIX652 source coverage map +3 synthetic guide-only screenshots delivered; root visually inspected mobile crop. No page errors/390px horizontal overflow; no private campaign payload. Linear stage comment1476e712-04b5-4341-a57d-70c284f1ee7f, issue remains open. Product asset optimization/integration and full scenario coverage not claimed.
 - Luna local exact76fc9cc runtime first gate: dedicated internal Docker network/fresh Postgres healthy8.19s, server127.0.0.1:14176 health200/databaseok/revision76fc9cc10.59s,49migrations/59publictables. Private synthetic envfiles confined ignored.data; do not print. Backup/restore and routing next, no retained data/remote access.
 - UIX2645focusedtests+webtscPASS reported; new targeted Playwright spec inprogress, source not accepted/committed yet. No fulllegacy runs.
+
+## Local release gate results / new shutdown finding
+- Root inspected edge-runtime.json: exact76fc9cc edge health200/revision76fc9cc, landing200, font200343264B, APIbootstrap/protectedstamp401JSON, Engine.IO initialpoll200/open observed (not authenticated two-client realtime proof).
+- Root inspected restored-db-runtime.json:49migrations/59tables/1syntheticcampaign preserved; restartagainstfreshrestore health2006.29s; separatemedia volume SHA9039ffddfeb960bc946485baadf50feaca53dfd2ec085b38b8679597043b2a44matches. Recovery PASS, schema downgrade untested.
+- docker save archives retained25,027,072B web SHA6583b4b689acfb5398c95da053ebffaa9ee35d91bd037b1ce7601fd1590f1260;191,117,312B server SHAd0a28f5351c0ae33a0d8aeb01e78596f266b3187ff11095c922604ee4efcb212. Do not distribute entireQA directory (contains private synthetic env).
+- Owncontainers stopped; serverexit137/OOMKilledfalse reported, DB/web/edgeexit0. Gracefulshutdown NOTproven; narrow exactsource/PID1 diagnosis assigned, no acceptedgate rerun.
+- UIX2640476865 fullworkspace/config/E2Etypecheck/buildPASS with unchangedHEAD; prior5unit/3mockbrowser retained. Linear deliverycommentb0a647b8-78c4-4ece-bbe6-9bf0f9e7f8df, full264notclosed.
+- Owner asked whetherenable remote, answeredownerturnon thenreport. This is not remoteaccess/deploy permission; no remoteaction. Next finalsafehandoff+shutdownfinding, await explicitservergateauthorization.
+
+## External VM start blocked by cloud quota
+- Owner supplied Yandex Compute startInstance429, message Resource allocation is restricted; protobuf detail includes QuotaExceeded. This is provider allocation denial, not application startup evidence. Exact exhausted resource unknown until cloud quota/support inspection.
+- No remote access/start/deploy inferred from error report. Preserve existing VM/disks; owner advised quota manager/support. Local finite shutdownfix/gate continues; goal not blocked while executable work remains.
+- Prior76fc9cc readiness finalized with515-entry safe manifest excluding private env/DBdump/rawSocketSID. Prior images remain immutable, stop137 explicitlyopen; gracefulfix sourcepool inprogress.
+
+## Shutdown source correction frozen
+- Commitaca14360c5033844ba3cfea9d87b8d48e6d07b0b: migration shell execsNode; persistentSIGTERM/SIGINT listeners shareoneboundedclose;8sdeadline; app.close awaitsSocketIOthenDB. Rootreview caught once-listener repeat-signalrisk, fixed with realEventEmitterregression.3focusedtests/servertscPASS.
+- gitdiff76fc9cc→aca1436 server/packages/Dockerfiles confirms onlyshutdownhelper/test/index/serverCMD changed. Originalfeature/recovery receipts retained; runtimeworker assigned server-only build/start/stopprobe/newarchive. Oldweb76fc9cc unchanged; manifestmustrecordpercomponentrevision, newUIX264notinoldweb.
+- Actual productionVMstart ownerfailed429QuotaExceeded; exactquotaunknown, no remoteaccess/deploy authorization. Localshutdowngate still executable, goalactive.
