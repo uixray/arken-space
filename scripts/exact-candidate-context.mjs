@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 
 const shaPattern = /^[0-9a-f]{40}$/i;
 const forbiddenPath =
-  /(?:^|\/)(?:\.data|\.tmp|\.git|\.env(?:\.[^/]*)?|node_modules|dist|tests?|fixtures?|secrets?|credentials?)(?:\/|$)/i;
+  /(?:^|\/)(?:\.data|\.tmp|\.git|\.env(?:\.[^/]*)?|node_modules|dist|tests?|fixtures?|[^/]*private[^/]*|secrets?|credentials?)(?:\/|$)|(?:^|\/)(?:id_rsa|id_ed25519|service-account(?:\.[^/]*)?)(?:$|\.)|\.(?:pem|key|p12|pfx|crt|cer|db|sqlite|dump)$/i;
 const allowedRootFiles = new Set([
   "Dockerfile.server",
   "Dockerfile.web",

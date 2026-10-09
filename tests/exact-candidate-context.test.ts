@@ -43,6 +43,22 @@ describe("exact candidate context allowlist", () => {
     expect(() =>
       validateCandidateContextRequest({
         sha,
+        files: ["apps/web/public/guide.webp"],
+      }),
+    ).not.toThrow();
+    for (const file of [
+      "apps/server/config/local-private.json",
+      "infra/certificates/tls.key",
+      "infra/certificates/tls.pem",
+      "apps/server/data/local.db",
+      "apps/server/config/service-account.json",
+    ])
+      expect(() =>
+        validateCandidateContextRequest({ sha, files: [file] }),
+      ).toThrow(/Unsafe/);
+    expect(() =>
+      validateCandidateContextRequest({
+        sha,
         files: ["packages/web/src/main.ts"],
         requiredImports: ["packages/web/package.json"],
       }),
