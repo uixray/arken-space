@@ -7,7 +7,12 @@ import { api } from "./api";
 
 export type WorldContentInstanceFields = Pick<
   WorldContentInstanceDto,
-  "displayNameOverride" | "currentState" | "gmNotes" | "quantity" | "condition"
+  | "displayNameOverride"
+  | "currentState"
+  | "gmNotes"
+  | "quantity"
+  | "condition"
+  | "ownerMembershipId"
 >;
 
 export const fetchWorldContentInstances = (worldContentId: string) =>

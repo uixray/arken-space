@@ -557,6 +557,7 @@ function SidebarContent(props: Props) {
           <WorldContentWorkspace
             open
             assets={props.snapshot.assets}
+            members={props.snapshot.members}
             onUpload={assetActions.uploadAsset}
             onClose={closeWorkspace}
           />

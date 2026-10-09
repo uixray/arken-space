@@ -28,6 +28,20 @@ vi.mock("./world-content-instances-client", () => ({
 }));
 
 const canonical = { id: "canon-1", name: "Порт", type: "LOCATION" };
+const members = [
+  {
+    id: "member-1",
+    role: "GM" as const,
+    displayName: "Мастер",
+    characterId: null,
+  },
+  {
+    id: "member-2",
+    role: "PLAYER" as const,
+    displayName: "Игрок",
+    characterId: null,
+  },
+];
 const row = (id: string, overrides: Partial<WorldContentInstanceDto> = {}) => ({
   ...instance(id),
   ...overrides,
@@ -54,6 +68,61 @@ function instance(id: string) {
 
 describe("WorldContentInstancesPanel", () => {
   beforeEach(() => vi.resetAllMocks());
+
+  it("sets, changes, clears, and preserves an instance owner without changing canon", async () => {
+    let stored = row("instance-1");
+    vi.mocked(fetchWorldContentInstances).mockResolvedValue([stored]);
+    vi.mocked(updateWorldContentInstance).mockImplementation(
+      async (id: string, input: UpdateWorldContentInstance) => {
+        stored = row(id, {
+          ...stored,
+          ...input,
+          ownerMembershipId:
+            input.ownerMembershipId === undefined
+              ? stored.ownerMembershipId
+              : input.ownerMembershipId,
+          revision: stored.revision + 1,
+        });
+        return stored;
+      },
+    );
+    renderComponent(
+      <WorldContentInstancesPanel canonical={canonical} members={members} />,
+    );
+    await screen.findByRole("button", { name: /Порт/ });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Изменить выбранный экземпляр" }),
+    );
+    const owner = screen.getByRole("combobox", {
+      name: "Владелец в этой кампании",
+    });
+    expect(owner).toHaveAccessibleName("Владелец в этой кампании");
+    expect(owner).toHaveTextContent("Не назначен");
+    await userEvent.click(owner);
+    await userEvent.click(
+      screen.getByRole("option", { name: "Мастер (Мастер)" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /^Сохранить$/ }));
+    await waitFor(() => expect(stored.ownerMembershipId).toBe("member-1"));
+
+    await userEvent.click(owner);
+    await userEvent.click(
+      screen.getByRole("option", { name: "Игрок (Игрок)" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /^Сохранить$/ }));
+    await waitFor(() => expect(stored.ownerMembershipId).toBe("member-2"));
+
+    await userEvent.clear(screen.getByLabelText("Состояние"));
+    await userEvent.type(screen.getByLabelText("Состояние"), "Перемещён");
+    await userEvent.click(screen.getByRole("button", { name: /^Сохранить$/ }));
+    await waitFor(() => expect(stored.ownerMembershipId).toBe("member-2"));
+
+    await userEvent.click(owner);
+    await userEvent.click(screen.getByRole("option", { name: "Не назначен" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Сохранить$/ }));
+    await waitFor(() => expect(stored.ownerMembershipId).toBeNull());
+    expect(stored.worldContentId).toBe(canonical.id);
+  });
 
   it("creates and edits ITEM quantity and condition, preserving zero and explicit unset", async () => {
     const itemCanonical = { id: "item-canon", name: "Зелье", type: "ITEM" };

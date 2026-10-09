@@ -5,6 +5,7 @@ import {
   worldContent,
   worldContentInstanceActions,
   worldContentInstances,
+  memberships,
 } from "@arken/db";
 import {
   createWorldContentInstanceSchema,
@@ -110,6 +111,25 @@ async function findCanonicalEntity(db: RequestDb, id: string) {
   return row ?? null;
 }
 
+async function ownerBelongsToCampaign(
+  db: RequestDb,
+  campaignId: string,
+  membershipId: string | null | undefined,
+) {
+  if (membershipId == null) return true;
+  const [membership] = await db
+    .select({ id: memberships.id })
+    .from(memberships)
+    .where(
+      and(
+        eq(memberships.id, membershipId),
+        eq(memberships.campaignId, campaignId),
+      ),
+    )
+    .limit(1);
+  return Boolean(membership);
+}
+
 const idParams = z.object({ id: z.string().uuid() }).strict();
 const listQuerySchema = z
   .object({
@@ -155,6 +175,14 @@ export function registerWorldContentInstanceRoutes(
     const body = createWorldContentInstanceSchema.parse(request.body);
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(200).send({ duplicate: true });
+    if (
+      !(await ownerBelongsToCampaign(
+        db,
+        auth.campaignId,
+        body.ownerMembershipId,
+      ))
+    )
+      return fail(reply, 400, "WORLD_CONTENT_OWNER_NOT_IN_CAMPAIGN");
     const entity = await findCanonicalEntity(db, body.worldContentId);
     if (!entity) return fail(reply, 404, "WORLD_CONTENT_NOT_FOUND");
     const created = await db.transaction(async (tx) => {
@@ -202,6 +230,14 @@ export function registerWorldContentInstanceRoutes(
     if (!existing) return fail(reply, 404, "WORLD_CONTENT_INSTANCE_NOT_FOUND");
     if (existing.revision !== body.revision)
       return fail(reply, 409, "WORLD_CONTENT_INSTANCE_CONFLICT");
+    if (
+      !(await ownerBelongsToCampaign(
+        db,
+        auth.campaignId,
+        body.ownerMembershipId,
+      ))
+    )
+      return fail(reply, 400, "WORLD_CONTENT_OWNER_NOT_IN_CAMPAIGN");
     const { actionId, revision: _revision, ...changes } = body;
     const updated = await db.transaction(async (tx) => {
       const [row] = await tx

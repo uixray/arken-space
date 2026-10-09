@@ -25,9 +25,17 @@ for (const width of [390, 1280]) {
     page,
   }) => {
     const snapshot = gmSnapshot({ schemaVersion: 2 });
+    const otherMember = {
+      ...snapshot.me,
+      id: "00000000-0000-4000-8000-000000000264",
+      displayName: "Другой игрок",
+      role: "PLAYER" as const,
+      characterId: null,
+    };
+    snapshot.members = [...snapshot.members, otherMember];
     let instances: Array<Record<string, unknown>> = [];
     let id = 0;
-    let updateCount = 0;
+    let failConflictOnce = true;
     let failCreateOnce = true;
     const writes: string[] = [];
     await page.route("**/api/**", async (route) => {
@@ -37,6 +45,10 @@ for (const width of [390, 1280]) {
       if (!["GET", "HEAD"].includes(request.method()))
         writes.push(`${request.method()} ${path}`);
       if (path === "/api/bootstrap") return route.fulfill({ json: snapshot });
+      if (path === "/api/soundpad")
+        return route.fulfill({
+          json: { packs: [], playerPlaybackEnabled: true },
+        });
       if (path === "/api/world-content")
         return route.fulfill({ json: [canonical] });
       if (path.endsWith("/relations") || path.endsWith("/media"))
@@ -69,9 +81,8 @@ for (const width of [390, 1280]) {
           currentState: body.currentState,
           gmNotes: body.gmNotes,
           portraitAssetId: null,
-          ownerMembershipId: null,
+          ownerMembershipId: body.ownerMembershipId ?? null,
           currentLocationId: null,
-          quantity: null,
           condition: body.condition ?? null,
           quantity: body.quantity ?? null,
           discovered: false,
@@ -96,7 +107,9 @@ for (const width of [390, 1280]) {
         path.startsWith("/api/world-content-instances/") &&
         request.method() === "PATCH"
       ) {
-        if (++updateCount === 3) {
+        const body = request.postDataJSON();
+        if (body.gmNotes === "Изменено мастером" && failConflictOnce) {
+          failConflictOnce = false;
           return route.fulfill({
             status: 409,
             json: { error: "WORLD_CONTENT_INSTANCE_CONFLICT" },
@@ -105,7 +118,6 @@ for (const width of [390, 1280]) {
         const current = instances.find(
           (item) => item.id === path.split("/").at(-1),
         )!;
-        const body = request.postDataJSON();
         const updated = {
           ...current,
           ...body,
@@ -137,6 +149,12 @@ for (const width of [390, 1280]) {
     await panel.getByLabel("Заметки мастера").fill("Ключ у смотрителя");
     await panel.getByLabel("Количество").fill("0");
     await panel.getByLabel("Состояние предмета").fill("Целое");
+    await panel.getByLabel("Владелец в этой кампании").click();
+    await page
+      .getByRole("option", {
+        name: `${snapshot.me.displayName} (Мастер)`,
+      })
+      .click();
     await panel.getByRole("button", { name: /^Создать$/ }).click();
     await expect(panel.getByRole("alert")).toBeVisible();
     await expect(panel.getByLabel("Имя в этой кампании")).toBeDisabled();
@@ -154,6 +172,36 @@ for (const width of [390, 1280]) {
       .click();
     await expect(panel.getByLabel("Количество")).toHaveValue("0");
     await expect(panel.getByLabel("Состояние предмета")).toHaveValue("Целое");
+    await expect(panel.getByLabel("Владелец в этой кампании")).toContainText(
+      snapshot.me.displayName,
+    );
+    await panel.getByLabel("Владелец в этой кампании").click();
+    await page.getByRole("option", { name: "Другой игрок (Игрок)" }).click();
+    await panel.getByRole("button", { name: /^Сохранить$/ }).click();
+    await expect(panel.getByText("Изменения сохранены.")).toBeVisible();
+    await panel.getByRole("button", { name: "Отмена" }).click();
+    await panel.getByRole("button", { name: "Обновить список" }).click();
+    await expect(
+      panel.getByRole("button", { name: /владелец: Другой игрок/ }),
+    ).toBeVisible();
+    await panel
+      .getByRole("button", { name: "Изменить выбранный экземпляр" })
+      .click();
+    await expect(panel.getByLabel("Владелец в этой кампании")).toContainText(
+      "Другой игрок",
+    );
+    await panel.getByLabel("Владелец в этой кампании").click();
+    await page.getByRole("option", { name: "Не назначен" }).click();
+    await panel.getByRole("button", { name: /^Сохранить$/ }).click();
+    await expect(panel.getByText("Изменения сохранены.")).toBeVisible();
+    await panel.getByRole("button", { name: "Отмена" }).click();
+    await panel.getByRole("button", { name: "Обновить список" }).click();
+    await panel
+      .getByRole("button", { name: "Изменить выбранный экземпляр" })
+      .click();
+    await expect(panel.getByLabel("Владелец в этой кампании")).toContainText(
+      "Не назначен",
+    );
     await panel.getByLabel("Состояние предмета").fill("Поцарапано");
     await panel.getByRole("button", { name: /^Сохранить$/ }).click();
     await expect(panel.getByText("Изменения сохранены.")).toBeVisible();
@@ -202,7 +250,7 @@ for (const width of [390, 1280]) {
     );
     expect(
       writes.filter((entry) => entry.includes("world-content-instances")),
-    ).toHaveLength(6);
+    ).toHaveLength(8);
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBeLessThanOrEqual(width);

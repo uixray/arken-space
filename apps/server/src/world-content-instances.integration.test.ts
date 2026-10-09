@@ -151,6 +151,33 @@ describe("world content instances HTTP: create", () => {
     });
   });
 
+  it("accepts only a same-campaign membership owner on create", async () => {
+    const assigned = await createInstance(secrets.gm, {
+      ownerMembershipId: ids.player,
+    });
+    expect(assigned.statusCode).toBe(201);
+    expect(assigned.json().ownerMembershipId).toBe(ids.player);
+
+    for (const ownerMembershipId of [id(), ids.foreignGm]) {
+      const body = createBody({ ownerMembershipId });
+      const rejected = await app.inject({
+        method: "POST",
+        url: "/api/world-content-instances",
+        headers: headers(secrets.gm),
+        payload: body,
+      });
+      expect(rejected.statusCode).toBe(400);
+      expect(rejected.json()).toEqual({
+        error: "WORLD_CONTENT_OWNER_NOT_IN_CAMPAIGN",
+      });
+      const [action] = await db
+        .select()
+        .from(schema.worldContentInstanceActions)
+        .where(eq(schema.worldContentInstanceActions.actionId, body.actionId));
+      expect(action).toBeUndefined();
+    }
+  });
+
   it("forbids a non-GM from creating", async () => {
     const res = await createInstance(secrets.player);
     expect(res.statusCode).toBe(403);
@@ -254,6 +281,67 @@ describe("world content instances HTTP: list/get", () => {
 });
 
 describe("world content instances HTTP: update", () => {
+  it("sets, retains, and clears a same-campaign owner; rejects foreign or unknown owners", async () => {
+    const created = (await createInstance(secrets.gm)).json();
+    const assign = await app.inject({
+      method: "PATCH",
+      url: `/api/world-content-instances/${created.id}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        revision: created.revision,
+        ownerMembershipId: ids.player,
+      },
+    });
+    expect(assign.statusCode).toBe(200);
+    expect(assign.json().ownerMembershipId).toBe(ids.player);
+
+    const unrelated = await app.inject({
+      method: "PATCH",
+      url: `/api/world-content-instances/${created.id}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        revision: assign.json().revision,
+        currentState: "still assigned",
+      },
+    });
+    expect(unrelated.json().ownerMembershipId).toBe(ids.player);
+
+    for (const ownerMembershipId of [id(), ids.foreignGm]) {
+      const body = {
+        actionId: id(),
+        revision: unrelated.json().revision,
+        ownerMembershipId,
+      };
+      const rejected = await app.inject({
+        method: "PATCH",
+        url: `/api/world-content-instances/${created.id}`,
+        headers: headers(secrets.gm),
+        payload: body,
+      });
+      expect(rejected.statusCode).toBe(400);
+      const [action] = await db
+        .select()
+        .from(schema.worldContentInstanceActions)
+        .where(eq(schema.worldContentInstanceActions.actionId, body.actionId));
+      expect(action).toBeUndefined();
+    }
+
+    const clear = await app.inject({
+      method: "PATCH",
+      url: `/api/world-content-instances/${created.id}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        revision: unrelated.json().revision,
+        ownerMembershipId: null,
+      },
+    });
+    expect(clear.statusCode).toBe(200);
+    expect(clear.json().ownerMembershipId).toBeNull();
+  });
+
   it("lets the GM update overrides with revision CAS", async () => {
     const created = (await createInstance(secrets.gm)).json();
     const res = await app.inject({

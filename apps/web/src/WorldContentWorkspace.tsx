@@ -4,6 +4,7 @@ import type {
   WorldContentDto,
   WorldContentLifecycle,
   WorldContentMediaDto,
+  MembershipDto,
   WorldContentRelationEdgeDto,
   WorldContentType,
 } from "@arken/contracts";
@@ -70,11 +71,13 @@ const safeError = "Не удалось выполнить операцию. По
 export const WorldContentWorkspace = memo(function WorldContentWorkspace({
   open,
   assets,
+  members = [],
   onUpload,
   onClose,
 }: {
   open: boolean;
   assets: AssetDto[];
+  members?: readonly MembershipDto[];
   onUpload?: AssetActions["uploadAsset"];
   onClose: () => void;
 }) {
@@ -285,6 +288,7 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
                   name: selected.name,
                   type: selected.type,
                 }}
+                members={members}
               />
             </>
           ) : (

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CreateWorldContentInstance,
+  MembershipDto,
   UpdateWorldContentInstance,
   WorldContentInstanceDto,
 } from "@arken/contracts";
 import { ApiError, formatApiError } from "./api";
 import { Button } from "./design-system/Button";
-import { FormInput, FormTextArea } from "./ui/GravityFormControls";
+import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 import {
   createWorldContentInstance,
   fetchWorldContentInstance,
@@ -22,6 +23,7 @@ type Draft = {
   gmNotes: string;
   quantity: string;
   condition: string;
+  ownerMembershipId: string;
 };
 
 const emptyDraft = (): Draft => ({
@@ -30,6 +32,7 @@ const emptyDraft = (): Draft => ({
   gmNotes: "",
   quantity: "",
   condition: "",
+  ownerMembershipId: "",
 });
 
 const fieldsFrom = (instance: WorldContentInstanceDto): Draft => ({
@@ -38,6 +41,7 @@ const fieldsFrom = (instance: WorldContentInstanceDto): Draft => ({
   gmNotes: instance.gmNotes ?? "",
   quantity: instance.quantity === null ? "" : String(instance.quantity),
   condition: instance.condition ?? "",
+  ownerMembershipId: instance.ownerMembershipId ?? "",
 });
 
 const editableFields = [
@@ -46,6 +50,7 @@ const editableFields = [
   "gmNotes",
   "quantity",
   "condition",
+  "ownerMembershipId",
 ] as const satisfies readonly (keyof Draft)[];
 
 const draftValues = (
@@ -58,6 +63,7 @@ const draftValues = (
   quantity:
     item && draft.quantity.trim() !== "" ? Number(draft.quantity) : null,
   condition: item ? draft.condition.trim() || null : null,
+  ownerMembershipId: draft.ownerMembershipId || null,
 });
 
 function actionId() {
@@ -66,8 +72,10 @@ function actionId() {
 
 export function WorldContentInstancesPanel({
   canonical,
+  members = [],
 }: {
   canonical: { id: string; name: string; type: string };
+  members?: readonly MembershipDto[];
 }) {
   const isItem = canonical.type === "ITEM";
   const [instances, setInstances] = useState<WorldContentInstanceDto[]>([]);
@@ -222,6 +230,7 @@ export function WorldContentInstancesPanel({
       displayNameOverride: draft.displayNameOverride.trim() || null,
       currentState: draft.currentState.trim() || null,
       gmNotes: draft.gmNotes.trim() || null,
+      ownerMembershipId: draft.ownerMembershipId || null,
       ...(isItem ? draftValues(draft, true) : {}),
     });
     try {
@@ -236,7 +245,8 @@ export function WorldContentInstancesPanel({
             row.currentState === request.currentState &&
             row.gmNotes === request.gmNotes &&
             row.quantity === (request.quantity ?? null) &&
-            row.condition === (request.condition ?? null),
+            row.condition === (request.condition ?? null) &&
+            row.ownerMembershipId === (request.ownerMembershipId ?? null),
         );
         createActionRef.current = null;
         setMode("view");
@@ -384,6 +394,14 @@ export function WorldContentInstancesPanel({
                 <span>{instance.displayNameOverride || canonical.name}</span>
                 <small>
                   {instance.currentState || "Состояние не указано"}
+                  <span>
+                    {" · владелец: "}
+                    {instance.ownerMembershipId
+                      ? (members.find(
+                          (member) => member.id === instance.ownerMembershipId,
+                        )?.displayName ?? "участник недоступен")
+                      : "не назначен"}
+                  </span>
                   <span> · ревизия {instance.revision}</span>
                 </small>
               </button>
@@ -444,6 +462,27 @@ export function WorldContentInstancesPanel({
               }
             />
           </label>
+          <label className="field">
+            Владелец в этой кампании
+            <FormSelect
+              value={draft.ownerMembershipId}
+              disabled={saving || retryPending}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  ownerMembershipId: event.target.value,
+                }))
+              }
+            >
+              <option value="">Не назначен</option>
+              {members.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.displayName} (
+                  {member.role === "GM" ? "Мастер" : "Игрок"})
+                </option>
+              ))}
+            </FormSelect>
+          </label>
           {isItem && (
             <>
               <label className="field">
@@ -500,6 +539,15 @@ export function WorldContentInstancesPanel({
               <p>Имя: {conflictLatest.displayNameOverride || canonical.name}</p>
               <p>Состояние: {conflictLatest.currentState || "не указано"}</p>
               <p>Заметки мастера: {conflictLatest.gmNotes || "нет"}</p>
+              <p>
+                Владелец:{" "}
+                {conflictLatest.ownerMembershipId
+                  ? (members.find(
+                      (member) =>
+                        member.id === conflictLatest.ownerMembershipId,
+                    )?.displayName ?? "участник недоступен")
+                  : "не назначен"}
+              </p>
               {isItem && (
                 <>
                   <p>Количество: {conflictLatest.quantity ?? "не указано"}</p>
