@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "@arken/db";
 import { accountActionTokens, accountSessions, users } from "@arken/db";
-import { createTestMailOutbox } from "./account-mail.js";
+import { createTestMailOutbox, createTestMailKeyring } from "./account-mail.js";
 
 const loginBarrier = vi.hoisted(() => ({
   enabled: false,
@@ -67,6 +67,7 @@ beforeEach(async () => {
     webOrigin: origin,
     publicUrl: origin,
     mail: outbox.adapter,
+    mailKeyring: createTestMailKeyring(),
   });
   await app.ready();
 });

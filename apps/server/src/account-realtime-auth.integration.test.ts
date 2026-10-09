@@ -9,7 +9,7 @@ import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "@arken/db";
 import { accountSessions, campaigns, memberships, sessions, users } from "@arken/db";
-import { createTestMailOutbox } from "./account-mail.js";
+import { createTestMailOutbox, createTestMailKeyring } from "./account-mail.js";
 import { registerAccountAuthRoutes } from "./account-auth-routes.js";
 import { registerRealtime } from "./realtime.js";
 import { hashToken } from "./security.js";
@@ -47,6 +47,7 @@ beforeEach(async () => {
     webOrigin: origin,
     publicUrl: origin,
     mail: outbox.adapter,
+    mailKeyring: createTestMailKeyring(),
   });
   await app.listen({ host: "127.0.0.1", port: 0 });
 });

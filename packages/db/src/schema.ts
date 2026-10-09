@@ -386,6 +386,42 @@ export const accountActionTokens = pgTable(
   ],
 );
 
+/** Durable encrypted delivery intent; bearer payload exists only in ciphertext. */
+export const accountMailOutbox = pgTable(
+  "account_mail_outbox",
+  {
+    id: uuid("id").primaryKey(),
+    actionTokenId: uuid("action_token_id").notNull().references(() => accountActionTokens.id, { onDelete: "cascade" }),
+    purpose: text("purpose").notNull(),
+    formatVersion: integer("format_version").notNull().default(1),
+    keyId: text("key_id").notNull(),
+    payloadNonce: text("payload_nonce"),
+    payloadCiphertext: text("payload_ciphertext"),
+    payloadAuthTag: text("payload_auth_tag"),
+    status: text("status").notNull().default("PENDING"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    leaseOwner: text("lease_owner"),
+    leaseToken: uuid("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    lastErrorCategory: text("last_error_category"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("account_mail_outbox_action_token_idx").on(table.actionTokenId),
+    index("account_mail_outbox_due_idx").on(table.status, table.nextAttemptAt, table.leaseExpiresAt),
+    check("account_mail_outbox_purpose_check", sql`${table.purpose} in ('VERIFY_EMAIL','RESET_PASSWORD')`),
+    check("account_mail_outbox_status_check", sql`${table.status} in ('PENDING','LEASED','ACCEPTED','CANCELLED','DEAD')`),
+    check("account_mail_outbox_attempts_check", sql`${table.attemptCount} >= 0 AND ${table.formatVersion} > 0`),
+    check("account_mail_outbox_lease_check", sql`(${table.status} = 'LEASED' AND ${table.leaseOwner} IS NOT NULL AND ${table.leaseToken} IS NOT NULL AND ${table.leaseExpiresAt} IS NOT NULL) OR (${table.status} <> 'LEASED' AND ${table.leaseOwner} IS NULL AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL)`),
+    check("account_mail_outbox_payload_check", sql`(${table.status} in ('PENDING','LEASED') AND ${table.payloadNonce} IS NOT NULL AND ${table.payloadCiphertext} IS NOT NULL AND ${table.payloadAuthTag} IS NOT NULL) OR (${table.status} not in ('PENDING','LEASED') AND ${table.payloadNonce} IS NULL AND ${table.payloadCiphertext} IS NULL AND ${table.payloadAuthTag} IS NULL)`),
+    check("account_mail_outbox_accepted_check", sql`(${table.status} = 'ACCEPTED' AND ${table.acceptedAt} IS NOT NULL) OR (${table.status} <> 'ACCEPTED' AND ${table.acceptedAt} IS NULL)`),
+    check("account_mail_outbox_error_category_check", sql`${table.lastErrorCategory} IS NULL OR ${table.lastErrorCategory} in ('SUPERSEDED','TOKEN_USED','TOKEN_EXPIRED','USER_INELIGIBLE','DECRYPTION_FAILED','TRANSPORT_FAILURE','RETRY_EXHAUSTED')`),
+  ],
+);
+
 /** Stable idempotency result for self-service campaign creation. */
 export const accountCampaignCreations = pgTable(
   "account_campaign_creations",

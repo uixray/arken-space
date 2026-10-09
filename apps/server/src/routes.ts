@@ -120,7 +120,7 @@ import {
 import { createStarterCharacter, RESOURCE_REGEN_STAT } from "@arken/system";
 import { createSession, requireAuth } from "./auth.js";
 import { registerAccountAuthRoutes } from "./account-auth-routes.js";
-import { unconfiguredMailAdapter } from "./account-mail.js";
+import { parseMailKeyringConfig, unconfiguredMailAdapter } from "./account-mail.js";
 import { DiceFormulaError, rollFormulaWithMode } from "./dice.js";
 import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
@@ -1043,6 +1043,7 @@ export function registerRoutes(
     webOrigin: env.WEB_ORIGIN,
     publicUrl: env.PUBLIC_URL,
     mail: unconfiguredMailAdapter,
+    mailKeyring: parseMailKeyringConfig(env.ACCOUNT_MAIL_ACTIVE_KEY_ID, env.ACCOUNT_MAIL_KEYRING),
   });
   registerAccountCampaignRoutes(app, db, io, {
     enabled: env.ACCOUNT_AUTH_ENABLED,

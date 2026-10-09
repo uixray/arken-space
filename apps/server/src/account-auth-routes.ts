@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { and, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import {
   accountActionTokens,
+  accountMailOutbox,
   accountSessions,
   sessions,
   users,
@@ -17,7 +18,8 @@ import {
   accountRegistrationSchema,
   accountSessionSchema,
 } from "@arken/contracts";
-import type { MailAdapter } from "./account-mail.js";
+import type { MailAdapter, MailKeyring } from "./account-mail.js";
+import { enqueueAccountAction, cancelActionMessages } from "./account-mail-outbox.js";
 import { hashPassword, PasswordPolicyError, verifyPassword } from "./password-security.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
 
@@ -39,6 +41,7 @@ export type AccountAuthOptions = {
   webOrigin: string;
   publicUrl: string;
   mail: MailAdapter;
+  mailKeyring: MailKeyring | null;
 };
 type AccountUser = typeof users.$inferSelect;
 
@@ -90,36 +93,7 @@ function cookieOptions(options: AccountAuthOptions) {
   return { httpOnly: true, secure: options.cookieSecure, sameSite: "strict" as const, path: "/" };
 }
 
-async function issueActionToken(
-  db: Database,
-  userId: string,
-  purpose: typeof VERIFY | typeof RESET,
-): Promise<string> {
-  const token = randomToken(32);
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + (purpose === VERIFY ? VERIFY_TTL_MS : RESET_TTL_MS));
-  await db.transaction(async (tx) => {
-    await tx.update(accountActionTokens)
-      .set({ usedAt: now })
-      .where(and(eq(accountActionTokens.userId, userId), eq(accountActionTokens.purpose, purpose), isNull(accountActionTokens.usedAt)));
-    await tx.insert(accountActionTokens).values({ userId, purpose, tokenHash: hashToken(token), expiresAt });
-  });
-  return token;
-}
-
-async function sendActionMail(
-  mail: MailAdapter,
-  publicUrl: string,
-  email: string,
-  purpose: typeof VERIFY | typeof RESET,
-  token: string,
-) {
-  if (!mail.ready) throw new Error("MAIL_ADAPTER_NOT_CONFIGURED");
-  const route = purpose === VERIFY ? "/account/verify" : "/account/reset-password";
-  const subject = purpose === VERIFY ? "Verify your Arken account" : "Reset your Arken password";
-  const text = `${subject}: ${publicUrl.replace(/\/$/, "")}${route}#token=${encodeURIComponent(token)}`;
-  await mail.send({ to: email, subject, text });
-}
+function mailReady(options: AccountAuthOptions) { return options.mail.ready && Boolean(options.mailKeyring?.keys.get(options.mailKeyring.activeKeyId)); }
 
 async function getDummyVerifier() {
   dummyVerifier ??= hashPassword(randomToken(48));
@@ -270,7 +244,7 @@ export function registerAccountAuthRoutes(
   app.get("/api/account/capabilities", async (_request, reply) => {
     return reply.send(accountCapabilitiesSchema.parse({
       accountAuthEnabled: options.enabled,
-      registrationEnabled: options.enabled && options.registrationEnabled && options.mail.ready,
+      registrationEnabled: options.enabled && options.registrationEnabled && mailReady(options),
       legacyDevEnabled: options.legacyDevEnabled,
       campaignLinkAccessEnabled: options.campaignLinkAccessEnabled,
       campaignCreationEnabled: options.enabled && options.campaignCreationEnabled,
@@ -286,11 +260,16 @@ export function registerAccountAuthRoutes(
     if (!emailLimiter(request, "register", email)) return reply.code(429).send({ error: "ACCOUNT_RATE_LIMITED" });
     try {
       if (!options.registrationEnabled) return reply.code(403).send({ error: "ACCOUNT_REGISTRATION_DISABLED" });
-      if (!options.mail.ready) return reply.code(503).send({ error: "ACCOUNT_DELIVERY_UNAVAILABLE" });
+      if (!mailReady(options)) return reply.code(503).send({ error: "ACCOUNT_DELIVERY_UNAVAILABLE" });
       const passwordHash = await hashPassword(body.password);
       let account: AccountUser | undefined;
+      let isNew = false;
       try {
-        [account] = await db.insert(users).values({ emailNormalized: email, emailDisplay: body.email.trim(), passwordHash }).returning();
+        await db.transaction(async (tx) => {
+          [account] = await tx.insert(users).values({ emailNormalized: email, emailDisplay: body.email.trim(), passwordHash }).returning();
+          isNew = Boolean(account);
+          if (account) await enqueueAccountAction(tx, { keyring: options.mailKeyring!, publicUrl: options.publicUrl, email: account.emailDisplay, userId: account.id, purpose: VERIFY });
+        });
       } catch (error) {
         if (!isDuplicateEmail(error)) throw error;
         // A previous send may have failed after account creation. Resend only
@@ -300,9 +279,14 @@ export function registerAccountAuthRoutes(
           .where(and(eq(users.emailNormalized, email), isNull(users.verifiedAt), isNull(users.disabledAt)))
           .limit(1);
       }
-      if (account) {
-        const token = await issueActionToken(db, account.id, VERIFY);
-        await sendActionMail(options.mail, options.publicUrl, account.emailDisplay, VERIFY, token);
+      if (account && !isNew && !account.verifiedAt && !account.disabledAt) {
+        await db.transaction(async (tx) => {
+          const [locked] = await tx.select().from(users).where(eq(users.id, account!.id)).for("update").limit(1);
+          // A duplicate insert path is the only path reaching this block. The
+          // already-unverified account keeps its original password hash.
+          if (!locked || locked.verifiedAt || locked.disabledAt) return;
+          await enqueueAccountAction(tx, { keyring: options.mailKeyring!, publicUrl: options.publicUrl, email: locked.emailDisplay, userId: locked.id, purpose: VERIFY });
+        });
       }
       return reply.code(202).send(accountActionAcceptedSchema.parse({ accepted: true }));
     } catch (error) {
@@ -373,11 +357,13 @@ export function registerAccountAuthRoutes(
     const email = normalizedEmail(body.email);
     if (!emailLimiter(request, "verify", email)) return reply.code(429).send({ error: "ACCOUNT_RATE_LIMITED" });
     try {
-      if (!options.mail.ready) return reply.code(503).send({ error: "ACCOUNT_DELIVERY_UNAVAILABLE" });
+      if (!mailReady(options)) return reply.code(503).send({ error: "ACCOUNT_DELIVERY_UNAVAILABLE" });
       const [account] = await db.select().from(users).where(and(eq(users.emailNormalized, email), isNull(users.verifiedAt), isNull(users.disabledAt))).limit(1);
       if (account) {
-        const token = await issueActionToken(db, account.id, VERIFY);
-        await sendActionMail(options.mail, options.publicUrl, account.emailDisplay, VERIFY, token);
+        await db.transaction(async (tx) => {
+          const [locked] = await tx.select().from(users).where(eq(users.id, account.id)).for("update").limit(1);
+          if (locked && !locked.verifiedAt && !locked.disabledAt) await enqueueAccountAction(tx, { keyring: options.mailKeyring!, publicUrl: options.publicUrl, email: locked.emailDisplay, userId: locked.id, purpose: VERIFY });
+        });
       }
       return reply.send(accountActionAcceptedSchema.parse({ accepted: true }));
     } catch {
@@ -391,16 +377,24 @@ export function registerAccountAuthRoutes(
     const body = parse(accountActionTokenSchema, request.body);
     if (!body) return reply.code(400).send({ error: "INVALID_ACCOUNT_TOKEN" });
     try {
-      const now = new Date();
       const result = await db.transaction(async (tx) => {
-        const [action] = await tx.update(accountActionTokens).set({ usedAt: now }).where(and(
+        const [candidate] = await tx.select({ id: accountActionTokens.id, userId: accountActionTokens.userId }).from(accountActionTokens).where(and(
           eq(accountActionTokens.tokenHash, hashToken(body.token)), eq(accountActionTokens.purpose, VERIFY),
-          isNull(accountActionTokens.usedAt), gt(accountActionTokens.expiresAt, now),
-        )).returning({ userId: accountActionTokens.userId });
+          isNull(accountActionTokens.usedAt), sql`${accountActionTokens.expiresAt} > clock_timestamp()`,
+        )).limit(1);
+        if (!candidate) return false;
+        const [user] = await tx.select({ id: users.id, verifiedAt: users.verifiedAt, disabledAt: users.disabledAt }).from(users).where(eq(users.id, candidate.userId)).for("update").limit(1);
+        if (!user || user.verifiedAt || user.disabledAt) return false;
+        const now = new Date();
+        const [action] = await tx.update(accountActionTokens).set({ usedAt: now }).where(and(
+          eq(accountActionTokens.id, candidate.id), eq(accountActionTokens.userId, user.id), eq(accountActionTokens.purpose, VERIFY),
+          isNull(accountActionTokens.usedAt), sql`${accountActionTokens.expiresAt} > clock_timestamp()`,
+        )).returning({ id: accountActionTokens.id });
         if (!action) return false;
         const [verified] = await tx.update(users).set({ verifiedAt: now, updatedAt: now })
-          .where(and(eq(users.id, action.userId), isNull(users.verifiedAt), isNull(users.disabledAt)))
+          .where(and(eq(users.id, user.id), isNull(users.verifiedAt), isNull(users.disabledAt)))
           .returning({ id: users.id });
+        await cancelActionMessages(tx, [action.id], "TOKEN_USED");
         return Boolean(verified);
       });
       if (!result) return reply.code(400).send({ error: "INVALID_OR_EXPIRED_ACCOUNT_TOKEN" });
@@ -418,11 +412,13 @@ export function registerAccountAuthRoutes(
     const email = normalizedEmail(body.email);
     if (!emailLimiter(request, "reset", email)) return reply.code(429).send({ error: "ACCOUNT_RATE_LIMITED" });
     try {
-      if (!options.mail.ready) return reply.code(503).send({ error: "ACCOUNT_DELIVERY_UNAVAILABLE" });
+      if (!mailReady(options)) return reply.code(503).send({ error: "ACCOUNT_DELIVERY_UNAVAILABLE" });
       const [account] = await db.select().from(users).where(and(eq(users.emailNormalized, email), isNotNull(users.verifiedAt), isNull(users.disabledAt))).limit(1);
       if (account) {
-        const token = await issueActionToken(db, account.id, RESET);
-        await sendActionMail(options.mail, options.publicUrl, account.emailDisplay, RESET, token);
+        await db.transaction(async (tx) => {
+          const [locked] = await tx.select().from(users).where(eq(users.id, account.id)).for("update").limit(1);
+          if (locked && locked.verifiedAt && !locked.disabledAt) await enqueueAccountAction(tx, { keyring: options.mailKeyring!, publicUrl: options.publicUrl, email: locked.emailDisplay, userId: locked.id, purpose: RESET });
+        });
       }
       return reply.send(accountActionAcceptedSchema.parse({ accepted: true }));
     } catch {
@@ -452,8 +448,10 @@ export function registerAccountAuthRoutes(
           eq(accountActionTokens.tokenHash, hashToken(body.token)), eq(accountActionTokens.userId, lockedUser.id),
           eq(accountActionTokens.purpose, RESET), isNull(accountActionTokens.usedAt),
           sql`${accountActionTokens.expiresAt} > clock_timestamp()`,
-        )).returning({ userId: accountActionTokens.userId });
+        )).returning({ id: accountActionTokens.id, userId: accountActionTokens.userId });
         if (!action) return null;
+        const resetTokens = await tx.select({ id: accountActionTokens.id }).from(accountActionTokens).where(and(eq(accountActionTokens.userId, lockedUser.id), eq(accountActionTokens.purpose, RESET)));
+        await cancelActionMessages(tx, resetTokens.map((item) => item.id), "TOKEN_USED");
         const [account] = await tx.update(users).set({ passwordHash, updatedAt: now }).where(and(eq(users.id, action.userId), isNull(users.disabledAt))).returning({ id: users.id });
         if (!account) return null;
         await tx.update(accountActionTokens).set({ usedAt: now }).where(and(
@@ -499,11 +497,15 @@ export function registerAccountAuthRoutes(
           .where(and(eq(users.id, account.id), eq(users.passwordHash, account.passwordHash)))
           .returning({ id: users.id });
         if (!changed) return null;
+        const resetTokens = await tx.select({ id: accountActionTokens.id }).from(accountActionTokens).where(and(
+          eq(accountActionTokens.userId, changed.id), eq(accountActionTokens.purpose, RESET), isNull(accountActionTokens.usedAt),
+        ));
         await tx.update(accountActionTokens).set({ usedAt: now }).where(and(
           eq(accountActionTokens.userId, changed.id),
           eq(accountActionTokens.purpose, RESET),
           isNull(accountActionTokens.usedAt),
         ));
+        await cancelActionMessages(tx, resetTokens.map((item) => item.id), "TOKEN_USED");
         const active = await tx.select({ id: accountSessions.id }).from(accountSessions)
           .where(and(eq(accountSessions.userId, changed.id), isNull(accountSessions.revokedAt)));
         const ids = active.map((row) => row.id);
