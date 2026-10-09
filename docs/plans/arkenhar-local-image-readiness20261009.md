@@ -71,4 +71,4 @@ Runtime receipts/logs are in the `.data/qa-prep/local-image-readiness-76fc9cc-20
 5. Container vulnerability/SBOM scan, browser/human acceptance, production operations/backup policy and owner approval remain separate gates. None were attempted.
 6. Separate owner approval and gates for any remote host, deployment, auth activation or production DB action. None are authorized or evidenced here.
 
-The images and test receipts are **local QA artifacts, not a deployable release or production evidence**. No source was changed by this task; candidate `76fc9cc` remains immutable.
+The images and test receipts are **local QA artifacts, not a deployable release or production evidence**. Candidate `76fc9cc` remains immutable. A later server-only shutdown-fix candidate and probe are recorded separately in [arkenhar-shutdown-fixed-aca1436-20261009.md](arkenhar-shutdown-fixed-aca1436-20261009.md); that does not change the 76fc9cc web image or retroactively change its prior shutdown result.

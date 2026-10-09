@@ -34,3 +34,8 @@ Focused verification: `vitest run apps/server/src/graceful-shutdown.test.ts` —
 ## Conclusion
 
 The strongest source-backed issue was the shell-as-PID1 command without `exec`, compounded by no explicit application SIGTERM path to `app.close()`. This materially supported a stop-timeout explanation for exit 137, but did not prove it without runtime process/log evidence. The bounded source fix above is in place; actual runtime probe remains required before treating the lifecycle gate as passed.
+
+## Root runtime acceptance — aca1436
+- Root inspected .data/qa-prep/local-image-readiness-aca1436-20261009/server-shutdown-receipt.json: exact sourceaca14360c5033844ba3cfea9d87b8d48e6d07b0b/treeb429e9cf9446860b6f4eef3c6d6d1b4c0c5539c7; automatic migration/start health200/revisionaca1436; default Dockerstop exit0 in0.56s/OOMKilledfalse; shutdown-started and shutdown-complete logs both present.
+- Runtime lifecycle gate PASS for this disposable scope; prior76fc9cc exit137 remains immutable historical evidence. No full authenticated traffic/drain, production, or schema rollback claim.
+- New server image e91b854539a1dea8e929d66dcc9796e104aca0ccd4f2fc1a8b6a49333ef0f09a; export191119360B SHA1aa9641018759b1d26b38b132f76c58a3ccd263f5598bf38b4d8610aef4af897. Web remains76fc9cc; no uniform revision or UIX264-in-old-web claim.
