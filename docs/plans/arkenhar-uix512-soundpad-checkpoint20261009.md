@@ -2,7 +2,7 @@
 
 ## Scope / revision
 - Isolated worktree: `C:\Users\UIXRay\.codex\worktrees\uix-512-soundpad\arken-space`.
-- Initial implementation base: `bc6cec718f88d2169c293387bcf68afb1eb0ee13`; initial partial slice committed in `4be0aea17fb235a64596f551f58f86a9a42c8af2`. Search/favorites delta committed in `96032d10d5c08919affbeefb4ccb758997cc726f`; final favorites-first acceptance fix follows in this pool.
+- Initial implementation base: `bc6cec718f88d2169c293387bcf68afb1eb0ee13`; initial partial slice committed in `4be0aea17fb235a64596f551f58f86a9a42c8af2`. Search/favorites delta committed in `96032d10d5c08919affbeefb4ccb758997cc726f`; favorites-first acceptance fix committed in `d4deb6ce4cfc47118d1f52278e4f6d974637475c`.
 - Release/publication worktree untouched; no merge, push, deployment, remote server, or Linear mutation.
 - This is an initial bounded slice, not full UIX-512 acceptance.
 
@@ -45,4 +45,4 @@
 - Actionable cards derive only from the authorized catalog and currently available AUDIO assets with duration >0 and <=10s. Hidden/deleted/missing assets therefore cannot become playable through search or favorites.
 - Follow-up source gate: focused Soundpad DOM Vitest 8/8 PASS after the favorites-first regression; web TypeScript PASS; final Vite build PASS (4,775 modules, existing main-chunk warning; final JS 1,192.21 kB). Browser interaction receipt: `.data/qa-prep/uix512-search-favorites-20261009/receipt.json`. Chromium headless exercised the actual Soundpad component in a temporary local Vite harness with a mocked authorized catalog API, not a live campaign/backend. Search/no-results/clear, favorites persistence after reload and campaign+membership isolation, pinned-first ordering, and missing-asset non-actionability passed; no sound was triggered, no autoplay bypass, no trace/screenshots. Harness removed; local server stopped.
 
-Current pool source delta (favorites-first) is ready for parent review/commit; do not merge or release from this isolated worktree. Whole UIX-512 remains open for human clip/copy acceptance, trim/waveform editing, and full live Socket.IO/browser, mobile/device, slow-network/performance acceptance. Keep release worktree untouched.
+Current isolated source pool is committed; no merge or release was performed. Whole UIX-512 remains open for human clip/copy acceptance, trim/waveform editing, and full live Socket.IO/browser, mobile/device, slow-network/performance acceptance. Keep release worktree untouched.
