@@ -146,3 +146,19 @@ Progress classification: this goal turn changed authoritative local state (dispo
 - Root sourceattributionreview accepted: unauthbootstrap401 is expectedauthgate; olderbuilt403records remainendpointambiguous andunwaived. Newreadonlynote arkenhar-qa-denial-classification20261009.md.
 - Actualsingleexact currentQA GMprobe: auth200/bootstrap200rolecampaignmatch, GET/api/operator/feedback/capability403 OPERATOR_REQUIRED. ReceiptSHA5BEF9FC2C1EF211E0348855EA37129B940230B57819E4F160D186E552EF7E49C.1naturalQAauthsession,0domainwrites; no browserreplay/operatorpromotion/allowlistchange. Doesnotretrospectivelyidentifyold403s orclearwholebuiltgate.
 - Next: executableGate1localadapters implementation; capturecurrentQAprotectedbaseline afterthisauthsession, notoldcounts. Ownerfontchoicepending; nofontsourcechange. GoalACTIVE; publicationNOTREADY.
+
+## Gate1 local-adapter source review — 2026-10-09
+- Root inspected frozenadapter1722139852B364E9FA8B6F6176B5921B9422203BB6EE49297F9E931087A57DB8; runtimeGO withheld. No DB/media/create/restore executed.
+- Concrete faults: Stats object passed toreadFileSync instead ofpath; originalarchive sourceDatabase arken_qa incorrectly compared to pairedrestoredname (rootprojectedpinnedreceiptconfirms original vsisolatedfields); protectedDBnullmedia globalreference path wouldthrow; rawpg_dump schemahash includesrandomguardtokens; sequenceis_called absent; mediaverifier fails torejectextrafiles. These invalidate claimed executable readiness despite offlinefake/guardpasses.
+- Next Luna connectedrepairpool+actualpurefixtures tests; strictsource/targetguards/exclusiveB0 unchanged. Root review again beforeGO, notcreationretry. GoalACTIVE; notreleasecomplete, ownerfontchoicepending.
+
+## First actual Gate1 execution — fail-closed preflight
+- Root reviewed frozenCD176.. connectedrepair and independentlyran12offlinechecksPASS, then authorized exactDB/media-only newF/B0 scope (noR/auth/API/import).
+- Actualcommand exit1 BEFOREcredentialread/databaseaccess/create: argument-gate FROZEN_PLAN_OR_PREFLIGHT_CHANGED. Rootchecked actualpinnedPLAN0B456..andPREFLIGHT00A668.. hashes match; implementation compares lowercasecomputedhex to uppercaseconstants. No restore/mediacopy/B0 action reached.
+- Immutable failure receiptSHA3A61E866AFDC1FA38E67124F615D9D56AADA698FED735CEA0855D0FA2B5E577C retained. Next Luna normalizehashcase+actualpinnedbytes regression and uniqueattempt2receipt; no overwrite/deletion/auto retry. RootGO again onlyafterfrozenreview. GoalACTIVE; gateNOTPASS.
+
+## Actual rollback Gate1 — fresh pre-write B0 PASS
+- Root reviewed/froze adapterE30518919EAE475A9C87558D4A8261A45503E52FB8D40D1C8CB9359D660DB856 with actualpinnedbytes8/8tests, then explicitattempt2exactscope. Exec97109 terminal0, private receiptSHA52DA86CB74AD3B1D70CFF53C6C554348125A1169181A2CF346CF9D4CE0B546E0.
+- CreatedONLY newF arken_qa_importfail_20261009_211bd455cd/OID28340; pinnedarchivepg_restoreexit0.139media10518668bytes/312refs, archive396sessions; logicaldomain/schema/journal/fullsequence/storage/media matches protectedpairedOID26493 except documented398sessions. Protected16384/24647/26493 fullbeforeafterfingerprints equal.
+- FreshB0dump366374bytes SHA73C8163A093042892F3746AA8BDF53D32FCEEE696C58CEBCB6056B937F648B4F, pg_restorelist523TOC/exit0, exclusiveB0media139copiedhashverified, fullFpre/postfingerprints equal. BeforeANYfault/import/authwrite. Firstattemptfailedreceipt retained; nooverwrite/cleanup.
+- Scope Gate1PASS only: noRcreated/API/auth/import/migration/seed; full173missinghistoricalmedia remainsNOTPASSED. F/B0/media retained, no automaticcleanup. NextLuna Gate2faultdriver+source-composed14186entry PREPONLY untilrootreview/explicitGO. GoalACTIVE/publicationNOTREADY.
