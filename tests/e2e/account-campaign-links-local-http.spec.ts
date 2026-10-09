@@ -21,10 +21,12 @@ let playerContext: BrowserContext | null = null;
 let previousEnv: Record<string, unknown> = {};
 
 function connectLocalApi(page: Page) {
-  return page.route("**/api/**", (route) => {
+  return page.route("**/api/**", async (route) => {
     const requestUrl = route.request().url();
     const path = new URL(requestUrl).pathname;
-    return route.fetch({ url: `${apiOrigin}${path}${new URL(requestUrl).search}` }).then((response) => route.fulfill({ response }));
+    const response = await route.fetch({ url: `${apiOrigin}${path}${new URL(requestUrl).search}` });
+    const [headers, body] = await Promise.all([response.headers(), response.body()]);
+    await route.fulfill({ status: response.status(), headers, body });
   });
 }
 

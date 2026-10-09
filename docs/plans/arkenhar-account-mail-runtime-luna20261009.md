@@ -11,7 +11,7 @@
 
 ## Revision and changed files
 
-- Git HEAD at checkpoint: `e256280` (no commit made for this pool).
+- Pool started from `e256280`; frozen source/test state was reviewed at full Git revision `11c3ae390495bdf26f759db6fdeb228f93d1355d` (short `11c3ae3`). No commit made for this pool.
 - Changed:
   - `apps/server/src/account-mail-runtime.ts` (new)
   - `apps/server/src/account-mail-runtime.test.ts` (new)
@@ -43,3 +43,12 @@
 - No SMTP adapter, dependency approval/version/license review, provider/transport credentials, TLS endpoint test, external send, or inbox placement. Queued is not sent; adapter acceptance is not inbox delivery.
 - PostgreSQL cross-process/lock-order/persistent restart and ambiguous post-DATA delivery remain separate evidence gates; this pool did not rerun the PG-specific integration suite after adding its explicit test fixture option.
 - Actual adapter socket closure on AbortSignal and clean shutdown under stalled PostgreSQL are not proven. Root owns integration and any later provider activation gate; no deployment/reload/push/merge was done.
+
+## Follow-up local browser gate — 2026-10-09
+
+- Frozen base for the browser gate: product/runtime state at `11c3ae390495bdf26f759db6fdeb228f93d1355d`; this follow-up changes only the two scoped browser specs and this checkpoint. Worktree HEAD at receipt: `0ae96a98cc2f78b18f55af002a82e6fb0a42b3d9` (shared tree has concurrent docs/asset edits; not included in this pool).
+- Commands: combined two-file gate `node node_modules/@playwright/test/cli.js test --config=playwright.config.ts --project=chromium --retries=0 tests/e2e/account-auth-local-http.spec.ts tests/e2e/account-campaign-links-local-http.spec.ts` (account case passed; link cases exposed a route-response fixture issue); then final link gate `node node_modules/@playwright/test/cli.js test --config=playwright.config.ts --project=chromium --retries=0 tests/e2e/account-campaign-links-local-http.spec.ts`.
+- Result: **3/3 Chromium browser test cases passed across the receipts**: account lifecycle passed in the combined run, then both GM-link and PLAYER-grant cases passed in the corrected link-only run (2/2). Account test exercised actual local HTTP registration, encrypted queue drain to the injected synthetic acceptance adapter, verification, login, and campaign create/select/invite UI. Link tests exercised actual registered server routes and role-specific bootstrap snapshots. Browser Socket.IO transport is not claimed; fixtures use no-op realtime. Trace capture was explicitly off in both specs.
+- Disposable Vite bound to localhost only on fixture origin `localhost:5173`; isolated ephemeral Fastify/PGlite APIs, synthetic identities and test-only mail adapter; stopped after tests. A prior attempt on `127.0.0.1:5191` failed origin checks; aligning the fixture origin resolved the two campaign-link bootstrap failures. The initial account attempt also exposed missing runtime/keyring fixture configuration and stale queued-wording expectations; harness now supplies an explicit test keyring/runtime enablement and drains the queued envelope through the fake adapter (no token DB lookup).
+- Test-only files changed: `tests/e2e/account-auth-local-http.spec.ts` (explicit runtime/keyring + queued fake-adapter delivery + accepted wording); `tests/e2e/account-campaign-links-local-http.spec.ts` (buffered local route-forward response). No browser traces retained.
+- No full gameplay socket/transport claim, production email delivery claim, deployment, remote mail, or real-identity data. The previously documented DB claim/ack clean-shutdown limitation remains.
