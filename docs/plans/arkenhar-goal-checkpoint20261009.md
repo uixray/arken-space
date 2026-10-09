@@ -307,3 +307,11 @@ Root visual review at e8fd4cb caught generatedPNG loaded but solidKonvafill mask
 - Command57910 terminal1; subsequentfulltypecheck/build NOTREACHED. Do not labelcandidateaccepted orpromotepre-repairbuild. GuideLunaownsfiniteFFtrace/sourcevsnavigationraceresolution, rootwillrerunfailedcellonly;19acceptedcellsretained.
 - CandidatecaptureLunaverifiedwaitingexplicitGO, no rebuild/capture duringrepair. Astra nextplan arkenhar-audited-next-pools20261009.md:exactcandidatefirst, then real264GMinstanceUI, then652neutral screenshotscoverage.382/457decisionwait, nohiddenunexposedcoresubstitute.
 - Noauth/remote/start/deploypushmerge. NextrepairFFguide, failedcellgate, finaltypebuildsourcefreeze/capture; UIX347transportreconnect remainsdistinctunperformed.
+
+## Candidate captured; next product pool executing
+- HEAD76fc9cc: failed Firefox guide cell replay1/1PASS; full workspace/config/E2E typecheck and full build PASS (root86727 exit0). Previousbf64877 30unit/19browser receipts retain their own revision; no fabricated exact-SHA20/20 claim.
+- Immutable local bundle captured119files; extraction119/119 path+SHA match. ZIP SHA2566202693dc2bd98764a60d816ef8bedd6a9999f89db7da366f16254d240f82acc. Evidence arkenhar-candidate-76fc9cc-20261009.md. Not a deployable image or production/migration acceptance.
+- UIX264 Luna executing existing-contract GM instance list/create/edit UI, revision/conflict handling and bounded QA. Its source edits are outside captured76fc9cc bundle; preserve them. No new lifecycle/player/economy policy and no task closure by partial UI.
+- Parallel Luna inspecting local Docker/image readiness and safe exact-SHA context only; no image pull/build/container/server start or remote work authorized by this assignment.
+- Blockers to publication remain server/image/migration/rollback gates and separate owner permission; auth owner-deferred. Other executable local work continues, goal active.
+- Next integrate264 connected gate and checkpoint; prepare deployment prerequisites without starting remote server. Unintegrated map-ping-motion.ts remains excluded.
