@@ -174,3 +174,20 @@ Progress classification: this goal turn changed authoritative local state (dispo
 - Root executed only default-noop entry and offline source/driver suite: exit1, 6/7 testsPASS, derived-entry module-load FAIL (MODULE_NOT_FOUND pino via apps/server/package.json). No credential/DB/auth/listen branch reached. New regression exposed dependency-binding failure missed by syntax checks.
 - Luna instructed to resolve existing locked dependency ownership without install/product dependency change; preserve actual failure evidence and clarify composition delta. Gate2/Gate3 runtimeGO still withheld; no retry of domain writes occurred. Gate3 offline5/5 reported, not runtime proof; required separate DB/media delta receipt still being prepared.
 - Next: frozen connected repair with prescribed stored-WebP inputs, genuine module-load PASS and guarded read-only before/final delta adapter. GoalACTIVE, publicationNOTREADY.
+
+## Actual Gate2 read-only preflight — 2026-10-09
+- Root reviewed repaired delta36063A49AB81C920B4E4BF38B1AF508B8D8633E688D255ACB87DB03106490882 and independently13/13offlinePASS (including actual default module-load, final receipt construction and non-Arken protected projection). Approved storedWebP v2intentE2B199.. replaces inert synthetic inputs.
+- Actual elevated BEFORE-only preflight exit1 BASELINE_MEDIA_DB_BINDING; immutable gate2-delta-before-failure-6fda1b5a-7e45-4d3e-ab9f-4159d14ccc47.receipt.json retained. No DBwrites/auth/HTTP/listener/import reached. Gate2NOTPASS; no automatic retry.
+- Next Luna source-backed diagnosis of original-source metadata hash versus pinned stored-WebP bytes, safe aggregate-only diagnostics, then frozen repair/root review. Actual import/Rrestore remainNOTRUN. GoalACTIVE/publicationNOTREADY.
+
+## Actual Gate2 HTTP fault/reconcile gate — 2026-10-09
+- Repaired source-vs-stored hash boundary CA323A.. root14/14offlinePASS. Actual read-only BEFORE exit0, receiptSHA8055F296D733D437043BFF60831015FF3D356746B7E476EC2A8BCCE1E92F24F6; no auth/write there.
+- Root launched frozenentryAAA196.. only F28340 copiedmedia/loopback14186 (PID34028/session74073). Phase1 new ownedDRAFT+item1 client-local ackwithheld exit0, receipt4870c06bda9f055019d01f7e9aedda05e35aab0ef34b61a3bc002b5b2488b885. Fresh-process phase2 officiallist/detail reconciles persisteditem1, stable replayIDs, changedintent409, badhashitem2 rejection400/no publish; HTTPreceipt2a58482d94b64b1e9fdd9686e4f27fde9d6983d74b88cf4e376a9ab3968b7821 PASS onlyHTTPscope.
+- Actual separate final DB/media gate exit1 MEDIA_DELTA_OR_ORPHAN; immutablefailureff68e647.. preserved. Root source detects likely size_bytes selected vs media.sizeBytes used (undefined), NOT asserting actual orphan/product defect. Luna boundedhelperrepair+row-shape regression and separateattempt2receipt; no domain replay/automaticretry.
+- StoppedONLY owned74073 viaCtrlC wrapperterminal1 (HTTPcommands exit0 preserved); elevated14186listener0. Rootstopproof bindsF28340/PID34028/session74073/HTTPreceipt. F partialstate/B0 retained; R NOTcreated. UIX649 stagegatecomment e4cb37b0-f069-494a-b9a0-623fd8f3de64, status unchanged/no closure.
+- Next: reviewedreadonlyfinalattempt2 then actual newRrestore/readability onlyafterfullGate2 evidence. Missing173/originalPNG/human/auth/remote/publication remainopen. GoalACTIVE.
+
+## Actual Gate2 final delta PASS — 2026-10-09
+- Root reviewed42FDEB.. correctedSQLsize alias+7/7focusedtests, then actual readonlyattempt2 exit0. Receipt98259D1EB2577DE8C9425338B82F8EFC3A92AF360C8907AC0F3B217AA2172B34; originalff68e647failure retained. No domainreplay/auth/listener in this check.
+- OneownedDRAFT/item1/globalmedia/file only; refs312→313/files139→140, baseline139 storedbytes/hash intact, no item2/duplicates/orphans/unexpectedrows, schema/journal/fullsequence/protectedfullfingerprints unchanged. NaturalFauthsessiondelta+2 recorded separately.
+- Gate2boundedmechanism PASS; Ractualrestore/readability NOTRUN. Gate3 consumer mismatched actualproducer receipt fields found/fixassigned; must validate actualbefore/final in memory beforeCREATE. Full173/originalPNG/human/auth/remote/publication remainNOTPASSED. GoalACTIVE.
