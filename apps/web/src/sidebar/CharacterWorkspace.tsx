@@ -951,8 +951,8 @@ export function CharacterPanel({
   const resourceLabels = resourceCostLabels(snapshot.campaign.statLayout);
   const [countersPending, setCountersPending] = useState(0);
   const [vitalsTab, setVitalsTab] = useState<
-    "resources" | "stats" | "inventory" | "bio"
-  >("resources");
+    "stats" | "inventory" | "bio"
+  >("stats");
   const vitalsTabId = useId();
   const [countersError, setCountersError] = useState("");
   // Undefined preserves each catalog action's legacy advantage setting until the player explicitly overrides it.
@@ -1560,19 +1560,13 @@ export function CharacterPanel({
         </details>
       </header>
 
-      <CharacterSpellBranches
-        key={character.id}
-        character={character}
-        isGm={snapshot.me.role === "GM"}
-      />
-
       {/* Vital Stats Bar: ключевые показатели прямо под шапкой */}
       <div
         className="character-vitals__tabs"
         role="tablist"
         aria-label="Ключевые показатели персонажа"
       >
-        {(["resources", "stats", "inventory", "bio"] as const).map((tab) => (
+        {(["stats", "inventory", "bio"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -1588,15 +1582,15 @@ export function CharacterPanel({
               )
                 return;
               event.preventDefault();
-              const tabs = ["resources", "stats", "inventory", "bio"] as const;
+              const tabs = ["stats", "inventory", "bio"] as const;
               const current = tabs.indexOf(vitalsTab);
               const next =
                 event.key === "Home"
                   ? tabs[0]
                   : event.key === "End"
-                    ? tabs[3]
+                    ? tabs[2]
                     : (tabs[
-                        (current + (event.key === "ArrowLeft" ? 3 : 1)) %
+                        (current + (event.key === "ArrowLeft" ? 2 : 1)) %
                           tabs.length
                       ] ?? tabs[0]);
               setVitalsTab(next);
@@ -1605,232 +1599,13 @@ export function CharacterPanel({
           >
             {
               {
-                resources: "Ресурсы",
                 stats: "Показатели",
-                inventory: "Инвентарь",
+                inventory: "Инвентарь и ресурсы",
                 bio: "Личность",
               }[tab]
             }
           </button>
         ))}
-      </div>
-      <div
-        className="character-vitals"
-        role="tabpanel"
-        id={`${vitalsTabId}-resources-panel`}
-        aria-labelledby={`${vitalsTabId}-resources-tab`}
-        aria-label="Ключевые показатели"
-        hidden={vitalsTab !== "resources"}
-      >
-        <div className="character-vitals__actions">
-          <Button
-            view="outlined"
-            disabled={!editable || countersPending > 0}
-            title="Половина регена выносливости и маны, округление вниз"
-            onClick={() => void runRest("SHORT")}
-          >
-            Короткий отдых
-          </Button>
-        </div>
-        <div className="character-vital-chip character-vital-chip--wallet">
-          <span className="character-vital-chip__label">Кошелёк</span>
-          <span className="character-vital-chip__value character-vital-chip__wallet-values">
-            <AppIcon icon={CoinsIcon} />
-            {(["gold", "silver", "copper"] as const).map((key) => (
-              <label className="character-wallet__coin" key={key}>
-                <span className="character-wallet__coin-label">
-                  {key === "gold"
-                    ? "Золото"
-                    : key === "silver"
-                      ? "Серебро"
-                      : "Медь"}
-                </span>
-                <span className="character-wallet__coin-controls">
-                  <Button
-                    disabled={
-                      !editable || !canSpendWalletCoin(walletDraft, key)
-                    }
-                    aria-label={`Уменьшить: ${WALLET_LABELS[key]}`}
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => changeWallet(key, -1)}
-                  >
-                    <AppIcon icon={DecreaseIcon} />
-                  </Button>
-                  <FormInput
-                    type="number"
-                    min={0}
-                    step={1}
-                    aria-label={`Кошелёк: ${WALLET_LABELS[key].toLowerCase()}`}
-                    value={walletDraft[key]}
-                    disabled={!editable}
-                    onChange={(event) => {
-                      cancelWalletBatch(false);
-                      const next = {
-                        ...walletDraftRef.current,
-                        [key]: normalizeWalletValue(event.target.value),
-                      };
-                      walletDraftRef.current = next;
-                      walletInputDirtyRef.current = true;
-                      setWalletDraft(next);
-                    }}
-                    onBlur={() => void saveWallet(walletDraftRef.current)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur();
-                    }}
-                  />
-                  <span>
-                    {key === "gold" ? "зм" : key === "silver" ? "см" : "мм"}
-                  </span>
-                  <Button
-                    disabled={!editable}
-                    aria-label={`Увеличить: ${WALLET_LABELS[key]}`}
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => changeWallet(key, 1)}
-                  >
-                    <AppIcon icon={AddIcon} />
-                  </Button>
-                </span>
-              </label>
-            ))}
-          </span>
-        </div>
-        {resourceRows.map(({ key, label }) => {
-          const res = resourcesDraft[key] ?? { current: 0, maximum: 0 };
-          const max = res.maximum ?? res.current;
-          const regenKey = RESOURCE_REGEN_STAT[key];
-          const regenRow = combatRows.find((row) => row.key === regenKey);
-          const regen = regenKey ? (character.stats[regenKey] ?? 0) : 0;
-          const changeResource = (delta: number) => {
-            const next = {
-              ...resourcesDraft,
-              [key]: { ...res, current: Math.max(0, res.current + delta) },
-            };
-            void saveResources(next);
-          };
-          return (
-            <div
-              className="character-vital-chip character-vital-chip--resource"
-              key={key}
-            >
-              <span className="character-vital-chip__label">{label}</span>
-              <span className="character-vital-chip__value character-vital-chip__resource-values">
-                <label className="character-vital-chip__number-field">
-                  <span>Текущее</span>
-                  <FormInput
-                    type="number"
-                    min={0}
-                    aria-label={`${label}: текущее`}
-                    value={res.current}
-                    disabled={!editable}
-                    onChange={(event) =>
-                      setResourcesDraft((current) => ({
-                        ...current,
-                        [key]: {
-                          ...res,
-                          current: Math.max(0, Number(event.target.value)),
-                        },
-                      }))
-                    }
-                    onBlur={() => void saveResources(resourcesDraft)}
-                  />
-                </label>
-                <label className="character-vital-chip__number-field">
-                  <span>Максимум</span>
-                  <FormInput
-                    type="number"
-                    min={0}
-                    aria-label={`${label}: максимум`}
-                    value={max}
-                    disabled={!editable}
-                    onChange={(event) =>
-                      setResourcesDraft((current) => ({
-                        ...current,
-                        [key]: {
-                          ...res,
-                          maximum: Math.max(0, Number(event.target.value)),
-                          recoverable: true,
-                        },
-                      }))
-                    }
-                    onBlur={() => void saveResources(resourcesDraft)}
-                  />
-                </label>
-              </span>
-              <div className="character-vital-chip__controls">
-                <Button
-                  disabled={
-                    !editable || countersPending > 0 || res.current <= 0
-                  }
-                  aria-label={`Уменьшить ${label}`}
-                  onClick={() => changeResource(-1)}
-                >
-                  <AppIcon icon={DecreaseIcon} />
-                </Button>
-                <Button
-                  disabled={!editable || countersPending > 0}
-                  aria-label={`Увеличить ${label}`}
-                  onClick={() => changeResource(1)}
-                >
-                  <AppIcon icon={AddIcon} />
-                </Button>
-                {regen > 0 && (
-                  <Button
-                    disabled={
-                      !editable || countersPending > 0 || res.current >= max
-                    }
-                    aria-label={`Восстановить ${regen}: ${label}`}
-                    title={`Восстановить на величину регена (${regen})`}
-                    onClick={() =>
-                      void saveResources({
-                        ...resourcesDraft,
-                        [key]: {
-                          ...res,
-                          current: Math.min(max, res.current + regen),
-                        },
-                      })
-                    }
-                  >
-                    <AppIcon icon={AddIcon} /> {regen}
-                  </Button>
-                )}
-              </div>
-              {regenKey && regenRow && (
-                <label className="character-vital-chip__regen">
-                  <span>Реген</span>
-                  <FormInput
-                    type="number"
-                    aria-label={regenRow.label}
-                    min={0}
-                    defaultValue={regen}
-                    disabled={!editable}
-                    onBlur={(event) =>
-                      changeStatValue(
-                        character,
-                        regenKey,
-                        Number(event.target.value),
-                      )
-                    }
-                  />
-                </label>
-              )}
-              <span className="character-vital-chip__track" aria-hidden="true">
-                <span
-                  style={{
-                    width: `${max > 0 ? Math.min(100, (res.current / max) * 100) : 0}%`,
-                  }}
-                />
-                {max > 0 && res.current > max && (
-                  <span
-                    className="character-vital-chip__excess"
-                    style={{
-                      width: `${Math.min(100, (((res.current - max) % max || max) / max) * 100)}%`,
-                    }}
-                  />
-                )}
-              </span>
-            </div>
-          );
-        })}
       </div>
       <div
         className="character-sheet-stat-panel"
@@ -2118,9 +1893,227 @@ export function CharacterPanel({
 
       {/* Секция 2: Ресурсы и кошелёк */}
       <div
+        className="character-vitals-panel"
+        role="tabpanel"
+        id={`${vitalsTabId}-inventory-panel`}
+        aria-labelledby={`${vitalsTabId}-inventory-tab`}
+        hidden={vitalsTab !== "inventory"}
+      >
+      <div className="character-vitals" aria-label="Ключевые показатели">
+        <div className="character-vitals__actions">
+          <Button
+            view="outlined"
+            disabled={!editable || countersPending > 0}
+            title="Половина регена выносливости и маны, округление вниз"
+            onClick={() => void runRest("SHORT")}
+          >
+            Короткий отдых
+          </Button>
+        </div>
+        <div className="character-vital-chip character-vital-chip--wallet">
+          <span className="character-vital-chip__label">Кошелёк</span>
+          <span className="character-vital-chip__value character-vital-chip__wallet-values">
+            <AppIcon icon={CoinsIcon} />
+            {(["gold", "silver", "copper"] as const).map((key) => (
+              <label className="character-wallet__coin" key={key}>
+                <span className="character-wallet__coin-label">
+                  {key === "gold"
+                    ? "Золото"
+                    : key === "silver"
+                      ? "Серебро"
+                      : "Медь"}
+                </span>
+                <span className="character-wallet__coin-controls">
+                  <Button
+                    disabled={
+                      !editable || !canSpendWalletCoin(walletDraft, key)
+                    }
+                    aria-label={`Уменьшить: ${WALLET_LABELS[key]}`}
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => changeWallet(key, -1)}
+                  >
+                    <AppIcon icon={DecreaseIcon} />
+                  </Button>
+                  <FormInput
+                    type="number"
+                    min={0}
+                    step={1}
+                    aria-label={`Кошелёк: ${WALLET_LABELS[key].toLowerCase()}`}
+                    value={walletDraft[key]}
+                    disabled={!editable}
+                    onChange={(event) => {
+                      cancelWalletBatch(false);
+                      const next = {
+                        ...walletDraftRef.current,
+                        [key]: normalizeWalletValue(event.target.value),
+                      };
+                      walletDraftRef.current = next;
+                      walletInputDirtyRef.current = true;
+                      setWalletDraft(next);
+                    }}
+                    onBlur={() => void saveWallet(walletDraftRef.current)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
+                  />
+                  <span>
+                    {key === "gold" ? "зм" : key === "silver" ? "см" : "мм"}
+                  </span>
+                  <Button
+                    disabled={!editable}
+                    aria-label={`Увеличить: ${WALLET_LABELS[key]}`}
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => changeWallet(key, 1)}
+                  >
+                    <AppIcon icon={AddIcon} />
+                  </Button>
+                </span>
+              </label>
+            ))}
+          </span>
+        </div>
+        {resourceRows.map(({ key, label }) => {
+          const res = resourcesDraft[key] ?? { current: 0, maximum: 0 };
+          const max = res.maximum ?? res.current;
+          const regenKey = RESOURCE_REGEN_STAT[key];
+          const regenRow = combatRows.find((row) => row.key === regenKey);
+          const regen = regenKey ? (character.stats[regenKey] ?? 0) : 0;
+          const changeResource = (delta: number) => {
+            const next = {
+              ...resourcesDraft,
+              [key]: { ...res, current: Math.max(0, res.current + delta) },
+            };
+            void saveResources(next);
+          };
+          return (
+            <div
+              className="character-vital-chip character-vital-chip--resource"
+              key={key}
+            >
+              <span className="character-vital-chip__label">{label}</span>
+              <span className="character-vital-chip__value character-vital-chip__resource-values">
+                <label className="character-vital-chip__number-field">
+                  <span>Текущее</span>
+                  <FormInput
+                    type="number"
+                    min={0}
+                    aria-label={`${label}: текущее`}
+                    value={res.current}
+                    disabled={!editable}
+                    onChange={(event) =>
+                      setResourcesDraft((current) => ({
+                        ...current,
+                        [key]: {
+                          ...res,
+                          current: Math.max(0, Number(event.target.value)),
+                        },
+                      }))
+                    }
+                    onBlur={() => void saveResources(resourcesDraft)}
+                  />
+                </label>
+                <label className="character-vital-chip__number-field">
+                  <span>Максимум</span>
+                  <FormInput
+                    type="number"
+                    min={0}
+                    aria-label={`${label}: максимум`}
+                    value={max}
+                    disabled={!editable}
+                    onChange={(event) =>
+                      setResourcesDraft((current) => ({
+                        ...current,
+                        [key]: {
+                          ...res,
+                          maximum: Math.max(0, Number(event.target.value)),
+                          recoverable: true,
+                        },
+                      }))
+                    }
+                    onBlur={() => void saveResources(resourcesDraft)}
+                  />
+                </label>
+              </span>
+              <div className="character-vital-chip__controls">
+                <Button
+                  disabled={
+                    !editable || countersPending > 0 || res.current <= 0
+                  }
+                  aria-label={`Уменьшить ${label}`}
+                  onClick={() => changeResource(-1)}
+                >
+                  <AppIcon icon={DecreaseIcon} />
+                </Button>
+                <Button
+                  disabled={!editable || countersPending > 0}
+                  aria-label={`Увеличить ${label}`}
+                  onClick={() => changeResource(1)}
+                >
+                  <AppIcon icon={AddIcon} />
+                </Button>
+                {regen > 0 && (
+                  <Button
+                    disabled={
+                      !editable || countersPending > 0 || res.current >= max
+                    }
+                    aria-label={`Восстановить ${regen}: ${label}`}
+                    title={`Восстановить на величину регена (${regen})`}
+                    onClick={() =>
+                      void saveResources({
+                        ...resourcesDraft,
+                        [key]: {
+                          ...res,
+                          current: Math.min(max, res.current + regen),
+                        },
+                      })
+                    }
+                  >
+                    <AppIcon icon={AddIcon} /> {regen}
+                  </Button>
+                )}
+              </div>
+              {regenKey && regenRow && (
+                <label className="character-vital-chip__regen">
+                  <span>Реген</span>
+                  <FormInput
+                    type="number"
+                    aria-label={regenRow.label}
+                    min={0}
+                    defaultValue={regen}
+                    disabled={!editable}
+                    onBlur={(event) =>
+                      changeStatValue(
+                        character,
+                        regenKey,
+                        Number(event.target.value),
+                      )
+                    }
+                  />
+                </label>
+              )}
+              <span className="character-vital-chip__track" aria-hidden="true">
+                <span
+                  style={{
+                    width: `${max > 0 ? Math.min(100, (res.current / max) * 100) : 0}%`,
+                  }}
+                />
+                {max > 0 && res.current > max && (
+                  <span
+                    className="character-vital-chip__excess"
+                    style={{
+                      width: `${Math.min(100, (((res.current - max) % max || max) / max) * 100)}%`,
+                    }}
+                  />
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div
         className="character-section character-section--resources"
         data-character-section="resources"
-        hidden={vitalsTab !== "resources"}
       >
         <h3 className="character-block-heading">Дополнительные ресурсы</h3>
         <div className="subsection character-resource-editor">
@@ -2475,10 +2468,6 @@ export function CharacterPanel({
       <div
         className="character-section character-section--inventory"
         data-character-section="inventory"
-        role="tabpanel"
-        id={`${vitalsTabId}-inventory-panel`}
-        aria-labelledby={`${vitalsTabId}-inventory-tab`}
-        hidden={vitalsTab !== "inventory"}
       >
         <h3 className="character-block-heading">Инвентарь и снаряжение</h3>
         <label className="field">
@@ -2517,6 +2506,7 @@ export function CharacterPanel({
           />
         </label>
       </div>
+      </div>
 
       {/* Секция 4: Личность, медиа и доступ */}
       <div
@@ -2527,6 +2517,13 @@ export function CharacterPanel({
         aria-labelledby={`${vitalsTabId}-bio-tab`}
         hidden={vitalsTab !== "bio"}
       >
+        {vitalsTab === "bio" && (
+          <CharacterSpellBranches
+            key={character.id}
+            character={character}
+            isGm={snapshot.me.role === "GM"}
+          />
+        )}
         {snapshot.me.role === "GM" && (
           <CharacterControllerAccess
             character={character}

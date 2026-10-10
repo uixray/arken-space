@@ -19,6 +19,14 @@ import {
 } from "../test-support/render";
 import { CharacterPanel, CharacterWorkspace } from "./CharacterWorkspace";
 
+// Branch data loading is covered by its own suite; this file verifies only the
+// CharacterWorkspace tab placement and keeps unrelated reads out of feedback tests.
+vi.mock("../CharacterSpellBranches", () => ({
+  CharacterSpellBranches: () => (
+    <section aria-label="Доступные ветки заклинаний" />
+  ),
+}));
+
 type PanelProps = ComponentProps<typeof CharacterPanel>;
 const originalScrollIntoView = Object.getOwnPropertyDescriptor(
   HTMLElement.prototype,
@@ -309,7 +317,7 @@ function selectPortrait(
 }
 
 describe("character action feedback", () => {
-  it("moves initiative and reaction to a keyboard-operable vital tab", async () => {
+  it("opens on Показатели and keeps tab navigation keyboard-operable", async () => {
     renderComponent(
       view(snapshot([character({ stats: { initiative: 2, reaction: 3 } })])),
     );
@@ -317,12 +325,16 @@ describe("character action feedback", () => {
     const tabs = screen.getByRole("tablist", {
       name: "Ключевые показатели персонажа",
     });
-    const resourcesTab = within(tabs).getByRole("tab", { name: "Ресурсы" });
     const initiativeTab = within(tabs).getByRole("tab", {
       name: "Показатели",
     });
-    expect(resourcesTab).toHaveAttribute("aria-selected", "true");
-    fireEvent.keyDown(resourcesTab, { key: "ArrowRight" });
+    expect(initiativeTab).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(initiativeTab, { key: "ArrowRight" });
+    const inventoryTab = within(tabs).getByRole("tab", {
+      name: "Инвентарь и ресурсы",
+    });
+    expect(inventoryTab).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(inventoryTab, { key: "ArrowLeft" });
     expect(initiativeTab).toHaveAttribute("aria-selected", "true");
     expect(initiativeTab).toHaveFocus();
     const panel = screen.getByRole("tabpanel", {
@@ -348,6 +360,7 @@ describe("character action feedback", () => {
     ]);
     renderComponent(view(state, { onUpdateCounters: update }));
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Инвентарь и ресурсы" }));
     const vitals = screen.getByLabelText("Ключевые показатели");
     expect(
       within(vitals).getByRole("spinbutton", { name: "Реген Выносливости" }),
@@ -375,7 +388,7 @@ describe("character action feedback", () => {
       ),
     );
   });
-  it("shows custom resources in the single resources tab", async () => {
+  it("shows custom resources in the combined inventory and resources tab", async () => {
     const save = vi.fn(async () => {});
     renderComponent(
       view(
@@ -386,6 +399,7 @@ describe("character action feedback", () => {
       ),
     );
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Инвентарь и ресурсы" }));
     expect(
       screen.getByRole("progressbar", { name: "Уровень: Ярость" }),
     ).toHaveAttribute("aria-valuenow", "3");
@@ -396,11 +410,36 @@ describe("character action feedback", () => {
     fireEvent.blur(input);
     await waitFor(() => expect(save).toHaveBeenCalled());
   });
-  it("shows inventory and notes in their own tab", async () => {
+  it("keeps resources, wallet, rest, inventory, and notes together", async () => {
     renderComponent(view(snapshot()));
     await galleryLoaded();
-    fireEvent.click(screen.getByRole("tab", { name: "Инвентарь" }));
-    expect(screen.getByRole("tabpanel", { name: "Инвентарь" })).toBeVisible();
+    const inventoryTab = screen.getByRole("tab", {
+      name: "Инвентарь и ресурсы",
+    });
+    fireEvent.click(inventoryTab);
+    const panel = screen.getByRole("tabpanel", { name: "Инвентарь и ресурсы" });
+    expect(
+      within(panel).getByRole("button", { name: "Короткий отдых" }),
+    ).toBeVisible();
+    expect(
+      within(panel).getByRole("spinbutton", { name: "Кошелёк: золото" }),
+    ).toBeVisible();
+    expect(within(panel).getByText("Дополнительные ресурсы")).toBeVisible();
+    expect(
+      within(panel).getByLabelText(/Инвентарь \(один предмет на строку\)/),
+    ).toBeVisible();
+    expect(within(panel).getByLabelText("Заметки")).toBeVisible();
+  });
+  it("shows spell branches inside Личность rather than outside the tabs", async () => {
+    renderComponent(view(snapshot()));
+    await galleryLoaded();
+    expect(
+      screen.queryByLabelText("Доступные ветки заклинаний"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Личность" }));
+    expect(
+      await screen.findByLabelText("Доступные ветки заклинаний"),
+    ).toBeVisible();
   });
   it("edits coins in the vital wallet and saves on blur or Enter", async () => {
     const update = vi.fn(async () => undefined);
@@ -409,6 +448,7 @@ describe("character action feedback", () => {
     ]);
     const rendered = renderComponent(view(state, { onUpdateCounters: update }));
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Инвентарь и ресурсы" }));
     const gold = screen.getByRole("spinbutton", { name: "Кошелёк: золото" });
     const silver = screen.getByRole("spinbutton", { name: "Кошелёк: серебро" });
     const copper = screen.getByRole("spinbutton", { name: "Кошелёк: медь" });
@@ -834,7 +874,9 @@ describe("character action feedback", () => {
     await galleryLoaded();
     // Changing characters deliberately closes the old portrait dialog. Reopen
     // the new character's dialog before starting its independent upload epoch.
-    const file = selectPortrait(new File(["b"], "b.png", { type: "image/png" }));
+    const file = selectPortrait(
+      new File(["b"], "b.png", { type: "image/png" }),
+    );
     expect(
       screen.getByRole("dialog", { name: "Портрет: Персонаж B" }),
     ).toBeVisible();
@@ -879,6 +921,7 @@ describe("character action feedback", () => {
     };
     renderComponent(view(readOnly));
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Инвентарь и ресурсы" }));
 
     fireEvent.click(screen.getByText("Предыстория", { selector: "summary" }));
     const backstory = screen.getByRole("textbox", { name: "Предыстория" });
@@ -912,6 +955,7 @@ describe("character action feedback", () => {
       ),
     );
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Инвентарь и ресурсы" }));
 
     const resourceName = screen.getByRole<HTMLInputElement>("textbox", {
       name: "Название нового ресурса",

@@ -157,6 +157,12 @@ vi.mock("./CharacterMediaGallery", () => ({
   ),
 }));
 
+// Spell-branch API behavior has its own focused suite; keep role-access tests
+// isolated from that read-only request while asserting Identity placement.
+vi.mock("../CharacterSpellBranches", () => ({
+  CharacterSpellBranches: () => null,
+}));
+
 const unexpectedAction = (): never => {
   throw new Error("Backstory test must not execute another campaign command");
 };
