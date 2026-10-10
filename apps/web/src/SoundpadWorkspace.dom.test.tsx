@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
+import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useCallback, useState } from "react";
 import { SoundpadWorkspace } from "./SoundpadWorkspace";
@@ -8,9 +9,9 @@ const sound = { id: "11111111-1111-4111-8111-111111111111", packId: "22222222-22
 const pack = { id: sound.packId, campaignId: "44444444-4444-4444-8444-444444444444", name: "Тестовый пак", published: true, audience: "ALL_MEMBERS" as const, sortOrder: 0, sounds: [sound] };
 const asset = { id: sound.assetId, kind: "AUDIO" as const, name: "laugh.ogg", mimeType: "audio/ogg", sizeBytes: 28146, width: null, height: null, durationSeconds: 2.5, url: "/api/assets/test/content", createdAt: new Date().toISOString() };
 
-function renderCatalog(packs: typeof pack[], assets: typeof asset[] = [asset], membershipId = "55555555-5555-4555-8555-555555555555") {
+function renderCatalog(packs: typeof pack[], assets: typeof asset[] = [asset], membershipId = "55555555-5555-4555-8555-555555555555", campaignId = pack.campaignId) {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ packs, playerPlaybackEnabled: true }) }));
-  return render(<SoundpadWorkspace campaignId={pack.campaignId} membershipId={membershipId} role="PLAYER" assets={assets} socket={null} onUpload={vi.fn()} />);
+  return render(<SoundpadWorkspace campaignId={campaignId} membershipId={membershipId} role="PLAYER" assets={assets} socket={null} onUpload={vi.fn()} />);
 }
 
 it("renders real sound buttons and sends one authorized trigger intent without local double-play", async () => {
@@ -63,6 +64,47 @@ it("stores favorites per campaign and membership and filters to only authorized 
   fireEvent.click(await screen.findByLabelText("Только избранное"));
   expect(await screen.findByText(/Ничего не найдено/)).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Запустить звук: Злодейский смех" })).toBeNull();
+});
+
+it("persists effects volume and mute per campaign and membership", async () => {
+  const membershipId = "55555555-5555-4555-8555-555555555555";
+  renderCatalog([pack], [asset], membershipId);
+  const volume = await screen.findByRole("slider", { name: "Громкость эффектов" });
+  fireEvent.change(volume, { target: { value: "0.23" } });
+  fireEvent.click(screen.getByRole("button", { name: "Выключить эффекты" }));
+  expect(localStorage.getItem(`arken.effects.volume.${pack.campaignId}.${membershipId}`)).toBe("0.23");
+  expect(localStorage.getItem(`arken.effects.muted.${pack.campaignId}.${membershipId}`)).toBe("true");
+
+  cleanup();
+  renderCatalog([pack], [asset], membershipId);
+  expect(await screen.findByRole("slider", { name: "Громкость эффектов" })).toHaveValue("0.23");
+  expect(screen.getByRole("button", { name: "Включить эффекты" })).toHaveAttribute("aria-pressed", "true");
+
+  cleanup();
+  const otherMembership = "66666666-6666-4666-8666-666666666666";
+  renderCatalog([pack], [asset], otherMembership);
+  expect(await screen.findByRole("slider", { name: "Громкость эффектов" })).toHaveValue("0.5");
+  expect(screen.getByRole("button", { name: "Выключить эффекты" })).toHaveAttribute("aria-pressed", "false");
+
+  cleanup();
+  const otherCampaign = "77777777-7777-4777-8777-777777777777";
+  renderCatalog([pack], [asset], membershipId, otherCampaign);
+  expect(await screen.findByRole("slider", { name: "Громкость эффектов" })).toHaveValue("0.5");
+  expect(screen.getByRole("button", { name: "Выключить эффекты" })).toHaveAttribute("aria-pressed", "false");
+});
+
+it("shows browser-blocked feedback when the silent autoplay unlock is rejected", async () => {
+  const unlockAudio = { pause: vi.fn(), play: vi.fn().mockRejectedValue(new Error("NotAllowedError")) };
+  vi.stubGlobal("Audio", vi.fn(function MockAudio() { return unlockAudio; }));
+  const revokeObjectURL = vi.fn();
+  vi.stubGlobal("URL", { ...URL, createObjectURL: vi.fn(() => "blob:unlock"), revokeObjectURL });
+  renderCatalog([pack]);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Включить звук" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Браузер пока блокирует звук. Нажмите кнопку ещё раз.");
+  expect(screen.getByRole("status")).toHaveTextContent("Нажмите, чтобы включить звук");
+  expect(unlockAudio.play).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith("blob:unlock"));
 });
 
 it("pins favorites first while preserving the relative order of other authorized sounds", async () => {

@@ -38,3 +38,6 @@ The inventory found no missing implementation of the existing GM stop, cooldown,
 
 ## Root scope correction
 Trim/waveform is already an explicit UIX-512 acceptance requirement, not a new unrequested idea. It is unimplemented and belongs to a separate bounded implementation pool; no additional product approval is required merely to plan it. It is not silently a blocker for the currently approved friends-first release. A distinct listener-local stop button is optional scope; local mute already stops voices. Existing 6d ZIP remains immutable; this checkpoint-only change does not alter image bytes.
+
+## Direct DOM evidence follow-up
+At inspected source5409a96, added tests in apps/web/src/SoundpadWorkspace.dom.test.tsx for persisted volume/mute values, remount restoration and campaign/member isolation, plus rejected silent unlock alert/locked status/blob cleanup. Connected playback+DOM gate2files/13tests PASS; webtypecheck PASS. Source implementation unchanged, no live/device claim. Trim/waveform remains genuine unimplementedAC; late voice play rejection still silent disposal (bounded UX improvement candidate). Current software6d build inputs unchanged (test/docs excluded); immutable ZIP retained.
