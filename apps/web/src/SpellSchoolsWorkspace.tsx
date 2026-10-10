@@ -28,6 +28,8 @@ import {
   nextSpellDraftVersion,
 } from "./spell-schools-editor";
 import "./SpellSchoolsWorkspace.css";
+import { SpellNodeActivationEditor } from "./SpellNodeActivationEditor";
+import { spellActivationDraftError } from "./spell-node-activation";
 
 type PendingSave = {
   fingerprint: string;
@@ -286,6 +288,8 @@ export function SpellSchoolsWorkspace({
     setError("");
     setNotice("");
     try {
+      const activationError = graph.nodes.map((node) => spellActivationDraftError(node.activation)).find(Boolean);
+      if (activationError) { setError(activationError); return; }
       const validation = await validateSpellPackDraft(graph);
       if (!validation.valid) {
         setError(validation.errors.map(issueText).join("\n"));
@@ -366,6 +370,8 @@ export function SpellSchoolsWorkspace({
     setError("");
     setNotice("");
     try {
+      const activationError = graph.nodes.map((node) => spellActivationDraftError(node.activation)).find(Boolean);
+      if (activationError) { setError(activationError); return; }
       const validation = await validateSpellPackDraft(graph);
       if (!validation.valid) {
         setError(validation.errors.map(issueText).join("\n"));
@@ -822,6 +828,13 @@ export function SpellSchoolsWorkspace({
                                 }
                               />
                             </label>
+                            <SpellNodeActivationEditor
+                              value={node.activation}
+                              disabled={editorLocked || busy}
+                              onChange={(activation) =>
+                                changeNode(node.id, { activation })
+                              }
+                            />
                             <div className="spell-cost-list">
                               <h4>Стоимость</h4>
                               {node.costs.map((cost, index) => (

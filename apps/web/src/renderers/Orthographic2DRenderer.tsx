@@ -210,6 +210,7 @@ import {
   CURSOR_INACTIVITY_MS,
 } from "./cursor-broadcast";
 import { cursorColorForMembership } from "./cursor-color";
+import { AnimatedMapPing } from "./AnimatedMapPing";
 import { rulerColorForMembership } from "./ruler-colors";
 import {
   mapViewportAriaKeyShortcuts,
@@ -234,117 +235,6 @@ const DRAWING_COLOR_PRESETS = [
   { value: "#3b82f6", name: "Синий" },
   { value: "#a855f7", name: "Фиолетовый" },
 ] as const;
-
-function AnimatedPing({
-  ping,
-  scale,
-}: {
-  ping: {
-    membershipId: string;
-    displayName: string;
-    x: number;
-    y: number;
-    createdAt: string | number;
-  };
-  scale: number;
-}) {
-  // A ping belongs to its sender, not to the viewer's theme. Reuse the
-  // deterministic member colour from cursor presence so every client sees
-  // the same player's cursor and ping in the same hue.
-  const color = cursorColorForMembership(ping.membershipId);
-  const pingTime =
-    typeof ping.createdAt === "number"
-      ? ping.createdAt
-      : new Date(ping.createdAt).getTime();
-
-  const [elapsed, setElapsed] = useState(() =>
-    Math.max(0, Date.now() - (Number.isNaN(pingTime) ? Date.now() : pingTime)),
-  );
-
-  useEffect(() => {
-    let animId: number;
-    const base = Number.isNaN(pingTime) ? Date.now() : pingTime;
-    const tick = () => {
-      const current = Date.now() - base;
-      setElapsed(current);
-      if (current < 3500) {
-        animId = requestAnimationFrame(tick);
-      }
-    };
-    animId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(animId);
-  }, [pingTime]);
-
-  const totalProgress = Math.min(1, Math.max(0, elapsed / 3500));
-  const fadeOut = Math.max(0, 1 - totalProgress);
-
-  // Expanding radiating ripple waves
-  const waveCycle = 1100;
-  const w1 = (elapsed % waveCycle) / waveCycle;
-  const w2 = ((elapsed + 360) % waveCycle) / waveCycle;
-  const w3 = ((elapsed + 720) % waveCycle) / waveCycle;
-
-  const r1 = (6 + w1 * 40) / scale;
-  const r2 = (6 + w2 * 40) / scale;
-  const r3 = (6 + w3 * 40) / scale;
-
-  const op1 = Math.max(0, (1 - w1) * fadeOut * 0.85);
-  const op2 = Math.max(0, (1 - w2) * fadeOut * 0.7);
-  const op3 = Math.max(0, (1 - w3) * fadeOut * 0.55);
-
-  const coreRadius = (6 + Math.sin(elapsed / 160) * 1.5) / scale;
-  const coreOpacity = Math.max(0, fadeOut * 0.95);
-
-  return (
-    <Group x={ping.x} y={ping.y}>
-      <Circle
-        radius={r1}
-        stroke={color}
-        strokeWidth={2.5 / scale}
-        opacity={op1}
-        listening={false}
-      />
-      <Circle
-        radius={r2}
-        stroke={color}
-        strokeWidth={2 / scale}
-        opacity={op2}
-        listening={false}
-      />
-      <Circle
-        radius={r3}
-        stroke={color}
-        strokeWidth={1.5 / scale}
-        opacity={op3}
-        listening={false}
-      />
-      <Circle
-        radius={coreRadius * 1.6}
-        fill={color}
-        opacity={coreOpacity * 0.4}
-        listening={false}
-      />
-      <Circle
-        radius={coreRadius}
-        fill={color}
-        stroke="#78350f"
-        strokeWidth={1.5 / scale}
-        opacity={coreOpacity}
-        listening={false}
-      />
-      <Text
-        x={22 / scale}
-        y={-7 / scale}
-        text={ping.displayName}
-        fill={color}
-        fontSize={13 / scale}
-        fontStyle="bold"
-        opacity={coreOpacity}
-        listening={false}
-      />
-    </Group>
-  );
-}
 
 function Grid({
   width,
@@ -3821,7 +3711,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
             );
           })}
           {props.pings.map((ping) => (
-            <AnimatedPing
+            <AnimatedMapPing
               key={`${ping.membershipId}-${ping.createdAt}`}
               ping={ping}
               scale={scale}

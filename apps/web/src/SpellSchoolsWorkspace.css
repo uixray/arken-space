@@ -366,3 +366,9 @@
     grid-column: auto;
   }
 }
+.spell-activation-editor { display: grid; gap: 10px; min-width: 0; border-top: 1px solid var(--spell-line); padding-top: 12px; }
+.spell-activation-editor h4 { margin: 0; }
+.spell-activation-passive { display: flex; align-items: center; gap: 8px; }
+.spell-activation-trigger { display: grid; gap: 10px; min-width: 0; border: 1px solid var(--spell-line); border-radius: 8px; padding: 12px; }
+.spell-activation-trigger label { display: grid; gap: 5px; min-width: 0; }
+.spell-activation-trigger input, .spell-activation-trigger textarea, .spell-activation-trigger select { box-sizing: border-box; max-width: 100%; width: 100%; }
