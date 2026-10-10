@@ -46,9 +46,39 @@ export function resolveRestoreMode(env) {
   } catch {
     throw new Error("service-v1 capture receipt is invalid JSON");
   }
+  let copyReceiptSha256;
+  let copyReceiptPath;
+  let sourceSnapshotId = env.SNAPSHOT_ID.toLowerCase();
+  if (env.RESTORE_COPY_RECEIPT_PATH || env.RESTORE_COPY_RECEIPT_SHA256) {
+    if (
+      !env.RESTORE_COPY_RECEIPT_PATH ||
+      !sha256Pattern.test(env.RESTORE_COPY_RECEIPT_SHA256 ?? "")
+    )
+      throw new Error(
+        "Copied recovery requires a mapping receipt path and digest",
+      );
+    copyReceiptPath = path.resolve(env.RESTORE_COPY_RECEIPT_PATH);
+    const bytes = readFileSync(copyReceiptPath);
+    copyReceiptSha256 = createHash("sha256").update(bytes).digest("hex");
+    if (copyReceiptSha256 !== env.RESTORE_COPY_RECEIPT_SHA256.toLowerCase())
+      throw new Error("Copy mapping receipt digest does not match");
+    const mapping = JSON.parse(bytes.toString("utf8"));
+    if (
+      mapping.format !== "arken-restic-copy-receipt-v1" ||
+      mapping.integrityCheck !== "restic-check-read-data-passed" ||
+      !sha256Pattern.test(mapping.sourceSnapshotId ?? "") ||
+      mapping.copiedSnapshotId?.toLowerCase() !==
+        env.SNAPSHOT_ID.toLowerCase() ||
+      mapping.sourceSnapshotId.toLowerCase() === env.SNAPSHOT_ID.toLowerCase()
+    )
+      throw new Error(
+        "Copy mapping receipt does not bind requested local snapshot",
+      );
+    sourceSnapshotId = mapping.sourceSnapshotId.toLowerCase();
+  }
   if (
     receipt?.format !== "arken-service-capture-receipt-v1" ||
-    receipt.snapshotId?.toLowerCase() !== env.SNAPSHOT_ID.toLowerCase() ||
+    receipt.snapshotId?.toLowerCase() !== sourceSnapshotId ||
     !sha256Pattern.test(receipt.manifestSha256 ?? "")
   )
     throw new Error(
@@ -57,6 +87,9 @@ export function resolveRestoreMode(env) {
   return {
     format,
     snapshotId: env.SNAPSHOT_ID.toLowerCase(),
+    sourceSnapshotId,
+    copyReceiptPath,
+    copyReceiptSha256,
     manifestSha256: receipt.manifestSha256.toLowerCase(),
     receiptSha256,
     receiptPath: path.resolve(env.RESTORE_CAPTURE_RECEIPT_PATH),
@@ -89,10 +122,11 @@ export async function resolveServiceSnapshot(snapshotRoot, request) {
   if (
     request.receipt.buildRevision !== manifest.buildRevision ||
     request.receipt.schemaVersion !== manifest.schemaVersion ||
-    request.receipt.imageIds?.server?.toLowerCase() !==
-      manifest.images.server.toLowerCase() ||
-    request.receipt.imageIds?.postgres?.toLowerCase() !==
-      manifest.images.postgres.toLowerCase()
+    !["server", "postgres", "web", "edge"].every(
+      (name) =>
+        request.receipt.imageIds?.[name]?.toLowerCase() ===
+        manifest.images[name].toLowerCase(),
+    )
   )
     throw new Error(
       "Service capture receipt and manifest do not describe the same runtime tuple",

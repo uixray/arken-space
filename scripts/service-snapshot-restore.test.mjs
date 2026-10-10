@@ -147,6 +147,8 @@ test("service-v1 resolves all database and media inputs from digest-pinned manif
         imageIds: {
           server: "sha256:" + "1".repeat(64),
           postgres: "sha256:" + "2".repeat(64),
+          web: "sha256:" + "3".repeat(64),
+          edge: "sha256:" + "4".repeat(64),
         },
       },
     };
@@ -158,6 +160,22 @@ test("service-v1 resolves all database and media inputs from digest-pinned manif
       resolved.databaseDumpPath,
       path.join(sample.root, "database.dump"),
     );
+    for (const name of ["web", "edge"]) {
+      await assert.rejects(
+        () =>
+          resolveServiceSnapshot(path.dirname(path.dirname(sample.root)), {
+            ...request,
+            receipt: {
+              ...request.receipt,
+              imageIds: {
+                ...request.receipt.imageIds,
+                [name]: "sha256:" + "9".repeat(64),
+              },
+            },
+          }),
+        /same runtime tuple/,
+      );
+    }
     assert.equal(resolved.databaseCounts.assets, 1);
     assert.equal(resolved.migrationLedger.length, 1);
     assert.equal(resolved.schemaVersion, 2);
@@ -282,4 +300,121 @@ test("isolated compose validator accepts the captured media target and exact dat
       databaseName: "source_db",
     }),
   );
+});
+
+test("offline copied snapshot binds original capture through digest-pinned mapping without origin access", () => {
+  const temp = mkdtempSync(path.join(os.tmpdir(), "arken-copy-restore-"));
+  try {
+    const source = "a".repeat(64),
+      local = "b".repeat(64);
+    const capture = JSON.stringify({
+      format: "arken-service-capture-receipt-v1",
+      snapshotId: source,
+      manifestSha256: "c".repeat(64),
+    });
+    const mapping = JSON.stringify({
+      format: "arken-restic-copy-receipt-v1",
+      sourceSnapshotId: source,
+      copiedSnapshotId: local,
+      integrityCheck: "restic-check-read-data-passed",
+    });
+    const capturePath = path.join(temp, "capture.json"),
+      mappingPath = path.join(temp, "copy.json");
+    writeFileSync(capturePath, capture);
+    writeFileSync(mappingPath, mapping);
+    const env = {
+      RESTORE_FORMAT: "service-v1",
+      ARKEN_ISOLATED_ONLY: "true",
+      SNAPSHOT_ID: local,
+      RESTORE_CAPTURE_RECEIPT_PATH: capturePath,
+      RESTORE_CAPTURE_RECEIPT_SHA256: sha(capture),
+      RESTORE_COPY_RECEIPT_PATH: mappingPath,
+      RESTORE_COPY_RECEIPT_SHA256: sha(mapping),
+      RESTORE_REPORT_PATH: path.join(temp, "report.json"),
+    };
+    const resolved = resolveRestoreMode(env);
+    assert.equal(resolved.snapshotId, local);
+    assert.equal(resolved.sourceSnapshotId, source);
+    assert.throws(
+      () =>
+        resolveRestoreMode({
+          ...env,
+          RESTORE_COPY_RECEIPT_SHA256: "d".repeat(64),
+        }),
+      /digest/,
+    );
+    for (const patch of [
+      { sourceSnapshotId: "e".repeat(64) },
+      { copiedSnapshotId: "e".repeat(64) },
+      { sourceSnapshotId: local },
+      { integrityCheck: "unchecked" },
+    ]) {
+      const altered = JSON.stringify({ ...JSON.parse(mapping), ...patch });
+      writeFileSync(mappingPath, altered);
+      assert.throws(() =>
+        resolveRestoreMode({
+          ...env,
+          RESTORE_COPY_RECEIPT_SHA256: sha(altered),
+        }),
+      );
+    }
+    writeFileSync(mappingPath, mapping);
+
+    assert.throws(
+      () => resolveRestoreMode({ ...env, SNAPSHOT_ID: "e".repeat(64) }),
+      /bind/,
+    );
+    assert.throws(
+      () =>
+        resolveRestoreMode({
+          ...env,
+          RESTORE_COPY_RECEIPT_PATH: undefined,
+          RESTORE_COPY_RECEIPT_SHA256: undefined,
+        }),
+      /capture receipt/,
+    );
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test("compose capture accepts same four-service manifest contract", async () => {
+  const sample = fixture();
+  try {
+    const file = path.join(sample.root, "capture-manifest.json");
+    const manifest = JSON.parse(readFileSync(file, "utf8"));
+    manifest.captureMode = "compose";
+    writeFileSync(file, JSON.stringify(manifest));
+    const request = {
+      format: "service-v1",
+      manifestSha256: sha(readFileSync(file)),
+      receipt: {
+        buildRevision: manifest.buildRevision,
+        schemaVersion: manifest.schemaVersion,
+        imageIds: manifest.images,
+      },
+    };
+    assert.equal(
+      (
+        await resolveServiceSnapshot(
+          path.dirname(path.dirname(sample.root)),
+          request,
+        )
+      ).databaseName,
+      "source_db",
+    );
+    manifest.target = "/opt/arken-space";
+    writeFileSync(file, JSON.stringify(manifest));
+    request.manifestSha256 = sha(readFileSync(file));
+    await assert.rejects(
+      () =>
+        resolveServiceSnapshot(
+          path.dirname(path.dirname(sample.root)),
+          request,
+        ),
+      /unsupported shape/,
+    );
+  } finally {
+    rmSync(sample.temp, { recursive: true, force: true });
+  }
 });
