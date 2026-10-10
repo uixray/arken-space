@@ -29,3 +29,11 @@ Revision base: 9f23464591ee6daa6f784bbfc2e091c55b287362; UI/actions working edit
 - Latest migration journal now has 58 entries including 0057. Timestamp monotonicity regression: 7/7 passed. Historical migration 56->57 evidence does NOT verify new 57->58 migration.
 - Current action/assets bytes are exposed only for independent source audit; runtime/browser/build/migration gate remains open. No Done/production claims.
 - Docker has no running containers. Heavy tests/builds deferred after owner reported lag; lightweight Git export/access only.
+
+## 2026-10-10 08:54 MSK — public audit access and low-load continuation
+- Authoritative source8916874; later documentation24f1b61 refreshes live273issue inventory,78open nonduplicate. Public audit branchcodex/claude-audit-20261010 verified remote b188a1dc7a8b36403f6a36111457e4401da78b47, one sanitized commit directly parented to publicmain9d441bd.1580sourceobjectIDs match; twoWOFFexcluded; onlyignore/font-policydelta. NoPR/merge/deploy.
+- Audit-access forecast10–15min; actual approximately14min (08:34–08:48MSK). Setup discovered copiedlinkedworktreeGitpointer; rebuilt independent.git repository. Authoritative source remainedclean; previouspreliminaryexport localbranch/index retainedforreview, not cleaned.
+- HeavyVitest run76379 terminal:58/62pass;4MediaPanelstaleassertionsfixed afterward, unverified. No live test handles remain; no runningDockercontainers. Do not silently promote to62PASS.
+- Lightweight3secondCPU sample aftertests:Firefoxprocesses dominated sample(1.48/0.67/0.41CPUseconds), ChatGPT0.58/0.31/0.31; Nodeaggregateworkingmemory146MB at priorcheck. This does not establish historicallagcause; noforeignapplicationskilled.
+- Root source review confirms asset delete DETACH live refs and RETAIN_HISTORY provenance; metadata transaction then blob cleanup aftercommit. Still runtime/new58migrationgatepending.
+- Current lowloadpool: refresh fullremainingevidence throughexisting76audit+677/678; ownerPCnotloadedwithnewbuild/test/container.
