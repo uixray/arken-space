@@ -5,7 +5,7 @@ import type { AssetDto, AudioStateDto, AudioTrackDto, CommandAck } from "@arken/
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isAudioConsentError } from "./audio-playback";
 import { volumeSliderToGain } from "./audio-volume";
-import { resolvePlaybackAction } from "./music-playback";
+import { resolvePlaybackAction, resolveTrackPosition } from "./music-playback";
 import type { GameSocket } from "./realtime";
 import { notify } from "./ui/notifications";
 import { fireEvent, renderComponent, screen } from "./test-support/render";
@@ -542,6 +542,15 @@ describe("resolvePlaybackAction (UIX-380 regression)", () => {
       if (action === "play") playerPaused = false;
       if (action === "pause") playerPaused = true;
     }
+  });
+});
+
+describe("resolveTrackPosition (UIX-505 track transport)", () => {
+  it("wraps looping positions and clamps non-looping positions", () => {
+    expect(resolveTrackPosition(125, 60, true)).toBe(5);
+    expect(resolveTrackPosition(125, 60, false)).toBe(60);
+    expect(resolveTrackPosition(-5, 60, false)).toBe(0);
+    expect(resolveTrackPosition(Number.NaN, 0, false)).toBe(0);
   });
 });
 
