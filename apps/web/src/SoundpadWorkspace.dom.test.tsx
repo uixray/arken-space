@@ -107,6 +107,31 @@ it("shows browser-blocked feedback when the silent autoplay unlock is rejected",
   await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith("blob:unlock"));
 });
 
+it("reports a rejected effect voice once and keeps the user unlock retry available", async () => {
+  const callbacks = new Map<string, (event?: any) => void>();
+  const socket = { connected: true, on: vi.fn((name: string, cb: (event?: any) => void) => callbacks.set(name, cb)), off: vi.fn((name: string) => callbacks.delete(name)), emit: vi.fn() };
+  const makeAudio = (play: ReturnType<typeof vi.fn>) => ({ src: "", currentTime: 0, volume: 1, onended: null as (() => void) | null, onerror: null as (() => void) | null, pause: vi.fn(), play });
+  const initialUnlock = makeAudio(vi.fn().mockResolvedValue(undefined));
+  const rejectedVoice = makeAudio(vi.fn().mockRejectedValue(new Error("NotAllowedError")));
+  const retryUnlock = makeAudio(vi.fn().mockResolvedValue(undefined));
+  const audioQueue = [initialUnlock, rejectedVoice, retryUnlock];
+  vi.stubGlobal("Audio", vi.fn(function MockAudio() { return audioQueue.shift()!; }));
+  vi.stubGlobal("URL", { ...URL, createObjectURL: vi.fn(() => "blob:unlock"), revokeObjectURL: vi.fn() });
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ packs: [pack], playerPlaybackEnabled: true }) }));
+  render(<SoundpadWorkspace campaignId={pack.campaignId} membershipId="55555555-5555-4555-8555-555555555555" role="PLAYER" assets={[asset]} socket={socket as never} onUpload={vi.fn()} />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Включить звук" }));
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Звук включён"));
+  callbacks.get("soundpad:triggered")?.({ eventId: "rejected-effect", soundId: sound.id, serverTime: new Date().toISOString(), defaultGain: 0.5 });
+  expect(await screen.findByRole("alert")).toHaveTextContent("Не удалось воспроизвести звуковой эффект.");
+  expect(rejectedVoice.play).toHaveBeenCalledOnce();
+
+  fireEvent.click(screen.getByRole("button", { name: "Включить звук" }));
+  await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  expect(retryUnlock.play).toHaveBeenCalledOnce();
+  expect(screen.getByRole("status")).toHaveTextContent("Звук включён");
+});
+
 it("pins favorites first while preserving the relative order of other authorized sounds", async () => {
   const secondSound = { ...sound, id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", assetId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", label: "Шорох ветра", sortOrder: 1 };
   const secondAsset = { ...asset, id: secondSound.assetId, name: "wind.ogg" };

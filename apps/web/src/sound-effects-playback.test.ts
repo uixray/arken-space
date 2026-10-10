@@ -41,4 +41,44 @@ describe("SoundEffectsPlayback", () => {
     expect(bus.activeVoiceCount).toBe(0);
     expect(bus.play(event("muted", connectedAt), "/effect.ogg", 1, true)).toBe(false);
   });
+
+  it("surfaces one consecutive playback rejection, rearms after success, and ignores stopped callbacks", async () => {
+    const errors = vi.fn();
+    const rejectedA = fakeAudio();
+    const rejectedB = fakeAudio();
+    const recovered = fakeAudio();
+    const rejectedAgain = fakeAudio();
+    rejectedA.play.mockRejectedValue(new Error("decode failed"));
+    rejectedB.play.mockRejectedValue(new Error("decode failed"));
+    rejectedAgain.play.mockRejectedValue(new Error("decode failed"));
+    const audios = [rejectedA, rejectedB, recovered, rejectedAgain];
+    let next = 0;
+    const bus = new SoundEffectsPlayback(() => audios[next++]!, 4, errors);
+    bus.setConnected();
+
+    bus.play(event("reject-1"), "/bad-a.ogg", 1, false);
+    bus.play(event("reject-2"), "/bad-b.ogg", 1, false);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(errors).toHaveBeenCalledTimes(1);
+    expect(bus.activeVoiceCount).toBe(0);
+
+    bus.play(event("recover"), "/ok.ogg", 1, false);
+    await Promise.resolve();
+    bus.play(event("reject-3"), "/bad-again.ogg", 1, false);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(errors).toHaveBeenCalledTimes(2);
+
+    const stale = fakeAudio();
+    let rejectStale!: (error: Error) => void;
+    stale.play.mockImplementation(() => new Promise<void>((_resolve, reject) => { rejectStale = reject; }));
+    audios.push(stale);
+    bus.play(event("stopped-rejection"), "/stale.ogg", 1, false);
+    bus.stop();
+    rejectStale(new Error("late reject after stop"));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(errors).toHaveBeenCalledTimes(2);
+  });
 });

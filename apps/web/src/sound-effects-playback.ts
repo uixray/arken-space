@@ -9,14 +9,16 @@ export class SoundEffectsPlayback {
   private seen = new Set<string>();
   private generation = 0;
   private connected = false;
+  private playbackErrorReported = false;
   constructor(
     private readonly createAudio: () => AudioLike = () => new Audio(),
     maxVoices = 4,
+    private readonly onPlaybackError?: () => void,
   ) { this.maxVoices = Math.max(1, Math.min(4, Math.floor(maxVoices))); }
   private readonly maxVoices: number;
 
   setConnected(_at?: number) { this.connected = true; }
-  setDisconnected() { this.connected = false; }
+  setDisconnected() { this.connected = false; this.stop(); }
   play(event: SoundEffectEvent, url: string, volume: number, muted: boolean): boolean {
     // Realtime events use volatile socket delivery and are never replayed after
     // reconnect. Do not compare server wall time to the client's clock: clock
@@ -38,8 +40,20 @@ export class SoundEffectsPlayback {
     element.onended = remove;
     element.onerror = remove;
     void element.play().then(() => {
-      if (generation !== this.generation) element.pause();
-    }).catch(remove);
+      if (generation !== this.generation || !this.connected || !this.voices.includes(voice)) {
+        element.pause();
+        return;
+      }
+      this.playbackErrorReported = false;
+    }).catch(() => {
+      // A stop, mute, disconnect, eviction, or unmount can invalidate a
+      // pending browser promise. Do not surface those stale rejections.
+      if (generation !== this.generation || !this.connected || !this.voices.includes(voice)) return;
+      remove();
+      if (this.playbackErrorReported) return;
+      this.playbackErrorReported = true;
+      this.onPlaybackError?.();
+    });
     return true;
   }
 
@@ -49,6 +63,7 @@ export class SoundEffectsPlayback {
   mute() { this.stop(); }
   stop() {
     this.generation++;
+    this.playbackErrorReported = false;
     for (const voice of [...this.voices]) this.dispose(voice);
   }
   disposeAll() { this.stop(); this.seen.clear(); this.connected = false; }

@@ -26,11 +26,11 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
 }
 
 export function SoundpadWorkspace({ campaignId, membershipId, role, assets, socket, onUpload, onRefreshSnapshot }: Props) {
-  const busRef = useRef<SoundEffectsPlayback | null>(null);
-  if (!busRef.current) busRef.current = new SoundEffectsPlayback();
-  const bus = busRef.current;
   const [data, setData] = useState<SoundpadResponse>({ packs: [], playerPlaybackEnabled: true });
   const [error, setError] = useState("");
+  const busRef = useRef<SoundEffectsPlayback | null>(null);
+  if (!busRef.current) busRef.current = new SoundEffectsPlayback(undefined, 4, () => setError("Не удалось воспроизвести звуковой эффект."));
+  const bus = busRef.current;
   const [busy, setBusy] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [volume, setVolume] = useState(() => {
@@ -180,6 +180,7 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
     try { localStorage.setItem(favoriteStorageKey, JSON.stringify([...next])); } catch { setError("Не удалось сохранить избранное на этом устройстве."); }
   };
   const enableEffects = () => {
+    setError("");
     setUnlocked(true); bus.setConnected(Date.now());
     // A 1-sample silent WAV performs the unlock attempt inside the user's
     // gesture; it is never a pack sound and contains no audible test tone.
