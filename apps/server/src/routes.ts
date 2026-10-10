@@ -165,6 +165,8 @@ import { assetContentVersion, assetDto, assetUploadActionMatches } from "./asset
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
 import { registerPlayerRequestRoutes } from "./player-requests.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
+import { registerGalleryChatShareRoutes } from "./gallery-chat-share.js";
+import { registerChatAttachmentContentRoute } from "./chat-attachment-content.js";
 import { registerTerrainStampRoutes } from "./terrain-stamp-routes.js";
 import { registerCharacterArchiveRoutes } from "./character-archive-routes.js";
 import { registerEncounterRoutes } from "./encounters.js";
@@ -1098,6 +1100,8 @@ export function registerRoutes(
   registerOperatorFeedbackRoutes(app, db);
   registerPlayerRequestRoutes(app, db, io);
   registerCharacterMediaRoutes(app, db);
+  registerGalleryChatShareRoutes(app, db, io);
+  registerChatAttachmentContentRoute(app, db);
   registerCharacterArchiveRoutes(app, db, (campaignId) =>
     broadcastSnapshots(io, db, campaignId),
   );
@@ -6679,62 +6683,6 @@ export function registerRoutes(
       return reply.code(400).send({ error: publicUploadError(error) });
     }
   });
-
-  app.get(
-    "/api/chat/attachments/:contentId/content",
-    async (request, reply) => {
-      const auth = await requireAuth(request, reply, db);
-      if (!auth) return;
-      const { contentId } = z
-        .object({ contentId: z.string().uuid() })
-        .parse(request.params);
-      const [item] = await db
-        .select({ upload: chatAttachmentUploads, thread: chatThreads })
-        .from(chatAttachments)
-        .innerJoin(
-          chatAttachmentUploads,
-          and(
-            eq(chatAttachmentUploads.campaignId, chatAttachments.campaignId),
-            eq(chatAttachmentUploads.contentId, chatAttachments.contentId),
-          ),
-        )
-        .innerJoin(
-          chatThreads,
-          and(
-            eq(chatThreads.campaignId, chatAttachments.campaignId),
-            eq(chatThreads.id, chatAttachments.threadId),
-          ),
-        )
-        .where(
-          and(
-            eq(chatAttachments.campaignId, auth.campaignId),
-            eq(chatAttachments.contentId, contentId),
-            or(
-              and(
-                eq(chatThreads.type, "STREAM"),
-                eq(
-                  chatAttachmentUploads.uploadedByMembershipId,
-                  auth.membershipId,
-                ),
-              ),
-              eq(chatThreads.participantAMembershipId, auth.membershipId),
-              eq(chatThreads.participantBMembershipId, auth.membershipId),
-            ),
-          ),
-        )
-        .limit(1);
-      if (!item) return reply.code(404).send({ error: "NOT_FOUND" });
-      try {
-        const opened = await openStoredFile(item.upload.storageKey, undefined);
-        reply.header("Content-Type", item.upload.mimeType);
-        reply.header("Content-Length", String(opened.size));
-        reply.header("Cache-Control", "private, no-store");
-        return reply.send(opened.stream);
-      } catch {
-        return reply.code(404).send({ error: "NOT_FOUND" });
-      }
-    },
-  );
 
   app.post("/api/chat/direct", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);

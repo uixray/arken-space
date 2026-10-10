@@ -8,6 +8,7 @@ import {
   assetUploadActionMatches,
   deleteUnusedAsset,
 } from "./asset-lifecycle.js";
+import { postgresErrorCode } from "./database-errors.js";
 
 const asset = {
   id: "00000000-0000-4000-8000-000000000001",
@@ -47,6 +48,14 @@ describe("asset dependency registry", () => {
       "GENERATED_TOKEN_SOURCE",
     ]);
   });
+});
+
+it("extracts a wrapped PostgreSQL unique-conflict code safely", () => {
+  expect(postgresErrorCode({ cause: { code: "23505" } })).toBe("23505");
+  expect(postgresErrorCode({ cause: { cause: { code: "23503" } } })).toBe("23503");
+  const cyclic: { cause?: unknown; code?: string } = {};
+  cyclic.cause = cyclic;
+  expect(postgresErrorCode(cyclic)).toBeUndefined();
 });
 
 describe("asset usage policy", () => {

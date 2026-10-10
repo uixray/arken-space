@@ -31,6 +31,7 @@ import {
   storeUpload,
 } from "./storage.js";
 import { publicUploadError } from "./telemetry.js";
+import { postgresErrorCode } from "./database-errors.js";
 import {
   assetContentVersion,
   assetDto,
@@ -354,7 +355,7 @@ export function registerAssetLifecycleRoutes(
       });
       return { kind: "updated" as const, asset: updated };
     }).catch((error: unknown) => {
-      if (typeof error === "object" && error !== null && "code" in error && error.code === "23505")
+      if (postgresErrorCode(error) === "23505")
         return { kind: "action_conflict" as const };
       throw error;
     });

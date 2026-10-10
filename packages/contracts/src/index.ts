@@ -1767,6 +1767,19 @@ export type ChatAttachmentMetadata = z.infer<
   typeof chatAttachmentMetadataSchema
 >;
 
+/** Publish a campaign-visible character-gallery image as a durable chat copy. */
+export const createGalleryChatShareSchema = z
+  .object({
+    actionId: actionIdSchema,
+    characterMediaId: z.string().uuid(),
+    /** Omitted copies the gallery caption; null or empty explicitly posts without one. */
+    caption: z.string().trim().max(500).nullable().optional(),
+  })
+  .strict();
+export type CreateGalleryChatShare = z.infer<
+  typeof createGalleryChatShareSchema
+>;
+
 export const createOrGetDirectChatThreadSchema = z.object({
   participantMembershipId: z.string().uuid(),
 });
