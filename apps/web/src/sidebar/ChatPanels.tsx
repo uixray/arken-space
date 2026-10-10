@@ -98,6 +98,7 @@ import {
 } from "../use-thread-history";
 import { QuickRollPanel } from "./QuickRollPanel";
 import { ResourceCounters } from "./ResourceCounters";
+import { ActivityInitiativePanel } from "./ActivityInitiativePanel";
 import type { ResourceCounterIntent } from "../resource-counter-intent";
 import { useSubmissionDraft } from "../ui/useSubmissionDraft";
 
@@ -456,6 +457,11 @@ export function ActivityPanel({
   onMessageFocused,
   onOpenPlayerRequestCreate,
   onUpdateCounters,
+  selectedTokenIds,
+  onUpdateInitiative,
+  onSetOwnInitiative,
+  onRollInitiative,
+  onRecruitFromBattleZone,
 }: {
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
@@ -798,6 +804,14 @@ export function ActivityPanel({
         snapshot.me.role === "GM" ? undefined : "chat-tab-activity"
       }
     >
+      <ActivityInitiativePanel
+        snapshot={snapshot}
+        selectedTokenIds={selectedTokenIds}
+        onUpdateInitiative={onUpdateInitiative}
+        onSetOwnInitiative={onSetOwnInitiative}
+        onRollInitiative={onRollInitiative}
+        onRecruitFromZone={onRecruitFromBattleZone}
+      />
       <div
         className="activity-feed__controls"
         role="region"
