@@ -81,6 +81,13 @@ describe("drizzle migration metadata integrity", () => {
     });
   });
 
+  it("keeps migration timestamps strictly increasing so upgrades cannot skip a new entry", () => {
+    const entries = readJournal();
+    entries.forEach((entry, index) => {
+      expect(Number.isSafeInteger(entry.when)).toBe(true);
+      if (index > 0) expect(entry.when).toBeGreaterThan(entries[index - 1]!.when);
+    });
+  });
   it("keeps a snapshot for the newest migration, so the generator diffs from the real baseline", () => {
     // Incident 2: `drizzle-kit generate` diffs against the newest snapshot.
     // If that is missing or stale, it re-emits already-applied DDL.

@@ -83,8 +83,8 @@ async function counts() {
   ]);
 }
 
-describe("closed-beta player authentication", () => {
-  it("authenticates only a unique active PLAYER grant", async () => {
+describe("public alias authentication is disabled", () => {
+  it("rejects a nickname even when the alias has an active PLAYER grant", async () => {
     const player = betaPlayerByHandle("archinamon")!;
     const membershipId = await addIdentity(
       "PLAYER",
@@ -92,10 +92,11 @@ describe("closed-beta player authentication", () => {
       player.handle,
     );
     const response = await login();
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(410);
+    expect(response.json()).toEqual({ error: "PUBLIC_ALIAS_LOGIN_DISABLED" });
     const sessions = await db.select().from(schema.sessions);
-    expect(sessions).toHaveLength(1);
-    expect(sessions[0]?.membershipId).toBe(membershipId);
+    expect(sessions).toHaveLength(0);
+    expect(membershipId).toBeTruthy();
   });
 
   it.each([
@@ -118,7 +119,7 @@ describe("closed-beta player authentication", () => {
     const response = await login(
       scenario === "unknown handle" ? "not-a-player" : "archinamon",
     );
-    expect(response.statusCode).toBe(404);
+    expect(response.statusCode).toBe(410);
     expect(await counts()).toEqual(before);
   });
 });

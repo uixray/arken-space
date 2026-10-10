@@ -34,6 +34,7 @@ afterEach(() => vi.unstubAllGlobals());
 const asset: AssetDto = {
   id: "f1be0001-1111-4111-8111-111111111111",
   kind: "AUDIO",
+  audioPurpose: "MUSIC",
   name: "Тема стража.mp3",
   mimeType: "audio/mpeg",
   sizeBytes: 128,
@@ -47,19 +48,47 @@ const asset: AssetDto = {
 function setup(
   onUpload: AssetActions["uploadAsset"] = vi.fn().mockResolvedValue(asset),
   player = false,
+  assets: AssetDto[] = [asset],
+  onRefresh?: AssetActions["refreshAssets"],
 ) {
   renderComponent(
     <ThemeProvider theme="dark" lang="ru">
       <MediaPanel
-        snapshot={player ? playerSnapshot() : gmSnapshot()}
+        snapshot={{ ...(player ? playerSnapshot() : gmSnapshot()), assets }}
         onUpload={onUpload}
         onGetUsage={vi.fn()}
         onDelete={vi.fn()}
+        onRefresh={onRefresh}
       />
     </ThemeProvider>,
   );
   return onUpload;
 }
+
+it("groups mixed-purpose audio under both library headings and allows explicit purpose change", async () => {
+  const soundEffect = { ...asset, id: "sound-effect", name: "effect.mp3", audioPurpose: "SOUND_EFFECT" as const };
+  const both = { ...asset, id: "both-purpose", name: "both.mp3", audioPurpose: "BOTH" as const };
+  const music = { ...asset, id: "music-only", name: "music.mp3", audioPurpose: "MUSIC" as const };
+  const refresh = vi.fn().mockResolvedValue(undefined);
+  const fetchMock = vi.fn().mockImplementation((url: string) =>
+    Promise.resolve(new Response(url === "/api/gm/sticker-packs" || url === "/api/gm/global-sticker-packs" ? "[]" : "{}", { status: 200 })),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  setup(vi.fn(), false, [soundEffect, both, music], refresh);
+
+  expect(screen.getByRole("region", { name: "Файлы: Фоновая музыка" })).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Файлы: Звуковые эффекты" })).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Файлы: Фоновая музыка" })).toHaveTextContent("both.mp3");
+  expect(screen.getByRole("region", { name: "Файлы: Фоновая музыка" })).toHaveTextContent("music.mp3");
+  expect(within(screen.getByRole("region", { name: "Файлы: Фоновая музыка" })).queryByText("effect.mp3")).not.toBeInTheDocument();
+  await userEvent.setup().selectOptions(screen.getByLabelText("Назначение аудио: effect.mp3"), "MUSIC");
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === `/api/assets/${soundEffect.id}/audio-purpose`)).toBe(true));
+  const [url, init] = fetchMock.mock.calls.find(([candidate]) => candidate === `/api/assets/${soundEffect.id}/audio-purpose`) as [string, RequestInit];
+  expect(url).toBe(`/api/assets/${soundEffect.id}/audio-purpose`);
+  expect(init.method).toBe("PATCH");
+  expect(JSON.parse(String(init.body))).toEqual({ actionId: expect.any(String), audioPurpose: "MUSIC" });
+  expect(refresh).toHaveBeenCalledTimes(1);
+});
 
 it.each([
   ["theme.mp3", "audio/mpeg"],
@@ -84,6 +113,7 @@ it.each([
     });
     const file = new File(["synthetic audio candidate"], name, { type });
     await user.upload(input, file);
+    await user.selectOptions(screen.getByLabelText("Назначение аудиофайла"), "MUSIC");
     expect(input).toHaveValue("");
     expect(upload).toBeEnabled();
     expect(upload).toHaveAccessibleDescription("Файл готов к загрузке.");
@@ -98,7 +128,7 @@ it.each([
     expect(onUpload).not.toHaveBeenCalled();
     await user.click(upload);
     expect(onUpload).toHaveBeenCalledTimes(1);
-    expect(onUpload).toHaveBeenCalledWith(file, "AUDIO");
+    expect(onUpload).toHaveBeenCalledWith(file, "AUDIO", { audioPurpose: "MUSIC" });
     expect(input).toBeDisabled();
     expect(remove).toBeDisabled();
     expect(upload).toBeDisabled();
@@ -125,6 +155,7 @@ it("keeps the audio candidate for retry after a server rejection", async () => {
   });
   const file = new File(["candidate"], "retry.mp3", { type: "audio/mpeg" });
   await user.upload(input, file);
+  await user.selectOptions(screen.getByLabelText("Назначение аудиофайла"), "SOUND_EFFECT");
   await user.click(upload);
   await screen.findByText("Аудиофайл повреждён.");
   expect(within(section).getByText(file.name)).toBeInTheDocument();
@@ -133,8 +164,8 @@ it("keeps the audio candidate for retry after a server rejection", async () => {
   await waitFor(() =>
     expect(within(section).queryByText(file.name)).not.toBeInTheDocument(),
   );
-  expect(onUpload).toHaveBeenNthCalledWith(1, file, "AUDIO");
-  expect(onUpload).toHaveBeenNthCalledWith(2, file, "AUDIO");
+  expect(onUpload).toHaveBeenNthCalledWith(1, file, "AUDIO", { audioPurpose: "SOUND_EFFECT" });
+  expect(onUpload).toHaveBeenNthCalledWith(2, file, "AUDIO", { audioPurpose: "SOUND_EFFECT" });
 });
 
 it("keeps AUDIO creation unavailable to PLAYER in the actual caller", () => {

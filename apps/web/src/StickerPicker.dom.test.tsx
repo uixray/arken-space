@@ -69,6 +69,26 @@ it("shows sticker artwork without visible file names while keeping accessible na
   expect(option.textContent).toBe("");
 });
 
+it("marks public catalog selections for the global send command", async () => {
+  const globalPack = {
+    ...stickerPack(),
+    scope: "GLOBAL_PUBLIC" as const,
+    subject: "COMMON" as const,
+    stickers: stickerPack().stickers.map((sticker) => ({
+      ...sticker,
+      url: `/api/global-stickers/${sticker.id}/content`,
+    })),
+  };
+  vi.mocked(api).mockResolvedValue([globalPack]);
+  const send = vi.fn().mockResolvedValue(undefined);
+  render(<StickerPicker onSelect={send} />);
+  await openPicker();
+  fireEvent.click(screen.getByRole("option", { name: "Стикер 1" }));
+  await waitFor(() =>
+    expect(send).toHaveBeenCalledWith(globalPack.stickers[0]!.id, "GLOBAL_PUBLIC"),
+  );
+});
+
 function deferred() {
   let resolve!: () => void;
   let reject!: (error: Error) => void;

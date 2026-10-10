@@ -61,6 +61,27 @@ export function tokenBounds(token: TokenDto): MapObjectBounds | null {
 }
 
 export function drawingBounds(drawing: DrawingDto): MapObjectBounds | null {
+  if (drawing.kind === "STAMP") {
+    const size = drawing.size ?? 96;
+    const rotation = ((drawing.rotation ?? 0) * Math.PI) / 180;
+    if (
+      !isFiniteNumber(drawing.x) ||
+      !isFiniteNumber(drawing.y) ||
+      !isFiniteNumber(size) ||
+      size <= 0 ||
+      !isFiniteNumber(rotation)
+    )
+      return null;
+    const half =
+      (size * (Math.abs(Math.cos(rotation)) + Math.abs(Math.sin(rotation)))) /
+      2;
+    return {
+      x: drawing.x - half,
+      y: drawing.y - half,
+      width: half * 2,
+      height: half * 2,
+    };
+  }
   if (
     !isFiniteNumber(drawing.x) ||
     !isFiniteNumber(drawing.y) ||

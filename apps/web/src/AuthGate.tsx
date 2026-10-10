@@ -1,11 +1,13 @@
 import { Button } from "./design-system/Button";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { api } from "./api";
-import { betaPlayerByHandle, betaPlayers } from "@arken/contracts";
+import type { AccountCapabilities } from "@arken/contracts";
 import { FormInput, FormTextArea } from "./ui/GravityFormControls";
 import { LandingGuide } from "./LandingGuide";
 import { capabilities, changelog, roadmapSections } from "./landing-data";
 import "./landing-public.css";
+import { AccountAuthWorkspace } from "./AccountAuthWorkspace";
+import { authenticateCampaignLink, getAccountCapabilities } from "./account-auth-client";
 
 type FeedbackStatus = "idle" | "sending" | "sent";
 type RoadmapVote = { id: string; count: number; voted: boolean };
@@ -20,7 +22,6 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const playerLoginPending = useRef(false);
   const [feedbackStatus, setFeedbackStatus] = useState<FeedbackStatus>("idle");
   const [feedbackError, setFeedbackError] = useState("");
   const [allPlansVisible, setAllPlansVisible] = useState(false);
@@ -28,13 +29,26 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [votesLoading, setVotesLoading] = useState(true);
   const [votePending, setVotePending] = useState<string | null>(null);
   const [voteError, setVoteError] = useState("");
+  const [accountCapabilities, setAccountCapabilities] = useState<AccountCapabilities | null>(null);
+  const [capabilityError, setCapabilityError] = useState("");
+  const [capabilityRetry, setCapabilityRetry] = useState(0);
   const parts = window.location.pathname.split("/").filter(Boolean);
   const mode = parts[0];
   const token = parts[1] ?? "";
-  const betaPlayer = mode === "play" ? betaPlayerByHandle(token) : undefined;
-  const hasInvitation = mode === "gm" || mode === "join" || Boolean(betaPlayer);
+  const isCampaignLink = mode === "gm" || mode === "join";
+  const [campaignLinkToken, setCampaignLinkToken] = useState(() => isCampaignLink ? token : "");
+  const [campaignLinkName, setCampaignLinkName] = useState("");
+  const hasInvitation = mode === "gm" || mode === "join" || (mode === "play" && Boolean(token));
+
+  // Link credentials are path secrets. Keep them only in component memory and
+  // remove them from the address bar before any capability/API request.
+  useEffect(() => {
+    if (!isCampaignLink || !token) return;
+    window.history.replaceState({}, "", `/${mode}`);
+  }, [isCampaignLink, mode, token]);
 
   useEffect(() => {
+    if (!accountCapabilities || accountCapabilities.accountAuthEnabled || !accountCapabilities.legacyDevEnabled || !isDevelopment) return;
     let active = true;
     api<RoadmapVoteResponse>("/api/public/roadmap-votes")
       .then(({ items }) => {
@@ -53,7 +67,18 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [accountCapabilities]);
+
+  useEffect(() => {
+    let active = true;
+    setCapabilityError("");
+    void getAccountCapabilities().then((value) => {
+      if (active) setAccountCapabilities(value);
+    }).catch(() => {
+      if (active) setCapabilityError("Не удалось определить режим входа. Для безопасности альтернативный вход не включён.");
+    });
+    return () => { active = false; };
+  }, [capabilityRetry]);
 
   const toggleRoadmapVote = async (id: string) => {
     if (votePending || votesLoading) return;
@@ -72,50 +97,29 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
     }
   };
 
-  const loginAsPlayer = async (handle: string) => {
-    // State updates are asynchronous: two clicks in the same event turn can
-    // otherwise dispatch duplicate login requests before `busy` rerenders.
-    if (playerLoginPending.current) return;
-    playerLoginPending.current = true;
-    setBusy(true);
-    setError("");
-    try {
-      await api(`/api/auth/player/${encodeURIComponent(handle)}`, {
-        method: "POST",
-      });
-      window.history.replaceState({}, "", "/");
-      onAuthenticated();
-    } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Не удалось войти в игру",
-      );
-    } finally {
-      playerLoginPending.current = false;
-      setBusy(false);
-    }
-  };
-
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setError("");
     try {
-      if (mode === "gm")
+      if (accountCapabilities?.accountAuthEnabled && isCampaignLink) {
+        if (!accountCapabilities.campaignLinkAccessEnabled)
+          throw new Error("Вход по этой ссылке временно недоступен.");
+        if (!campaignLinkToken) throw new Error("Ссылка уже использована или повреждена. Откройте её заново.");
+        await authenticateCampaignLink(mode as "gm" | "join", campaignLinkToken, campaignLinkName);
+      } else if (mode === "gm")
         await api("/api/auth/gm", {
           method: "POST",
-          body: JSON.stringify({ token }),
+          body: JSON.stringify({ token: campaignLinkToken }),
         });
       else if (mode === "join")
         await api("/api/auth/invite", {
           method: "POST",
-          body: JSON.stringify({ token, displayName: name }),
-        });
-      else if (mode === "play" && betaPlayer)
-        await api(`/api/auth/player/${encodeURIComponent(betaPlayer.handle)}`, {
-          method: "POST",
+          body: JSON.stringify({ token: campaignLinkToken, displayName: name }),
         });
       else throw new Error("Откройте персональную ссылку мастера или игрока");
       window.history.replaceState({}, "", "/");
+      setCampaignLinkToken("");
       onAuthenticated();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось войти");
@@ -150,6 +154,29 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
       );
     }
   };
+
+  if (!accountCapabilities && !capabilityError)
+    return <main className="account-auth-shell" aria-busy="true"><p role="status">Проверяем режим входа…</p></main>;
+  if (mode === "play" && token)
+    return <main className="account-auth-shell"><section className="account-auth-card"><h1>Эта ссылка больше не поддерживается</h1><p>Вход по публичному псевдониму отключён. Попросите мастера прислать персональную ссылку на кампанию.</p><a href="/">Перейти к аккаунту</a></section></main>;
+  if (accountCapabilities?.accountAuthEnabled && isCampaignLink) {
+    const linkEnabled = accountCapabilities.campaignLinkAccessEnabled;
+    return <main className="account-auth-shell"><section className="account-auth-card" aria-busy={busy}>
+      <a href="/">← Аккаунт</a>
+      <h1>{mode === "gm" ? "Войти как мастер по ссылке" : "Присоединиться по ссылке"}</h1>
+      <p>{linkEnabled ? "Эта персональная ссылка подтверждает доступ к кампании. Она будет использована только для входа в игру." : "Вход по ссылкам кампании пока не включён в этом окружении. Аккаунт и кампании остаются доступны отдельно."}</p>
+      {!linkEnabled && <p role="status">Ссылка не отправлялась.</p>}
+      {mode === "join" && linkEnabled && <label>Имя в кампании<FormInput value={campaignLinkName} onChange={(event) => setCampaignLinkName(event.target.value)} maxLength={40} autoComplete="nickname" /></label>}
+      {error && <div className="error-box" role="alert">{error}</div>}
+      <form onSubmit={submit}>
+        <Button type="submit" view="action" size="l" disabled={!linkEnabled || busy || !campaignLinkToken} loading={busy}>Продолжить в игру</Button>
+      </form>
+    </section></main>;
+  }
+  if (accountCapabilities?.accountAuthEnabled)
+    return <AccountAuthWorkspace onAuthenticated={onAuthenticated} capabilities={accountCapabilities} />;
+  if (!accountCapabilities?.legacyDevEnabled || !isDevelopment)
+    return <main className="account-auth-shell"><section className="account-auth-card"><h1>Вход временно недоступен</h1><p role="alert">{capabilityError || "Для этого окружения не настроен поддерживаемый режим входа."}</p><Button type="button" onClick={() => { setAccountCapabilities(null); setCapabilityRetry((value) => value + 1); }}>Повторить</Button></section></main>;
 
   return (
     <main className="landing-shell">
@@ -235,9 +262,7 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
                 ? "Вход мастера"
                 : mode === "join"
                   ? "Вход в кампанию"
-                  : betaPlayer
-                    ? `Войти как ${betaPlayer.name}`
-                    : "Выберите игрока"}
+                  : "Войти по персональной ссылке игрока"}
             </h2>
           </div>
           <p>
@@ -245,9 +270,7 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
               ? "После входа ссылка будет заменена безопасной сессией мастера в этом браузере."
               : mode === "join"
                 ? "Укажите имя, которое увидят другие участники игры."
-                : betaPlayer
-                  ? `Публичный бета-аккаунт @${betaPlayer.handle}.`
-                  : "Нажмите на своего игрока для быстрого входа в игровое лобби."}
+                : "Персональная ссылка используется только в явно разрешённом режиме входа."}
           </p>
 
           {mode === "join" && (
@@ -273,37 +296,6 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
 
           {hasInvitation ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {betaPlayer && (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "10px 14px",
-                    background: "var(--palette-ink-900, #181816)",
-                    border: "1px solid var(--palette-clay-500, #c46f49)",
-                    borderRadius: "6px",
-                  }}
-                >
-                  <div>
-                    <strong
-                      style={{ color: "var(--palette-ink-100, #e8e4da)" }}
-                    >
-                      {betaPlayer.name}
-                    </strong>
-                    <div
-                      style={{
-                        fontSize: "0.8rem",
-                        color: "var(--palette-clay-400, #d57d55)",
-                        fontFamily: "monospace",
-                      }}
-                    >
-                      @{betaPlayer.handle}
-                    </div>
-                  </div>
-                  <span className="landing-badge">Готов к игре</span>
-                </div>
-              )}
               <Button
                 type="submit"
                 view="action"
@@ -313,43 +305,14 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
               >
                 Войти в игру
               </Button>
-              {betaPlayer && (
-                <a
-                  href="/"
-                  style={{
-                    textAlign: "center",
-                    fontSize: "0.85rem",
-                    color: "var(--palette-ink-300, #777267)",
-                    textDecoration: "underline",
-                  }}
-                >
-                  Выбрать другого игрока
-                </a>
-              )}
             </div>
           ) : (
             <nav
               className="beta-player-list"
-              aria-label="Постоянные игроки"
+              aria-label="Вход по персональной ссылке"
               aria-busy={busy}
             >
-              {betaPlayers.map((player) => (
-                <a
-                  key={player.handle}
-                  href={`/play/${player.handle}`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (busy) return;
-                    void loginAsPlayer(player.handle);
-                  }}
-                  aria-disabled={busy || undefined}
-                  tabIndex={busy ? -1 : undefined}
-                  title={`Войти в игру как ${player.name} (@${player.handle})`}
-                >
-                  <strong>{player.name}</strong>
-                  <span>@{player.handle}</span>
-                </a>
-              ))}
+              <p>Список постоянных игроков не публикуется. Откройте персональную ссылку, полученную от мастера.</p>
             </nav>
           )}
         </form>

@@ -11,11 +11,13 @@ export function filterStickerPacks(
   return packs
     .filter(
       (pack) =>
-        pack.canSend && (category === "COMMON" || pack.subject === category),
+        pack.canSend &&
+        (category === "COMMON" ||
+          (pack.scope !== "GLOBAL_PUBLIC" && pack.subject === category)),
     )
     .flatMap((pack) => pack.stickers.map((sticker) => ({ pack, sticker })))
     .filter(({ pack, sticker }) =>
-      [pack.name, pack.subjectLabel, sticker.name, sticker.altText]
+      [pack.name, pack.subjectLabel, sticker.altText]
         .filter(Boolean)
         .some((value) => value!.toLocaleLowerCase("ru").includes(needle)),
     );

@@ -146,12 +146,16 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function galleryElement(characterId: string, isGm: boolean) {
+function galleryElement(
+  characterId: string,
+  isGm: boolean,
+  editable = true,
+) {
   return (
     <CharacterMediaGallery
       characterId={characterId}
       characterName="Аркен"
-      editable
+      editable={editable}
       isGm={isGm}
       onUpload={vi.fn()}
     />
@@ -160,6 +164,10 @@ function galleryElement(characterId: string, isGm: boolean) {
 
 function renderGallery(isGm: boolean) {
   return renderComponent(galleryElement(media.characterId, isGm));
+}
+
+function renderReadOnlyGallery() {
+  return renderComponent(galleryElement(media.characterId, false, false));
 }
 
 function expectMutation(
@@ -183,6 +191,136 @@ beforeEach(() => {
   apiMock.mockReset();
   apiMock.mockResolvedValue([media]);
   vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(actionId);
+});
+
+describe("public chat sharing for visible character gallery media", () => {
+  it("allows a read-only PLAYER to publish visible art with its existing caption", async () => {
+    renderReadOnlyGallery();
+    await screen.findByText("Портрет у костра");
+
+    const shareButton = screen.getByRole("button", {
+      name: "Поделиться в общем чате",
+    });
+    expect(shareButton).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Убрать из галереи" })).not.toBeInTheDocument();
+
+    await userEvent.click(shareButton);
+    const dialog = screen.getByRole("dialog", {
+      name: "Опубликовать арт в чате",
+    });
+    expect(
+      within(dialog).getByRole("textbox", {
+        name: "Подпись к сообщению (необязательно)",
+      }),
+    ).toHaveValue("Портрет у костра");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Опубликовать" }),
+    );
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Изображение опубликовано в общем чате.",
+    );
+    expect(apiMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/chat/gallery-shares",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          actionId,
+          characterMediaId: media.id,
+        }),
+      },
+    );
+  });
+
+  it("keeps the same action id for an authorized retry and sends an edited caption", async () => {
+    apiMock.mockReset();
+    apiMock
+      .mockResolvedValueOnce([media])
+      .mockRejectedValueOnce(
+        new ApiError(404, "GALLERY_MEDIA_NOT_FOUND", "not found"),
+      )
+      .mockResolvedValueOnce({ id: "chat-message" });
+    renderReadOnlyGallery();
+    await screen.findByText("Портрет у костра");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Поделиться в общем чате" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Опубликовать арт в чате",
+    });
+    const caption = within(dialog).getByRole("textbox", {
+      name: "Подпись к сообщению (необязательно)",
+    });
+    await userEvent.clear(caption);
+    await userEvent.type(caption, "Сцена у костра");
+    const publish = within(dialog).getByRole("button", {
+      name: "Опубликовать",
+    });
+
+    await userEvent.click(publish);
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "Не удалось опубликовать изображение. Проверьте доступ и повторите попытку.",
+    );
+    expect(screen.queryByText("GALLERY_MEDIA_NOT_FOUND")).not.toBeInTheDocument();
+    await userEvent.click(publish);
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Изображение опубликовано в общем чате.",
+    );
+    const retryBody = JSON.parse(String(apiMock.mock.calls[2]?.[1]?.body));
+    expect(retryBody).toEqual({
+      actionId,
+      characterMediaId: media.id,
+      caption: "Сцена у костра",
+    });
+    expect(apiMock.mock.calls[1]?.[1]).toEqual(apiMock.mock.calls[2]?.[1]);
+  });
+
+  it("uses a new action id when a failed share is changed before retry", async () => {
+    const changedActionId = "00000000-0000-4000-8000-000000000405";
+    vi.spyOn(globalThis.crypto, "randomUUID")
+      .mockReturnValueOnce(actionId)
+      .mockReturnValueOnce(changedActionId);
+    apiMock.mockReset();
+    apiMock
+      .mockResolvedValueOnce([media])
+      .mockRejectedValueOnce(
+        new ApiError(404, "GALLERY_MEDIA_NOT_FOUND", "not found"),
+      )
+      .mockResolvedValueOnce({ id: "chat-message" });
+    renderReadOnlyGallery();
+    await screen.findByText("Портрет у костра");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Поделиться в общем чате" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Опубликовать арт в чате",
+    });
+    const publish = within(dialog).getByRole("button", {
+      name: "Опубликовать",
+    });
+    await userEvent.click(publish);
+    await within(dialog).findByRole("alert");
+
+    const caption = within(dialog).getByRole("textbox", {
+      name: "Подпись к сообщению (необязательно)",
+    });
+    await userEvent.clear(caption);
+    await userEvent.type(caption, "Новое описание");
+    await userEvent.click(publish);
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Изображение опубликовано в общем чате.",
+    );
+    expect(JSON.parse(String(apiMock.mock.calls[1]?.[1]?.body))).toEqual({
+      actionId,
+      characterMediaId: media.id,
+    });
+    expect(JSON.parse(String(apiMock.mock.calls[2]?.[1]?.body))).toEqual({
+      actionId: changedActionId,
+      characterMediaId: media.id,
+      caption: "Новое описание",
+    });
+  });
 });
 
 afterEach(() => {

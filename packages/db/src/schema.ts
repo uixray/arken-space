@@ -12,6 +12,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -29,6 +30,11 @@ export const assetKindEnum = pgEnum("asset_kind", [
   "PORTRAIT",
   "IMAGE",
   "AUDIO",
+]);
+export const audioPurposeEnum = pgEnum("audio_purpose", [
+  "MUSIC",
+  "SOUND_EFFECT",
+  "BOTH",
 ]);
 export const messageVisibilityEnum = pgEnum("message_visibility", [
   "PUBLIC",
@@ -333,6 +339,173 @@ export const campaigns = pgTable("campaigns", {
     .notNull(),
 });
 
+/** Authenticated people are distinct from campaign-scoped memberships/roles. */
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    emailNormalized: text("email_normalized").notNull(),
+    emailDisplay: text("email_display").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("users_email_normalized_idx").on(table.emailNormalized),
+  ],
+);
+
+/** Account authentication sessions are separate from selected game memberships. */
+export const accountSessions = pgTable(
+  "account_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    csrfHash: text("csrf_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("account_sessions_token_hash_idx").on(table.tokenHash),
+    index("account_sessions_user_active_idx").on(table.userId, table.revokedAt),
+  ],
+);
+
+export const accountActionTokens = pgTable(
+  "account_action_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    purpose: text("purpose").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("account_action_tokens_token_hash_idx").on(table.tokenHash),
+    index("account_action_tokens_user_purpose_idx").on(
+      table.userId,
+      table.purpose,
+    ),
+    check(
+      "account_action_tokens_purpose_check",
+      sql`${table.purpose} in ('VERIFY_EMAIL','RESET_PASSWORD')`,
+    ),
+  ],
+);
+
+/** Durable encrypted delivery intent; bearer payload exists only in ciphertext. */
+export const accountMailOutbox = pgTable(
+  "account_mail_outbox",
+  {
+    id: uuid("id").primaryKey(),
+    actionTokenId: uuid("action_token_id")
+      .notNull()
+      .references(() => accountActionTokens.id, { onDelete: "cascade" }),
+    purpose: text("purpose").notNull(),
+    formatVersion: integer("format_version").notNull().default(1),
+    keyId: text("key_id").notNull(),
+    payloadNonce: text("payload_nonce"),
+    payloadCiphertext: text("payload_ciphertext"),
+    payloadAuthTag: text("payload_auth_tag"),
+    status: text("status").notNull().default("PENDING"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    leaseOwner: text("lease_owner"),
+    leaseToken: uuid("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    lastErrorCategory: text("last_error_category"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("account_mail_outbox_action_token_idx").on(table.actionTokenId),
+    index("account_mail_outbox_due_idx").on(
+      table.status,
+      table.nextAttemptAt,
+      table.leaseExpiresAt,
+    ),
+    check(
+      "account_mail_outbox_purpose_check",
+      sql`${table.purpose} in ('VERIFY_EMAIL','RESET_PASSWORD')`,
+    ),
+    check(
+      "account_mail_outbox_status_check",
+      sql`${table.status} in ('PENDING','LEASED','ACCEPTED','CANCELLED','DEAD')`,
+    ),
+    check(
+      "account_mail_outbox_attempts_check",
+      sql`${table.attemptCount} >= 0 AND ${table.formatVersion} > 0`,
+    ),
+    check(
+      "account_mail_outbox_lease_check",
+      sql`(${table.status} = 'LEASED' AND ${table.leaseOwner} IS NOT NULL AND ${table.leaseToken} IS NOT NULL AND ${table.leaseExpiresAt} IS NOT NULL) OR (${table.status} <> 'LEASED' AND ${table.leaseOwner} IS NULL AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL)`,
+    ),
+    check(
+      "account_mail_outbox_payload_check",
+      sql`(${table.status} in ('PENDING','LEASED') AND ${table.payloadNonce} IS NOT NULL AND ${table.payloadCiphertext} IS NOT NULL AND ${table.payloadAuthTag} IS NOT NULL) OR (${table.status} not in ('PENDING','LEASED') AND ${table.payloadNonce} IS NULL AND ${table.payloadCiphertext} IS NULL AND ${table.payloadAuthTag} IS NULL)`,
+    ),
+    check(
+      "account_mail_outbox_accepted_check",
+      sql`(${table.status} = 'ACCEPTED' AND ${table.acceptedAt} IS NOT NULL) OR (${table.status} <> 'ACCEPTED' AND ${table.acceptedAt} IS NULL)`,
+    ),
+    check(
+      "account_mail_outbox_error_category_check",
+      sql`${table.lastErrorCategory} IS NULL OR ${table.lastErrorCategory} in ('SUPERSEDED','TOKEN_USED','TOKEN_EXPIRED','USER_INELIGIBLE','DECRYPTION_FAILED','TRANSPORT_FAILURE','RETRY_EXHAUSTED')`,
+    ),
+  ],
+);
+
+/** Stable idempotency result for self-service campaign creation. */
+export const accountCampaignCreations = pgTable(
+  "account_campaign_creations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("account_campaign_creations_user_key_idx").on(
+      table.userId,
+      table.idempotencyKey,
+    ),
+  ],
+);
+
 /**
  * Stable campaign-scoped identity of a spell pack. Every content or lifecycle
  * change is appended to `spellPackVersions`; this row is never rewritten.
@@ -424,6 +597,9 @@ export const memberships = pgTable(
   "memberships",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     campaignId: uuid("campaign_id")
       .notNull()
       .references(() => campaigns.id, { onDelete: "cascade" }),
@@ -442,6 +618,10 @@ export const memberships = pgTable(
   },
   (table) => [
     index("memberships_campaign_idx").on(table.campaignId),
+    index("memberships_user_idx").on(table.userId),
+    uniqueIndex("memberships_campaign_user_idx")
+      .on(table.campaignId, table.userId)
+      .where(sql`${table.userId} is not null`),
     uniqueIndex("memberships_campaign_id_id_idx").on(
       table.campaignId,
       table.id,
@@ -453,6 +633,42 @@ export const memberships = pgTable(
     check(
       "memberships_selected_theme_id_check",
       sql`${table.selectedThemeId} is null or ${table.selectedThemeId} in ('system','forest','dragons','ice','fire','gold','silver','light','classic-v1')`,
+    ),
+  ],
+);
+
+/** Account-backed campaign invitations are separate from character-bound legacy invites. */
+export const accountCampaignInvites = pgTable(
+  "account_campaign_invites",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    createdByMembershipId: uuid("created_by_membership_id")
+      .notNull()
+      .references(() => memberships.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    label: text("label").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    claimedByUserId: uuid("claimed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("account_campaign_invites_token_hash_idx").on(table.tokenHash),
+    index("account_campaign_invites_campaign_idx").on(
+      table.campaignId,
+      table.createdAt,
+    ),
+    check(
+      "account_campaign_invites_label_check",
+      sql`length(trim(${table.label})) between 1 and 80`,
     ),
   ],
 );
@@ -558,6 +774,7 @@ export const assets = pgTable(
       .notNull()
       .references(() => memberships.id),
     kind: assetKindEnum("kind").notNull(),
+    audioPurpose: audioPurposeEnum("audio_purpose"),
     name: text("name").notNull(),
     storageKey: text("storage_key").notNull().unique(),
     mimeType: text("mime_type").notNull(),
@@ -571,6 +788,10 @@ export const assets = pgTable(
   },
   (table) => [
     uniqueIndex("assets_campaign_id_id_idx").on(table.campaignId, table.id),
+    check(
+      "assets_audio_purpose_kind_check",
+      sql`(${table.kind} = 'AUDIO' AND ${table.audioPurpose} IS NOT NULL) OR (${table.kind} <> 'AUDIO' AND ${table.audioPurpose} IS NULL)`,
+    ),
   ],
 );
 
@@ -1100,6 +1321,10 @@ export const worldMapLocations = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     campaignId: uuid("campaign_id").notNull(),
     mapId: uuid("map_id").notNull(),
+    canonicalLocationId: uuid("canonical_location_id").references(
+      () => worldContent.id,
+      { onDelete: "restrict" },
+    ),
     name: text("name").notNull(),
     kind: worldMapLocationKindEnum("kind").notNull().default("OTHER"),
     /** Player-safe short card text. */
@@ -1381,8 +1606,23 @@ export const drawings = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    /** Missing values in pre-stamp rows migrate to FREEHAND. */
+    kind: text("kind").notNull().default("FREEHAND"),
+    /** Fixed server catalog key; never a path or URL supplied by a client. */
+    stampAssetKey: text("stamp_asset_key"),
+    stampPackId: text("stamp_pack_id"),
+    stampSize: doublePrecision("stamp_size"),
+    stampRotation: doublePrecision("stamp_rotation"),
+    stampLayer: text("stamp_layer"),
   },
-  (table) => [index("drawings_scene_idx").on(table.sceneId)],
+  (table) => [
+    index("drawings_scene_idx").on(table.sceneId),
+    check("drawings_kind_check", sql`${table.kind} in ('FREEHAND', 'STAMP')`),
+    check(
+      "drawings_stamp_fields_check",
+      sql`(${table.kind} = 'FREEHAND' and ${table.stampAssetKey} is null and ${table.stampPackId} is null and ${table.stampSize} is null and ${table.stampRotation} is null and ${table.stampLayer} is null) or (${table.kind} = 'STAMP' and ${table.stampAssetKey} is not null and ${table.stampAssetKey} in ('forest', 'mountains', 'clouds') and ${table.stampPackId} is not null and ${table.stampPackId} = 'builtin-terrain-v1' and ${table.stampSize} is not null and ${table.stampSize} between 16 and 1024 and ${table.stampRotation} is not null and ${table.stampRotation} between -360 and 360 and ${table.stampLayer} is not null and ${table.stampLayer} in ('PUBLIC', 'GM'))`,
+    ),
+  ],
 );
 
 export const invites = pgTable(
@@ -1402,6 +1642,7 @@ export const invites = pgTable(
     ),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -1444,6 +1685,24 @@ export const sessions = pgTable(
     membershipId: uuid("membership_id")
       .notNull()
       .references(() => memberships.id, { onDelete: "cascade" }),
+    accountSessionId: uuid("account_session_id").references(
+      () => accountSessions.id,
+      { onDelete: "cascade" },
+    ),
+    authSource: text("auth_source"),
+    gmCredentialCampaignId: uuid("gm_credential_campaign_id").references(
+      () => gmAccessCredentials.campaignId,
+      { onDelete: "cascade" },
+    ),
+    gmCredentialRevision: integer("gm_credential_revision"),
+    playerAccessGrantId: uuid("player_access_grant_id").references(
+      () => playerAccessGrants.id,
+      { onDelete: "cascade" },
+    ),
+    playerAccessGrantRevision: integer("player_access_grant_revision"),
+    legacyInviteId: uuid("legacy_invite_id").references(() => invites.id, {
+      onDelete: "cascade",
+    }),
     tokenHash: text("token_hash").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -1453,7 +1712,21 @@ export const sessions = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [uniqueIndex("sessions_token_hash_idx").on(table.tokenHash)],
+  (table) => [
+    uniqueIndex("sessions_token_hash_idx").on(table.tokenHash),
+    index("sessions_player_grant_idx").on(table.playerAccessGrantId),
+    index("sessions_legacy_invite_idx").on(table.legacyInviteId),
+    check(
+      "sessions_auth_source_check",
+      sql`COALESCE((
+      (${table.authSource} is null and ${table.accountSessionId} is null and ${table.gmCredentialCampaignId} is null and ${table.gmCredentialRevision} is null and ${table.playerAccessGrantId} is null and ${table.playerAccessGrantRevision} is null and ${table.legacyInviteId} is null)
+      or (${table.authSource} = 'ACCOUNT' and ${table.accountSessionId} is not null and ${table.gmCredentialCampaignId} is null and ${table.gmCredentialRevision} is null and ${table.playerAccessGrantId} is null and ${table.playerAccessGrantRevision} is null and ${table.legacyInviteId} is null)
+      or (${table.authSource} = 'GM_LINK' and ${table.accountSessionId} is null and ${table.gmCredentialCampaignId} is not null and ${table.gmCredentialRevision} is not null and ${table.playerAccessGrantId} is null and ${table.playerAccessGrantRevision} is null and ${table.legacyInviteId} is null)
+      or (${table.authSource} = 'PLAYER_GRANT' and ${table.accountSessionId} is null and ${table.gmCredentialCampaignId} is null and ${table.gmCredentialRevision} is null and ${table.playerAccessGrantId} is not null and ${table.playerAccessGrantRevision} is not null and ${table.legacyInviteId} is null)
+      or (${table.authSource} = 'LEGACY_INVITE' and ${table.accountSessionId} is null and ${table.gmCredentialCampaignId} is null and ${table.gmCredentialRevision} is null and ${table.playerAccessGrantId} is null and ${table.playerAccessGrantRevision} is null and ${table.legacyInviteId} is not null)
+    ), false)`,
+    ),
+  ],
 );
 
 export const stickerPacks = pgTable(
@@ -1671,6 +1944,104 @@ export const stickers = pgTable(
   ],
 );
 
+/** Service-wide public catalog. It is deliberately separate from campaign ACL rows. */
+export const globalStickerPacks = pgTable(
+  "global_sticker_packs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    creatorMembershipId: uuid("creator_membership_id"),
+    createActionId: text("create_action_id").notNull(),
+    lifecycle: stickerPackLifecycleEnum("lifecycle").notNull().default("DRAFT"),
+    revision: integer("revision").notNull().default(0),
+    deprecatedAt: timestamp("deprecated_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "global_sticker_packs_creator_fk",
+      columns: [table.creatorMembershipId],
+      foreignColumns: [memberships.id],
+    }).onDelete("set null"),
+    index("global_sticker_packs_lifecycle_idx").on(table.lifecycle),
+    uniqueIndex("global_sticker_packs_creator_action_idx").on(
+      table.creatorMembershipId,
+      table.createActionId,
+    ),
+  ],
+);
+
+export const globalStickerMedia = pgTable(
+  "global_sticker_media",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    uploadedByMembershipId: uuid("uploaded_by_membership_id"),
+    storageKey: text("storage_key").notNull(),
+    mimeType: text("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    sha256: text("sha256").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "global_sticker_media_uploader_fk",
+      columns: [table.uploadedByMembershipId],
+      foreignColumns: [memberships.id],
+    }).onDelete("set null"),
+    uniqueIndex("global_sticker_media_storage_key_idx").on(table.storageKey),
+    index("global_sticker_media_sha_idx").on(table.sha256),
+    check("global_sticker_media_size_check", sql`${table.sizeBytes} > 0`),
+    check(
+      "global_sticker_media_dimensions_check",
+      sql`${table.width} BETWEEN 1 AND 4096 AND ${table.height} BETWEEN 1 AND 4096`,
+    ),
+  ],
+);
+
+export const globalStickers = pgTable(
+  "global_stickers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    packId: uuid("pack_id").notNull(),
+    actionId: text("action_id").notNull(),
+    mediaId: uuid("media_id").notNull(),
+    name: text("name").notNull(),
+    altText: text("alt_text").notNull(),
+    authorCredit: text("author_credit"),
+    licenseNote: text("license_note"),
+    sourceReference: text("source_reference"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "global_stickers_pack_fk",
+      columns: [table.packId],
+      foreignColumns: [globalStickerPacks.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "global_stickers_media_fk",
+      columns: [table.mediaId],
+      foreignColumns: [globalStickerMedia.id],
+    }).onDelete("restrict"),
+    uniqueIndex("global_stickers_pack_id_id_idx").on(table.packId, table.id),
+    uniqueIndex("global_stickers_pack_action_idx").on(
+      table.packId,
+      table.actionId,
+    ),
+  ],
+);
+
 export const chatThreads = pgTable(
   "chat_threads",
   {
@@ -1751,6 +2122,7 @@ export const chatMessages = pgTable(
       operationCount: number;
     }>(),
     stickerId: uuid("sticker_id"),
+    globalStickerId: uuid("global_sticker_id"),
     stickerPresentation: jsonb("sticker_presentation").$type<{
       name: string;
       altText: string;
@@ -1778,13 +2150,18 @@ export const chatMessages = pgTable(
       columns: [table.campaignId, table.stickerId],
       foreignColumns: [stickers.campaignId, stickers.id],
     }).onDelete("restrict"),
+    foreignKey({
+      name: "chat_messages_global_sticker_fk",
+      columns: [table.globalStickerId],
+      foreignColumns: [globalStickers.id],
+    }).onDelete("restrict"),
     check(
       "chat_messages_sticker_shape_check",
-      sql`(${table.stickerId} IS NULL AND ${table.stickerPresentation} IS NULL) OR (${table.stickerId} IS NOT NULL AND ${table.stickerPresentation} IS NOT NULL AND ${table.kind} = 'TEXT' AND ${table.dice} IS NULL)`,
+      sql`(${table.stickerId} IS NULL AND ${table.globalStickerId} IS NULL AND ${table.stickerPresentation} IS NULL) OR (((${table.stickerId} IS NOT NULL)::int + (${table.globalStickerId} IS NOT NULL)::int) = 1 AND ${table.stickerPresentation} IS NOT NULL AND ${table.kind} = 'TEXT' AND ${table.dice} IS NULL)`,
     ),
     check(
       "chat_messages_player_request_shape_check",
-      sql`${table.playerRequestId} IS NULL OR (${table.kind} = 'SYSTEM' AND ${table.body} = '' AND ${table.dice} IS NULL AND ${table.systemData} IS NULL AND ${table.stickerId} IS NULL AND ${table.stickerPresentation} IS NULL)`,
+      sql`${table.playerRequestId} IS NULL OR (${table.kind} = 'SYSTEM' AND ${table.body} = '' AND ${table.dice} IS NULL AND ${table.systemData} IS NULL AND ${table.stickerId} IS NULL AND ${table.globalStickerId} IS NULL AND ${table.stickerPresentation} IS NULL)`,
     ),
     check(
       "chat_messages_sticker_presentation_check",
@@ -2214,6 +2591,121 @@ export const campaignAudioTracks = pgTable(
   ],
 );
 
+/** UIX-512 durable campaign-owned soundpad packs; playback itself is ephemeral. */
+export const campaignSoundPacks = pgTable(
+  "campaign_sound_packs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    published: boolean("published").notNull().default(false),
+    audience: text("audience").notNull().default("ALL_MEMBERS"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("campaign_sound_packs_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+    uniqueIndex("campaign_sound_packs_campaign_name_idx").on(
+      table.campaignId,
+      table.name,
+    ),
+    index("campaign_sound_packs_campaign_idx").on(
+      table.campaignId,
+      table.sortOrder,
+    ),
+    check(
+      "campaign_sound_packs_audience_check",
+      sql`${table.audience} IN ('ALL_MEMBERS','GM_ONLY')`,
+    ),
+    check(
+      "campaign_sound_packs_name_check",
+      sql`length(trim(${table.name})) BETWEEN 1 AND 80`,
+    ),
+  ],
+);
+
+/** Campaign-wide PLAYER trigger permission; defaults to enabled for all players. */
+export const campaignSoundpadSettings = pgTable("campaign_soundpad_settings", {
+  campaignId: uuid("campaign_id")
+    .primaryKey()
+    .references(() => campaigns.id, { onDelete: "cascade" }),
+  playerPlaybackEnabled: boolean("player_playback_enabled")
+    .notNull()
+    .default(true),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Sounds reference campaign-local AUDIO assets and prevent dangling deletion. */
+export const campaignSounds = pgTable(
+  "campaign_sounds",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    packId: uuid("pack_id").notNull(),
+    assetId: uuid("asset_id").notNull(),
+    label: text("label").notNull(),
+    icon: text("icon").notNull().default("🔊"),
+    category: text("category").notNull().default("Другое"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    defaultGain: doublePrecision("default_gain").notNull().default(0.5),
+    audience: text("audience").notNull().default("ALL_MEMBERS"),
+    sourceNote: text("source_note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("campaign_sounds_campaign_id_id_idx").on(
+      table.campaignId,
+      table.id,
+    ),
+    uniqueIndex("campaign_sounds_pack_asset_idx").on(
+      table.packId,
+      table.assetId,
+    ),
+    index("campaign_sounds_pack_order_idx").on(table.packId, table.sortOrder),
+    foreignKey({
+      name: "campaign_sounds_campaign_pack_fk",
+      columns: [table.campaignId, table.packId],
+      foreignColumns: [campaignSoundPacks.campaignId, campaignSoundPacks.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "campaign_sounds_campaign_asset_fk",
+      columns: [table.campaignId, table.assetId],
+      foreignColumns: [assets.campaignId, assets.id],
+    }).onDelete("restrict"),
+    check(
+      "campaign_sounds_audience_check",
+      sql`${table.audience} IN ('ALL_MEMBERS','GM_ONLY')`,
+    ),
+    check(
+      "campaign_sounds_gain_check",
+      sql`${table.defaultGain} >= 0 AND ${table.defaultGain} <= 1`,
+    ),
+    check(
+      "campaign_sounds_label_check",
+      sql`length(trim(${table.label})) BETWEEN 1 AND 60`,
+    ),
+  ],
+);
+
 /** Durable player-to-GM requests. Visibility is always filtered server-side. */
 export const playerRequests = pgTable(
   "player_requests",
@@ -2488,13 +2980,9 @@ export const encounters = pgTable(
  * decides GM vs player projections; callers must not hand-roll their own
  * exclusion logic.
  *
- * `coverAssetId` (here) and `world_content_media.assetId` (gallery, below)
- * intentionally have NO foreign key to `assets`: `assets` is campaign-scoped
- * with an `onDelete: cascade` back to `campaigns`, so a hard FK would either
- * force World Content back into a single campaign's lifetime or leave
- * dangling rows when a campaign is deleted. Later stages are expected to
- * introduce a campaign-independent media/asset store for canon; until then
- * these are plain UUID references, resolved best-effort by the caller.
+ * These global pointers deliberately do not grant global asset access. The
+ * authorized campaign GM may detach their asset; the world-content record
+ * remains and its cover/gallery association is removed by FK policy.
  */
 export const worldContent = pgTable(
   "world_content",
@@ -2516,8 +3004,10 @@ export const worldContent = pgTable(
     lifecycle: worldContentLifecycleEnum("lifecycle")
       .notNull()
       .default("DRAFT"),
-    /** Single cover reference; see table doc comment re: no FK to `assets`. */
-    coverAssetId: uuid("cover_asset_id"),
+    /** Single nullable cover pointer; deleting the campaign asset detaches it. */
+    coverAssetId: uuid("cover_asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
     /** Import provenance (later, blocked stage); all nullable since GM-authored-from-scratch canon has none. */
     sourceUrl: text("source_url"),
     sourceExternalId: text("source_external_id"),
@@ -2588,7 +3078,7 @@ export const worldContentActions = pgTable(
 
 /**
  * Ordered gallery for a canonical entity, in the spirit of `character_media`
- * but not campaign-scoped (see `worldContent` doc comment re: `assets`).
+ * but not campaign-scoped; its asset FK removes only this association row.
  */
 export const worldContentMedia = pgTable(
   "world_content_media",
@@ -2597,7 +3087,9 @@ export const worldContentMedia = pgTable(
     worldContentId: uuid("world_content_id")
       .notNull()
       .references(() => worldContent.id, { onDelete: "cascade" }),
-    assetId: uuid("asset_id").notNull(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
     caption: text("caption"),
     ordering: integer("ordering").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -2609,6 +3101,7 @@ export const worldContentMedia = pgTable(
       table.worldContentId,
       table.ordering,
     ),
+    index("world_content_media_asset_idx").on(table.assetId),
     uniqueIndex("world_content_media_entity_asset_idx").on(
       table.worldContentId,
       table.assetId,
@@ -2682,11 +3175,8 @@ export const worldContentRelations = pgTable(
  * (UIX-264 AC) true by construction — a raw SQL DELETE of a referenced
  * `worldContent` row fails loudly instead of silently orphaning instances.
  *
- * `portraitAssetId` has NO FK, for the same reason as `worldContent.coverAssetId`
- * (see that table's doc comment): campaign assets (`assets`, cascade-deleted
- * with their campaign) and world-content instances have different enough
- * lifetimes/ownership that a hard FK would be the wrong constraint here too;
- * resolved best-effort by the caller.
+ * `portraitAssetId` references a campaign-owned blob. Deleting the blob clears
+ * only this pointer; this campaign-scoped instance remains intact.
  *
  * `ownerMembershipId` follows `memberships`' own convention: campaign-scoped,
  * `onDelete: set null` (an instance should not vanish just because whoever
@@ -2717,8 +3207,9 @@ export const worldContentInstances = pgTable(
     currentState: text("current_state"),
     /** GM-only, same sensitivity tier as `worldContent.gmOnlyText` — never expose to players. */
     gmNotes: text("gm_notes"),
-    /** No FK — see table doc comment. */
-    portraitAssetId: uuid("portrait_asset_id"),
+    portraitAssetId: uuid("portrait_asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
     ownerMembershipId: uuid("owner_membership_id").references(
       () => memberships.id,
       { onDelete: "set null" },

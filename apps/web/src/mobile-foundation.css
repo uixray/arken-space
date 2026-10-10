@@ -922,7 +922,7 @@
     --g-modal-margin: 8px;
     top: var(--compact-viewport-top, 0px);
     bottom: auto;
-    height: var(--compact-viewport-height, 100dvh);
+    height: min(var(--compact-viewport-height, 100dvh), 100dvh);
     padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
       env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   }
@@ -937,14 +937,14 @@
       )
     );
     max-height: calc(
-      var(--compact-viewport-height, 100dvh) - env(safe-area-inset-top, 0px) -
+      min(var(--compact-viewport-height, 100dvh), 100dvh) - env(safe-area-inset-top, 0px) -
         env(safe-area-inset-bottom, 0px) - 16px
     );
   }
 
   .g-modal .g-modal__content_has-scroll {
     max-height: calc(
-      var(--compact-viewport-height, 100dvh) - env(safe-area-inset-top, 0px) -
+      min(var(--compact-viewport-height, 100dvh), 100dvh) - env(safe-area-inset-top, 0px) -
         env(safe-area-inset-bottom, 0px) - 16px
     );
   }
@@ -1016,13 +1016,14 @@
         100dvh - var(--compact-header-height) - var(--compact-nav-height) - 16px
       )
     );
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
+    overflow: hidden;
   }
 
-  .app-shell--compact .map-toolbar > .toolbar-group {
-    flex: 0 0 auto;
-    overflow: visible;
+  .app-shell--compact .map-toolbar__scroll {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
   }
 
   .app-shell--compact .map-toolbar > .toolbar-shortcuts {
@@ -1090,12 +1091,13 @@
    * toolbar height and collapse its tool scroller to 0px in landscape. Scroll
    * the complete rail so every tool remains reachable. */
   .app-shell--compact .map-toolbar {
+    overflow: hidden;
+  }
+  .app-shell--compact .map-toolbar__scroll {
+    min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-y: contain;
-  }
-  .app-shell--compact .map-toolbar > .toolbar-group {
-    flex: 0 0 auto;
-    overflow: visible;
   }
   .app-shell--compact .map-toolbar > .toolbar-shortcuts {
     margin-top: 0;

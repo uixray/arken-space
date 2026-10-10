@@ -107,6 +107,14 @@ const defaultActions = () => ({
   }),
 });
 
+function queryUploadSection(label: string) {
+  const control =
+    label === "Музыка и звуки"
+      ? screen.queryByLabelText(label)
+      : screen.queryByRole("button", { name: `Выбрать файл: ${label}` });
+  return control?.closest(".upload-section") ?? null;
+}
+
 afterEach(() => vi.restoreAllMocks());
 
 describe("MediaPanel upload sections by role", () => {
@@ -114,16 +122,21 @@ describe("MediaPanel upload sections by role", () => {
     "renders Russian types for all five visible asset kinds for %s without changing names or actions",
     (role) => {
       const examples = [
-        ["MAP", "Карта", "North Gate.webp"],
-        ["TOKEN", "Изображение токена", "ranger-token.webp"],
-        ["PORTRAIT", "Портрет персонажа", "Elena.webp"],
-        ["IMAGE", "Изображение", "Замок.webp"],
-        ["AUDIO", "Аудиофайл", "Moonlight.ogg"],
+        ["MAP", "Карта", "Карты", "North Gate.webp"],
+        [
+          "TOKEN",
+          "Изображение токена",
+          "Изображения токенов",
+          "ranger-token.webp",
+        ],
+        ["PORTRAIT", "Портрет персонажа", "Портреты персонажей", "Elena.webp"],
+        ["IMAGE", "Изображение", "Другие изображения", "Замок.webp"],
+        ["AUDIO", "Фоновая музыка", "Музыка и звуки", "Moonlight.ogg"],
       ] as const;
       // These DTOs represent already-visible shared assets, not a claim that
       // PLAYER can see every asset stored by the GM. Server filtering is unchanged.
       const visibleAssets: AssetDto[] = examples.map(
-        ([kind, , name], index) => ({
+        ([kind, , , name], index) => ({
           ...asset,
           id: `00000000-0000-4000-8000-0000000006${index + 20}`,
           kind,
@@ -143,7 +156,7 @@ describe("MediaPanel upload sections by role", () => {
         />,
       );
 
-      for (const [kind, label, name] of examples) {
+      for (const [kind, label, uploadLabel, name] of examples) {
         const row = screen.getByText(name).closest(".asset-row");
         expect(row).not.toBeNull();
         expect(
@@ -152,6 +165,10 @@ describe("MediaPanel upload sections by role", () => {
         expect(screen.queryByText(`${kind} · 1.0 МБ`)).not.toBeInTheDocument();
         if (kind !== "AUDIO")
           expect(screen.getByAltText(`Превью: ${name}`)).toBeInTheDocument();
+        const uploadSection = queryUploadSection(uploadLabel);
+        if (role === "GM" || kind === "TOKEN" || kind === "PORTRAIT")
+          expect(uploadSection).not.toBeNull();
+        else expect(uploadSection).toBeNull();
       }
       expect(screen.getByLabelText("Аудиофайл")).toHaveTextContent("Аудиофайл");
       expect(screen.queryByText("AUDIO")).not.toBeInTheDocument();
@@ -167,6 +184,14 @@ describe("MediaPanel upload sections by role", () => {
       expect(actions.onUpload).not.toHaveBeenCalled();
       expect(actions.onGetUsage).not.toHaveBeenCalled();
       expect(actions.onDelete).not.toHaveBeenCalled();
+      if (role === "GM")
+        expect(
+          screen.getByRole("heading", { name: "Пак кампании" }),
+        ).toBeInTheDocument();
+      else
+        expect(
+          screen.queryByRole("heading", { name: "Пак кампании" }),
+        ).toBeNull();
     },
   );
 
@@ -175,11 +200,21 @@ describe("MediaPanel upload sections by role", () => {
       <MediaPanel snapshot={gmSnapshot()} {...defaultActions()} />,
     );
 
-    expect(screen.getByText("Карты")).toBeInTheDocument();
-    expect(screen.getByText("Изображения токенов")).toBeInTheDocument();
-    expect(screen.getByText("Портреты персонажей")).toBeInTheDocument();
-    expect(screen.getByText("Другие изображения")).toBeInTheDocument();
-    expect(screen.getByText("Музыка и звуки")).toBeInTheDocument();
+    for (const label of [
+      "Карты",
+      "Изображения токенов",
+      "Портреты персонажей",
+      "Другие изображения",
+      "Музыка и звуки",
+    ]) {
+      const section = queryUploadSection(label);
+      expect(section).not.toBeNull();
+      expect(
+        within(section as HTMLElement).getByRole("button", {
+          name: "Загрузить",
+        }),
+      ).toBeInTheDocument();
+    }
   });
 
   it("hides GM-only asset kinds (maps, other images, audio) from a PLAYER", () => {
@@ -187,12 +222,119 @@ describe("MediaPanel upload sections by role", () => {
       <MediaPanel snapshot={playerSnapshot()} {...defaultActions()} />,
     );
 
-    expect(screen.getByText("Изображения токенов")).toBeInTheDocument();
-    expect(screen.getByText("Портреты персонажей")).toBeInTheDocument();
-    expect(screen.queryByText("Карты")).not.toBeInTheDocument();
-    expect(screen.queryByText("Другие изображения")).not.toBeInTheDocument();
-    expect(screen.queryByText("Музыка и звуки")).not.toBeInTheDocument();
+    expect(queryUploadSection("Изображения токенов")).not.toBeNull();
+    expect(queryUploadSection("Портреты персонажей")).not.toBeNull();
+    for (const label of ["Карты", "Другие изображения", "Музыка и звуки"])
+      expect(queryUploadSection(label)).toBeNull();
   });
+
+  it("groups assets by type, filters to one exact type, and restores all groups", async () => {
+    const token = {
+      ...asset,
+      id: "token-asset",
+      kind: "TOKEN" as const,
+      name: "Токен.webp",
+    };
+    const portrait = {
+      ...asset,
+      id: "portrait-asset",
+      kind: "PORTRAIT" as const,
+      name: "Портрет.webp",
+    };
+    renderComponent(
+      <MediaPanel
+        snapshot={gmSnapshot({ assets: [asset, token, portrait] })}
+        {...defaultActions()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("region", { name: "Файлы: Другие изображения" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Файлы: Изображения токенов" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Файлы: Портреты персонажей" }),
+    ).toBeInTheDocument();
+
+    const filter = screen.getByRole("combobox", {
+      name: "Фильтр файлов по типу",
+    });
+    await userEvent.selectOptions(filter, "TOKEN");
+    expect(screen.getByText("Токен.webp")).toBeInTheDocument();
+    expect(screen.queryByText("Замок.webp")).not.toBeInTheDocument();
+    expect(screen.queryByText("Портрет.webp")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Файлы: Изображения токенов" }),
+    ).toBeInTheDocument();
+
+    await userEvent.selectOptions(filter, "ALL");
+    expect(screen.getByText("Замок.webp")).toBeInTheDocument();
+    expect(screen.getByText("Токен.webp")).toBeInTheDocument();
+    expect(screen.getByText("Портрет.webp")).toBeInTheDocument();
+  });
+
+  it("shows an explicit empty-catalog and filtered-empty state", async () => {
+    const { rerender } = renderComponent(
+      <MediaPanel
+        snapshot={gmSnapshot({ assets: [] })}
+        {...defaultActions()}
+      />,
+    );
+    expect(screen.getByText("Файлов пока нет.")).toBeInTheDocument();
+    rerender(
+      <MediaPanel
+        snapshot={gmSnapshot({ assets: [asset] })}
+        {...defaultActions()}
+      />,
+    );
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "Фильтр файлов по типу" }),
+      "AUDIO",
+    );
+    expect(
+      screen.getByText("Нет файлов типа «Музыка и звуки»."),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    ["GM", gmSnapshot],
+    ["PLAYER", playerSnapshot],
+  ] as const)(
+    "explains upload intent and sends the chosen kind for %s",
+    async (_role, buildSnapshot) => {
+      const onUpload = vi.fn().mockResolvedValue(asset);
+      renderComponent(
+        <MediaPanel
+          snapshot={buildSnapshot()}
+          {...defaultActions()}
+          onUpload={onUpload}
+        />,
+      );
+
+      expect(
+        screen.getAllByText(/Загрузка не прикрепляет файл автоматически\./),
+      ).toHaveLength(_role === "GM" ? 5 : 2);
+      const tokenSection = screen
+        .getByRole("button", {
+          name: "Выбрать файл: Изображения токенов",
+        })
+        .closest(".upload-section");
+      expect(tokenSection).not.toBeNull();
+      await userEvent.click(
+        within(tokenSection as HTMLElement).getByRole("button", {
+          name: "Выбрать файл: Изображения токенов",
+        }),
+      );
+      await userEvent.click(
+        within(tokenSection as HTMLElement).getByRole("button", {
+          name: "Загрузить",
+        }),
+      );
+      expect(onUpload).toHaveBeenCalledWith(expect.any(File), "TOKEN", undefined);
+    },
+  );
 
   it("объясняет состояния недоступной загрузки видимым текстом", async () => {
     let finishUpload!: (uploaded: AssetDto) => void;
@@ -251,6 +393,32 @@ describe("MediaPanel upload sections by role", () => {
     await userEvent.click(screen.getByText("Удалить файл"));
     expect(window.confirm).toHaveBeenCalledWith(
       "Удалить файл «Замок.webp» без возможности отмены?",
+    );
+    expect(actions.onDelete).toHaveBeenCalledWith(asset.id);
+  });
+
+  it("warns before detaching shared world-content references", async () => {
+    const actions = defaultActions();
+    actions.onGetUsage.mockResolvedValue({
+      ...unused,
+      inUse: true,
+      usages: [
+        {
+          kind: "WORLD_CONTENT_COVER",
+          entityId: "world-1",
+          label: "Локация",
+          location: "Обложка материала мира",
+          visibility: "GM_ONLY",
+          deletionPolicy: "DETACH",
+        },
+      ],
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderComponent(<MediaPanel snapshot={gmSnapshot({ assets: [asset] })} {...actions} />);
+    await userEvent.click(screen.getByText("Проверить использование"));
+    await userEvent.click(await screen.findByText("Удалить файл"));
+    expect(window.confirm).toHaveBeenCalledWith(
+      "Отвязать 1 связей и удалить файл «Замок.webp» без возможности отмены? Материалы мира сохранятся; их обложки и файлы будут отвязаны. Материалов мира: 1.",
     );
     expect(actions.onDelete).toHaveBeenCalledWith(asset.id);
   });

@@ -19,6 +19,8 @@ import {
 } from "@arken/contracts";
 import {
   assets,
+  campaignSoundPacks,
+  campaignSounds,
   campaigns,
   catalogEntries,
   characterCatalogEntries,
@@ -194,6 +196,7 @@ export interface CampaignReadSet {
   assignedRows: Awaited<ReturnType<typeof loadAssignedEntries>>;
   characterMediaRows: Awaited<ReturnType<typeof loadCharacterMedia>>;
   publishedWorldAssetRows: Awaited<ReturnType<typeof loadPublishedWorldAssets>>;
+  publishedSoundpadAssetRows: Awaited<ReturnType<typeof loadPublishedSoundpadAssets>>;
   assetRows: Awaited<ReturnType<typeof loadAssets>>;
   sequenceRows: Awaited<ReturnType<typeof loadSequence>>;
   /**
@@ -344,6 +347,72 @@ const loadAssets = (db: Database, campaignId: string) =>
     .where(eq(assets.campaignId, campaignId))
     .orderBy(desc(assets.createdAt));
 
+/** Only published shared soundpad clips are player-visible asset references. */
+export interface SnapshotSoundpadAssetRow {
+  campaignId: string;
+  packPublished: boolean;
+  packAudience: string;
+  soundAudience: string;
+  assetId: string;
+  assetKind: string;
+  durationSeconds: number | null;
+}
+
+export function visibleSoundpadAssetIds(
+  auth: AuthContext,
+  rows: readonly SnapshotSoundpadAssetRow[],
+): Set<string> {
+  const ids = new Set<string>();
+  if (auth.role === "GM") return ids;
+  for (const row of rows) {
+    if (
+      row.campaignId === auth.campaignId &&
+      row.packPublished &&
+      row.packAudience === "ALL_MEMBERS" &&
+      row.soundAudience === "ALL_MEMBERS" &&
+      row.assetKind === "AUDIO" &&
+      typeof row.durationSeconds === "number" &&
+      row.durationSeconds > 0 &&
+      row.durationSeconds <= 10
+    )
+      ids.add(row.assetId);
+  }
+  return ids;
+}
+
+const loadPublishedSoundpadAssets = (db: Database, campaignId: string) =>
+  db
+    .select({
+      campaignId: campaignSounds.campaignId,
+      packPublished: campaignSoundPacks.published,
+      packAudience: campaignSoundPacks.audience,
+      soundAudience: campaignSounds.audience,
+      assetId: campaignSounds.assetId,
+      assetKind: assets.kind,
+      durationSeconds: assets.durationSeconds,
+    })
+    .from(campaignSounds)
+    .innerJoin(
+      campaignSoundPacks,
+      and(
+        eq(campaignSounds.campaignId, campaignSoundPacks.campaignId),
+        eq(campaignSounds.packId, campaignSoundPacks.id),
+      ),
+    )
+    .innerJoin(
+      assets,
+      and(
+        eq(campaignSounds.campaignId, assets.campaignId),
+        eq(campaignSounds.assetId, assets.id),
+      ),
+    )
+    .where(
+      and(
+        eq(campaignSounds.campaignId, campaignId),
+        eq(campaignSoundPacks.campaignId, campaignId),
+      ),
+    );
+
 const loadSequence = (db: Database, campaignId: string) =>
   db
     .select({ value: max(gameEvents.sequence) })
@@ -367,6 +436,7 @@ export async function loadCampaignReadSet(
     assignedRows,
     characterMediaRows,
     publishedWorldAssetRows,
+    publishedSoundpadAssetRows,
     assetRows,
     sequenceRows,
     audioTracks,
@@ -383,6 +453,7 @@ export async function loadCampaignReadSet(
     loadAssignedEntries(db, campaignId),
     loadCharacterMedia(db, campaignId),
     loadPublishedWorldAssets(db, campaignId),
+    loadPublishedSoundpadAssets(db, campaignId),
     loadAssets(db, campaignId),
     loadSequence(db, campaignId),
     normalizeAudioTrackDeadlines(db, campaignId),
@@ -401,6 +472,7 @@ export async function loadCampaignReadSet(
     assignedRows,
     characterMediaRows,
     publishedWorldAssetRows,
+    publishedSoundpadAssetRows,
     assetRows,
     sequenceRows,
     audioTracks,
@@ -487,6 +559,7 @@ export async function buildSnapshot(
     assignedRows,
     characterMediaRows,
     publishedWorldAssetRows,
+    publishedSoundpadAssetRows,
     assetRows,
     sequenceRows,
     audioTracks: normalizedAudioTracks,
@@ -801,6 +874,10 @@ export async function buildSnapshot(
     visibleAssetIds.add(assetId);
   for (const row of publishedWorldAssetRows)
     if (row.assetId) visibleAssetIds.add(row.assetId);
+  if (auth.role !== "GM") {
+    for (const assetId of visibleSoundpadAssetIds(auth, publishedSoundpadAssetRows))
+      visibleAssetIds.add(assetId);
+  }
   const visibleAssets =
     auth.role === "GM"
       ? assetRows
@@ -999,7 +1076,13 @@ export async function buildSnapshot(
         revision: fog.revision,
       })),
     drawings: drawingRows
-      .filter(({ drawing }) => visibleSceneIds.has(drawing.sceneId))
+      .filter(
+        ({ drawing }) =>
+          visibleSceneIds.has(drawing.sceneId) &&
+          (auth.role === "GM" ||
+            drawing.kind !== "STAMP" ||
+            drawing.stampLayer === "PUBLIC"),
+      )
       .map(({ drawing }) => ({
         id: drawing.id,
         sceneId: drawing.sceneId,
@@ -1010,6 +1093,16 @@ export async function buildSnapshot(
         x: drawing.x,
         y: drawing.y,
         revision: drawing.revision,
+        kind: drawing.kind as "FREEHAND" | "STAMP",
+        ...(drawing.kind === "STAMP"
+          ? {
+              assetKey: drawing.stampAssetKey as "forest" | "mountains" | "clouds",
+              packId: drawing.stampPackId as "builtin-terrain-v1",
+              size: drawing.stampSize!,
+              rotation: drawing.stampRotation!,
+              layer: drawing.stampLayer as "PUBLIC" | "GM",
+            }
+          : {}),
       })),
     worldMaps: worldMapProjection.snapshot,
     playerRequests: playerRequestRows,

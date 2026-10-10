@@ -1,5 +1,5 @@
 import "./roll-controls.css";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "../design-system/Button";
 import { isSystemRegenStatKey, STAT_VALUE_RANGE } from "@arken/system";
 import { ApiError, formatApiError } from "../api";
@@ -32,6 +32,50 @@ const REFERENCE_KIND_LABELS: Record<string, string> = {
   CATALOG_ENTRY: "Способность каталога",
   CHARACTER_ENTRY: "Способность персонажа",
 };
+
+/** Keep the inline native-details menu within every clipping viewport. */
+function syncStatMenuPlacement(menu: HTMLDetailsElement) {
+  const summary = menu.querySelector<HTMLElement>("summary");
+  const popup = menu.querySelector<HTMLElement>(".stat-field__menu-items");
+  if (!menu.open || !summary || !popup) {
+    menu.removeAttribute("data-menu-side");
+    menu.style.removeProperty("--stat-field-menu-max-height");
+    return;
+  }
+
+  const visualViewport = window.visualViewport;
+  let top = visualViewport?.offsetTop ?? 0;
+  let bottom = top + (visualViewport?.height ?? window.innerHeight);
+  for (
+    let ancestor = menu.parentElement;
+    ancestor && ancestor !== document.body;
+    ancestor = ancestor.parentElement
+  ) {
+    const overflowY = window.getComputedStyle(ancestor).overflowY;
+    if (!/(auto|scroll|hidden|clip)/.test(overflowY)) continue;
+    const rect = ancestor.getBoundingClientRect();
+    top = Math.max(top, rect.top + ancestor.clientTop);
+    bottom = Math.min(bottom, rect.top + ancestor.clientTop + ancestor.clientHeight);
+  }
+
+  const summaryRect = summary.getBoundingClientRect();
+  // Measure the un-clamped content so a previous short viewport cannot bias
+  // the next resize/scroll placement decision.
+  menu.style.removeProperty("--stat-field-menu-max-height");
+  const popupHeight = Math.max(popup.scrollHeight, popup.getBoundingClientRect().height);
+  const gap = 8;
+  const above = Math.max(0, summaryRect.top - top - gap);
+  const below = Math.max(0, bottom - summaryRect.bottom - gap);
+  let side: "above" | "below";
+  if (popupHeight <= below) side = "below";
+  else if (popupHeight <= above) side = "above";
+  else side = above > below ? "above" : "below";
+  const available = side === "above" ? above : below;
+
+  menu.dataset.menuSide = side;
+  if (popupHeight > available)
+    menu.style.setProperty("--stat-field-menu-max-height", `${available}px`);
+}
 
 /**
  * Разбирает отказ сервера. Список ссылок приходит только с
@@ -168,6 +212,7 @@ export function StatLayoutCard({
   onReorderRow?: (key: string, targetKey: string) => Promise<void>;
 }) {
   const fieldIdPrefix = useId();
+  const cardRef = useRef<HTMLDivElement>(null);
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
   // `null` — окно закрыто; `{ key: undefined }` — добавление новой строки.
   const [editing, setEditing] = useState<{ key?: string } | null>(null);
@@ -190,6 +235,71 @@ export function StatLayoutCard({
     null,
   );
 
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      const targetDialog =
+        target instanceof Element ? target.closest('[role="dialog"], dialog') : null;
+      for (const menu of cardRef.current?.querySelectorAll<HTMLDetailsElement>(
+        "details.stat-field__menu[open]",
+      ) ?? []) {
+        // The card's rename/delete prompts are portalled outside this card's
+        // DOM, but remain its child interaction. Other dialogs do not own it.
+        if (editing || deleting) continue;
+        const ownerDialog = menu.closest('[role="dialog"], dialog');
+        if (targetDialog && targetDialog === ownerDialog && menu.contains(target))
+          continue;
+        if (!menu.contains(target)) menu.open = false;
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [deleting, editing]);
+
+  useEffect(() => {
+    let frame: number | null = null;
+    const syncOpenMenus = () => {
+      frame = null;
+      for (const menu of cardRef.current?.querySelectorAll<HTMLDetailsElement>(
+        "details.stat-field__menu[open]",
+      ) ?? [])
+        syncStatMenuPlacement(menu);
+    };
+    const scheduleSync = () => {
+      if (
+        !cardRef.current?.querySelector("details.stat-field__menu[open]")
+      )
+        return;
+      if (frame === null) frame = window.requestAnimationFrame(syncOpenMenus);
+    };
+    const onToggle = (event: Event) => {
+      const target = event.target;
+      if (
+        !(target instanceof HTMLDetailsElement) ||
+        !target.matches("details.stat-field__menu") ||
+        !cardRef.current?.contains(target)
+      )
+        return;
+      if (target.open) scheduleSync();
+      else syncStatMenuPlacement(target);
+    };
+
+    document.addEventListener("toggle", onToggle, true);
+    document.addEventListener("scroll", scheduleSync, true);
+    window.addEventListener("resize", scheduleSync);
+    window.visualViewport?.addEventListener("resize", scheduleSync);
+    window.visualViewport?.addEventListener("scroll", scheduleSync);
+    return () => {
+      document.removeEventListener("toggle", onToggle, true);
+      document.removeEventListener("scroll", scheduleSync, true);
+      window.removeEventListener("resize", scheduleSync);
+      window.visualViewport?.removeEventListener("resize", scheduleSync);
+      window.visualViewport?.removeEventListener("scroll", scheduleSync);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
   const askToDelete = (row: { key: string; label: string }) => {
     setRefusal(null);
     setDeleting(row);
@@ -209,7 +319,7 @@ export function StatLayoutCard({
   };
 
   return (
-    <div className={`character-card character-card--${modifier}`}>
+    <div ref={cardRef} className={`character-card character-card--${modifier}`}>
       <h3 className="character-card__header">{title}</h3>
       <div className="character-card__body">
         {rows.map((row, index) => (
@@ -301,7 +411,28 @@ export function StatLayoutCard({
             )}
             <div className="stat-field__actions">
               {canEditLayout && (
-                <details className="stat-field__menu">
+                <details
+                  className="stat-field__menu"
+                  onKeyDownCapture={(event) => {
+                    const menu = event.currentTarget;
+                    if (event.key !== "Escape" || !menu.open) return;
+                    const target = event.target;
+                    // React keyboard events from a portalled child still pass
+                    // through this component. Do not intercept a nested dialog.
+                    if (!(target instanceof Node) || !menu.contains(target))
+                      return;
+                    const targetDialog =
+                      target instanceof Element
+                        ? target.closest('[role="dialog"], dialog')
+                        : null;
+                    const ownerDialog = menu.closest('[role="dialog"], dialog');
+                    if (targetDialog && targetDialog !== ownerDialog) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    menu.open = false;
+                    menu.querySelector<HTMLElement>("summary")?.focus();
+                  }}
+                >
                   <summary aria-label={`Действия строки «${row.label}»`}>
                     …
                   </summary>
@@ -318,6 +449,7 @@ export function StatLayoutCard({
                       title="Переместить выше"
                     >
                       <AppIcon icon={MoveUpIcon} />
+                      <span className="stat-field__menu-label">Выше</span>
                     </Button>
                     <Button
                       view="flat"
@@ -331,6 +463,7 @@ export function StatLayoutCard({
                       title="Переместить ниже"
                     >
                       <AppIcon icon={MoveDownIcon} />
+                      <span className="stat-field__menu-label">Ниже</span>
                     </Button>
                     <Button
                       view="flat"
@@ -343,6 +476,7 @@ export function StatLayoutCard({
                       title="Переименовать строку"
                     >
                       <AppIcon icon={RenameIcon} />
+                      <span className="stat-field__menu-label">Переименовать</span>
                     </Button>
                     <Button
                       view="flat"
@@ -364,6 +498,7 @@ export function StatLayoutCard({
                       }
                     >
                       <AppIcon icon={DeleteIcon} />
+                      <span className="stat-field__menu-label">Удалить</span>
                     </Button>
                   </div>
                 </details>

@@ -10,6 +10,7 @@ export type MapTool =
   | "FOG"
   | "COVER"
   | "DRAW"
+  | "STAMP"
   | "RULER"
   | "PING"
   | "SCENE_REGION"

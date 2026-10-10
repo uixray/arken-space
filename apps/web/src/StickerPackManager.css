@@ -1,0 +1,43 @@
+.sticker-pack-manager {
+  margin-top: var(--space-md);
+}
+
+.sticker-pack-fields,
+.sticker-pack-draft,
+.sticker-pack-file-list {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.sticker-pack-server-list {
+  display: grid;
+  gap: var(--space-xs);
+  margin-block: var(--space-sm);
+}
+
+.sticker-pack-server-list ul {
+  display: grid;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sticker-pack-file-list {
+  max-height: min(60vh, 720px);
+  overflow: auto;
+}
+
+.sticker-pack-file {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 0;
+  padding: var(--space-sm);
+  border: 1px solid var(--line);
+  background: var(--panel-soft);
+}
+
+.sticker-pack-file legend {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}

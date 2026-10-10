@@ -157,6 +157,12 @@ vi.mock("./CharacterMediaGallery", () => ({
   ),
 }));
 
+// Spell-branch API behavior has its own focused suite; keep role-access tests
+// isolated from that read-only request while asserting Identity placement.
+vi.mock("../CharacterSpellBranches", () => ({
+  CharacterSpellBranches: () => null,
+}));
+
 const unexpectedAction = (): never => {
   throw new Error("Backstory test must not execute another campaign command");
 };
@@ -246,6 +252,31 @@ const actions: CampaignActions = {
   },
   statLayout: { onUpdateStatLayout: unexpectedAction },
   chatHistory: { onLoadThreadHistory: unexpectedAction },
+  character: {
+    replaceCharacterControllers: unexpectedAction,
+    patchCharacter: unexpectedAction,
+    updateCharacterCounters: unexpectedAction,
+    onCreateCharacter: unexpectedAction,
+  },
+  initiative: {
+    onUpdateInitiative: unexpectedAction,
+    onSetOwnInitiative: unexpectedAction,
+    onRollInitiative: unexpectedAction,
+    onSetBattleZone: unexpectedAction,
+    onRecruitFromBattleZone: unexpectedAction,
+  },
+  dice: { onRoll: unexpectedAction },
+  campaign: { onCampaignClock: unexpectedAction },
+  player: { onPreviewPlayer: unexpectedAction },
+  sidebar: {
+    onRequestedChatMessageHandled: unexpectedAction,
+    onChatVisibilityChange: unexpectedAction,
+    onCollapsedChange: unexpectedAction,
+    onResizeHandleDown: unexpectedAction,
+    onResizeHandleMove: unexpectedAction,
+    onResizeHandleUp: unexpectedAction,
+    onWorkspaceChange: unexpectedAction,
+  },
 };
 
 function makeCharacter(overrides: Partial<CharacterDto> = {}): CharacterDto {

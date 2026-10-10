@@ -185,7 +185,11 @@ export function StoryPost({
   }
 
   return (
-    <article className="story-post" data-story-lifecycle={post.lifecycle}>
+    <article
+      id={`story-post-${post.id}`}
+      className="story-post"
+      data-story-lifecycle={post.lifecycle}
+    >
       <header className="story-post__header">
         <div>
           <span className="eyebrow">

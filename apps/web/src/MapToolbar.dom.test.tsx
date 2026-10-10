@@ -2,8 +2,17 @@
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
-import { renderComponent, screen, userEvent } from "./test-support/render";
+import {
+  renderComponent,
+  screen,
+  userEvent,
+  waitFor,
+} from "./test-support/render";
 import { MapToolbar, type MapToolbarProps } from "./MapToolbar";
+import {
+  MAP_TOOL_SHORTCUTS,
+  shortcutLabel,
+} from "./renderers/map-tool-shortcuts";
 import { cursorPreferenceDefault } from "./cursor-preference";
 import { writeToolbarCollapsed } from "./toolbar-preference";
 
@@ -112,17 +121,27 @@ describe("MapToolbar — панель инструментов карты (UIX-4
   beforeEach(() => {
     writeToolbarCollapsed(window.localStorage, "m1", false);
   });
-  it("keeps pause below shortcuts, outside scrolling tools", () => {
+  it("keeps every toolbar control in the single full-height scroller", () => {
     const { container } = renderComponent(
       <MapToolbar
-        {...createDefaultProps({ pauseControl: <button>Pause</button> })}
+        {...createDefaultProps({ pauseControl: <button>Pause</button>, onToggleObjectList: vi.fn() })}
       />,
     );
     const toolbar = container.querySelector(".map-toolbar")!;
-    expect(toolbar.lastElementChild).toHaveClass("map-toolbar__pause");
-    expect(toolbar.lastElementChild).toContainElement(
+    const scroller = toolbar.querySelector(".map-toolbar__scroll")!;
+    expect(toolbar.firstElementChild).toHaveClass("map-toolbar__collapse");
+    expect(scroller).toContainElement(
       screen.getByRole("button", { name: "Pause" }),
     );
+    expect(scroller).toContainElement(screen.getByRole("button", { name: "Pause" }));
+    expect(scroller.querySelector(".map-toolbar__pause")).toBeInTheDocument();
+    expect(scroller.lastElementChild).toHaveAttribute("data-tool", "STAMP");
+    expect(scroller).toContainElement(screen.getByRole("button", { name: "Перемещение" }));
+    const objectList = screen.getByRole("button", {
+      name: "Список объектов и токенов карты",
+    });
+    expect(scroller).toContainElement(objectList);
+    expect(objectList).toHaveTextContent("Список");
   });
 
   it("рендерит инструменты для роли PLAYER: без тумана и боевой зоны", () => {
@@ -133,7 +152,7 @@ describe("MapToolbar — панель инструментов карты (UIX-4
       cursorPreference: cursorPreferenceDefault("PLAYER"),
     });
 
-    renderComponent(<MapToolbar {...props} />);
+    const { container } = renderComponent(<MapToolbar {...props} />);
 
     expect(
       screen.getByRole("button", { name: "Перемещение" }),
@@ -153,6 +172,120 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     expect(
       screen.queryByRole("button", { name: "Обвести зону боя" }),
     ).not.toBeInTheDocument();
+    for (const entry of MAP_TOOL_SHORTCUTS.filter(
+      (shortcut) => shortcut.gmOnly,
+    )) {
+      expect(
+        container.querySelector(`[data-tool="${entry.tool}"]`),
+        `${entry.tool} is GM-only`,
+      ).toBeNull();
+      if (entry.shiftTool)
+        expect(
+          container.querySelector(`[data-tool="${entry.shiftTool}"]`),
+          `${entry.shiftTool} is GM-only`,
+        ).toBeNull();
+    }
+  });
+
+  it("shows each canonical shortcut in the actual GM toolbar tooltip", async () => {
+    const user = userEvent.setup();
+    const { container } = renderComponent(
+      <MapToolbar {...createDefaultProps()} />,
+    );
+    const toolbar = container.querySelector(".map-toolbar")!;
+
+    for (const entry of MAP_TOOL_SHORTCUTS) {
+      const trigger = toolbar.querySelector<HTMLElement>(
+        `[data-tool="${entry.tool}"]`,
+      );
+      expect(trigger, `${entry.tool} trigger`).not.toBeNull();
+      await user.hover(trigger!);
+      const tooltip = await screen.findByRole("tooltip");
+      expect(
+        tooltip.textContent?.trim().split("·").at(-1)?.trim(),
+        `${entry.tool} tooltip shortcut`,
+      ).toBe(shortcutLabel(entry.tool));
+      await user.unhover(trigger!);
+      await waitFor(() =>
+        expect(screen.queryByRole("tooltip")).not.toBeInTheDocument(),
+      );
+
+      if (entry.shiftTool) {
+        const shiftTrigger = toolbar.querySelector<HTMLElement>(
+          `[data-tool="${entry.shiftTool}"]`,
+        );
+        expect(shiftTrigger, `${entry.shiftTool} trigger`).not.toBeNull();
+        await user.hover(shiftTrigger!);
+        const shiftTooltip = await screen.findByRole("tooltip");
+        expect(
+          shiftTooltip.textContent?.trim().split("·").at(-1)?.trim(),
+          `${entry.shiftTool} tooltip shortcut`,
+        ).toBe(shortcutLabel(entry.shiftTool));
+        await user.unhover(shiftTrigger!);
+        await waitFor(() =>
+          expect(screen.queryByRole("tooltip")).not.toBeInTheDocument(),
+        );
+      }
+    }
+  });
+
+  it("keeps the GM fog heading between navigation and map markers", () => {
+    const { container } = renderComponent(
+      <MapToolbar {...createDefaultProps()} />,
+    );
+    const group = container.querySelector(".toolbar-group")!;
+    const children = Array.from(group.children);
+    const indexOfText = (text: string) =>
+      children.findIndex((child) => child.textContent?.trim() === text);
+    const fogHeading = indexOfText("Туман");
+    const markersHeading = indexOfText("Метки");
+    const pan = children.findIndex(
+      (child) => child.getAttribute("data-tool") === "PAN",
+    );
+    const fog = children.findIndex(
+      (child) => child.getAttribute("data-tool") === "FOG",
+    );
+    const ruler = children.findIndex(
+      (child) => child.getAttribute("data-tool") === "RULER",
+    );
+
+    expect(pan).toBeGreaterThanOrEqual(0);
+    expect(fogHeading).toBeGreaterThan(pan);
+    expect(fog).toBeGreaterThan(fogHeading);
+    expect(markersHeading).toBeGreaterThan(fog);
+    expect(ruler).toBeGreaterThan(markersHeading);
+  });
+
+  it("keeps stamp as the final GM toolbar action and opens an adjacent dismissible popup", async () => {
+    const user = userEvent.setup();
+    const props = createDefaultProps();
+    const { container } = renderComponent(<MapToolbar {...props} />);
+    const scroller = container.querySelector(".map-toolbar__scroll")!;
+    const stamp = screen.getByRole("button", { name: "Штамп рельефа" });
+    expect(scroller.lastElementChild).toBe(stamp);
+
+    await user.click(stamp);
+    const popup = screen.getByRole("dialog", { name: "Штампы рельефа" });
+    expect(scroller).not.toContainElement(popup);
+    expect(popup.parentElement).toBe(document.body);
+
+    popup.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Штампы рельефа" })).not.toBeInTheDocument());
+    await waitFor(() => expect(stamp).toHaveFocus());
+    expect(props.onToolSelect).toHaveBeenLastCalledWith("PAN");
+  });
+
+  it("dismisses the stamp popup on outside pointer interaction without stealing focus", async () => {
+    const user = userEvent.setup();
+    const props = createDefaultProps();
+    const { container } = renderComponent(<MapToolbar {...props} />);
+    const stamp = screen.getByRole("button", { name: "Штамп рельефа" });
+    await user.click(stamp);
+    expect(screen.getByRole("dialog", { name: "Штампы рельефа" })).toBeInTheDocument();
+    const outside = container.querySelector(".map-toolbar__collapse")!;
+    await user.click(outside);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Штампы рельефа" })).not.toBeInTheDocument());
+    expect(props.onToolSelect).toHaveBeenLastCalledWith("STAMP");
   });
 
   it("рендерит инструменты GM без отключённого боя (UIX-621)", () => {
@@ -240,6 +373,44 @@ describe("MapToolbar — панель инструментов карты (UIX-4
 
     expect(fog).not.toHaveFocus();
     expect(escape.defaultPrevented).toBe(false);
+  });
+
+  it("lets an open tooltip own the first Escape before toolbar focus is released", async () => {
+    const props = createDefaultProps();
+    renderComponent(<MapToolbar {...props} />);
+    const fog = screen.getByRole("button", { name: "Открыть туман" });
+    await userEvent.hover(fog);
+    expect(await screen.findByRole("tooltip")).toBeInTheDocument();
+    fog.focus();
+
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument(),
+    );
+    const tooltipId = fog.getAttribute("aria-describedby");
+    const staleTooltip = tooltipId && document.getElementById(tooltipId);
+    if (staleTooltip) expect(staleTooltip).not.toHaveAttribute("data-open");
+    expect(fog).toHaveFocus();
+
+    await userEvent.keyboard("{Escape}");
+    expect(fog).not.toHaveFocus();
+  });
+
+  it("does not let a stale closed tooltip node keep toolbar focus on Escape", async () => {
+    const props = createDefaultProps();
+    renderComponent(<MapToolbar {...props} />);
+    const fog = screen.getByRole("button", { name: "Открыть туман" });
+    const stale = document.createElement("div");
+    stale.id = "stale-toolbar-tooltip";
+    stale.setAttribute("role", "tooltip");
+    document.body.append(stale);
+    fog.setAttribute("aria-describedby", stale.id);
+    fog.focus();
+
+    await userEvent.keyboard("{Escape}");
+
+    expect(fog).not.toHaveFocus();
+    stale.remove();
   });
 
   it("не возвращает боевые кнопки при сохранённом активном столкновении", () => {

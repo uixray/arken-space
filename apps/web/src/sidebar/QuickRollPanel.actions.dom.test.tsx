@@ -17,7 +17,7 @@ beforeEach(() => window.localStorage.clear());
 
 for (const kind of ["ABILITY", "SKILL"] as const) {
   for (const executable of [false, true]) {
-    it(`${kind} ${executable ? "executes its roll" : "shares without an invalid execute request"}`, async () => {
+    it(`${kind} ${executable ? "executes its roll" : kind === "ABILITY" ? "activates without a roll" : "shares without an invalid execute request"}`, async () => {
       const entry = {
         id: "entry",
         kind,
@@ -26,6 +26,9 @@ for (const kind of ["ABILITY", "SKILL"] as const) {
         sourceCatalogEntryId: null,
         revision: 3,
         data: {
+          ...(kind === "ABILITY" && !executable
+            ? { activation: { consumeUse: true }, uses: { current: 1, max: 1, recharge: "DAY" } }
+            : {}),
           rollActions: executable
             ? [
                 {
@@ -62,7 +65,8 @@ for (const kind of ["ABILITY", "SKILL"] as const) {
       fireEvent.click(screen.getByRole("button", { name: "Теневой шаг" }));
       await waitFor(() => expect(onEntryAction).toHaveBeenCalledOnce());
       const [, mode, rollActionId] = onEntryAction.mock.calls[0]!;
-      expect(mode).toBe(executable ? "EXECUTE" : "SHARE");
+      const expectedMode = executable || kind === "ABILITY" ? "EXECUTE" : "SHARE";
+      expect(mode).toBe(expectedMode);
       expect(rollActionId).toBe(executable ? "strike" : undefined);
       expect(
         entryRollRequestSchema.safeParse({

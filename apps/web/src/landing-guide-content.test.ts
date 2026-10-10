@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolveMapToolShortcut } from "./renderers/map-interaction";
+import {
+  resolveMapToolShortcut,
+  resolveTokenMoveKey,
+} from "./renderers/map-interaction";
 import { MAP_TOOL_SHORTCUTS } from "./renderers/map-tool-shortcuts";
 import { getSlashCommandSuggestions } from "./chat-composer";
 import { decideComposerKeydown } from "./composer-keyboard-intent";
@@ -29,6 +32,37 @@ const shortcutsFor = (title: string) =>
   canvasSections.find((section) => section.title === title)!.shortcuts;
 
 describe("the landing guide describes shortcuts that exist", () => {
+  it("documents WASD movement with its PAN, selection, grid and Shift constraints", () => {
+    const tokenShortcuts = shortcutsFor("Токены");
+    expect(
+      tokenShortcuts.find((item) => item.keys.join("+") === "W+A+S+D")?.action,
+    ).toContain("режиме перемещения");
+    expect(
+      tokenShortcuts.find((item) => item.keys.join("+") === "Shift+WASD")
+        ?.action,
+    ).toContain("пять раз");
+    const input = {
+      key: "w",
+      repeat: false,
+      tool: "PAN" as const,
+      hasSelectedToken: true,
+      gridEnabled: true,
+      gridSize: 64,
+      shiftKey: false,
+    };
+    expect(resolveTokenMoveKey(input)).toEqual({ delta: { x: 0, y: -64 } });
+    expect(resolveTokenMoveKey({ ...input, shiftKey: true })).toEqual({
+      delta: { x: 0, y: -320 },
+    });
+    expect(resolveTokenMoveKey({ ...input, gridEnabled: false })).toEqual({
+      delta: { x: 0, y: -8 },
+    });
+    expect(resolveTokenMoveKey({ ...input, tool: "DRAW" })).toBeNull();
+    expect(
+      resolveTokenMoveKey({ ...input, hasSelectedToken: false }),
+    ).toBeNull();
+  });
+
   it("lists tool keys the canvas actually resolves", () => {
     const tools = shortcutsFor("Инструменты")
       .map((shortcut) => shortcut.keys[0]!)

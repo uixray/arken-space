@@ -26,6 +26,13 @@ const ids = {
   entity: id(),
   draftEntity: id(),
   archivedEntity: id(),
+  worldMap: id(),
+  foreignWorldMap: id(),
+  location: id(),
+  foreignLocation: id(),
+  portrait: id(),
+  foreignPortrait: id(),
+  audioAsset: id(),
 };
 const secrets = {
   gm: "g".repeat(40),
@@ -74,6 +81,72 @@ beforeAll(async () => {
       campaignId: ids.cascadeCampaign,
       role: "GM",
       displayName: "Cascade GM",
+    },
+  ]);
+  await db.insert(schema.assets).values([
+    {
+      id: ids.portrait,
+      campaignId: ids.campaign,
+      uploadedByMembershipId: ids.gm,
+      kind: "IMAGE",
+      name: "Portrait",
+      storageKey: `test/${ids.portrait}`,
+      mimeType: "image/png",
+      sizeBytes: 1024,
+      width: 64,
+      height: 64,
+    },
+    {
+      id: ids.foreignPortrait,
+      campaignId: ids.foreignCampaign,
+      uploadedByMembershipId: ids.foreignGm,
+      kind: "PORTRAIT",
+      name: "Foreign portrait",
+      storageKey: `test/${ids.foreignPortrait}`,
+      mimeType: "image/jpeg",
+      sizeBytes: 1024,
+      width: 64,
+      height: 64,
+    },
+    {
+      id: ids.audioAsset,
+      campaignId: ids.campaign,
+      uploadedByMembershipId: ids.gm,
+      kind: "AUDIO",
+      audioPurpose: "MUSIC",
+      name: "Sound",
+      storageKey: `test/${ids.audioAsset}`,
+      mimeType: "audio/ogg",
+      sizeBytes: 1024,
+      width: null,
+      height: null,
+      durationSeconds: 1,
+    },
+  ]);
+  await db.insert(schema.worldMaps).values([
+    { id: ids.worldMap, campaignId: ids.campaign, name: "Current map" },
+    {
+      id: ids.foreignWorldMap,
+      campaignId: ids.foreignCampaign,
+      name: "Foreign map",
+    },
+  ]);
+  await db.insert(schema.worldMapLocations).values([
+    {
+      id: ids.location,
+      campaignId: ids.campaign,
+      mapId: ids.worldMap,
+      name: "Harbor",
+      x: 0.5,
+      y: 0.5,
+    },
+    {
+      id: ids.foreignLocation,
+      campaignId: ids.foreignCampaign,
+      mapId: ids.foreignWorldMap,
+      name: "Foreign harbor",
+      x: 0.5,
+      y: 0.5,
     },
   ]);
   for (const [membershipId, secret] of [
@@ -149,6 +222,71 @@ describe("world content instances HTTP: create", () => {
       discovered: false,
       revision: 0,
     });
+  });
+
+  it("accepts campaign image/location references and rejects invalid references without audit writes", async () => {
+    const accepted = await createInstance(secrets.gm, {
+      portraitAssetId: ids.portrait,
+      currentLocationId: ids.location,
+    });
+    expect(accepted.statusCode).toBe(201);
+    expect(accepted.json()).toMatchObject({
+      portraitAssetId: ids.portrait,
+      currentLocationId: ids.location,
+    });
+
+    const invalidCases = [
+      { portraitAssetId: id() },
+      { portraitAssetId: ids.foreignPortrait },
+      { portraitAssetId: ids.audioAsset },
+      { currentLocationId: id() },
+      { currentLocationId: ids.foreignLocation },
+    ];
+    for (const overrides of invalidCases) {
+      const body = createBody(overrides);
+      const rejected = await app.inject({
+        method: "POST",
+        url: "/api/world-content-instances",
+        headers: headers(secrets.gm),
+        payload: body,
+      });
+      expect(rejected.statusCode).toBe(400);
+      expect(rejected.json().error).toMatch(
+        /^WORLD_CONTENT_(PORTRAIT|LOCATION)_/,
+      );
+      const [action] = await db
+        .select()
+        .from(schema.worldContentInstanceActions)
+        .where(eq(schema.worldContentInstanceActions.actionId, body.actionId));
+      expect(action).toBeUndefined();
+    }
+  });
+
+  it("accepts only a same-campaign membership owner on create", async () => {
+    const assigned = await createInstance(secrets.gm, {
+      ownerMembershipId: ids.player,
+    });
+    expect(assigned.statusCode).toBe(201);
+    expect(assigned.json().ownerMembershipId).toBe(ids.player);
+
+    for (const ownerMembershipId of [id(), ids.foreignGm]) {
+      const body = createBody({ ownerMembershipId });
+      const rejected = await app.inject({
+        method: "POST",
+        url: "/api/world-content-instances",
+        headers: headers(secrets.gm),
+        payload: body,
+      });
+      expect(rejected.statusCode).toBe(400);
+      expect(rejected.json()).toEqual({
+        error: "WORLD_CONTENT_OWNER_NOT_IN_CAMPAIGN",
+      });
+      const [action] = await db
+        .select()
+        .from(schema.worldContentInstanceActions)
+        .where(eq(schema.worldContentInstanceActions.actionId, body.actionId));
+      expect(action).toBeUndefined();
+    }
   });
 
   it("forbids a non-GM from creating", async () => {
@@ -254,6 +392,136 @@ describe("world content instances HTTP: list/get", () => {
 });
 
 describe("world content instances HTTP: update", () => {
+  it("validates new references but preserves and clears a historical orphan portrait", async () => {
+    const created = (await createInstance(secrets.gm)).json();
+    const orphanPortraitId = id();
+    await db
+      .update(schema.worldContentInstances)
+      .set({
+        portraitAssetId: orphanPortraitId,
+        currentLocationId: ids.location,
+      })
+      .where(eq(schema.worldContentInstances.id, created.id));
+
+    const unrelated = await app.inject({
+      method: "PATCH",
+      url: `/api/world-content-instances/${created.id}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        revision: created.revision,
+        currentState: "changed without touching references",
+      },
+    });
+    expect(unrelated.statusCode).toBe(200);
+    expect(unrelated.json()).toMatchObject({
+      portraitAssetId: orphanPortraitId,
+      currentLocationId: ids.location,
+    });
+
+    for (const overrides of [
+      { portraitAssetId: ids.foreignPortrait },
+      { portraitAssetId: ids.audioAsset },
+      { currentLocationId: ids.foreignLocation },
+    ]) {
+      const body = {
+        actionId: id(),
+        revision: unrelated.json().revision,
+        ...overrides,
+      };
+      const rejected = await app.inject({
+        method: "PATCH",
+        url: `/api/world-content-instances/${created.id}`,
+        headers: headers(secrets.gm),
+        payload: body,
+      });
+      expect(rejected.statusCode).toBe(400);
+      const [action] = await db
+        .select()
+        .from(schema.worldContentInstanceActions)
+        .where(eq(schema.worldContentInstanceActions.actionId, body.actionId));
+      expect(action).toBeUndefined();
+    }
+
+    const clear = await app.inject({
+      method: "PATCH",
+      url: `/api/world-content-instances/${created.id}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        revision: unrelated.json().revision,
+        portraitAssetId: null,
+        currentLocationId: null,
+      },
+    });
+    expect(clear.statusCode).toBe(200);
+    expect(clear.json()).toMatchObject({
+      portraitAssetId: null,
+      currentLocationId: null,
+    });
+  });
+
+  it("sets, retains, and clears a same-campaign owner; rejects foreign or unknown owners", async () => {
+    const created = (await createInstance(secrets.gm)).json();
+    const assign = await app.inject({
+      method: "PATCH",
+      url: `/api/world-content-instances/${created.id}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        revision: created.revision,
+        ownerMembershipId: ids.player,
+      },
+    });
+    expect(assign.statusCode).toBe(200);
+    expect(assign.json().ownerMembershipId).toBe(ids.player);
+
+    const unrelated = await app.inject({
+      method: "PATCH",
+      url: `/api/world-content-instances/${created.id}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        revision: assign.json().revision,
+        currentState: "still assigned",
+      },
+    });
+    expect(unrelated.json().ownerMembershipId).toBe(ids.player);
+
+    for (const ownerMembershipId of [id(), ids.foreignGm]) {
+      const body = {
+        actionId: id(),
+        revision: unrelated.json().revision,
+        ownerMembershipId,
+      };
+      const rejected = await app.inject({
+        method: "PATCH",
+        url: `/api/world-content-instances/${created.id}`,
+        headers: headers(secrets.gm),
+        payload: body,
+      });
+      expect(rejected.statusCode).toBe(400);
+      const [action] = await db
+        .select()
+        .from(schema.worldContentInstanceActions)
+        .where(eq(schema.worldContentInstanceActions.actionId, body.actionId));
+      expect(action).toBeUndefined();
+    }
+
+    const clear = await app.inject({
+      method: "PATCH",
+      url: `/api/world-content-instances/${created.id}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        revision: unrelated.json().revision,
+        ownerMembershipId: null,
+      },
+    });
+    expect(clear.statusCode).toBe(200);
+    expect(clear.json().ownerMembershipId).toBeNull();
+  });
+
   it("lets the GM update overrides with revision CAS", async () => {
     const created = (await createInstance(secrets.gm)).json();
     const res = await app.inject({

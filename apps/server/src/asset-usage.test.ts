@@ -5,8 +5,10 @@ import {
   assetUsagePolicy,
   assetDto,
   assetContentVersion,
+  assetUploadActionMatches,
   deleteUnusedAsset,
 } from "./asset-lifecycle.js";
+import { postgresErrorCode } from "./database-errors.js";
 
 const asset = {
   id: "00000000-0000-4000-8000-000000000001",
@@ -28,7 +30,7 @@ const usage = (kind: AssetUsageDto["kind"]): AssetUsageDto => ({
   label: "Safe label",
   visibility: "GM_ONLY",
   deletionPolicy:
-    kind === "GENERATED_TOKEN_SOURCE" ? "RETAIN_HISTORY" : "BLOCK",
+    kind === "GENERATED_TOKEN_SOURCE" ? "RETAIN_HISTORY" : "DETACH",
 });
 
 describe("asset dependency registry", () => {
@@ -36,6 +38,7 @@ describe("asset dependency registry", () => {
     expect(ASSET_DEPENDENCY_REGISTRY).toEqual([
       "SCENE_BACKGROUND",
       "TOKEN_DEFINITION",
+      "TOKEN_INSTANCE",
       "CHARACTER_PORTRAIT",
       "CHARACTER_RESOURCE",
       "CHARACTER_MEDIA",
@@ -43,9 +46,18 @@ describe("asset dependency registry", () => {
       "AUDIO_TRACK",
       "WORLD_CONTENT_COVER",
       "WORLD_CONTENT_MEDIA",
+      "WORLD_CONTENT_INSTANCE_PORTRAIT",
       "GENERATED_TOKEN_SOURCE",
     ]);
   });
+});
+
+it("extracts a wrapped PostgreSQL unique-conflict code safely", () => {
+  expect(postgresErrorCode({ cause: { code: "23505" } })).toBe("23505");
+  expect(postgresErrorCode({ cause: { cause: { code: "23503" } } })).toBe("23503");
+  const cyclic: { cause?: unknown; code?: string } = {};
+  cyclic.cause = cyclic;
+  expect(postgresErrorCode(cyclic)).toBeUndefined();
 });
 
 describe("asset usage policy", () => {
@@ -59,13 +71,13 @@ describe("asset usage policy", () => {
     });
   });
 
-  it("returns multiple dependencies to a GM and blocks deletion", () => {
+  it("returns detachable dependencies to a GM and permits a safe detach-and-delete", () => {
     const usages = [usage("SCENE_BACKGROUND"), usage("AUDIO_TRACK")];
     expect(assetUsagePolicy(asset, usages, { role: "GM" })).toMatchObject({
       inUse: true,
       usages,
-      canDelete: false,
-      deletionBlockedReason: "ASSET_IN_USE",
+      canDelete: true,
+      deletionBlockedReason: null,
     });
   });
 
@@ -102,7 +114,7 @@ describe("asset deletion orchestration", () => {
     const deleteMetadata = vi.fn();
     const removeBlob = vi.fn();
     await expect(
-      deleteUnusedAsset(asset.id, [usage("TOKEN_DEFINITION")], {
+      deleteUnusedAsset(asset.id, [{ ...usage("TOKEN_DEFINITION"), deletionPolicy: "BLOCK" }], {
         deleteMetadata,
         removeBlob,
       }),
@@ -185,4 +197,12 @@ it("changes rendered content URL only when blob version changes, retaining canon
     assetContentVersion("new-private-blob.webp").slice(1, -1),
   );
   expect(JSON.stringify(replaced)).not.toContain("new-private-blob");
+});
+
+it("binds upload action replay to audio purpose while retaining the legacy MUSIC default", () => {
+  expect(assetUploadActionMatches({ kind: "AUDIO" }, "AUDIO", "MUSIC")).toBe(true);
+  expect(assetUploadActionMatches({ kind: "AUDIO", audioPurpose: "SOUND_EFFECT" }, "AUDIO", "SOUND_EFFECT")).toBe(true);
+  expect(assetUploadActionMatches({ kind: "AUDIO", audioPurpose: "MUSIC" }, "AUDIO", "SOUND_EFFECT")).toBe(false);
+  expect(assetUploadActionMatches({ kind: "IMAGE" }, "IMAGE", null)).toBe(true);
+  expect(assetUploadActionMatches({ kind: "IMAGE", audioPurpose: "MUSIC" }, "IMAGE", null)).toBe(false);
 });

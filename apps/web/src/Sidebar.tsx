@@ -1,34 +1,25 @@
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
   ChatStream,
-  CharacterDto,
   GameSnapshot,
-  InitiativeParticipantDto,
-  MessageVisibility,
   StoryPostAdminDto,
   StoryPostDto,
 } from "@arken/contracts";
 import { Button } from "./design-system/Button";
 import type { GameSocket } from "./realtime";
 import { useCampaignActions } from "./campaign-actions-context";
-import type { CharacterTemplateFields } from "./character-workspace-state";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { AppIcon } from "./ui/AppIcon";
 import { SidebarCollapseIcon } from "./ui/icons";
 import { SceneManagerDialog } from "./ui/SceneManagerDialog";
 import { StoryChannel } from "./StoryChannel";
+import { StoryAttachmentLibrary } from "./StoryAttachmentLibrary";
 import { useThreadHistory } from "./use-thread-history";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
 import { WorldContentWorkspace } from "./WorldContentWorkspace";
+import { SpellSchoolsWorkspace } from "./SpellSchoolsWorkspace";
 import { WorldEncyclopediaWorkspace } from "./WorldEncyclopediaWorkspace";
 import { PlayerRequestsWorkspace } from "./PlayerRequestsWorkspace";
 import {
@@ -55,7 +46,6 @@ import {
 import { PalettePanel } from "./sidebar/TokenPalette";
 import { SetupPanel } from "./sidebar/SetupPanel";
 import { MediaPanel } from "./sidebar/MediaPanel";
-import type { CharacterCounterMutationIntent } from "./character-counter-mutation";
 import { CampaignStatLabelsProvider } from "./campaign-stat-labels-context";
 
 type SidebarFeed = "ACTIVITY" | ChatStream;
@@ -83,70 +73,16 @@ export type Props = {
   requestedCharacterId?: string | null;
   socket: GameSocket | null;
   presence: Array<{ membershipId: string; online: boolean }>;
-  onReplaceCharacterControllers: (
-    characterId: string,
-    revision: number,
-    controllerMembershipIds: string[],
-  ) => Promise<void>;
-  onPatchCharacter: (id: string, patch: Partial<CharacterDto>) => Promise<void>;
   storyPosts: Array<StoryPostDto | StoryPostAdminDto>;
   storyNextCursor: string | null;
-  onRoll: (
-    formula: string,
-    label?: string,
-    visibility?: MessageVisibility,
-    characterId?: string | null,
-    rollMode?: "NORMAL" | "ADVANTAGE" | "DISADVANTAGE",
-  ) => Promise<void>;
-  onCreateCharacter: (
-    name: string,
-    template?: CharacterTemplateFields,
-  ) => Promise<void>;
   viewedSceneId: string | null;
   sceneDialogRequest: number;
   requestedSceneEditId?: string | null;
   /** UIX-431: выделение с карты и правка очереди ходов. */
   selectedTokenIds: readonly string[];
-  onUpdateInitiative: (
-    participants: InitiativeParticipantDto[],
-    revision: number,
-  ) => Promise<void>;
-  onSetOwnInitiative: (
-    participantId: string,
-    initiative: number | null,
-    revision: number,
-  ) => Promise<void>;
-  onRollInitiative: (
-    participants: readonly InitiativeParticipantDto[],
-    participant: InitiativeParticipantDto,
-    revision: number,
-    isGm: boolean,
-  ) => Promise<void>;
-  /** UIX-466 п. 3: подтянуть в очередь тех, кто в зоне боя; отсутствует, когда зона не задана. */
-  onRecruitFromBattleZone?: () => void;
-  onPreviewPlayer: (membershipId: string) => Promise<void>;
-  onUpdateCounters: (
-    characterId: string,
-    revision: number,
-    patch: {
-      wallet?: CharacterDto["wallet"];
-      resources?: CharacterDto["resources"];
-      rest?: "SHORT" | "LONG";
-    },
-    intent?: CharacterCounterMutationIntent,
-  ) => Promise<void>;
-  onCampaignClock: (
-    command:
-      | "ADVANCE_DAY"
-      | "LONG_REST"
-      | "START_BATTLE"
-      | "END_BATTLE"
-      | "RESET_CLOCK",
-    revision: number,
-  ) => Promise<void>;
+  /** Mirrors the preview-aware battle-zone availability from App's view snapshot. */
+  canRecruitFromBattleZone: boolean;
   requestedChatMessageId: string | null;
-  onRequestedChatMessageHandled: () => void;
-  onChatVisibilityChange: (visible: boolean) => void;
   collapsed: boolean;
   /** Compact surfaces retain one mounted feed and one cached character portal. */
   compact?: boolean;
@@ -154,13 +90,6 @@ export type Props = {
   keepCharacterWorkspaceMounted?: boolean;
   /** Width of the journal column, forwarded to body-portalled workspaces. */
   workspaceSidebarWidth?: number | null;
-  onCollapsedChange: (collapsed: boolean) => void;
-  /** UIX-372: pointer handlers driving the sidebar's drag-to-resize width
-   * handle. Left to the caller (App.tsx) since it owns the persisted width
-   * and the `--sidebar-width` custom property on `.workbench`. */
-  onResizeHandleDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onResizeHandleMove: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onResizeHandleUp: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   workspace:
     | "characters"
     | "tokens"
@@ -172,24 +101,10 @@ export type Props = {
     | "operator-feedback"
     | "player-requests"
     | "world-encyclopedia"
+    | "spell-schools"
     | "world-codex"
     | null;
   operatorFeedbackAllowed: boolean;
-  onWorkspaceChange: (
-    workspace:
-      | "characters"
-      | "tokens"
-      | "scenes"
-      | "story"
-      | "setup"
-      | "media"
-      | "world-maps"
-      | "operator-feedback"
-      | "player-requests"
-      | "world-encyclopedia"
-      | "world-codex"
-      | null,
-  ) => void;
 };
 
 function SidebarComponent(props: Props) {
@@ -203,13 +118,14 @@ function SidebarComponent(props: Props) {
 export const Sidebar = memo(SidebarComponent);
 
 function TokenPaletteWorkspacePortal({ props }: { props: Props }) {
+  const { sidebar: sidebarActions } = useCampaignActions();
   return createPortal(
     <ArkenDialog
       open
       footer={false}
       title="Токены"
       variant="workspace"
-      onClose={() => props.onWorkspaceChange(null)}
+      onClose={() => sidebarActions.onWorkspaceChange(null)}
     >
       <PalettePanel {...props} />
     </ArkenDialog>,
@@ -227,14 +143,17 @@ function SidebarContent(props: Props) {
     story: storyActions,
     chat: chatActions,
     asset: assetActions,
+    character: characterActions,
+    initiative: initiativeActions,
+    dice: diceActions,
+    sidebar: sidebarActions,
   } = useCampaignActions();
+  const { requestedChatMessageId, sceneDialogRequest } = props;
   const {
     onChatVisibilityChange,
     onRequestedChatMessageHandled,
-    requestedChatMessageId,
     onWorkspaceChange,
-    sceneDialogRequest,
-  } = props;
+  } = sidebarActions;
   const { onActiveChatThreadChange, onMarkChatRead } = chatActions;
   const { messages: snapshotMessages, chatThreads: snapshotChatThreads } =
     props.snapshot;
@@ -267,6 +186,10 @@ function SidebarContent(props: Props) {
   // inline at each usage site would be a fresh function every Sidebar
   // render (which happens on every realtime snapshot event), defeating
   // React.memo's shallow prop comparison on those panels.
+  const [spellSavePending, setSpellSavePending] = useState(false);
+  const closeSpellWorkspace = useCallback(() => {
+    if (!spellSavePending) onWorkspaceChange(null);
+  }, [spellSavePending, onWorkspaceChange]);
   const closeWorkspace = useCallback(
     () => onWorkspaceChange(null),
     [onWorkspaceChange],
@@ -383,10 +306,10 @@ function SidebarContent(props: Props) {
         className="sidebar-resize-handle"
         aria-label="Изменить ширину боковой панели"
         title="Перетащите, чтобы изменить ширину боковой панели"
-        onPointerDown={props.onResizeHandleDown}
-        onPointerMove={props.onResizeHandleMove}
-        onPointerUp={props.onResizeHandleUp}
-        onPointerCancel={props.onResizeHandleUp}
+        onPointerDown={sidebarActions.onResizeHandleDown}
+        onPointerMove={sidebarActions.onResizeHandleMove}
+        onPointerUp={sidebarActions.onResizeHandleUp}
+        onPointerCancel={sidebarActions.onResizeHandleUp}
       />
       <button
         type="button"
@@ -395,7 +318,7 @@ function SidebarContent(props: Props) {
         aria-expanded="true"
         aria-label="Свернуть боковую панель"
         title="Свернуть боковую панель"
-        onClick={() => props.onCollapsedChange(true)}
+        onClick={() => sidebarActions.onCollapsedChange(true)}
       >
         <AppIcon icon={SidebarCollapseIcon} />
       </button>
@@ -484,18 +407,22 @@ function SidebarContent(props: Props) {
             onActivityFiltersChange={setActivityFilters}
             onChat={chatActions.onChat}
             onSticker={chatActions.onSticker}
-            onRoll={props.onRoll}
+            onRoll={diceActions.onRoll}
             focusedMessageId={focusedMessageId}
             onMessageFocused={() => setFocusedMessageId(null)}
             onOpenPlayerRequestCreate={
               playerRequestActions.onOpenPlayerRequestCreate
             }
-            onUpdateCounters={props.onUpdateCounters}
+            onUpdateCounters={characterActions.updateCharacterCounters}
             selectedTokenIds={props.selectedTokenIds}
-            onUpdateInitiative={props.onUpdateInitiative}
-            onSetOwnInitiative={props.onSetOwnInitiative}
-            onRollInitiative={props.onRollInitiative}
-            onRecruitFromBattleZone={props.onRecruitFromBattleZone}
+            onUpdateInitiative={initiativeActions.onUpdateInitiative}
+            onSetOwnInitiative={initiativeActions.onSetOwnInitiative}
+            onRollInitiative={initiativeActions.onRollInitiative}
+            onRecruitFromBattleZone={
+              props.canRecruitFromBattleZone
+                ? initiativeActions.onRecruitFromBattleZone
+                : undefined
+            }
           />
         ) : (
           <ChatPanel
@@ -503,14 +430,12 @@ function SidebarContent(props: Props) {
             visible={chatVisible}
             onChat={chatActions.onChat}
             onSticker={chatActions.onSticker}
-            onRoll={props.onRoll}
+            onRoll={diceActions.onRoll}
             onMarkChatRead={chatActions.onMarkChatRead}
             activeStream={activeFeed}
             focusedMessageId={focusedMessageId}
             onMessageFocused={() => setFocusedMessageId(null)}
-            onOpenPlayerRequests={() =>
-              props.onWorkspaceChange("player-requests")
-            }
+            onOpenPlayerRequests={() => onWorkspaceChange("player-requests")}
           />
         )}
         {(props.workspace === "characters" ||
@@ -518,7 +443,7 @@ function SidebarContent(props: Props) {
           <CharacterWorkspace
             {...props}
             active={props.workspace === "characters"}
-            onClose={() => props.onWorkspaceChange(null)}
+            onClose={() => onWorkspaceChange(null)}
           />
         )}
         {props.workspace === "story" && isGm && (
@@ -541,6 +466,10 @@ function SidebarContent(props: Props) {
               </button>
             )}
             {storyHistory.error && <p role="alert">{storyHistory.error}</p>}
+            <StoryAttachmentLibrary
+              campaignId={props.snapshot.campaign.id}
+              isGm={isGm}
+            />
             <StoryChannel
               posts={props.storyPosts}
               nextCursor={props.storyNextCursor}
@@ -572,7 +501,7 @@ function SidebarContent(props: Props) {
             variant="workspace"
             className="setup-workspace"
             workspaceDraggable={false}
-            onClose={() => props.onWorkspaceChange(null)}
+            onClose={() => onWorkspaceChange(null)}
           >
             <SetupPanel {...props} />
           </ArkenDialog>
@@ -585,7 +514,7 @@ function SidebarContent(props: Props) {
             viewedSceneId={props.viewedSceneId}
             initialEditSceneId={props.requestedSceneEditId}
             editRequest={props.sceneDialogRequest}
-            onClose={() => props.onWorkspaceChange(null)}
+            onClose={() => onWorkspaceChange(null)}
             onView={sceneActions.onViewScene}
             onPublish={sceneActions.onActivateScene}
             onSave={sceneActions.onSaveScene}
@@ -600,7 +529,7 @@ function SidebarContent(props: Props) {
           <PlayerRequestsWorkspace
             open
             snapshot={props.snapshot}
-            onClose={() => props.onWorkspaceChange(null)}
+            onClose={() => onWorkspaceChange(null)}
             onCreate={playerRequestActions.onCreatePlayerRequest}
             onUpdate={playerRequestActions.onUpdatePlayerRequest}
             onAction={playerRequestActions.onPlayerRequestAction}
@@ -610,10 +539,10 @@ function SidebarContent(props: Props) {
           <WorldMapsWorkspace
             open
             snapshot={props.snapshot}
-            onClose={() => props.onWorkspaceChange(null)}
+            onClose={() => onWorkspaceChange(null)}
             onOpenScene={(sceneId) => {
               sceneActions.onViewScene(sceneId);
-              props.onWorkspaceChange(null);
+              onWorkspaceChange(null);
             }}
             onCreateMap={worldMapActions.onCreateWorldMap}
             onSetDraftBackground={worldMapActions.onSetWorldMapDraftBackground}
@@ -634,9 +563,25 @@ function SidebarContent(props: Props) {
           <WorldContentWorkspace
             open
             assets={props.snapshot.assets}
+            members={props.snapshot.members}
+            worldMaps={props.snapshot.worldMaps}
             onUpload={assetActions.uploadAsset}
             onClose={closeWorkspace}
           />
+        )}
+        {props.workspace === "spell-schools" && isGm && (
+          <ArkenDialog
+            open
+            footer={false}
+            title="Школы заклинаний"
+            variant="workspace"
+            onClose={closeSpellWorkspace}
+          >
+            <SpellSchoolsWorkspace
+              onClose={closeSpellWorkspace}
+              onPendingChange={setSpellSavePending}
+            />
+          </ArkenDialog>
         )}
         {props.workspace === "world-codex" && (
           <WorldEncyclopediaWorkspace
@@ -651,7 +596,7 @@ function SidebarContent(props: Props) {
             footer={false}
             title="Файлы"
             variant="workspace"
-            onClose={() => props.onWorkspaceChange(null)}
+            onClose={() => onWorkspaceChange(null)}
           >
             <MediaPanel
               snapshot={props.snapshot}

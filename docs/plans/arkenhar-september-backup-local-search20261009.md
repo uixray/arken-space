@@ -1,0 +1,57 @@
+# September 19 production-backup local search — 2026-10-09
+
+## Finding
+
+The workstation has **a local proof/restore receipt for the September 19 production Restic snapshot, but no discovered local copy of that snapshot's PostgreSQL dump or complete media archive**. The receipt confirms that the snapshot was selected and restored during the historical release rehearsal; it is not itself a backup payload. This search does not establish that no copy exists elsewhere or that the 2026-09-19 snapshot is current production as of 2026-10-09.
+
+No remote host, Yandex API, Restic repository, credentials, database content, media payload, raw release logs or secret profiles were accessed. Four Arken-named tar archives were enumerated with tar's header-only listing (no extraction or member-content reads); raw member paths were kept out of output. SHA-256 and filesystem metadata were recorded.
+
+## Exact September 19 evidence and backup naming
+
+Primary source: `docs/release-2026-09-19.md` records:
+
+- Confirmed Restic snapshot: `5ae46818eefb19341819a54553d35d9ee50eb5247fc9aace9f90c2e44f4136a9` (the release report also lists an earlier unconfirmed snapshot `c5235abb298c5ae6fd8dafebfd90eac18dd178297a8498e8ee726ed56079c956`).
+- Restore receipt states the selected snapshot time was `2026-09-19T13:18:02.475470812Z`; 22/22 restore steps passed; all 55 persisted table counts were covered; the restored migration prefix was 44; 120 media checksums were restored/checked; cleanup exit was 0. Release report says 120 media files / 74,699,580 bytes, aggregate SHA-256 `6bcace0864428fdd3e8a709cb3ddfc3698efcf5fea5e012d20e45a9d1c11b35b`.
+- Local receipt: `C:\Users\UIXRay\.codex\visualizations\2026\09\16\01a0a7d5-b072-7022-8e9d-4538c0a92b07\release-2026-09-19\restore-confirmed-aab0731.json` — 22,331 bytes; mtime 2026-09-19 16:21:20 local; SHA-256 `4363A157090AF9F170B22AFB01EB01A2DC6028CA756B091B22BD664D82894251`. This is a JSON restore manifest, not a DB dump. The adjacent `persistence-comparison.json` — 329 bytes; mtime 2026-09-19 16:25:46 local; SHA-256 `7E658046B88B6239A83ACCFED892140E2D0E24E4264A7C166025303BFD61F0B5` — records equal pre/post-deploy/post-restart counts for 55 tables and the 120-file media aggregate at revision `aab0731a947852bbcb3c5955ed52008468353ae4`.
+- The release artifact directory contains that manifest and operator receipts/scripts/images/logs; a targeted immediate-file filter found no `.dump`, `.pgcustom`, `.zip`, `.tar`, `.gz`, `.backup`, or `.snapshot-id` payload in the directory. Raw logs were not opened.
+
+`infra/backup/backup.sh` documents the server-local staging names: `arken-<UTC timestamp>.dump`, matching `.dump.sha256`, `.database-counts.txt`, `.media-sha256.txt`, and a `.snapshot-id`; it uploads the dump, manifests and media directory into the configured encrypted Restic repository. It deletes old `arken-*` staging files after two days. `docs/operations.md` places staging under `/home/uixray/apps/arken-space-data/backups`, production media under `/home/uixray/apps/arken-space-data/media`, and documents the repository configuration as root-owned server files. Therefore these names/paths describe the **server staging workflow**, not a local copy found here. The safe September 19 receipt identifies the Restic snapshot, not its exact timestamped dump basename or a workstation destination for payload files.
+
+## Targeted local filename/metadata search
+
+Search roots were `D:\AI` and the user `Downloads`, `Desktop`, and `Documents` directories. Filename matching used the exact two snapshot IDs, production revision/date markers, and Arken-named dump/archive forms. The search excluded `.git`, `node_modules`, `build`, `dist`, `.next`, `vendor`, and media-payload trees. User folders contained no matching snapshot/dump/archive names. Among matching non-build files in `D:\AI`:
+
+| Local item | Metadata | Classification |
+|---|---|---|
+| `D:\AI\personal\experiments\arken-space\.worktrees\uix-293-catalog-20261007\.data\qa-prep\uix293-global-import-prep\backups\uix293-arken_qa-20261008T164747Z.pgcustom` | 311,439 bytes; 2026-10-08 19:47:48 local; SHA-256 `578BEB0D6024798010722EF8C6691287FB4407EA3EDA826BED147773C8077295` | QA dump, explicitly named/labeled QA in existing inventory/checkpoint; not production backup. |
+| `D:\AI\personal\experiments\arken-space\.worktrees\uix-293-catalog-20261007\.data\qa-prep\uix293-global-import-prep\backups\uix293-arken_qa-20261009T043628Z.pgcustom` | 370,239 bytes; 2026-10-09 07:36:29 local; SHA-256 `F896AC40AC44BCFCA82B336F95233CC04A628A5F73BE454485E319B7CA549EF6` | QA dump, explicitly named/labeled QA in existing inventory/checkpoint; not production backup. |
+| `D:\AI\arken-space-d6a224b.tar.gz` | 124,964 bytes; 2026-07-13 00:48:32; SHA-256 `628B62968BB3B446AD5497BD3C6ED13E71856553B14C0FDDC993A1DF53EAF16F` | Tar headers: 88 regular files / 22 directories / 494,395 uncompressed member bytes; 67 source-like files / 458,880 bytes; 2 `.sql` files / 11,950 bytes; 0 standalone DB-dump suffixes; no common media extension or `media/` path entries; no PostgreSQL data-directory markers. Software/source-like archive, not demonstrated DB/media backup. |
+| `D:\AI\arken-space-73fe7ff.tar.gz` | 120,676 bytes; 2026-07-12 19:56:48; SHA-256 `14236E0CBC02F69EED2DA2995A3F3F4ABD618352A231FA2CE4BB908C9A266463` | Tar headers: 84 regular files / 22 directories / 483,832 uncompressed member bytes; 65 source-like files / 453,915 bytes; 2 `.sql` files / 11,950 bytes; 0 standalone DB-dump suffixes; no common media extension or `media/` path entries; no PostgreSQL data-directory markers. Software/source-like archive, not demonstrated DB/media backup. |
+| `D:\AI\arken-space-deploy.tar.gz` | 1,062,311 bytes; 2026-07-12 14:17:56; SHA-256 `617DFE485A99C097A7017B0039CE646AFA70668C1E695364EB65BD95AA72AF2C` | Tar headers: 363 regular files / 153 directories / 3,258,497 uncompressed member bytes; 87 source-like files / 597,038 bytes; 2 `.sql` files / 11,766 bytes; 0 standalone DB-dump suffixes; no common media extension or `media/` path entries; no PostgreSQL data-directory markers. Deployment-named software archive, not demonstrated DB/media backup. |
+| `D:\AI\.tmp\arken-space-e2e.tar` | 604,160 bytes; 2026-07-13 02:19:26; SHA-256 `5C20A1476E3A9714A260AA2EDB3896FE7618BA3C3D45EADB62C8F669EFDED8C7` | Tar headers: 94 regular files / 24 directories / 513,112 uncompressed member bytes; 71 source-like files / 475,327 bytes; 2 `.sql` files / 11,950 bytes; 0 standalone DB-dump suffixes; no common media extension or `media/` path entries; no PostgreSQL data-directory markers. E2E-named software/test archive, not production data evidence. |
+
+For each archive, tar header enumeration succeeded (`tar -tvf`, exit 0), produced zero unparsed regular-file records, and showed zero `.dump`/`.pgcustom`/`.backup` member suffixes. The two `.sql` members are classified as SQL files only, not assumed to be database dumps. Counts of 0 media refer to the checked common image/audio/video extensions and no path segment named `media`; they do not prove absence of an arbitrary binary object with an unknown extension. Raw archive member paths and contents were not displayed/read.
+
+Previously inventoried local `media/` in the main checkout is 309 files / 431,837,534 bytes with unknown provenance; the active worktree media folder is empty. Neither is paired by the September receipt to the named Restic snapshot. The existing paired QA archive/media set is 139 files / 10,518,668 bytes with 173 unresolved media references and is explicitly QA, not production. Do not reinterpret any of these as the 120-file September production media copy.
+
+## Other historical backup records
+
+- `docs/operations.md` says a Yandex Restic repository was initialized on 2026-07-13 and records snapshot prefix `07bc8d52` plus a successful Restic check/timer state. This is historical repository/runbook evidence; it does not locate a local Restic pack or prove the current contents of the external repository.
+- `docs/measurement-runbook-2026-08-24.md` names snapshot `7198f062` from 2026-08-15 and dump `arken-20260815T065736Z.dump`, restored to `/tmp/arken-measure/home/uixray/apps/arken-space-data/backups/` on the server; media was intentionally not restored. It does not prove that dump is on this workstation or that it contains current September data.
+- `docs/yandex-object-storage-backup-2026-07-13.md` is a setup/cost runbook with placeholder bucket and credential templates, not a manifest of stored objects. No secret/config files were read.
+
+## Scope and next evidence
+
+This was a filename/metadata/provenance-doc search only, not a payload inventory. It did not scan unrelated file contents, inspect hidden database/media payload, enumerate Docker volume contents, inspect environment or credential stores, query a Restic repository, or establish whether other local directories/cloud copies exist. A definitive local production backup requires a safe manifest tying exact DB dump, 120-file/full media archive, hashes and capture time to the named snapshot. The scoped search found the receipt but no local dump/media payload pair. No file was changed, restored, moved or deleted.
+
+## Owner-visible backup bucket evidence
+
+2026-10-09 owner supplied console screenshot: ObjectStorage bucket arken-space-backups-uixray contains prefix arken-space and259.66MB usage. This establishes visible bucket/prefix/nonzero storage at screenshot time ONLY; repository structure/snapshotdate/integrity/passwordavailability still unverified. No external API/read/download or credentials accessed. Next owner action: inspectprefix and share nonsecretobjectlist; do not delete/publicize. Current19September localsearch located receipt, not payload. Candidate4dca5a1 build continues independently.
+
+Owner's second screenshot shows Restic-like config/data/index/keys/snapshots structure. Third screenshot shows snapshot-object modification timestamps including2026-10-06 13:03 (display timezone not independently verified). This supports repository writes afterSeptember but does NOT establish decrypted snapshot capturetime, full payload integrity or latestsnapshot. Passwordavailability unresolved; root offered local presence-only backupsecret-file search, not authorized/executed yet. No individualencryptedfile recoveryclaim.
+
+## Encrypted repository download completed
+
+Owner explicitly authorized downloadingwholeprefix. yc storage s3 cp recursive exited0; local destination D:\AI\personal\experiments\arken-space\.data\recovery\yandex-restic-20261009 contains701files/272271426bytes including174snapshotobjects. Counts are filesystemmetadata, NOT decryptedsnapshot/data integrity. Cloudobjects unchanged. OfficialportableRestic0.19.1 downloadedwithownerapproval into.data/tools; releasezipSHA256DA948AD707ED690426473AABA2046CD61F8F90F6F0E7DAB6BE0D5796531DE67D matchesofficialSHA256SUMS; versioncommandPASS. No systemPATHchange.
+
+Ownerfound restic-password entry in theirpasswordmanager; no passwordreceived/read/printed. Usergivenlocalinteractive --no-lock snapshots command toverifysecretandlistdecryptedcapturetimes. Restore/check notrun; current-data completeness remainsunknown. Passwordfilename searchwasstoppedatownerrequest, notresumed. Next: ownerlocalunlock, selectedlatestvalidatedsnapshot restoration toseparateprivatedirectory, hashes/migration/mediarefproof beforepackageclaims. Newimagebuild6091 stillpendingfinalunpack; no restartfromtimeout.

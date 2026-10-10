@@ -17,4 +17,4 @@ COPY packages packages
 RUN pnpm --filter @arken/contracts build && pnpm --filter @arken/system build && pnpm --filter @arken/db build && pnpm --filter @arken/server build
 
 EXPOSE 4100
-CMD ["sh", "-c", "pnpm db:migrate && node apps/server/dist/index.js"]
+CMD ["sh", "-c", "pnpm db:migrate && exec node apps/server/dist/index.js"]

@@ -242,6 +242,106 @@ describe("world content HTTP: list + get visibility", () => {
   });
 });
 
+describe("world content HTTP: relatedTo list filter", () => {
+  it("matches both edge directions, intersects other filters, and hides inaccessible IDs and endpoints", async () => {
+    const subject = (
+      await createEntity(secrets.gm, { name: "Known Subject" })
+    ).json();
+    const incoming = (
+      await createEntity(secrets.gm, {
+        type: "PERSON",
+        name: "Mira Vale",
+        tags: ["ally", "harbor"],
+        gmOnlyText: "private note",
+      })
+    ).json();
+    const outgoing = (
+      await createEntity(secrets.gm, {
+        type: "LOCATION",
+        name: "Old Harbor",
+        tags: ["harbor"],
+      })
+    ).json();
+    const hidden = (
+      await createEntity(secrets.gm, { name: "Hidden Target" })
+    ).json();
+    await publish(subject.id, 0);
+    await publish(incoming.id, 0);
+    await publish(outgoing.id, 0);
+
+    for (const [from, to] of [
+      [incoming.id, subject.id],
+      [subject.id, outgoing.id],
+      [subject.id, hidden.id],
+    ]) {
+      const relation = await app.inject({
+        method: "POST",
+        url: `/api/world-content/${from}/relations`,
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: id(),
+          toWorldContentId: to,
+          relationType: "CONNECTED_TO",
+        },
+      });
+      expect(relation.statusCode).toBe(201);
+    }
+
+    const playerResponse = await app.inject({
+      method: "GET",
+      url: `/api/world-content?relatedTo=${subject.id}`,
+      headers: headers(secrets.player),
+    });
+    expect(playerResponse.statusCode).toBe(200);
+    const playerRows = playerResponse.json();
+    expect(playerRows.map((row: { id: string }) => row.id)).toEqual(
+      expect.arrayContaining([incoming.id, outgoing.id]),
+    );
+    expect(playerRows.map((row: { id: string }) => row.id)).not.toContain(
+      hidden.id,
+    );
+    for (const row of playerRows) expect(row).not.toHaveProperty("gmOnlyText");
+
+    const gmResponse = await app.inject({
+      method: "GET",
+      url: `/api/world-content?relatedTo=${subject.id}`,
+      headers: headers(secrets.gm),
+    });
+    expect(gmResponse.json().map((row: { id: string }) => row.id)).toContain(
+      hidden.id,
+    );
+
+    const combined = await app.inject({
+      method: "GET",
+      url: `/api/world-content?relatedTo=${subject.id}&type=PERSON&tags=ally&q=Mira`,
+      headers: headers(secrets.player),
+    });
+    expect(combined.json().map((row: { id: string }) => row.id)).toEqual([
+      incoming.id,
+    ]);
+
+    const invalid = await app.inject({
+      method: "GET",
+      url: "/api/world-content?relatedTo=not-a-uuid",
+      headers: headers(secrets.player),
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    const hiddenSubject = await app.inject({
+      method: "GET",
+      url: `/api/world-content?relatedTo=${hidden.id}`,
+      headers: headers(secrets.player),
+    });
+    const unknownSubject = await app.inject({
+      method: "GET",
+      url: `/api/world-content?relatedTo=${id()}`,
+      headers: headers(secrets.player),
+    });
+    expect(hiddenSubject.statusCode).toBe(404);
+    expect(hiddenSubject.body).toBe(unknownSubject.body);
+  });
+});
+
 describe("world content HTTP: update", () => {
   it("forbids a player, revision-gates, and applies changes for the GM", async () => {
     const created = (await createEntity(secrets.gm)).json();
@@ -291,6 +391,7 @@ describe("world content HTTP: update", () => {
       payload,
     });
     expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({ name: "Once", revision: 1 });
     const retry = await app.inject({
       method: "PATCH",
       url: `/api/world-content/${created.id}`,
@@ -299,6 +400,18 @@ describe("world content HTTP: update", () => {
     });
     expect(retry.statusCode).toBe(200);
     expect(retry.json()).toEqual({ duplicate: true });
+
+    const authoritative = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${created.id}`,
+      headers: headers(secrets.gm),
+    });
+    expect(authoritative.json()).toMatchObject({ name: "Once", revision: 1 });
+    const actions = await db
+      .select()
+      .from(schema.worldContentActions)
+      .where(eq(schema.worldContentActions.actionId, actionId));
+    expect(actions).toHaveLength(1);
   });
 });
 

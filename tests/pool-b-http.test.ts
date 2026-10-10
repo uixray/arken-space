@@ -887,6 +887,223 @@ describe("Pool B HTTP boundaries", () => {
     expect(replay.json()).toMatchObject({ duplicate: true });
   });
 
+  it("keeps built-in terrain stamps GM-owned, layer-filtered and fully undoable", async () => {
+    const makeStamp = (assetKey: "forest" | "mountains" | "clouds", layer: "PUBLIC" | "GM", actionId = crypto.randomUUID(), x = 24, y = 48) =>
+      app.inject({
+        method: "POST",
+        url: "/api/drawings",
+        headers: headers(secrets.gm),
+        payload: {
+          actionId,
+          sceneId: ids.scene,
+          kind: "STAMP",
+          assetKey,
+          packId: "builtin-terrain-v1",
+          x,
+          y,
+          size: 80,
+          rotation: 35,
+          layer,
+        },
+      });
+    const publicForestAction = crypto.randomUUID();
+    const publicForest = await makeStamp("forest", "PUBLIC", publicForestAction);
+    const hiddenMountains = await makeStamp("mountains", "GM");
+    const hiddenForest = await makeStamp("forest", "GM", crypto.randomUUID(), 987, 987);
+    expect(publicForest.statusCode, publicForest.body).toBe(201);
+    expect(hiddenMountains.statusCode, hiddenMountains.body).toBe(201);
+    expect(hiddenForest.statusCode, hiddenForest.body).toBe(201);
+    const forest = publicForest.json();
+    const mountains = hiddenMountains.json();
+    expect(forest).toMatchObject({
+      kind: "STAMP", assetKey: "forest", packId: "builtin-terrain-v1",
+      size: 80, rotation: 35, layer: "PUBLIC", revision: 0,
+    });
+    const playerCannotUndoStamp = await app.inject({
+      method: "POST", url: "/api/canvas/undo", headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    // GM-authored stamps do not enter the player's personal history stack.
+    expect(playerCannotUndoStamp.statusCode).toBe(404);
+
+    const replay = await makeStamp("clouds", "GM", publicForestAction);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toMatchObject({ duplicate: true });
+    expect(await db.select().from(schema.drawings)).toHaveLength(3);
+
+    const legacy = await app.inject({
+      method: "POST", url: "/api/drawings", headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene, points: [1, 2, 8, 9], color: "#abcdef" },
+    });
+    expect(legacy.statusCode, legacy.body).toBe(201);
+    expect(legacy.json()).toMatchObject({ kind: "FREEHAND", points: [1, 2, 8, 9] });
+    const playerCreate = await app.inject({
+      method: "POST", url: "/api/drawings", headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene, kind: "STAMP", assetKey: "forest", packId: "builtin-terrain-v1", x: 1, y: 2, size: 64, rotation: 0, layer: "PUBLIC" },
+    });
+    expect(playerCreate.statusCode).toBe(403);
+
+    const playerSnapshot = await app.inject({ method: "GET", url: "/api/bootstrap", headers: headers(secrets.player) });
+    expect(playerSnapshot.statusCode).toBe(200);
+    const projectedDrawings = playerSnapshot.json().drawings;
+    expect(projectedDrawings.map((drawing: { id: string }) => drawing.id)).toContain(forest.id);
+    expect(projectedDrawings.map((drawing: { id: string }) => drawing.id)).not.toContain(mountains.id);
+    expect(projectedDrawings.map((drawing: { id: string }) => drawing.id)).not.toContain(hiddenForest.json().id);
+    expect(JSON.stringify(projectedDrawings)).not.toContain("mountains");
+    expect(projectedDrawings.some((drawing: { x: number }) => drawing.x === 987)).toBe(false);
+    const cover = await app.inject({
+      method: "POST", url: "/api/fog-reveals", headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene, x: 0, y: 0, width: 100, height: 100, operation: "COVER" },
+    });
+    expect(cover.statusCode).toBe(201);
+    const fogCoveredSnapshot = await app.inject({ method: "GET", url: "/api/bootstrap", headers: headers(secrets.player) });
+    expect(fogCoveredSnapshot.json().fogReveals).toEqual(expect.arrayContaining([expect.objectContaining({ operation: "COVER" })]));
+    expect(fogCoveredSnapshot.json().drawings.map((drawing: { id: string }) => drawing.id)).toContain(forest.id);
+
+    const publicAsset = await app.inject({ method: "GET", url: "/api/terrain-stamps/assets/forest", headers: headers(secrets.player) });
+    expect(publicAsset.statusCode).toBe(200);
+    expect(publicAsset.headers["cache-control"]).toBe("private, no-store");
+    expect(publicAsset.headers["content-type"]).toContain("image/png");
+    expect(publicAsset.rawPayload.byteLength).toBeGreaterThan(1000);
+    const hiddenAsset = await app.inject({
+      method: "GET", url: "/api/terrain-stamps/assets/mountains", headers: { ...headers(secrets.player), range: "bytes=0-20", "if-none-match": "*" },
+    });
+    expect(hiddenAsset.statusCode).toBe(404);
+    const hiddenHead = await app.inject({ method: "HEAD", url: "/api/terrain-stamps/assets/mountains", headers: headers(secrets.player) });
+    expect(hiddenHead.statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: "/api/terrain-stamps/assets/forest" })).statusCode).toBe(401);
+    expect((await app.inject({ method: "GET", url: "/api/terrain-stamps/assets/forest", headers: headers(secrets.foreignPlayer) })).statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: "/api/terrain-stamps/catalog", headers: headers(secrets.player) })).statusCode).toBe(403);
+
+    const playerMove = await app.inject({
+      method: "PATCH", url: `/api/drawings/${forest.id}`, headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), revision: 0, x: 2 },
+    });
+    expect(playerMove.statusCode).toBe(403);
+    const playerCopy = await app.inject({
+      method: "POST", url: `/api/drawings/${forest.id}/copy`, headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), revision: 0 },
+    });
+    expect(playerCopy.statusCode).toBe(403);
+    const playerDelete = await app.inject({
+      method: "DELETE", url: `/api/drawings/${forest.id}`, headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), revision: 0 },
+    });
+    expect(playerDelete.statusCode).toBe(403);
+    const playerBulk = await app.inject({
+      method: "POST", url: "/api/canvas/bulk", headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene, operation: "MOVE", deltaX: 1, deltaY: 2, targets: [{ targetType: "DRAWING", targetId: forest.id, revision: 0 }] },
+    });
+    expect(playerBulk.statusCode).toBe(403);
+
+    const changeLayerAction = crypto.randomUUID();
+    const hiddenNow = await app.inject({
+      method: "PATCH", url: `/api/drawings/${forest.id}`, headers: headers(secrets.gm),
+      payload: { actionId: changeLayerAction, revision: 0, x: 30, size: 96, rotation: 90, layer: "GM" },
+    });
+    expect(hiddenNow.statusCode, hiddenNow.body).toBe(200);
+    expect(hiddenNow.json()).toMatchObject({ x: 30, size: 96, rotation: 90, layer: "GM", revision: 1 });
+    const layerAction = await db.select().from(schema.actionJournal).where(eq(schema.actionJournal.actionId, changeLayerAction));
+    expect(layerAction[0]).toMatchObject({ scope: "GM", before: expect.objectContaining({ stampLayer: "PUBLIC" }), after: expect.objectContaining({ stampLayer: "GM" }) });
+    const playerHiddenSnapshot = await app.inject({ method: "GET", url: "/api/bootstrap", headers: headers(secrets.player) });
+    expect(playerHiddenSnapshot.json().drawings.map((drawing: { id: string }) => drawing.id)).not.toContain(forest.id);
+    expect((await app.inject({ method: "GET", url: "/api/terrain-stamps/assets/forest", headers: headers(secrets.player) })).statusCode).toBe(404);
+    const layerUndo = await app.inject({ method: "POST", url: "/api/canvas/undo", headers: headers(secrets.gm), payload: { actionId: crypto.randomUUID(), sceneId: ids.scene } });
+    expect(layerUndo.statusCode).toBe(200);
+    const [publicAgain] = await db.select().from(schema.drawings).where(eq(schema.drawings.id, forest.id));
+    expect(publicAgain).toMatchObject({ stampLayer: "PUBLIC", stampSize: 80, stampRotation: 35, x: 24, y: 48, revision: 2 });
+    expect((await app.inject({ method: "GET", url: "/api/terrain-stamps/assets/forest", headers: headers(secrets.player) })).statusCode).toBe(200);
+    const layerRedo = await app.inject({ method: "POST", url: "/api/canvas/redo", headers: headers(secrets.gm), payload: { actionId: crypto.randomUUID(), sceneId: ids.scene } });
+    expect(layerRedo.statusCode).toBe(200);
+    const [hiddenAgain] = await db.select().from(schema.drawings).where(eq(schema.drawings.id, forest.id));
+    expect(hiddenAgain).toMatchObject({ stampLayer: "GM", stampSize: 96, stampRotation: 90, x: 30, y: 48, revision: 3 });
+    expect((await app.inject({ method: "GET", url: "/api/terrain-stamps/assets/forest", headers: headers(secrets.player) })).statusCode).toBe(404);
+    const duplicateLayer = await app.inject({
+      method: "PATCH", url: `/api/drawings/${forest.id}`, headers: headers(secrets.gm),
+      payload: { actionId: changeLayerAction, revision: 0, x: 100, layer: "PUBLIC" },
+    });
+    expect(duplicateLayer.json()).toMatchObject({ duplicate: true });
+    const [notReapplied] = await db.select().from(schema.drawings).where(eq(schema.drawings.id, forest.id));
+    expect(notReapplied).toMatchObject({ x: 30, stampLayer: "GM", revision: 3 });
+    const stale = await app.inject({
+      method: "PATCH", url: `/api/drawings/${forest.id}`, headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), revision: 0, x: 50 },
+    });
+    expect(stale.statusCode).toBe(409);
+
+    const copied = await app.inject({
+      method: "POST", url: `/api/drawings/${mountains.id}/copy`, headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), revision: 0 },
+    });
+    expect(copied.statusCode).toBe(201);
+    expect(copied.json()).toMatchObject({ kind: "STAMP", assetKey: "mountains", packId: "builtin-terrain-v1", size: 80, rotation: 35, layer: "GM", x: 40, y: 64, revision: 0 });
+    const copyId = copied.json().id as string;
+    const bulk = await app.inject({
+      method: "POST", url: "/api/canvas/bulk", headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene, operation: "MOVE", deltaX: 5, deltaY: 7, targets: [{ targetType: "DRAWING", targetId: copyId, revision: 0 }] },
+    });
+    expect(bulk.statusCode, bulk.body).toBe(200);
+    const undo = async (direction: "undo" | "redo") => app.inject({
+      method: "POST", url: `/api/canvas/${direction}`, headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect((await undo("undo")).statusCode).toBe(200);
+    let [movedBack] = await db.select().from(schema.drawings).where(eq(schema.drawings.id, copyId));
+    expect(movedBack).toMatchObject({ x: 40, y: 64, kind: "STAMP", stampAssetKey: "mountains", stampSize: 80, stampRotation: 35, stampLayer: "GM", revision: 2 });
+    expect((await undo("redo")).statusCode).toBe(200);
+    let [movedAgain] = await db.select().from(schema.drawings).where(eq(schema.drawings.id, copyId));
+    expect(movedAgain).toMatchObject({ x: 45, y: 71, kind: "STAMP", stampAssetKey: "mountains", stampPackId: "builtin-terrain-v1", stampLayer: "GM", revision: 3 });
+    const deleteCopy = await app.inject({
+      method: "DELETE", url: `/api/drawings/${copyId}`, headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), revision: movedAgain.revision },
+    });
+    expect(deleteCopy.statusCode).toBe(204);
+    expect((await undo("undo")).statusCode).toBe(200);
+    const [restoredCopy] = await db.select().from(schema.drawings).where(eq(schema.drawings.id, copyId));
+    expect(restoredCopy).toMatchObject({ kind: "STAMP", stampAssetKey: "mountains", stampSize: 80, stampRotation: 35, stampLayer: "GM" });
+
+      const deleteActionId = crypto.randomUUID();
+      const deletePayload = { actionId: deleteActionId, revision: restoredCopy!.revision };
+      const firstDelete = await app.inject({
+        method: "DELETE", url: `/api/drawings/${copyId}`, headers: headers(secrets.gm), payload: deletePayload,
+      });
+      expect(firstDelete.statusCode).toBe(204);
+      const retriedDelete = await app.inject({
+        method: "DELETE", url: `/api/drawings/${copyId}`, headers: headers(secrets.gm), payload: deletePayload,
+      });
+      expect(retriedDelete.statusCode).toBe(200);
+      expect(retriedDelete.json()).toMatchObject({ duplicate: true });
+      const otherActorRetry = await app.inject({
+        method: "DELETE", url: `/api/drawings/${copyId}`, headers: headers(secrets.player), payload: deletePayload,
+      });
+      expect(otherActorRetry.statusCode).toBe(403);
+      const otherActorNewAction = await app.inject({
+        method: "DELETE", url: `/api/drawings/${copyId}`, headers: headers(secrets.player),
+        payload: { actionId: crypto.randomUUID(), revision: restoredCopy!.revision },
+      });
+      expect(otherActorNewAction.statusCode).toBe(403);
+
+      const copyActionId = crypto.randomUUID();
+      const copyPayload = { actionId: copyActionId, revision: mountains.revision };
+      const firstCopy = await app.inject({
+        method: "POST", url: `/api/drawings/${mountains.id}/copy`, headers: headers(secrets.gm), payload: copyPayload,
+      });
+      expect(firstCopy.statusCode).toBe(201);
+      const copyRetry = await app.inject({
+        method: "POST", url: `/api/drawings/${mountains.id}/copy`, headers: headers(secrets.gm), payload: copyPayload,
+      });
+      expect(copyRetry.statusCode).toBe(200);
+      expect(copyRetry.json()).toMatchObject({ duplicate: true });
+      const wrongSourceRetry = await app.inject({
+        method: "POST", url: `/api/drawings/${hiddenForest.json().id}/copy`, headers: headers(secrets.gm), payload: copyPayload,
+      });
+      expect(wrongSourceRetry.statusCode).toBe(409);
+
+    await expect(db.insert(schema.drawings).values({
+      sceneId: ids.scene, authorMembershipId: ids.gm, points: [], color: "#ffffff", kind: "STAMP",
+    } as never)).rejects.toThrow();
+  });
+
   it("serializes placement against destructive definition deletion", async () => {
     const deleteAction = crypto.randomUUID();
     const [placement, deletion] = await Promise.all([

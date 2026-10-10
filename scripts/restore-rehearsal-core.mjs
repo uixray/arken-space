@@ -1,13 +1,27 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import {
+  createReadStream,
+  lstatSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+} from "node:fs";
 import path from "node:path";
 
 const restoreProjectPattern = /^arken-restore-[a-z0-9][a-z0-9_-]*$/;
 
 const applicationCountTableNames = [
+  "account_action_tokens",
+  "account_campaign_creations",
+  "account_campaign_invites",
+  "account_mail_outbox",
+  "account_sessions",
   "action_journal",
   "assets",
   "campaign_audio_tracks",
+  "campaign_sound_packs",
+  "campaign_soundpad_settings",
+  "campaign_sounds",
   "campaigns",
   "catalog_entries",
   "character_catalog_entries",
@@ -28,6 +42,9 @@ const applicationCountTableNames = [
   "feedback_reports",
   "fog_reveals",
   "game_events",
+  "global_sticker_media",
+  "global_sticker_packs",
+  "global_stickers",
   "gm_access_credentials",
   "invites",
   "memberships",
@@ -51,6 +68,7 @@ const applicationCountTableNames = [
   "token_controllers",
   "token_definitions",
   "tokens",
+  "users",
   "world_content",
   "world_content_actions",
   "world_content_instance_actions",
@@ -63,6 +81,219 @@ const applicationCountTableNames = [
   "world_maps",
 ];
 const applicationCountTables = new Set(applicationCountTableNames);
+
+function listRegularFiles(root) {
+  const files = [];
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const candidate = path.join(directory, entry.name);
+      if (entry.isSymbolicLink())
+        throw new Error("Service snapshot contains a symlink or reparse point");
+      if (entry.isDirectory()) visit(candidate);
+      else if (entry.isFile()) files.push(candidate);
+      else throw new Error("Service snapshot contains a non-regular entry");
+    }
+  };
+  visit(root);
+  return files;
+}
+
+function safeManifestRelativePath(value) {
+  if (
+    typeof value !== "string" ||
+    !value ||
+    value.includes("\\") ||
+    value.startsWith("/") ||
+    /^[a-z]:/i.test(value) ||
+    value.startsWith("//")
+  )
+    throw new Error("Service snapshot manifest contains an unsafe path");
+  const segments = value.split("/");
+  if (
+    segments.some(
+      (segment) => !segment || segment === "." || segment === "..",
+    ) ||
+    path.posix.normalize(value) !== value
+  )
+    throw new Error("Service snapshot manifest contains an unsafe path");
+  return value;
+}
+
+function sha256File(file) {
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    const stream = createReadStream(file);
+    stream.on("error", reject);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => resolve(hash.digest("hex")));
+  });
+}
+
+function safeLstat(file) {
+  try {
+    return lstatSync(file);
+  } catch {
+    throw new Error("Service snapshot file is missing or unreadable");
+  }
+}
+
+/**
+ * Validate the v1 service-capture artifact without connecting it to the live
+ * restore runner. `expectedManifestSha256` must come from the separately
+ * protected capture receipt, not from the snapshot itself.
+ */
+export async function validateServiceSnapshotManifest(
+  snapshotRoot,
+  { expectedManifestSha256 },
+) {
+  if (!/^[0-9a-f]{64}$/i.test(expectedManifestSha256 ?? ""))
+    throw new Error("Expected service snapshot manifest digest is required");
+  let snapshot;
+  let allFiles;
+  try {
+    snapshot = realpathSync(snapshotRoot);
+    allFiles = listRegularFiles(snapshot);
+  } catch {
+    throw new Error("Service snapshot root is missing or unsafe");
+  }
+  const candidates = allFiles.filter(
+    (file) => path.basename(file) === "capture-manifest.json",
+  );
+  if (candidates.length !== 1)
+    throw new Error("Expected exactly one service capture manifest");
+  const manifestPath = candidates[0];
+  const captureRoot = path.dirname(manifestPath);
+  let actualManifestSha;
+  let manifestText;
+  try {
+    const manifestBytes = readFileSync(manifestPath);
+    actualManifestSha = createHash("sha256")
+      .update(manifestBytes)
+      .digest("hex");
+    manifestText = manifestBytes.toString("utf8");
+  } catch {
+    throw new Error("Service capture manifest is unreadable");
+  }
+  if (actualManifestSha !== expectedManifestSha256.toLowerCase())
+    throw new Error("Service capture manifest digest does not match receipt");
+
+  let manifest;
+  try {
+    manifest = JSON.parse(manifestText);
+  } catch {
+    throw new Error("Service capture manifest is invalid JSON");
+  }
+  if (
+    manifest?.format !== "arken-service-snapshot-v1" ||
+    manifest?.captureMode !== "cloned-review" ||
+    !Array.isArray(manifest.files) ||
+    !Array.isArray(manifest.target?.containerIds) ||
+    manifest.target.containerIds.length !== 4 ||
+    !manifest.target.containerIds.every((id) => /^[0-9a-f]{64}$/i.test(id)) ||
+    !/^[A-Za-z0-9_]+$/.test(manifest.target?.databaseName ?? "") ||
+    !/^[0-9a-f]{64}$/i.test(manifest.target?.networkId ?? "") ||
+    typeof manifest.target?.mediaContainerPath !== "string" ||
+    typeof manifest.target?.edgeConfigContainerPath !== "string" ||
+    !manifest.images ||
+    !["server", "postgres", "web", "edge"].every((name) =>
+      /^sha256:[0-9a-f]{64}$/i.test(manifest.images[name] ?? ""),
+    )
+  )
+    throw new Error("Service capture manifest has an unsupported shape");
+
+  const rootReal = realpathSync(captureRoot);
+  const declared = new Map();
+  const collisionKeys = new Set();
+  for (const entry of manifest.files) {
+    const relative = safeManifestRelativePath(entry?.path);
+    const collisionKey = relative.normalize("NFKC").toLocaleLowerCase("en-US");
+    if (collisionKeys.has(collisionKey) || declared.has(relative))
+      throw new Error("Service capture manifest contains duplicate paths");
+    collisionKeys.add(collisionKey);
+    if (
+      !Number.isSafeInteger(entry.bytes) ||
+      entry.bytes < 0 ||
+      !/^[0-9a-f]{64}$/i.test(entry.sha256 ?? "")
+    )
+      throw new Error(
+        "Service capture manifest contains an invalid file record",
+      );
+    const target = path.resolve(captureRoot, ...relative.split("/"));
+    if (target !== captureRoot && !target.startsWith(captureRoot + path.sep))
+      throw new Error("Service capture manifest path escaped its root");
+    let current = captureRoot;
+    for (const segment of relative.split("/")) {
+      current = path.join(current, segment);
+      const stat = safeLstat(current);
+      if (stat.isSymbolicLink())
+        throw new Error("Service snapshot contains a symlink or reparse point");
+    }
+    const fileStat = safeLstat(target);
+    if (!fileStat.isFile() || fileStat.size !== entry.bytes)
+      throw new Error(
+        "Service snapshot file is missing or has a size mismatch",
+      );
+    const actualSha = await sha256File(target);
+    if (actualSha !== entry.sha256.toLowerCase())
+      throw new Error("Service snapshot file hash mismatch");
+    declared.set(relative, { target, bytes: entry.bytes, sha256: actualSha });
+  }
+
+  const outsideFiles = allFiles.filter(
+    (file) => file !== manifestPath && !file.startsWith(captureRoot + path.sep),
+  );
+  if (outsideFiles.length)
+    throw new Error(
+      "Service snapshot contains undeclared files outside its root",
+    );
+  const actualRelative = allFiles
+    .filter((file) => file !== manifestPath)
+    .map((file) => path.relative(captureRoot, file).split(path.sep).join("/"));
+  if (
+    actualRelative.length !== declared.size ||
+    actualRelative.some((relative) => !declared.has(relative))
+  )
+    throw new Error("Service snapshot contains missing or undeclared files");
+
+  for (const required of [
+    "database.dump",
+    "database-counts.txt",
+    "postgres-version.txt",
+    "migration-ledger.txt",
+    "images/server.tar",
+    "images/postgres.tar",
+    "images/web.tar",
+    "images/edge.tar",
+  ])
+    if (!declared.has(required))
+      throw new Error("Service capture is missing a required artifact");
+  if (!actualRelative.some((relative) => relative.startsWith("media/")))
+    throw new Error("Service capture media directory is missing or empty");
+  const mediaRoot = path.join(captureRoot, "media");
+  const mediaStat = safeLstat(mediaRoot);
+  if (mediaStat.isSymbolicLink() || !mediaStat.isDirectory())
+    throw new Error("Service capture media root is invalid");
+  if (realpathSync(mediaRoot) !== path.resolve(rootReal, "media"))
+    throw new Error(
+      "Service capture media root escaped its snapshot directory",
+    );
+
+  return {
+    manifestPath,
+    captureRoot,
+    databaseDumpRelativePath: "database.dump",
+    databaseCountsRelativePath: "database-counts.txt",
+    migrationLedgerRelativePath: "migration-ledger.txt",
+    mediaRootRelativePath: "media",
+    databaseDumpPath: path.join(captureRoot, "database.dump"),
+    databaseCountsPath: path.join(captureRoot, "database-counts.txt"),
+    migrationLedgerPath: path.join(captureRoot, "migration-ledger.txt"),
+    mediaRootPath: mediaRoot,
+    files: declared.size,
+    bytes: [...declared.values()].reduce((sum, file) => sum + file.bytes, 0),
+    manifestSha256: actualManifestSha,
+  };
+}
 
 /**
  * Exported so tests can compare this list directly against the other two
@@ -399,7 +630,13 @@ export function selectResticSnapshot(
 
 export function assertIsolatedComposeConfig(
   config,
-  { projectName, mediaSource, buildRevision },
+  {
+    projectName,
+    mediaSource,
+    buildRevision,
+    mediaTarget = "/srv/arken-space/media",
+    databaseName = "arken",
+  },
 ) {
   validateRestoreProjectName(projectName);
   if (config.name !== projectName)
@@ -435,10 +672,21 @@ export function assertIsolatedComposeConfig(
   const serverVolumes = services.server?.volumes ?? [];
   const expectedMedia = path.resolve(mediaSource);
   if (
+    typeof mediaTarget !== "string" ||
+    !/^\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+$/.test(mediaTarget) ||
+    mediaTarget === "/" ||
+    path.posix.normalize(mediaTarget) !== mediaTarget ||
+    mediaTarget
+      .split("/")
+      .some((segment) => segment === "." || segment === "..") ||
+    !/^[A-Za-z0-9_]+$/.test(databaseName)
+  )
+    throw new Error("Restore media target or database name is invalid");
+  if (
     serverVolumes.length !== 1 ||
     serverVolumes[0].type !== "bind" ||
     path.resolve(serverVolumes[0].source) !== expectedMedia ||
-    serverVolumes[0].target !== "/srv/arken-space/media"
+    serverVolumes[0].target !== mediaTarget
   )
     throw new Error("Restore server must mount only restored temporary media");
   const productionMedia = path.resolve(
@@ -450,8 +698,36 @@ export function assertIsolatedComposeConfig(
   const serverEnvironment = environmentObject(services.server?.environment);
   if (serverEnvironment.BUILD_REVISION !== buildRevision)
     throw new Error("Restore Compose build revision is not exact");
-  if (!/@postgres:5432\/arken$/.test(serverEnvironment.DATABASE_URL ?? ""))
+  let databaseUrl;
+  try {
+    databaseUrl = new URL(serverEnvironment.DATABASE_URL);
+  } catch {
     throw new Error("Restore database URL must target isolated postgres");
+  }
+  if (
+    databaseUrl.protocol !== "postgres:" ||
+    databaseUrl.hostname !== "postgres" ||
+    databaseUrl.port !== "5432" ||
+    decodeURIComponent(databaseUrl.pathname.slice(1)) !== databaseName ||
+    databaseUrl.username !== "arken" ||
+    !databaseUrl.password ||
+    databaseUrl.search ||
+    databaseUrl.hash
+  )
+    throw new Error("Restore database URL must target isolated postgres");
+  const postgresEnvironment = environmentObject(services.postgres?.environment);
+  if (
+    postgresEnvironment.POSTGRES_USER !== "arken" ||
+    postgresEnvironment.POSTGRES_DB !== databaseName ||
+    !postgresEnvironment.POSTGRES_PASSWORD
+  )
+    throw new Error(
+      "Restore PostgreSQL identity does not match requested database",
+    );
+  if (serverEnvironment.MEDIA_ROOT !== mediaTarget)
+    throw new Error(
+      "Restore server media root does not match captured container path",
+    );
 }
 
 export function isTransientPostgresStartupError(output) {

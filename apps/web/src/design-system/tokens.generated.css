@@ -35,7 +35,8 @@
   --focus-ring-width: 2px;
   --focus-ring-offset: 1px;
   --font-family-sans:
-    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; /** Интерфейсный шрифт. Системный: своих начертаний проект не грузит. */
+    "Pragmatica Next", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif; /** Локальный variable font интерфейса с системными fallback. */
   --font-family-mono:
     ui-monospace, SFMono-Regular, Consolas, monospace; /** Формулы бросков, идентификаторы, технические значения. */
   --font-size-caption: 10px; /** Служебные подписи: время сообщения, единицы, счётчики. Нижняя граница читаемости — мельче не опускаться. */

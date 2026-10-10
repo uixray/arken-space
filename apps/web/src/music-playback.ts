@@ -14,3 +14,15 @@ export function resolvePlaybackAction(
   if (audioPlaying) return playerPaused ? "play" : "none";
   return playerPaused ? "none" : "pause";
 }
+
+/** Normalizes a server position against the active media element's duration. */
+export function resolveTrackPosition(
+  positionSeconds: number,
+  durationSeconds: number,
+  loop: boolean,
+): number {
+  const position = Number.isFinite(positionSeconds) ? Math.max(0, positionSeconds) : 0;
+  const duration = Number.isFinite(durationSeconds) ? Math.max(0, durationSeconds) : 0;
+  if (duration <= 0) return position;
+  return loop ? position % duration : Math.min(position, duration);
+}

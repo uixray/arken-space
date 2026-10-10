@@ -14,6 +14,12 @@
 .operator-feedback section {
   overflow: auto;
 }
+.operator-feedback__grid > nav,
+.operator-feedback__grid > .operator-feedback__detail {
+  box-sizing: border-box;
+  padding: var(--space-md);
+  scroll-padding-block: var(--space-md);
+}
 .operator-feedback nav button {
   display: flex;
   flex-direction: column;
@@ -29,6 +35,17 @@
 .operator-feedback pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+.operator-feedback__detail-heading {
+  margin-block-start: 0;
+  scroll-margin-block: var(--space-md) var(--space-lg);
+}
+.operator-feedback__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-block: var(--space-sm);
 }
 
 .operator-feedback__filters fieldset,

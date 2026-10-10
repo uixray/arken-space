@@ -19,6 +19,14 @@ import {
 } from "../test-support/render";
 import { CharacterPanel, CharacterWorkspace } from "./CharacterWorkspace";
 
+// Branch data loading is covered by its own suite; this file verifies only the
+// CharacterWorkspace tab placement and keeps unrelated reads out of feedback tests.
+vi.mock("../CharacterSpellBranches", () => ({
+  CharacterSpellBranches: () => (
+    <section aria-label="Доступные ветки заклинаний" />
+  ),
+}));
+
 type PanelProps = ComponentProps<typeof CharacterPanel>;
 const originalScrollIntoView = Object.getOwnPropertyDescriptor(
   HTMLElement.prototype,
@@ -77,6 +85,7 @@ const unexpectedAction = (): never => {
 
 function actions(
   uploadAsset: CampaignActions["asset"]["uploadAsset"] = unexpectedAction,
+  onCampaignClock: CampaignActions["campaign"]["onCampaignClock"] = unexpectedAction,
 ): CampaignActions {
   return {
     scene: {
@@ -161,6 +170,31 @@ function actions(
     },
     statLayout: { onUpdateStatLayout: unexpectedAction },
     chatHistory: { onLoadThreadHistory: unexpectedAction },
+    character: {
+      replaceCharacterControllers: unexpectedAction,
+      patchCharacter: unexpectedAction,
+      updateCharacterCounters: unexpectedAction,
+      onCreateCharacter: unexpectedAction,
+    },
+    initiative: {
+      onUpdateInitiative: unexpectedAction,
+      onSetOwnInitiative: unexpectedAction,
+      onRollInitiative: unexpectedAction,
+      onSetBattleZone: unexpectedAction,
+      onRecruitFromBattleZone: unexpectedAction,
+    },
+    dice: { onRoll: unexpectedAction },
+    campaign: { onCampaignClock },
+    player: { onPreviewPlayer: unexpectedAction },
+    sidebar: {
+      onRequestedChatMessageHandled: unexpectedAction,
+      onChatVisibilityChange: unexpectedAction,
+      onCollapsedChange: unexpectedAction,
+      onResizeHandleDown: unexpectedAction,
+      onResizeHandleMove: unexpectedAction,
+      onResizeHandleUp: unexpectedAction,
+      onWorkspaceChange: unexpectedAction,
+    },
   };
 }
 
@@ -283,7 +317,175 @@ function selectPortrait(
 }
 
 describe("character action feedback", () => {
-  it("moves initiative and reaction to a keyboard-operable vital tab", async () => {
+  it("edits a standard skill through the revisioned character patch", async () => {
+    const patch = vi.fn().mockResolvedValue(undefined);
+    renderComponent(
+      view(
+        snapshot([
+          character({
+            revision: 23,
+            skills: [
+              { key: "sword", name: "Меч", rank: 1, formula: "1d20 + sila" },
+            ],
+          }),
+        ]),
+        { onPatch: patch },
+      ),
+    );
+    await galleryLoaded();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Редактировать навык Меч" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Редактировать навык «Меч»",
+    });
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: "Название" }),
+      {
+        target: { value: "Длинный меч" },
+      },
+    );
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "Ранг" }), {
+      target: { value: "2" },
+    });
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: "Формула броска" }),
+      { target: { value: "1d20 + sila + 2" } },
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Сохранить навык" }),
+    );
+
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patch).toHaveBeenCalledWith("character-a", {
+      skills: [
+        {
+          key: "sword",
+          name: "Длинный меч",
+          rank: 2,
+          formula: "1d20 + sila + 2",
+        },
+      ],
+      revision: 23,
+    });
+  });
+
+  it("validates standard skill edits before sending a patch", async () => {
+    const patch = vi.fn().mockResolvedValue(undefined);
+    renderComponent(
+      view(
+        snapshot([
+          character({
+            skills: [
+              { key: "sword", name: "Меч", rank: 1, formula: "1d20 + sila" },
+            ],
+          }),
+        ]),
+        { onPatch: patch },
+      ),
+    );
+    await galleryLoaded();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Редактировать навык Меч" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Редактировать навык «Меч»",
+    });
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: "Название" }),
+      {
+        target: { value: "Меч" },
+      },
+    );
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "Ранг" }), {
+      target: { value: "1" },
+    });
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: "Формула броска" }),
+      { target: { value: "   " } },
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Сохранить навык" }),
+    );
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "Формула броска должна содержать от 1 до 160 символов.",
+    );
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it("confirms standard skill deletion, keeps errors visible, and allows retry", async () => {
+    const patch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("conflict"))
+      .mockResolvedValueOnce(undefined);
+    renderComponent(
+      view(
+        snapshot([
+          character({
+            revision: 24,
+            skills: [
+              { key: "sword", name: "Меч", rank: 1, formula: "1d20 + sila" },
+            ],
+          }),
+        ]),
+        { onPatch: patch },
+      ),
+    );
+    await galleryLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Удалить навык Меч" }));
+    const dialog = screen.getByRole("dialog", {
+      name: "Удалить стандартный навык?",
+    });
+    expect(dialog).toHaveTextContent("Навык «Меч» будет удалён");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Удалить навык" }),
+    );
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "Не удалось удалить навык. Повторите попытку.",
+    );
+    expect(patch).toHaveBeenNthCalledWith(1, "character-a", {
+      skills: [],
+      revision: 24,
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Удалить навык" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Удалить стандартный навык?" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(patch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not expose standard skill mutation controls to an unrelated player", async () => {
+    const state = snapshot([
+      character({
+        skills: [{ key: "sword", name: "Меч", rank: 1, formula: "1d20" }],
+      }),
+    ]);
+    renderComponent(
+      view({
+        ...state,
+        me: {
+          ...state.me,
+          id: "player-guest",
+          role: "PLAYER",
+          characterId: null,
+        },
+      }),
+    );
+    await galleryLoaded();
+    expect(
+      screen.queryByRole("button", { name: "Редактировать навык Меч" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Удалить навык Меч" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens on Показатели and keeps tab navigation keyboard-operable", async () => {
     renderComponent(
       view(snapshot([character({ stats: { initiative: 2, reaction: 3 } })])),
     );
@@ -291,12 +493,16 @@ describe("character action feedback", () => {
     const tabs = screen.getByRole("tablist", {
       name: "Ключевые показатели персонажа",
     });
-    const resourcesTab = within(tabs).getByRole("tab", { name: "Ресурсы" });
     const initiativeTab = within(tabs).getByRole("tab", {
       name: "Показатели",
     });
-    expect(resourcesTab).toHaveAttribute("aria-selected", "true");
-    fireEvent.keyDown(resourcesTab, { key: "ArrowRight" });
+    expect(initiativeTab).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(initiativeTab, { key: "ArrowRight" });
+    const inventoryTab = within(tabs).getByRole("tab", {
+      name: "Инвентарь и ресурсы",
+    });
+    expect(inventoryTab).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(inventoryTab, { key: "ArrowLeft" });
     expect(initiativeTab).toHaveAttribute("aria-selected", "true");
     expect(initiativeTab).toHaveFocus();
     const panel = screen.getByRole("tabpanel", {
@@ -322,6 +528,7 @@ describe("character action feedback", () => {
     ]);
     renderComponent(view(state, { onUpdateCounters: update }));
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Инвентарь и ресурсы" }));
     const vitals = screen.getByLabelText("Ключевые показатели");
     expect(
       within(vitals).getByRole("spinbutton", { name: "Реген Выносливости" }),
@@ -349,7 +556,7 @@ describe("character action feedback", () => {
       ),
     );
   });
-  it("shows custom resources in the single resources tab", async () => {
+  it("shows custom resources in the combined inventory and resources tab", async () => {
     const save = vi.fn(async () => {});
     renderComponent(
       view(
@@ -360,6 +567,7 @@ describe("character action feedback", () => {
       ),
     );
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Инвентарь и ресурсы" }));
     expect(
       screen.getByRole("progressbar", { name: "Уровень: Ярость" }),
     ).toHaveAttribute("aria-valuenow", "3");
@@ -370,11 +578,36 @@ describe("character action feedback", () => {
     fireEvent.blur(input);
     await waitFor(() => expect(save).toHaveBeenCalled());
   });
-  it("shows inventory and notes in their own tab", async () => {
+  it("keeps resources, wallet, rest, inventory, and notes together", async () => {
     renderComponent(view(snapshot()));
     await galleryLoaded();
-    fireEvent.click(screen.getByRole("tab", { name: "Инвентарь" }));
-    expect(screen.getByRole("tabpanel", { name: "Инвентарь" })).toBeVisible();
+    const inventoryTab = screen.getByRole("tab", {
+      name: "Инвентарь и ресурсы",
+    });
+    fireEvent.click(inventoryTab);
+    const panel = screen.getByRole("tabpanel", { name: "Инвентарь и ресурсы" });
+    expect(
+      within(panel).getByRole("button", { name: "Короткий отдых" }),
+    ).toBeVisible();
+    expect(
+      within(panel).getByRole("spinbutton", { name: "Кошелёк: золото" }),
+    ).toBeVisible();
+    expect(within(panel).getByText("Дополнительные ресурсы")).toBeVisible();
+    expect(
+      within(panel).getByLabelText(/Инвентарь \(один предмет на строку\)/),
+    ).toBeVisible();
+    expect(within(panel).getByLabelText("Заметки")).toBeVisible();
+  });
+  it("shows spell branches inside Личность rather than outside the tabs", async () => {
+    renderComponent(view(snapshot()));
+    await galleryLoaded();
+    expect(
+      screen.queryByLabelText("Доступные ветки заклинаний"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Личность" }));
+    expect(
+      await screen.findByLabelText("Доступные ветки заклинаний"),
+    ).toBeVisible();
   });
   it("edits coins in the vital wallet and saves on blur or Enter", async () => {
     const update = vi.fn(async () => undefined);
@@ -383,6 +616,7 @@ describe("character action feedback", () => {
     ]);
     const rendered = renderComponent(view(state, { onUpdateCounters: update }));
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Инвентарь и ресурсы" }));
     const gold = screen.getByRole("spinbutton", { name: "Кошелёк: золото" });
     const silver = screen.getByRole("spinbutton", { name: "Кошелёк: серебро" });
     const copper = screen.getByRole("spinbutton", { name: "Кошелёк: медь" });
@@ -794,18 +1028,29 @@ describe("character action feedback", () => {
 
     rendered.rerender(
       view(
-        snapshot([character({ id: "character-b", revision: 12 })]),
+        snapshot([
+          character({
+            id: "character-b",
+            name: "Персонаж B",
+            revision: 12,
+          }),
+        ]),
         { onPatch: patch },
         commands,
       ),
     );
     await galleryLoaded();
-    expect(
-      screen.getByRole("button", { name: "Загрузить и назначить" }),
-    ).toHaveAttribute("aria-busy", "false");
+    // Changing characters deliberately closes the old portrait dialog. Reopen
+    // the new character's dialog before starting its independent upload epoch.
     const file = selectPortrait(
       new File(["b"], "b.png", { type: "image/png" }),
     );
+    expect(
+      screen.getByRole("dialog", { name: "Портрет: Персонаж B" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Загрузить и назначить" }),
+    ).toHaveAttribute("aria-busy", "false");
     const button = screen.getByRole("button", {
       name: "Загрузить и назначить",
     });
@@ -844,6 +1089,7 @@ describe("character action feedback", () => {
     };
     renderComponent(view(readOnly));
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Инвентарь и ресурсы" }));
 
     fireEvent.click(screen.getByText("Предыстория", { selector: "summary" }));
     const backstory = screen.getByRole("textbox", { name: "Предыстория" });
@@ -877,6 +1123,7 @@ describe("character action feedback", () => {
       ),
     );
     await galleryLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Инвентарь и ресурсы" }));
 
     const resourceName = screen.getByRole<HTMLInputElement>("textbox", {
       name: "Название нового ресурса",
@@ -906,41 +1153,28 @@ describe("character action feedback", () => {
       character({ id: "character-c", name: "Персонаж C" }),
       character({ id: "character-d", name: "Персонаж D" }),
     ]);
+    const onCampaignClock = vi.fn(async () => {});
     const workspaceProps: ComponentProps<typeof CharacterWorkspace> = {
       snapshot: state,
       onClose: unexpectedAction,
       socket: null,
       presence: [],
-      onReplaceCharacterControllers: unexpectedAction,
-      onPatchCharacter: unexpectedAction,
       storyPosts: [],
       storyNextCursor: null,
-      onRoll: unexpectedAction,
-      onCreateCharacter: unexpectedAction,
       viewedSceneId: null,
       sceneDialogRequest: 0,
       selectedTokenIds: [],
-      onUpdateInitiative: unexpectedAction,
-      onSetOwnInitiative: unexpectedAction,
-      onRollInitiative: unexpectedAction,
-      onPreviewPlayer: unexpectedAction,
-      onUpdateCounters: unexpectedAction,
-      onCampaignClock: vi.fn(async () => {}),
+      canRecruitFromBattleZone: false,
       requestedChatMessageId: null,
-      onRequestedChatMessageHandled: unexpectedAction,
-      onChatVisibilityChange: unexpectedAction,
       collapsed: false,
-      onCollapsedChange: unexpectedAction,
-      onResizeHandleDown: unexpectedAction,
-      onResizeHandleMove: unexpectedAction,
-      onResizeHandleUp: unexpectedAction,
       workspace: "characters",
       operatorFeedbackAllowed: false,
-      onWorkspaceChange: unexpectedAction,
     };
     renderComponent(
       <ThemeProvider theme="dark" lang="ru">
-        <CampaignActionsContext.Provider value={actions()}>
+        <CampaignActionsContext.Provider
+          value={actions(undefined, onCampaignClock)}
+        >
           <CharacterWorkspace {...workspaceProps} />
         </CampaignActionsContext.Provider>
       </ThemeProvider>,
@@ -987,7 +1221,7 @@ describe("character action feedback", () => {
     });
     fireEvent.click(day);
     await waitFor(() =>
-      expect(workspaceProps.onCampaignClock).toHaveBeenCalledExactlyOnceWith(
+      expect(onCampaignClock).toHaveBeenCalledExactlyOnceWith(
         "ADVANCE_DAY",
         state.campaign.revision,
       ),

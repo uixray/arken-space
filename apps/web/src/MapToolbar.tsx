@@ -16,6 +16,10 @@ import {
 import { CursorPresenceMenu } from "./ui/CursorPresenceMenu";
 import type { CursorPreference } from "./cursor-preference";
 import { CanvasHistoryControls } from "./renderers/CanvasHistoryControls";
+import {
+  TerrainStampControls,
+  type TerrainStampSettings,
+} from "./renderers/TerrainStampControls";
 import { GridSettings } from "./renderers/GridSettings";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import { AppIcon } from "./ui/AppIcon";
@@ -64,6 +68,8 @@ export interface MapToolbarProps {
   onGmFogVisibleChange: (visible: boolean) => void;
   gmGridVisible: boolean;
   onGmGridVisibleChange: (visible: boolean) => void;
+  stampSettings?: TerrainStampSettings;
+  onStampSettingsChange?: (settings: TerrainStampSettings) => void;
 }
 
 export function MapToolbar({
@@ -92,14 +98,33 @@ export function MapToolbar({
   onGmFogVisibleChange,
   gmGridVisible,
   onGmGridVisibleChange,
+  stampSettings = {
+    assetKey: "forest",
+    size: 160,
+    rotation: 0,
+    layer: "PUBLIC",
+  },
+  onStampSettingsChange = () => undefined,
 }: MapToolbarProps) {
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
+  const [stampPopoverOpen, setStampPopoverOpen] = useState(false);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const stampTriggerRef = useRef<HTMLButtonElement | null>(null);
   const resizeSettingsRef = useRef<HTMLDetailsElement>(null);
   const toolbarOverflowRef = useRef<HTMLDetailsElement>(null);
 
   useDismissibleDetails(resizeSettingsRef);
   useDismissibleDetails(toolbarOverflowRef);
+
+  const closeStampPopover = useCallback((restoreFocus = true) => {
+    setStampPopoverOpen(false);
+    onToolSelect("PAN");
+    if (restoreFocus) requestAnimationFrame(() => stampTriggerRef.current?.focus());
+  }, [onToolSelect]);
+
+  useEffect(() => {
+    if (tool !== "STAMP") setStampPopoverOpen(false);
+  }, [tool]);
 
   useEffect(() => {
     if (!snapshot) return;
@@ -190,6 +215,15 @@ export function MapToolbar({
           ".map-tool",
         );
         if (focusedTool && toolbarRef.current?.contains(focusedTool)) {
+          const describedBy = focusedTool.getAttribute("aria-describedby");
+          const tooltipOwnsEscape = describedBy?.split(/\s+/).some((id) => {
+            const popup = document.getElementById(id);
+            return (
+              popup?.getAttribute("role") === "tooltip" &&
+              popup.hasAttribute("data-open")
+            );
+          });
+          if (tooltipOwnsEscape) return;
           focusedTool.blur();
         }
       }}
@@ -214,6 +248,8 @@ export function MapToolbar({
           icon={toolbarCollapsed ? ExpandToolbarIcon : CollapseToolbarIcon}
         />
       </ToolbarButton>
+
+      <div className="map-toolbar__scroll">
 
       <div className="toolbar-group">
         <ToolbarButton
@@ -462,8 +498,8 @@ export function MapToolbar({
         {onToggleObjectList && (
           <ToolbarButton
             type="button"
-            aria-label="Объекты карты"
-            title="Список объектов и токенов на карте"
+            aria-label="Список объектов и токенов карты"
+            title="Открыть список объектов и токенов активной сцены"
             className="map-tool map-object-list-trigger"
             data-tool="MAP_OBJECTS"
             aria-pressed={objectListOpen}
@@ -477,7 +513,7 @@ export function MapToolbar({
             }}
           >
             <AppIcon icon={MapObjectsIcon} />
-            <span className="map-tool__label">Объекты</span>
+            <span className="map-tool__label">Список</span>
           </ToolbarButton>
         )}
         {tokenTrayControl}
@@ -488,6 +524,39 @@ export function MapToolbar({
         />
       </div>
       {pauseControl && <div className="map-toolbar__pause">{pauseControl}</div>}
+      {!previewSnapshot && snapshot.me.role === "GM" && (
+        <ToolbarButton
+          ref={stampTriggerRef}
+          aria-label="Штамп рельефа"
+          title="Разместить штамп рельефа"
+          className="map-tool map-tool--stamp"
+          data-tool="STAMP"
+          aria-pressed={stampPopoverOpen}
+          aria-expanded={stampPopoverOpen}
+          aria-controls="terrain-stamp-popover"
+          onClick={() => {
+            if (stampPopoverOpen) closeStampPopover();
+            else {
+              setStampPopoverOpen(true);
+              onToolSelect("STAMP");
+            }
+          }}
+        >
+          <span aria-hidden="true">▧</span>
+          <span className="map-tool__label">Штамп</span>
+        </ToolbarButton>
+      )}
+      </div>
+      {stampPopoverOpen && !previewSnapshot && snapshot.me.role === "GM" && (
+        <TerrainStampControls
+          id="terrain-stamp-popover"
+          triggerRef={stampTriggerRef}
+          value={stampSettings}
+          onChange={onStampSettingsChange}
+          onClose={closeStampPopover}
+          onDismissOutside={() => setStampPopoverOpen(false)}
+        />
+      )}
     </div>
   );
 }

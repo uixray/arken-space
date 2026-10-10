@@ -40,9 +40,8 @@ export interface GuideSection {
 }
 
 /**
- * The canvas listens only while it has focus and ignores anything held with
- * Ctrl, Alt or Cmd — which is why none of these collide with browser
- * shortcuts, and why clicking the map first is part of the instruction.
+ * The canvas listens only while it has focus. Most tool keys ignore Ctrl, Alt
+ * and Cmd; documented Ctrl+Z/Shift+Ctrl+Z and Ctrl-click are deliberate exceptions.
  */
 /**
  * UIX-466: «мастерский» и «про туман» перестали быть одним и тем же.
@@ -94,7 +93,7 @@ export const canvasSections: GuideSection[] = [
   },
   {
     title: "Отмена",
-    hint: "Эти две работают везде, а не только на карте — но не тогда, когда вы печатаете.",
+    hint: "Работают на карте и вне её, но не тогда, когда вы печатаете.",
     shortcuts: [
       { keys: ["Ctrl", "Z"], action: "Отменить изменение на карте" },
       { keys: ["Ctrl", "Shift", "Z"], action: "Вернуть отменённое" },
@@ -122,10 +121,19 @@ export const canvasSections: GuideSection[] = [
   },
   {
     title: "Токены",
-    hint: "Стрелки двигают выделенный токен. Если ничего не выделено — двигают карту.",
+    hint: "Стрелки двигают выделенный токен; без выделения — карту. WASD двигают выбранные токены в режиме перемещения.",
     shortcuts: [
       { keys: ["←", "→", "↑", "↓"], action: "Шаг на одну клетку сетки" },
       { keys: ["Shift", "стрелка"], action: "Шаг сразу на пять клеток" },
+      {
+        keys: ["W", "A", "S", "D"],
+        action:
+          "Двигать выбранные токены в режиме перемещения: вверх, влево, вниз, вправо. Шаг — клетка сетки или 8 px без сетки",
+      },
+      {
+        keys: ["Shift", "WASD"],
+        action: "Увеличить шаг перемещения в пять раз",
+      },
       {
         keys: ["ЛКМ", "перетаскивание по пустой карте"],
         action: "Выделить несколько токенов рамкой",

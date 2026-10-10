@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#10140f" />
+    <title>Terrain Stamp Prototype · ArkenHar</title>
+  </head>
+  <body>
+    <main id="app" aria-label="Изолированный прототип штампов местности">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ARKEN SPACE · UIX-347 · ИЗОЛИРОВАННЫЙ ПРОТОТИП</p>
+          <h1>Штампы местности</h1>
+          <p class="intro">
+            Локальный Konva-прототип модели и плотности размещения. Не часть
+            продукта.
+          </p>
+        </div>
+        <div class="history-actions" aria-label="История изменений">
+          <button id="undo" type="button">↶ Отменить</button>
+          <button id="redo" type="button">↷ Повторить</button>
+          <button id="copy" type="button">Копировать</button>
+          <button id="remove" type="button" class="danger">Удалить</button>
+        </div>
+      </header>
+
+      <section class="workbench">
+        <aside class="palette panel" aria-label="Палитра штампов">
+          <div class="panel-heading">
+            <span class="step">01</span>
+            <div>
+              <h2>Палитра</h2>
+              <p>Повторно размещайте выбранный мотив</p>
+            </div>
+          </div>
+          <div
+            id="stamp-palette"
+            class="stamp-palette"
+            role="group"
+            aria-label="Набор прототипа"
+          >
+            <button
+              type="button"
+              class="stamp-choice active"
+              data-stamp="forest"
+              aria-pressed="true"
+            >
+              <span class="stamp-preview forest" aria-hidden="true"></span
+              ><span><strong>Лес</strong><small>лесной массив</small></span>
+            </button>
+            <button
+              type="button"
+              class="stamp-choice"
+              data-stamp="mountain"
+              aria-pressed="false"
+            >
+              <span class="stamp-preview mountain" aria-hidden="true"></span
+              ><span><strong>Горы</strong><small>горный хребет</small></span>
+            </button>
+            <button
+              type="button"
+              class="stamp-choice"
+              data-stamp="cloud"
+              aria-pressed="false"
+            >
+              <span class="stamp-preview cloud" aria-hidden="true"></span
+              ><span><strong>Облако</strong><small>дымка и облака</small></span>
+            </button>
+          </div>
+          <div
+            class="pattern-atlas"
+            aria-label="Проверка повторения текстуры 2 на 2"
+          >
+            <div class="atlas-tile forest-pattern"><span>Лес · 2×2</span></div>
+            <div class="atlas-tile mountain-pattern">
+              <span>Горы · 2×2</span>
+            </div>
+            <div class="atlas-tile cloud-pattern">
+              <span>Облака · 2×2</span>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+          <div class="panel-heading compact">
+            <span class="step">02</span>
+            <div>
+              <h2>Параметры</h2>
+              <p>Проверочные значения</p>
+            </div>
+          </div>
+          <label class="control-label" for="size"
+            >Размер <output id="size-value">72</output></label
+          >
+          <input
+            id="size"
+            type="range"
+            min="24"
+            max="240"
+            step="4"
+            value="72"
+          />
+          <label class="control-label" for="rotation"
+            >Поворот <output id="rotation-value">0°</output></label
+          >
+          <input
+            id="rotation"
+            type="range"
+            min="0"
+            max="359"
+            step="1"
+            value="0"
+          />
+          <label class="control-label" for="layer">Слой (метаданные)</label>
+          <select id="layer">
+            <option value="DECORATION_PUBLIC">Декор · общий</option>
+            <option value="DECORATION_GM">Декор · GM</option>
+          </select>
+          <label class="toggle-row"
+            ><input id="snap" type="checkbox" /> Привязка к тестовой
+            сетке</label
+          >
+          <p class="prototype-note">
+            Размер, шаг сетки и поведение — прототипные параметры, не
+            продуктовые решения.
+          </p>
+
+          <div class="divider"></div>
+          <div class="panel-heading compact">
+            <span class="step">03</span>
+            <div>
+              <h2>Нагрузка</h2>
+              <p>Детерминированный тестовый набор</p>
+            </div>
+          </div>
+          <div class="density-actions">
+            <button id="load-100" type="button">Загрузить 100</button>
+            <button id="load-500" type="button">Загрузить 500</button>
+          </div>
+          <button id="clear" type="button" class="quiet full-width">
+            Очистить сцену
+          </button>
+        </aside>
+
+        <section class="canvas-column" aria-label="Рабочая сцена">
+          <div class="canvas-toolbar panel">
+            <div class="mode-switch" role="group" aria-label="Режим указателя">
+              <button
+                id="place-mode"
+                type="button"
+                class="mode active"
+                aria-pressed="true"
+              >
+                ＋ Размещение
+              </button>
+              <button
+                id="select-mode"
+                type="button"
+                class="mode"
+                aria-pressed="false"
+              >
+                ↖ Выбор
+              </button>
+            </div>
+            <div class="canvas-hint">
+              <kbd>ЛКМ</kbd> ставит / выбирает <kbd>Колесо</kbd> масштаб
+              <kbd>Средняя кнопка</kbd> панорама
+            </div>
+            <button id="reset-view" type="button" class="quiet">
+              Сбросить вид
+            </button>
+          </div>
+          <div class="stage-shell panel">
+            <div id="stage" aria-label="Карта сцены для прототипирования"></div>
+            <div class="stage-badge">
+              <span class="live-dot"></span>Локальная сцена · без сервера
+            </div>
+          </div>
+          <div class="metrics panel" aria-live="polite">
+            <div>
+              <span class="metric-label">Объектов</span
+              ><strong id="object-count">0</strong>
+            </div>
+            <div>
+              <span class="metric-label">Загрузка набора</span
+              ><strong id="load-time">—</strong>
+            </div>
+            <div>
+              <span class="metric-label">Рисование слоя</span
+              ><strong id="draw-time">—</strong>
+            </div>
+            <div>
+              <span class="metric-label">Панорама / zoom</span
+              ><strong id="panzoom-time">—</strong>
+            </div>
+            <div>
+              <span class="metric-label">JSON payload</span
+              ><strong id="payload-size">—</strong>
+            </div>
+            <div>
+              <span class="metric-label">Масштаб</span
+              ><strong id="zoom-value">100%</strong>
+            </div>
+            <div class="metric-status" id="status" role="status">
+              Выберите мотив и разместите несколько копий
+            </div>
+          </div>
+        </section>
+
+        <aside class="inspector panel" aria-label="Выбранный штамп">
+          <div class="panel-heading">
+            <span class="step">04</span>
+            <div>
+              <h2>Инспектор</h2>
+              <p>Трансформация выбранного объекта</p>
+            </div>
+          </div>
+          <div id="empty-selection" class="empty-selection">
+            <span>◇</span>
+            <p>Выберите штамп на сцене,<br />чтобы посмотреть его данные.</p>
+          </div>
+          <dl id="stamp-details" class="details hidden">
+            <dt>Тип</dt>
+            <dd id="detail-kind">—</dd>
+            <dt>Авторский ключ</dt>
+            <dd id="detail-author">—</dd>
+            <dt>Стабильный ID</dt>
+            <dd id="detail-id" class="mono">—</dd>
+            <dt>Координаты</dt>
+            <dd id="detail-position" class="mono">—</dd>
+            <dt>Размер / угол</dt>
+            <dd id="detail-transform" class="mono">—</dd>
+            <dt>Слой / ревизия</dt>
+            <dd id="detail-revision" class="mono">—</dd>
+          </dl>
+          <button id="roundtrip" type="button" class="quiet full-width">
+            Проверить JSON round-trip
+          </button>
+          <p id="roundtrip-result" class="roundtrip-result" aria-live="polite">
+            Проверка модели ещё не запускалась.
+          </p>
+          <div class="boundary-card">
+            <strong>Граница прототипа</strong>
+            <p>
+              Модель, история, символы и метрики живут в памяти браузера. Нет
+              server-authority, ACL, reconnect или общей видимости между
+              игроками.
+            </p>
+          </div>
+        </aside>
+      </section>
+      <footer>
+        Сгенерированные паттерны леса, гор и облаков; векторные символы — запасной
+        вариант. Финальная библиотека и бесшовность ещё не утверждены.
+      </footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
