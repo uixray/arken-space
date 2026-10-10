@@ -51,10 +51,26 @@ if [[ $CAPTURE_MODE == compose ]]; then
   server_id=$("${dc[@]}" ps -q server)
   pg_id=$("${dc[@]}" ps -q postgres)
   [[ -n $server_id && -n $pg_id ]] || die 'running server and postgres containers are required'
-  web_id=$("${dc[@]}" ps -q web || true)
-  edge_id=
+  web_id=$("${dc[@]}" ps -q web)
+  edge_id=$("${dc[@]}" ps -q edge)
+  [[ -n $web_id && -n $edge_id ]] || die 'complete service snapshot requires running web and edge containers'
+  expected_identity=$(docker inspect "$server_id" "$pg_id" "$web_id" "$edge_id" | node -e '
+const fs=require("node:fs");
+try {
+ const c=JSON.parse(fs.readFileSync(0,"utf8")), ids=process.argv.slice(1);
+ if(c.length!==4||c.some((x,i)=>x.Id!==ids[i]||x.State?.Status!=="running"||!/^sha256:[0-9a-f]{64}$/i.test(x.Image)))process.exit(2);
+ const nets=c.map(x=>Object.values(x.NetworkSettings?.Networks??{}));
+ const common=nets[0].filter(n=>nets.every(ns=>ns.some(v=>v.NetworkID===n.NetworkID)));
+ if(common.length!==1)process.exit(3);
+ const media=c[0].Mounts?.filter(m=>m.Type==="bind"&&m.Destination===(c[0].Config?.Env??[]).find(e=>e.startsWith("MEDIA_ROOT="))?.slice(11));
+ const edge=c[3].Mounts?.filter(m=>m.Type==="bind"&&m.Destination.startsWith("/etc/nginx/")&&!m.Destination.endsWith("/"));
+ if(media?.length!==1||edge?.length!==1||!fs.statSync(edge[0].Source).isFile())process.exit(4);
+ const u=new URL((c[0].Config?.Env??[]).find(e=>e.startsWith("DATABASE_URL="))?.slice(13));
+ process.stdout.write(JSON.stringify({containerIds:ids,networkId:common[0].NetworkID,databaseName:decodeURIComponent(u.pathname.slice(1)),mediaSource:media[0].Source,mediaContainerPath:media[0].Destination,edgeConfigSource:edge[0].Source,edgeConfigContainerPath:edge[0].Destination}));
+}catch{process.exit(5)}
+' "$server_id" "$pg_id" "$web_id" "$edge_id") || die 'compose service, image, network or bind-mount identity is incomplete'
   database_name=
-  media_container_path=/srv/arken-space/media
+  media_container_path=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).mediaContainerPath)' "$expected_identity")
   # Resolve the database the API actually uses against this PG container before downtime.
   # Inspect the URL only in memory; stdout contains only the target host and database.
   compose_identity=$(docker inspect "$server_id" "$pg_id" | node -e '
@@ -151,7 +167,7 @@ NODE
 if [[ $CAPTURE_MODE == cloned-review ]]; then
   assert_canonical_sources "$ARKEN_REVIEW_RUNTIME_ENV_FILE" "$ARKEN_REVIEW_MEDIA_SOURCE" "$ARKEN_REVIEW_EDGE_CONFIG_SOURCE"
 else
-  assert_canonical_sources "$COMPOSE_FILE" "$ENV_FILE"
+  assert_canonical_sources "$COMPOSE_FILE" "$ENV_FILE" "$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).mediaSource)' "$expected_identity")" "$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).edgeConfigSource)' "$expected_identity")"
 fi
 
 # Capture the safe health fields while the API container is still running.
@@ -224,7 +240,10 @@ mkdir -m 700 "$work/config" "$work/images" "$work/media"
 # Runtime credentials and deployment configuration are staged privately and are
 # included only inside the encrypted Restic snapshot. They are never emitted.
 install -m 600 "$ENV_FILE" "$work/config/runtime.env"
-if [[ $CAPTURE_MODE == compose ]]; then install -m 600 "$COMPOSE_FILE" "$work/config/compose.yml"; fi
+if [[ $CAPTURE_MODE == compose ]]; then
+  install -m 600 "$COMPOSE_FILE" "$work/config/compose.yml"
+  install -m 600 "$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).edgeConfigSource)' "$expected_identity")" "$work/config/edge-nginx.conf"
+fi
 # Preserve server env_file references while interpolating the rest of the private
 # deployment config. Default Compose resolution can inline env_file values and
 # remove the path needed to capture the original runtime env file.
@@ -258,9 +277,8 @@ if [[ $CAPTURE_MODE == compose ]]; then "${dc[@]}" stop server >/dev/null; else 
 if [[ $CAPTURE_MODE == compose ]]; then
   server_image_id=$(docker inspect --format '{{.Image}}' "$server_id")
   pg_image_id=$(docker inspect --format '{{.Image}}' "$pg_id")
-  web_image_id=unavailable
-  if [[ -n $web_id ]]; then web_image_id=$(docker inspect --format '{{.Image}}' "$web_id"); fi
-  edge_image_id=unavailable
+  web_image_id=$(docker inspect --format '{{.Image}}' "$web_id")
+  edge_image_id=$(docker inspect --format '{{.Image}}' "$edge_id")
 else
   server_image_id=$ARKEN_REVIEW_API_IMAGE_ID
   pg_image_id=$ARKEN_REVIEW_PG_IMAGE_ID
@@ -293,7 +311,7 @@ docker cp "$server_id:$media_container_path/." "$work/media/" >/dev/null
 if [[ $CAPTURE_MODE == cloned-review ]]; then
   capture_identity=$expected_identity
 else
-  capture_identity='{}'
+  capture_identity=$expected_identity
 fi
 image_metadata=$(node -e 'const [s,p,w,e]=process.argv.slice(1); console.log(JSON.stringify({server:s,postgres:p,web:w,edge:e}))' "$server_image_id" "$pg_image_id" "$web_image_id" "$edge_image_id")
 node - "$work" "$APP_ROOT" "$health_json" "$image_metadata" "$capture_identity" <<'NODE'

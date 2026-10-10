@@ -26,3 +26,25 @@ Restore only through the existing isolated restore rehearsal flow; never restore
 ## Evidence boundary
 
 Fake-command tests validate Compose and explicitly selected cloned-review paths, mismatch-before-stop, API-only restart on injected failure, four-image/config staging, secret-output guards, and that no retention/deletion command is used. They do not prove host connectivity, snapshot creation, confidentiality of a misconfigured Restic repository, consistency under unrelated writers, or restore readiness. No snapshot is created by tests.
+
+## Compose and independent-copy recovery contract
+
+Both `compose` and `cloned-review` produce the same complete four-service
+manifest: exact server/PostgreSQL/web/edge immutable image IDs, all four image
+archives, inspected database name, shared network, media bind target and edge
+configuration. Compose capture refuses an incomplete service tuple before API
+quiescence; it does not emit a partial snapshot as recovery-ready.
+
+For a local Restic copy, `SNAPSHOT_ID` is the **copied** 64-character ID.
+Keep the original protected capture receipt, and additionally set
+`RESTORE_COPY_RECEIPT_PATH` and `RESTORE_COPY_RECEIPT_SHA256` to the protected
+`arken-restic-copy-receipt-v1` mapping receipt produced by
+`copy-snapshot-local.ps1`. The original capture ID must equal the mapping's
+`sourceSnapshotId`; the requested local ID must equal `copiedSnapshotId`.
+Both receipts are digest-pinned and checked privately before restore. No origin
+repository is opened during recovery; the local repository remains the only
+Restic source. The report records both IDs and both receipt digests.
+
+Synthetic contract tests are not a real encrypted-copy/restore rehearsal.
+Actual capture, offline image load, database/media verification and rollback
+remain required before a release recovery gate can pass.

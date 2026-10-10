@@ -24,3 +24,7 @@ backups
 docs/stickers
 .env
 *.log
+
+.data
+**/.data
+.env.*

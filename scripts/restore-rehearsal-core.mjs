@@ -185,7 +185,7 @@ export async function validateServiceSnapshotManifest(
   }
   if (
     manifest?.format !== "arken-service-snapshot-v1" ||
-    manifest?.captureMode !== "cloned-review" ||
+    !["cloned-review", "compose"].includes(manifest?.captureMode) ||
     !Array.isArray(manifest.files) ||
     !Array.isArray(manifest.target?.containerIds) ||
     manifest.target.containerIds.length !== 4 ||

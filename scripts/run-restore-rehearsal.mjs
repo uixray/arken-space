@@ -675,6 +675,21 @@ try {
     prepareProtectedReportDirectory(requestedReportPath, privateRoot);
     privateReportDirectory = requestedReportDirectory;
   }
+  if (process.env.RESTORE_COPY_RECEIPT_PATH) {
+    const mappingPath = path.resolve(process.env.RESTORE_COPY_RECEIPT_PATH);
+    if (
+      !isPathWithin(privateRoot, mappingPath) ||
+      !isPathWithin(privateRoot, realpathSync(mappingPath)) ||
+      !lstatSync(mappingPath).isFile() ||
+      lstatSync(mappingPath).isSymbolicLink()
+    )
+      throw new Error(
+        "Copy mapping receipt must be a regular private file inside .data/qa-prep",
+      );
+    if (platform() === "win32") verifyWindowsAcl(mappingPath);
+    else if (statSync(mappingPath).mode & 0o177)
+      throw new Error("Copy mapping receipt is not private");
+  }
   const restoreRequest = resolveRestoreMode(process.env);
   if (restoreRequest.format === "service-v1") {
     const receiptRealPath = realpathSync(restoreRequest.receiptPath);
@@ -693,6 +708,8 @@ try {
     report.snapshotIdRequired = restoreRequest.snapshotId;
     report.captureManifestSha256 = restoreRequest.manifestSha256;
     report.captureReceiptSha256 = restoreRequest.receiptSha256;
+    report.sourceSnapshotId = restoreRequest.sourceSnapshotId;
+    report.copyReceiptSha256 = restoreRequest.copyReceiptSha256;
     report.recoveryMode =
       "captured server and PostgreSQL images; no source-build equivalence claim";
   }

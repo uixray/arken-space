@@ -14,7 +14,6 @@ RUN pnpm install --frozen-lockfile
 
 COPY apps/server apps/server
 COPY packages packages
-RUN pnpm --filter @arken/contracts build && pnpm --filter @arken/system build && pnpm --filter @arken/db build && pnpm --filter @arken/server build
+RUN pnpm --filter @arken/contracts build && pnpm --filter @arken/system build && pnpm --filter @arken/db build && pnpm --filter @arken/server exec tsup src/index.ts src/env.ts --format esm --clean --sourcemap
 
-EXPOSE 4100
-CMD ["sh", "-c", "pnpm db:migrate && exec node apps/server/dist/index.js"]
+CMD ["sh", "-c", "node --input-type=module -e 'import(\"./apps/server/dist/env.js\").catch(() => { console.error(\"Invalid runtime configuration; aborting before migration.\"); process.exitCode = 1; })' && pnpm db:migrate && exec node apps/server/dist/index.js"]

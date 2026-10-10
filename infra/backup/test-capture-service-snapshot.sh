@@ -30,12 +30,16 @@ set -eu
 printf '%s\n' "docker $*" >> "$TEST_LOG"
 if [[ ${1:-} == inspect && ${2:-} != --format ]]; then
 if [[ ${ARKEN_CAPTURE_MODE:-compose} == compose ]]; then
-cat <<JSON
-[
- {"Id":"server-id","Image":"sha256:server","State":{"Status":"running"},"Name":"/server","Config":{"Env":["DATABASE_URL=$TEST_COMPOSE_API_DB_URL"]},"NetworkSettings":{"Networks":{"app":{"NetworkID":"$TEST_COMPOSE_NETWORK","Aliases":["server"]}}},"Mounts":[]},
- {"Id":"pg-id","Image":"sha256:postgres","State":{"Status":"running"},"Name":"/postgres","Config":{"Env":["POSTGRES_DB=$TEST_COMPOSE_PG_DB","POSTGRES_USER=postgres"]},"NetworkSettings":{"Networks":{"app":{"NetworkID":"$TEST_COMPOSE_NETWORK","Aliases":["postgres","pg"]}}},"Mounts":[]}
-]
-JSON
+TEST_INSPECT_COUNT=$# node -e '
+const fs=require("node:fs"),e=process.env;
+const net={app:{NetworkID:e.TEST_COMPOSE_NETWORK,Aliases:["postgres","pg"]}};
+const c=[
+ {Id:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",Image:"sha256:"+"1".repeat(64),State:{Status:"running"},Config:{Env:["DATABASE_URL="+e.TEST_COMPOSE_API_DB_URL,"MEDIA_ROOT=/app/media"]},NetworkSettings:{Networks:net},Mounts:[{Type:"bind",Source:e.TEST_COMPOSE_MEDIA,Destination:"/app/media"}]},
+ {Id:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",Image:"sha256:"+"2".repeat(64),State:{Status:"running"},Config:{Env:["POSTGRES_DB="+e.TEST_COMPOSE_PG_DB,"POSTGRES_USER=postgres"]},NetworkSettings:{Networks:net},Mounts:[]},
+ {Id:"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",Image:"sha256:"+"3".repeat(64),State:{Status:"running"},NetworkSettings:{Networks:net},Mounts:[]},
+ {Id:"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",Image:"sha256:"+"4".repeat(64),State:{Status:"running"},NetworkSettings:{Networks:net},Mounts:[{Type:"bind",Source:e.TEST_COMPOSE_EDGE,Destination:"/etc/nginx/conf.d/default.conf"}]}
+];console.log(JSON.stringify(c.slice(0,Number(e.TEST_INSPECT_COUNT)-1)));'
+
 else
 cat <<JSON
 [
@@ -49,11 +53,18 @@ fi
 exit 0
 fi
 case "$*" in
-  *' ps -q server'*) printf 'server-id\n' ;;
-  *' ps -q postgres'*) printf 'pg-id\n' ;;
-  *' ps -q web'*) printf 'web-id\n' ;;
+  *' ps -q server'*) printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' ;;
+  *' ps -q postgres'*) printf 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' ;;
+  *' ps -q web'*) printf 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\n' ;;
+  *' ps -q edge'*) printf 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n' ;;
   *' config --format json --no-env-resolution'*) printf '{"services":{"server":{"env_file":[{"path":"%s"}]}}}\n' "$TEST_RUNTIME_ENV" ;;
-  *'inspect --format'*) [[ $* == *server-id* ]] && printf 'sha256:server\n' || { [[ $* == *pg-id* ]] && printf 'sha256:postgres\n' || printf 'sha256:web\n'; } ;;
+  *'inspect --format'*) case "${*: -1}" in
+    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa) printf 'sha256:1111111111111111111111111111111111111111111111111111111111111111\n';;
+    bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb) printf 'sha256:2222222222222222222222222222222222222222222222222222222222222222\n';;
+    cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) printf 'sha256:3333333333333333333333333333333333333333333333333333333333333333\n';;
+    *) printf 'sha256:4444444444444444444444444444444444444444444444444444444444444444\n';;
+  esac ;;
+
   *' node -e '*healthz*) printf '{"buildRevision":"synthetic-rev","schemaVersion":"schema-test"}\n' ;;
   *'save --output '* ) [[ ${FAKE_FAIL_SAVE:-0} != 1 ]] || exit 7; out=${*: -2:1}; : > "$out" ;;
   *' pg_dump '* ) printf 'synthetic-db-dump' ;;
@@ -90,6 +101,9 @@ case "$1" in
      grep -q 'PRIVATE_TEST_SENTINEL=do-not-print' "$root/config/runtime.env"
      grep -q 'SERVER_SECRET_SENTINEL=must-stay-encrypted' "$root/config/server-runtime.env"
      test -f "$root/config/compose-rendered.private.json"
+     test -f "$root/images/web.tar" && test -f "$root/images/edge.tar" && test -f "$root/config/edge-nginx.conf"
+     node -e 'const m=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(m.captureMode!=="compose"||m.target.databaseName!=="arken_db"||m.target.containerIds.length!==4||!m.target.containerIds.every(x=>/^[a-f0-9]{64}$/.test(x))||m.target.mediaContainerPath!=="/app/media"||!["server","postgres","web","edge"].every(x=>/^sha256:[a-f0-9]{64}$/.test(m.images[x])))process.exit(1)' "$root/capture-manifest.json"
+
    fi
    : > "$TEST_LOG.snapshot"
    ;;
@@ -100,7 +114,10 @@ chmod +x "$TMP/bin/docker" "$TMP/bin/restic" "$TMP/bin/node"
 export PATH="$TMP/bin:$PATH" TEST_REAL_NODE="$REAL_NODE" TEST_LOG="$TMP/commands.log" RESTIC_REPOSITORY="$TMP/repo" TEST_RUNTIME_ENV="$TMP/app/server-runtime.env"
 export ARKEN_APP_ROOT="$TMP/app" ARKEN_COMPOSE_FILE="$TMP/app/compose.template.yml"
 export ARKEN_RUNTIME_ENV_FILE="$TMP/app/runtime.env" ARKEN_BACKUP_ROOT="$TMP/out"
-export TEST_COMPOSE_API_DB_URL=postgres://api_user:PRIVATE@postgres/arken_db TEST_COMPOSE_PG_DB=arken_db TEST_COMPOSE_NETWORK=compose-network
+mkdir -p "$TMP/compose-media"
+printf 'synthetic edge' > "$TMP/compose-edge.conf"
+export TEST_COMPOSE_MEDIA="$(cygpath -m "$TMP/compose-media")" TEST_COMPOSE_EDGE="$(cygpath -m "$TMP/compose-edge.conf")"
+export TEST_COMPOSE_API_DB_URL=postgres://api_user:PRIVATE@postgres/arken_db TEST_COMPOSE_PG_DB=arken_db TEST_COMPOSE_NETWORK=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
 export ARKEN_CAPTURE_TMPDIR="$TMP" TEST_CAPTURE_TMPDIR="$TMP" ARKEN_CAPTURE_CONFIG_FILES="$TMP/app/extra.conf" ARKEN_CAPTURE_RECEIPT="$TMP/out/receipt.json"
 export ARKEN_CAPTURE_QUIESCE_CONFIRM=stop-and-restart-arken-server
 # A compose API URL pointing at a different database is refused before downtime.
