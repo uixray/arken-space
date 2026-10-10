@@ -11,7 +11,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import * as schema from "@arken/db";
 import { accountActionTokens, memberships, users } from "@arken/db";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createAccountMailContext } from "./account-mail-context.js";
 import { createAccountMailRuntime } from "./account-mail-runtime.js";
 import { registerAccountAuthRoutes } from "./account-auth-routes.js";
@@ -27,7 +27,6 @@ const certPath = join(temp, "tls-cert.pem");
 const syntheticEmail = `signup-${crypto.randomUUID()}@example.invalid`;
 const syntheticPassword = "synthetic-only-passphrase-2026";
 const runtimeWorkerId = `lifecycle-${crypto.randomUUID()}`;
-const emptyDrain = { accepted: 0, retried: 0, cancelled: 0, blocked: 0 } as const;
 
 function fakeSmtp() {
   const accepted: string[] = [];

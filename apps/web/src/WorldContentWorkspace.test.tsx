@@ -96,6 +96,24 @@ async function selectEntity() {
 }
 
 describe("WorldContentWorkspace canonical PATCH recovery", () => {
+  it("reflects dirty state and clears it when the draft returns to baseline", async () => {
+    renderManager();
+    await selectEntity();
+    const save = screen.getByRole("button", { name: "Сохранить" });
+    expect(save).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Название"), {
+      target: { value: "Unsaved local edit" },
+    });
+    expect(save).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("Название"), {
+      target: { value: "Silver Coast" },
+    });
+    expect(save).toBeDisabled();
+    expect(
+      apiMock.mock.calls.filter(([, init]) => init?.method === "PATCH"),
+    ).toHaveLength(0);
+  });
+
   it("retries an ambiguous save with the exact original action, revision, and changed payload", async () => {
     let patchCount = 0;
     const saved = entity({ name: "Changed locally", revision: 5 });
@@ -221,6 +239,7 @@ describe("WorldContentWorkspace canonical PATCH recovery", () => {
       }),
     );
     await screen.findByText("Сохранено.");
+    expect(screen.getByRole("button", { name: "Сохранить" })).toBeDisabled();
     const patches = apiMock.mock.calls.filter(
       ([path, init]) =>
         path === `/api/world-content/${entityId}` && init?.method === "PATCH",
@@ -239,6 +258,38 @@ describe("WorldContentWorkspace canonical PATCH recovery", () => {
       "Concurrent summary",
     );
     expect(screen.getByLabelText("Название")).toHaveValue("Local title");
+  });
+
+  it("discards a conflicted local draft onto the latest baseline and clears dirty state", async () => {
+    const latest = entity({ name: "Latest server title", revision: 5 });
+    apiMock.mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/api/world-content")
+        return Promise.resolve([entity(), other]);
+      if (path === `/api/world-content/${entityId}` && init?.method === "PATCH")
+        return Promise.reject(
+          new ApiError(409, "WORLD_CONTENT_CONFLICT", "conflict"),
+        );
+      if (path === `/api/world-content/${entityId}`)
+        return Promise.resolve(latest);
+      return Promise.resolve([]);
+    });
+    renderManager();
+    await selectEntity();
+    fireEvent.change(screen.getByLabelText("Название"), {
+      target: { value: "Discard this local title" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await screen.findByRole("region", { name: "Сверка конфликта версии" });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Отбросить черновик и загрузить версию 5",
+      }),
+    );
+    await screen.findByText("Черновик отброшен. Загружена актуальная версия.");
+    expect(screen.getByLabelText("Название")).toHaveValue(
+      "Latest server title",
+    );
+    expect(screen.getByRole("button", { name: "Сохранить" })).toBeDisabled();
   });
 
   it("coalesces rapid save clicks into one immutable in-flight PATCH", async () => {
@@ -273,6 +324,7 @@ describe("WorldContentWorkspace canonical PATCH recovery", () => {
     expect(patches).toHaveLength(1);
     settlePatch?.(entity({ name: "Single request", revision: 5 }));
     await screen.findByText("Сохранено.");
+    expect(screen.getByRole("button", { name: "Сохранить" })).toBeDisabled();
     expect(
       apiMock.mock.calls.filter(
         ([path, init]) =>

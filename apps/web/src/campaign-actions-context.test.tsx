@@ -113,6 +113,62 @@ describe("useCampaignActions", () => {
     expect(Object.keys(seen[2]!)).toEqual(CAMPAIGN_ACTION_DOMAIN_KEYS);
   });
 
+  it.each([
+    ["scene", "onViewScene"],
+    ["worldMap", "onCreateWorldMap"],
+    ["token", "onPlaceTokenDefinition"],
+    ["chat", "onChat"],
+    ["access", "onCreateInvite"],
+    ["catalog", "onCreateCatalogEntry"],
+    ["story", "onLoadMoreStoryPosts"],
+    ["playerRequest", "onOpenPlayerRequestCreate"],
+    ["asset", "replaceAsset"],
+    ["statLayout", "onUpdateStatLayout"],
+    ["chatHistory", "onLoadThreadHistory"],
+    ["character", "patchCharacter"],
+    ["initiative", "onUpdateInitiative"],
+    ["dice", "onRoll"],
+    ["campaign", "onCampaignClock"],
+    ["player", "onPreviewPlayer"],
+    ["sidebar", "onWorkspaceChange"],
+  ] as const)(
+    "updates a changed real command in %s without hiding it behind container identity",
+    async (domain, command) => {
+      const seen: CampaignActions[] = [];
+      const changedCommand = () => undefined;
+      function ChangedCommandHarness() {
+        const [changed, setChanged] = useState(false);
+        const group = new Proxy(
+          { [command]: changed ? changedCommand : noop } as Record<
+            string,
+            unknown
+          >,
+          {
+            get: (target, key) =>
+              typeof key === "string" ? (target[key] ?? noop) : noop,
+          },
+        );
+        const value = useCampaignActionsValue(makeActions({ [domain]: group }));
+        seen.push(value);
+        return (
+          <button type="button" onClick={() => setChanged(true)}>
+            change command
+          </button>
+        );
+      }
+      renderComponent(<ChangedCommandHarness />);
+      await userEvent.click(
+        screen.getByRole("button", { name: "change command" }),
+      );
+      expect(seen[1]).not.toBe(seen[0]);
+      expect(
+        (seen[1]![domain] as unknown as Record<string, unknown>)[command],
+      ).toBe(changedCommand);
+      expect(Object.keys(seen[1]!)).toEqual(CAMPAIGN_ACTION_DOMAIN_KEYS);
+      expect(nonFunctionEntries(seen[1]!)).toEqual([]);
+    },
+  );
+
   it("hands every consumer the identical value across re-renders", async () => {
     // This identity is the whole basis for using context here: it is what
     // lets React.memo hold further down the tree. If the provider were given

@@ -1,6 +1,5 @@
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
-import { cursorColorForMembership } from "../../apps/web/src/renderers/cursor-color";
 
 const sceneId = "uix508-ping-scene";
 const membershipId = "uix508-sender";

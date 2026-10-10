@@ -34,7 +34,7 @@ export function useLatestCallback<T extends (...args: never[]) => unknown>(
 ): T {
   const callbackRef = useLatestRef(callback);
   return useCallback(
-    ((...args: Parameters<T>) => callbackRef.current(...args)) as T,
+    (...args: Parameters<T>) => callbackRef.current(...args),
     [callbackRef],
-  );
+  ) as T;
 }

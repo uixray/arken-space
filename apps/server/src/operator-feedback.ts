@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { and, asc, eq, gt, gte, lte, or, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import {

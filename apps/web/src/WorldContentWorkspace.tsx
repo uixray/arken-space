@@ -133,7 +133,6 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
   >(null);
   const selectedIdRef = useRef(selectedId);
   const selectionEpochRef = useRef(0);
-  selectedIdRef.current = selectedId;
 
   const setSelection = (id: string | null) => {
     selectionEpochRef.current += 1;
@@ -627,6 +626,7 @@ function EntityDetail({
     canonicalDraftFromEntity(entity),
   );
   const baseRef = useRef(entity);
+  const [baseline, setBaseline] = useState(entity);
   const [pending, setPending] = useState<PendingCanonicalSave | null>(null);
   const [conflict, setConflict] = useState<CanonicalConflict | null>(null);
   const [busy, setBusy] = useState(false);
@@ -635,8 +635,7 @@ function EntityDetail({
   const requestEpochRef = useRef(0);
   const inFlightRef = useRef(false);
 
-  const dirty =
-    Object.keys(canonicalEditPatch(baseRef.current, draft)).length > 0;
+  const dirty = Object.keys(canonicalEditPatch(baseline, draft)).length > 0;
   const editorLocked = busy || pending !== null || conflict !== null;
 
   useEffect(() => {
@@ -664,6 +663,7 @@ function EntityDetail({
 
   const commitUpdated = (updated: WorldContentDto, message: string) => {
     baseRef.current = updated;
+    setBaseline(updated);
     setDraft(canonicalDraftFromEntity(updated));
     setPending(null);
     setConflict(null);
@@ -771,6 +771,7 @@ function EntityDetail({
 
   const loadLatestAndDiscard = (latest: WorldContentDto) => {
     baseRef.current = latest;
+    setBaseline(latest);
     setDraft(canonicalDraftFromEntity(latest));
     setConflict(null);
     setError("");
@@ -808,6 +809,7 @@ function EntityDetail({
     const payload = { ...conflict.payload };
     const mergedDraft = reapplyCanonicalEditPatch(latest, payload);
     baseRef.current = latest;
+    setBaseline(latest);
     setDraft(mergedDraft);
     setConflict(null);
     void sendEnvelope(

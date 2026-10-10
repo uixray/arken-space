@@ -84,8 +84,9 @@ export function SpellSchoolsWorkspace({
   });
   const pendingSave = useRef<PendingSave | null>(null);
   const savedGraphFingerprint = useRef<string | null>(null);
+  const [savedFingerprintSnapshot, setSavedFingerprintSnapshot] = useState<string | null>(null);
   const graphIsDirty = Boolean(
-    graph && !isNew && savedGraphFingerprint.current !== JSON.stringify(graph),
+    graph && !isNew && savedFingerprintSnapshot !== JSON.stringify(graph),
   );
   const editorLocked =
     retryPending || versionConflict || pendingActivation !== null;
@@ -147,6 +148,7 @@ export function SpellSchoolsWorkspace({
       );
       setGraph(version.graph);
       savedGraphFingerprint.current = JSON.stringify(version.graph);
+      setSavedFingerprintSnapshot(JSON.stringify(version.graph));
       setIsNew(false);
       setActivationPrompt(null);
       setVersionConflict(false);
@@ -172,6 +174,7 @@ export function SpellSchoolsWorkspace({
     const empty = createEmptySpellDraft(title);
     setGraph({ ...empty, schools: [createSpellSchool(empty, name)] });
     savedGraphFingerprint.current = null;
+    setSavedFingerprintSnapshot(null);
     setIsNew(true);
     setActivationPrompt(null);
     setError("");
@@ -319,6 +322,7 @@ export function SpellSchoolsWorkspace({
           );
       setGraph(saved.graph);
       savedGraphFingerprint.current = JSON.stringify(saved.graph);
+      setSavedFingerprintSnapshot(JSON.stringify(saved.graph));
       setIsNew(false);
       setRetryPending(false);
       setVersionConflict(false);
@@ -421,6 +425,7 @@ export function SpellSchoolsWorkspace({
       const activated = await promoteSpellPackToActive(graph.packId, command);
       setGraph(activated.graph);
       savedGraphFingerprint.current = JSON.stringify(activated.graph);
+      setSavedFingerprintSnapshot(JSON.stringify(activated.graph));
       setPackTitle(activated.graph.title);
       setPendingActivation(null);
       setActivationPrompt(null);
@@ -482,6 +487,7 @@ export function SpellSchoolsWorkspace({
       );
       setGraph(latest.graph);
       savedGraphFingerprint.current = JSON.stringify(latest.graph);
+      setSavedFingerprintSnapshot(JSON.stringify(latest.graph));
       setIsNew(false);
       setActivationPrompt(null);
       setPackTitle(latest.graph.title);

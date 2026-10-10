@@ -69,9 +69,9 @@ export function parseAccountMailSmtpConfig(source: AccountMailSmtpEnvironment): 
     || /^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?))*\.?$/.test(host));
   const port = portText ? Number(portText) : 465;
   if (!hostIsDns || !Number.isInteger(port) || port < 1 || port > 65535
-    || !username || username.length > 512 || /[\r\n\u0000]/.test(username)
-    || !password || password.length > 4096 || /[\r\n\u0000]/.test(password)
-    || !EMAIL.test(from) || from.length > 320 || /[\r\n\u0000]/.test(from)) {
+    || !username || username.length > 512 || (/[\r\n]/.test(username) || username.includes(String.fromCharCode(0)))
+    || !password || password.length > 4096 || (/[\r\n]/.test(password) || password.includes(String.fromCharCode(0)))
+    || !EMAIL.test(from) || from.length > 320 || (/[\r\n]/.test(from) || from.includes(String.fromCharCode(0)))) {
     throw new Error("MAIL_SMTP_CONFIG_INVALID");
   }
   const connectTimeoutMs = boundedMs(source.ACCOUNT_MAIL_SMTP_CONNECT_TIMEOUT_MS, 2_000, 2_500);
@@ -106,7 +106,7 @@ function classify(error: unknown, signal?: AbortSignal): AccountMailSmtpError {
 
 function validateMessage(mail: OutboundMail, messageId: string, from: string) {
   if (!MESSAGE_ID.test(messageId) || !EMAIL.test(mail.to) || mail.to.length > 320
-    || /[\r\n\u0000]/.test(mail.to) || /[\r\n\u0000]/.test(mail.subject)
+    || (/[\r\n]/.test(mail.to) || mail.to.includes(String.fromCharCode(0))) || (/[\r\n]/.test(mail.subject) || mail.subject.includes(String.fromCharCode(0)))
     || mail.subject.length > 200 || mail.text.length > 8_192 || !EMAIL.test(from)) {
     throw new AccountMailSmtpError("SMTP_CONFIG");
   }

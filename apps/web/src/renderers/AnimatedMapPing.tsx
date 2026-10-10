@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Circle, Group, Text } from "react-konva";
 import Konva from "konva";
 import { cursorColorForMembership } from "./cursor-color";
@@ -7,6 +7,7 @@ import {
   subscribeReducedMotion,
   evaluateMapPing,
   mapPingElapsed,
+  mapPingIsActive,
   mapPingStartTime,
   MAP_PING_LIFETIME_MS,
 } from "./map-ping-motion";
@@ -44,63 +45,73 @@ export function AnimatedMapPing({
     [ping.membershipId],
   );
   const reduced = useReducedMotionPreference();
+  const groupRef = useRef<Konva.Group>(null);
   const ringRefs = useRef<Array<Konva.Circle | null>>([null, null, null]);
   const haloRef = useRef<Konva.Circle>(null);
   const coreRef = useRef<Konva.Circle>(null);
   const nameRef = useRef<Konva.Text>(null);
 
+  const applyGeometry = useCallback((elapsed: number) => {
+    const g = evaluateMapPing(elapsed, scale, reduced);
+    const rings = reduced ? [ringRefs.current[0]] : ringRefs.current;
+    rings.forEach((shape, index) => {
+      if (!shape) return;
+      const spec = g.rings[reduced ? 0 : index]!;
+      shape.radius(spec.radius);
+      shape.strokeWidth(spec.strokeWidth);
+      shape.opacity(spec.opacity);
+      shape.visible(spec.opacity > 0);
+    });
+    ringRefs.current.slice(reduced ? 1 : 3).forEach((shape) => shape?.visible(false));
+    haloRef.current?.radius(g.haloRadius);
+    haloRef.current?.opacity(g.haloOpacity);
+    coreRef.current?.radius(g.coreRadius);
+    coreRef.current?.strokeWidth(g.coreStrokeWidth);
+    coreRef.current?.opacity(g.coreOpacity);
+    nameRef.current?.x(g.nameX);
+    nameRef.current?.y(g.nameY);
+    nameRef.current?.fontSize(g.nameFontSize);
+    nameRef.current?.opacity(g.coreOpacity);
+    groupRef.current?.visible(mapPingIsActive(ping.createdAt, Date.now()));
+  }, [ping.createdAt, scale, reduced]);
+
+  // Konva visibility and geometry are imperative so a rerender after expiry
+  // cannot briefly restore a ping from stale mount-time props.
+  useLayoutEffect(() => {
+    applyGeometry(mapPingElapsed(ping.createdAt, Date.now()));
+  });
+
   useEffect(() => {
     const startTime = mapPingStartTime(ping.createdAt, Date.now());
-    if (Date.now() - startTime >= MAP_PING_LIFETIME_MS) return;
+    const elapsed = Math.max(0, Date.now() - startTime);
+    const remaining = MAP_PING_LIFETIME_MS - elapsed;
+    if (remaining <= 0) return;
     const layer = ringRefs.current[0]?.getLayer();
     if (!layer) return;
-    let driver: ReturnType<typeof createMapPingAnimationDriver>;
     const animation = new Konva.Animation(() => {
       if (!driver.tick()) animation.stop();
     }, layer);
-    driver = createMapPingAnimationDriver({
+    const driver = createMapPingAnimationDriver({
       startTime,
       durationMs: reduced ? 500 : MAP_PING_LIFETIME_MS,
       now: Date.now,
       loop: { start: () => animation.start(), stop: () => animation.stop() },
-      apply: (elapsed) => {
-        const g = evaluateMapPing(elapsed, scale, reduced);
-        const rings = reduced ? [ringRefs.current[0]] : ringRefs.current;
-        rings.forEach((shape, index) => {
-          if (!shape) return;
-          const spec = g.rings[reduced ? 0 : index]!;
-          shape.radius(spec.radius);
-          shape.strokeWidth(spec.strokeWidth);
-          shape.opacity(spec.opacity);
-          shape.visible(spec.opacity > 0);
-        });
-        ringRefs.current
-          .slice(reduced ? 1 : 3)
-          .forEach((shape) => shape?.visible(false));
-        haloRef.current?.radius(g.haloRadius);
-        haloRef.current?.opacity(g.haloOpacity);
-        coreRef.current?.radius(g.coreRadius);
-        coreRef.current?.strokeWidth(g.coreStrokeWidth);
-        coreRef.current?.opacity(g.coreOpacity);
-        nameRef.current?.x(g.nameX);
-        nameRef.current?.y(g.nameY);
-        nameRef.current?.fontSize(g.nameFontSize);
-        nameRef.current?.opacity(g.coreOpacity);
-      },
+      apply: applyGeometry,
     });
     driver.start();
-    return () => driver.stop();
-  }, [ping.createdAt, scale, reduced]);
+    const expiryTimer = window.setTimeout(
+      () => groupRef.current?.visible(false),
+      remaining,
+    );
+    return () => {
+      window.clearTimeout(expiryTimer);
+      driver.stop();
+    };
+  }, [ping.createdAt, scale, reduced, applyGeometry]);
 
-  const initialElapsed = mapPingElapsed(ping.createdAt, Date.now());
-  const initial = evaluateMapPing(initialElapsed, scale, reduced);
+  const initial = evaluateMapPing(0, scale, reduced);
   return (
-    <Group
-      x={ping.x}
-      y={ping.y}
-      visible={initialElapsed < MAP_PING_LIFETIME_MS}
-      listening={false}
-    >
+    <Group ref={groupRef} x={ping.x} y={ping.y} listening={false}>
       {Array.from({ length: 3 }, (_, index) => {
         const ring = initial.rings[reduced ? 0 : index]!;
         return (

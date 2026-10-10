@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   evaluateMapPing,
+  mapPingIsActive,
   mapPingElapsed,
   MAP_PING_LIFETIME_MS,
 } from "./map-ping-motion";
@@ -41,6 +42,13 @@ describe("map ping motion", () => {
     expect(a.coreOpacity).toBeGreaterThan(b.coreOpacity);
     expect(b.coreOpacity).toBeGreaterThan(c.coreOpacity);
     expect(c.coreOpacity).toBe(0);
+  });
+  it("keeps expired pings hidden on mount and later rerenders", () => {
+    const createdAt = 1_000;
+    expect(mapPingIsActive(createdAt, 1_000)).toBe(true);
+    expect(mapPingIsActive(createdAt, 4_499)).toBe(true);
+    expect(mapPingIsActive(createdAt, 4_500)).toBe(false);
+    expect(mapPingIsActive(createdAt, 5_000)).toBe(false);
   });
   it("clamps invalid and delayed elapsed times without restarting old pings", () => {
     expect(mapPingElapsed(100, 50)).toBe(0);

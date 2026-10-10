@@ -80,7 +80,6 @@ import {
   type ClientToServerEvents,
   type ServerToClientEvents,
 } from "@arken/contracts";
-import { betaPlayerByHandle, uniqueBetaPlayerIdentity } from "@arken/contracts";
 import {
   assets,
   campaignSounds,
@@ -1031,7 +1030,7 @@ const scaledGridCoordinate = (
 ) => roundedCanvasValue(nextOffset + (value - previousOffset) * scale);
 
 export function registerRoutes(
-  app: FastifyInstance<any, any, any, any>,
+  app: FastifyInstance,
   db: Database,
   io: RealtimeServer,
   mailContext: AccountMailContext = createAccountMailContext(env),

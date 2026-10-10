@@ -135,6 +135,15 @@ describe("account SMTP adapter", () => {
     })).toThrow("MAIL_SMTP_CONFIG_INVALID");
   });
 
+  it.each(["ACCOUNT_MAIL_SMTP_USERNAME", "ACCOUNT_MAIL_SMTP_PASSWORD", "ACCOUNT_MAIL_SMTP_FROM"])("rejects NUL control in config header %s", (field) => {
+    expect(() => parseAccountMailSmtpConfig({
+      ACCOUNT_MAIL_SMTP_HOST: "smtp.example.test",
+      ACCOUNT_MAIL_SMTP_USERNAME: "user",
+      ACCOUNT_MAIL_SMTP_PASSWORD: "pass",
+      ACCOUNT_MAIL_SMTP_FROM: "sender@example.test",
+      [field]: "synthetic" + String.fromCharCode(0),
+    })).toThrow("MAIL_SMTP_CONFIG_INVALID");
+  });
   it("shares explicit runtime readiness and a single constructed adapter/keyring context", () => {
     const context = createAccountMailContext({
       ACCOUNT_MAIL_RUNTIME_ENABLED: false,

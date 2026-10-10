@@ -159,6 +159,27 @@ describe("AccountAuthWorkspace", () => {  it("registers without creating a sessi
     await screen.findByText("Вы присоединились к кампании. Выберите её, чтобы открыть игровой стол.");
     expect(apiMock).toHaveBeenCalledWith("/api/account/campaigns/invites/claim", expect.objectContaining({ body: JSON.stringify({ token: "synthetic-claim-token-1234567890123456789012345" }), headers: { "x-csrf-token": session.csrfToken } }));
   });
+  it("keeps the invite-claim lock synchronous against immediate duplicate submits", async () => {
+    let resolveClaim!: (value: unknown) => void;
+    let claimCalls = 0;
+    apiMock.mockImplementation((path: string) => {
+      if (path === "/api/account/session") return Promise.resolve(session);
+      if (path === "/api/account/campaigns") return Promise.resolve({ campaigns: [] });
+      if (path === "/api/account/campaigns/invites/claim") {
+        claimCalls += 1;
+        return new Promise((resolve) => { resolveClaim = resolve; });
+      }
+      return Promise.resolve({ ok: true });
+    });
+    window.history.replaceState({}, "", "/account/join#token=synthetic-claim-token-1234567890123456789012345");
+    renderComponent(<AccountAuthWorkspace onAuthenticated={vi.fn()} capabilities={capabilities} />);
+    await screen.findByRole("heading", { name: "Присоединиться" });
+    const button = await screen.findByRole("button", { name: "Принять приглашение" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await waitFor(() => expect(claimCalls).toBe(1));
+    resolveClaim({ campaignId: "22222222-2222-4222-8222-222222222222", membershipId: "33333333-3333-4333-8333-333333333333", role: "PLAYER" });
+  });
   it("accepts a same-origin invite URL pasted into the account form and rejects foreign links", async () => {
     apiMock.mockImplementation((path: string) => {
       if (path === "/api/account/session") return Promise.resolve(session);
@@ -174,7 +195,7 @@ describe("AccountAuthWorkspace", () => {  it("registers without creating a sessi
   });
   it("retries uncertain campaign creation with the exact original idempotency payload", async () => {
     let calls = 0;
-    let submitted: unknown[] = [];
+    const submitted: unknown[] = [];
     apiMock.mockImplementation((path: string, options?: RequestInit) => {
       if (path === "/api/account/session") return Promise.resolve(session);
       if (path === "/api/account/campaigns" && options?.method === "POST") {
@@ -217,5 +238,21 @@ describe("AccountAuthWorkspace", () => {  it("registers without creating a sessi
     fireEvent.click(inviteButton);
     expect(await screen.findByRole("link", { name: /synthetic-player-invite-token-2/ })).toBeInTheDocument();
     expect(inviteCount).toBe(2);
+  });
+  it("blocks a second invite after an uncertain result until reload", async () => {
+    let inviteCount = 0;
+    apiMock.mockImplementation((path: string) => {
+      if (path === "/api/account/session") return Promise.resolve(session);
+      if (path === "/api/account/campaigns") return Promise.resolve({ campaigns: [{ id: "22222222-2222-4222-8222-222222222222", name: "My table", role: "GM", membershipId: "33333333-3333-4333-8333-333333333333", selected: true }] });
+      if (path === "/api/account/campaigns/invites") { inviteCount += 1; return Promise.reject(new Error("network lost")); }
+      return Promise.resolve({ ok: true });
+    });
+    renderComponent(<AccountAuthWorkspace onAuthenticated={vi.fn()} capabilities={capabilities} />);
+    await screen.findByRole("heading", { name: "Мои кампании" });
+    const inviteButton = screen.getByRole("button", { name: "Создать ссылку-приглашение" });
+    fireEvent.click(inviteButton);
+    await screen.findByRole("alert");
+    expect(inviteButton).toBeDisabled();
+    expect(inviteCount).toBe(1);
   });
 });

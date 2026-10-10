@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { InitiativeParticipantDto } from "@arken/contracts";
 import type { GameSnapshot } from "@arken/contracts";
 import { InitiativePanel } from "./InitiativePanel";
@@ -69,18 +69,16 @@ export function ActivityInitiativePanel({
     null,
   );
 
-  // Invalidate synchronously during render as well as in the effect: a promise
-  // settling between a new scope's commit and its passive effect must not leak
-  // an old error into the new campaign/member/encounter view.
-  if (scopeRef.current !== scopeKey) {
+  useLayoutEffect(() => {
+    if (scopeRef.current === scopeKey) return;
     scopeRef.current = scopeKey;
     generation.current += 1;
     inFlight.current = null;
-  }
-
-  useEffect(() => {
     setPendingScope(null);
     setError(null);
+  }, [scopeKey]);
+
+  useEffect(() => {
     return () => {
       if (scopeRef.current === scopeKey) generation.current += 1;
     };

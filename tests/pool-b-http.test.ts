@@ -1048,10 +1048,10 @@ describe("Pool B HTTP boundaries", () => {
       payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
     });
     expect((await undo("undo")).statusCode).toBe(200);
-    let [movedBack] = await db.select().from(schema.drawings).where(eq(schema.drawings.id, copyId));
+    const [movedBack] = await db.select().from(schema.drawings).where(eq(schema.drawings.id, copyId));
     expect(movedBack).toMatchObject({ x: 40, y: 64, kind: "STAMP", stampAssetKey: "mountains", stampSize: 80, stampRotation: 35, stampLayer: "GM", revision: 2 });
     expect((await undo("redo")).statusCode).toBe(200);
-    let [movedAgain] = await db.select().from(schema.drawings).where(eq(schema.drawings.id, copyId));
+    const [movedAgain] = await db.select().from(schema.drawings).where(eq(schema.drawings.id, copyId));
     expect(movedAgain).toMatchObject({ x: 45, y: 71, kind: "STAMP", stampAssetKey: "mountains", stampPackId: "builtin-terrain-v1", stampLayer: "GM", revision: 3 });
     const deleteCopy = await app.inject({
       method: "DELETE", url: `/api/drawings/${copyId}`, headers: headers(secrets.gm),

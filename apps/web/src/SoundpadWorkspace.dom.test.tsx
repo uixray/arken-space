@@ -98,9 +98,9 @@ it("marks starter-pack uploads explicitly as sound effects", async () => {
 });
 
 it("renders real sound buttons and sends one authorized trigger intent without local double-play", async () => {
-  const callbacks = new Map<string, (event: any) => void>();
+  const callbacks = new Map<string, (event: unknown) => void>();
   const emit = vi.fn();
-  const socket = { connected: true, on: vi.fn((name: string, cb: (event: any) => void) => callbacks.set(name, cb)), off: vi.fn((name: string) => callbacks.delete(name)), emit };
+  const socket = { connected: true, on: vi.fn((name: string, cb: (event: unknown) => void) => callbacks.set(name, cb)), off: vi.fn((name: string) => callbacks.delete(name)), emit };
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ packs: [pack], playerPlaybackEnabled: true }) }));
   const audio = { src: "", currentTime: 0, volume: 1, onended: null, onerror: null, pause: vi.fn(), play: vi.fn().mockResolvedValue(undefined) };
   function mockAudio(this: unknown, url?: string) { audio.src = url ?? ""; return audio; }
@@ -199,8 +199,8 @@ it("shows blocked feedback and retries on the next ordinary effect action", asyn
 });
 
 it("reports a rejected effect voice once and keeps the user unlock retry available", async () => {
-  const callbacks = new Map<string, (event?: any) => void>();
-  const socket = { connected: true, on: vi.fn((name: string, cb: (event?: any) => void) => callbacks.set(name, cb)), off: vi.fn((name: string) => callbacks.delete(name)), emit: vi.fn() };
+  const callbacks = new Map<string, (event?: unknown) => void>();
+  const socket = { connected: true, on: vi.fn((name: string, cb: (event?: unknown) => void) => callbacks.set(name, cb)), off: vi.fn((name: string) => callbacks.delete(name)), emit: vi.fn() };
   const makeAudio = (play: ReturnType<typeof vi.fn>) => ({ src: "", currentTime: 0, volume: 1, onended: null as (() => void) | null, onerror: null as (() => void) | null, pause: vi.fn(), play });
   const initialUnlock = makeAudio(vi.fn().mockRejectedValue(new Error("NotAllowedError")));
   const rejectedVoice = makeAudio(vi.fn().mockRejectedValue(new Error("NotAllowedError")));
@@ -236,11 +236,11 @@ it("pins favorites first while preserving the relative order of other authorized
 });
 
 it("refetches the role-filtered catalogue after reconnect/change and then plays a newly published sound", async () => {
-  const callbacks = new Map<string, (event?: any) => void>();
+  const callbacks = new Map<string, (event?: unknown) => void>();
   let current = { packs: [] as typeof pack[], playerPlaybackEnabled: true };
   const fetchMock = vi.fn().mockImplementation(async () => ({ ok: true, json: async () => current }));
   vi.stubGlobal("fetch", fetchMock);
-  const socket = { connected: true, on: vi.fn((name: string, cb: (event?: any) => void) => callbacks.set(name, cb)), off: vi.fn((name: string) => callbacks.delete(name)), emit: vi.fn() };
+  const socket = { connected: true, on: vi.fn((name: string, cb: (event?: unknown) => void) => callbacks.set(name, cb)), off: vi.fn((name: string) => callbacks.delete(name)), emit: vi.fn() };
   const audio = { src: "", currentTime: 0, volume: 1, onended: null, onerror: null, pause: vi.fn(), play: vi.fn().mockResolvedValue(undefined) };
   function mockAudio(this: unknown, url?: string) { audio.src = url ?? ""; return audio; }
   vi.stubGlobal("Audio", vi.fn(mockAudio));
@@ -260,7 +260,7 @@ it("refetches the role-filtered catalogue after reconnect/change and then plays 
 });
 
 it("refreshes player snapshot assets before reloading a newly published catalogue", async () => {
-  const callbacks = new Map<string, (event?: any) => void | Promise<void>>();
+  const callbacks = new Map<string, (event?: unknown) => void | Promise<void>>();
   let current = { packs: [] as typeof pack[], playerPlaybackEnabled: true };
   const fetchMock = vi.fn().mockImplementation(async () => ({
     ok: true,
@@ -269,7 +269,7 @@ it("refreshes player snapshot assets before reloading a newly published catalogu
   vi.stubGlobal("fetch", fetchMock);
   const socket = {
     connected: false,
-    on: vi.fn((name: string, cb: (event?: any) => void) => callbacks.set(name, cb)),
+    on: vi.fn((name: string, cb: (event?: unknown) => void) => callbacks.set(name, cb)),
     off: vi.fn((name: string) => callbacks.delete(name)),
     emit: vi.fn(),
   };
@@ -298,16 +298,16 @@ it("refreshes player snapshot assets before reloading a newly published catalogu
 });
 
 it("does not play an unknown trigger if catalogue lookup resolves after GM stop", async () => {
-  const callbacks = new Map<string, (event?: any) => void>();
+  const callbacks = new Map<string, (event?: unknown) => void>();
   let calls = 0;
-  let resolveLookup!: (value: { ok: boolean; json: () => Promise<any> }) => void;
+  let resolveLookup!: (value: { ok: boolean; json: () => Promise<unknown> }) => void;
   const fetchMock = vi.fn().mockImplementation(() => {
     calls++;
     if (calls === 1) return Promise.resolve({ ok: true, json: async () => ({ packs: [], playerPlaybackEnabled: true }) });
     return new Promise((resolve) => { resolveLookup = resolve; });
   });
   vi.stubGlobal("fetch", fetchMock);
-  const socket = { connected: true, on: vi.fn((name: string, cb: (event?: any) => void) => callbacks.set(name, cb)), off: vi.fn((name: string) => callbacks.delete(name)), emit: vi.fn() };
+  const socket = { connected: true, on: vi.fn((name: string, cb: (event?: unknown) => void) => callbacks.set(name, cb)), off: vi.fn((name: string) => callbacks.delete(name)), emit: vi.fn() };
   const audio = { src: "", currentTime: 0, volume: 1, onended: null, onerror: null, pause: vi.fn(), play: vi.fn().mockResolvedValue(undefined) };
   function mockAudio(this: unknown, url?: string) { audio.src = url ?? ""; return audio; }
   vi.stubGlobal("Audio", vi.fn(mockAudio));
@@ -325,9 +325,9 @@ it("does not play an unknown trigger if catalogue lookup resolves after GM stop"
 });
 
 it("does not play a pre-reconnect trigger after the socket reconnects during catalogue lookup", async () => {
-  const callbacks = new Map<string, (event?: any) => void>();
+  const callbacks = new Map<string, (event?: unknown) => void>();
   let calls = 0;
-  let resolveLookup!: (value: { ok: boolean; json: () => Promise<any> }) => void;
+  let resolveLookup!: (value: { ok: boolean; json: () => Promise<unknown> }) => void;
   const fetchMock = vi.fn().mockImplementation(() => {
     calls++;
     if (calls === 1) return Promise.resolve({ ok: true, json: async () => ({ packs: [], playerPlaybackEnabled: true }) });
@@ -335,7 +335,7 @@ it("does not play a pre-reconnect trigger after the socket reconnects during cat
     return Promise.resolve({ ok: true, json: async () => ({ packs: [pack], playerPlaybackEnabled: true }) });
   });
   vi.stubGlobal("fetch", fetchMock);
-  const socket = { connected: true, on: vi.fn((name: string, cb: (event?: any) => void) => callbacks.set(name, cb)), off: vi.fn((name: string) => callbacks.delete(name)), emit: vi.fn() };
+  const socket = { connected: true, on: vi.fn((name: string, cb: (event?: unknown) => void) => callbacks.set(name, cb)), off: vi.fn((name: string) => callbacks.delete(name)), emit: vi.fn() };
   const audio = { src: "", currentTime: 0, volume: 1, onended: null, onerror: null, pause: vi.fn(), play: vi.fn().mockResolvedValue(undefined) };
   function mockAudio(this: unknown, url?: string) { audio.src = url ?? ""; return audio; }
   vi.stubGlobal("Audio", vi.fn(mockAudio));
@@ -357,14 +357,14 @@ it("does not play a pre-reconnect trigger after the socket reconnects during cat
 });
 
 it("performs a trailing catalogue fetch when invalidation arrives during an older in-flight fetch", async () => {
-  const callbacks = new Map<string, (event?: any) => void>();
-  let current = { packs: [pack], playerPlaybackEnabled: true };
-  let resolveInitial!: (value: { ok: boolean; json: () => Promise<any> }) => void;
+  const callbacks = new Map<string, (event?: unknown) => void>();
+  const current = { packs: [pack], playerPlaybackEnabled: true };
+  let resolveInitial!: (value: { ok: boolean; json: () => Promise<unknown> }) => void;
   const fetchMock = vi.fn().mockImplementation(() => fetchMock.mock.calls.length === 1
     ? new Promise((resolve) => { resolveInitial = resolve; })
     : Promise.resolve({ ok: true, json: async () => current }));
   vi.stubGlobal("fetch", fetchMock);
-  const socket = { connected: false, on: vi.fn((name: string, cb: (event?: any) => void) => callbacks.set(name, cb)), off: vi.fn((name: string) => callbacks.delete(name)), emit: vi.fn() };
+  const socket = { connected: false, on: vi.fn((name: string, cb: (event?: unknown) => void) => callbacks.set(name, cb)), off: vi.fn((name: string) => callbacks.delete(name)), emit: vi.fn() };
   renderInTheme(<SoundpadWorkspace campaignId={pack.campaignId} membershipId="55555555-5555-4555-8555-555555555555" role="PLAYER" assets={[asset]} socket={socket as never} onUpload={vi.fn()} />);
   fireEvent.click(screen.getByRole("button", { name: "Саундпад" }));
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));

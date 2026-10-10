@@ -44,7 +44,7 @@ let preview: Konva.Group | null = null;
 let hasPointerPosition = false;
 let panStart: { x: number; y: number; stageX: number; stageY: number } | null =
   null;
-let panZoomSamples: number[] = [];
+const panZoomSamples: number[] = [];
 const localPatternImages: Partial<Record<StampKind, HTMLImageElement>> = {};
 
 // Generated assets can be plugged in here as exact local paths. Until then the
