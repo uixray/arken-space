@@ -30,7 +30,7 @@ const usage = (kind: AssetUsageDto["kind"]): AssetUsageDto => ({
   label: "Safe label",
   visibility: "GM_ONLY",
   deletionPolicy:
-    kind === "GENERATED_TOKEN_SOURCE" ? "RETAIN_HISTORY" : "BLOCK",
+    kind === "GENERATED_TOKEN_SOURCE" ? "RETAIN_HISTORY" : "DETACH",
 });
 
 describe("asset dependency registry", () => {
@@ -38,6 +38,7 @@ describe("asset dependency registry", () => {
     expect(ASSET_DEPENDENCY_REGISTRY).toEqual([
       "SCENE_BACKGROUND",
       "TOKEN_DEFINITION",
+      "TOKEN_INSTANCE",
       "CHARACTER_PORTRAIT",
       "CHARACTER_RESOURCE",
       "CHARACTER_MEDIA",
@@ -45,6 +46,7 @@ describe("asset dependency registry", () => {
       "AUDIO_TRACK",
       "WORLD_CONTENT_COVER",
       "WORLD_CONTENT_MEDIA",
+      "WORLD_CONTENT_INSTANCE_PORTRAIT",
       "GENERATED_TOKEN_SOURCE",
     ]);
   });
@@ -69,13 +71,13 @@ describe("asset usage policy", () => {
     });
   });
 
-  it("returns multiple dependencies to a GM and blocks deletion", () => {
+  it("returns detachable dependencies to a GM and permits a safe detach-and-delete", () => {
     const usages = [usage("SCENE_BACKGROUND"), usage("AUDIO_TRACK")];
     expect(assetUsagePolicy(asset, usages, { role: "GM" })).toMatchObject({
       inUse: true,
       usages,
-      canDelete: false,
-      deletionBlockedReason: "ASSET_IN_USE",
+      canDelete: true,
+      deletionBlockedReason: null,
     });
   });
 
@@ -112,7 +114,7 @@ describe("asset deletion orchestration", () => {
     const deleteMetadata = vi.fn();
     const removeBlob = vi.fn();
     await expect(
-      deleteUnusedAsset(asset.id, [usage("TOKEN_DEFINITION")], {
+      deleteUnusedAsset(asset.id, [{ ...usage("TOKEN_DEFINITION"), deletionPolicy: "BLOCK" }], {
         deleteMetadata,
         removeBlob,
       }),

@@ -2980,13 +2980,9 @@ export const encounters = pgTable(
  * decides GM vs player projections; callers must not hand-roll their own
  * exclusion logic.
  *
- * `coverAssetId` (here) and `world_content_media.assetId` (gallery, below)
- * intentionally have NO foreign key to `assets`: `assets` is campaign-scoped
- * with an `onDelete: cascade` back to `campaigns`, so a hard FK would either
- * force World Content back into a single campaign's lifetime or leave
- * dangling rows when a campaign is deleted. Later stages are expected to
- * introduce a campaign-independent media/asset store for canon; until then
- * these are plain UUID references, resolved best-effort by the caller.
+ * These global pointers deliberately do not grant global asset access. The
+ * authorized campaign GM may detach their asset; the world-content record
+ * remains and its cover/gallery association is removed by FK policy.
  */
 export const worldContent = pgTable(
   "world_content",
@@ -3008,8 +3004,10 @@ export const worldContent = pgTable(
     lifecycle: worldContentLifecycleEnum("lifecycle")
       .notNull()
       .default("DRAFT"),
-    /** Single cover reference; see table doc comment re: no FK to `assets`. */
-    coverAssetId: uuid("cover_asset_id"),
+    /** Single nullable cover pointer; deleting the campaign asset detaches it. */
+    coverAssetId: uuid("cover_asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
     /** Import provenance (later, blocked stage); all nullable since GM-authored-from-scratch canon has none. */
     sourceUrl: text("source_url"),
     sourceExternalId: text("source_external_id"),
@@ -3080,7 +3078,7 @@ export const worldContentActions = pgTable(
 
 /**
  * Ordered gallery for a canonical entity, in the spirit of `character_media`
- * but not campaign-scoped (see `worldContent` doc comment re: `assets`).
+ * but not campaign-scoped; its asset FK removes only this association row.
  */
 export const worldContentMedia = pgTable(
   "world_content_media",
@@ -3089,7 +3087,9 @@ export const worldContentMedia = pgTable(
     worldContentId: uuid("world_content_id")
       .notNull()
       .references(() => worldContent.id, { onDelete: "cascade" }),
-    assetId: uuid("asset_id").notNull(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
     caption: text("caption"),
     ordering: integer("ordering").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -3101,6 +3101,7 @@ export const worldContentMedia = pgTable(
       table.worldContentId,
       table.ordering,
     ),
+    index("world_content_media_asset_idx").on(table.assetId),
     uniqueIndex("world_content_media_entity_asset_idx").on(
       table.worldContentId,
       table.assetId,
@@ -3174,11 +3175,8 @@ export const worldContentRelations = pgTable(
  * (UIX-264 AC) true by construction — a raw SQL DELETE of a referenced
  * `worldContent` row fails loudly instead of silently orphaning instances.
  *
- * `portraitAssetId` has NO FK, for the same reason as `worldContent.coverAssetId`
- * (see that table's doc comment): campaign assets (`assets`, cascade-deleted
- * with their campaign) and world-content instances have different enough
- * lifetimes/ownership that a hard FK would be the wrong constraint here too;
- * resolved best-effort by the caller.
+ * `portraitAssetId` references a campaign-owned blob. Deleting the blob clears
+ * only this pointer; this campaign-scoped instance remains intact.
  *
  * `ownerMembershipId` follows `memberships`' own convention: campaign-scoped,
  * `onDelete: set null` (an instance should not vanish just because whoever
@@ -3209,8 +3207,9 @@ export const worldContentInstances = pgTable(
     currentState: text("current_state"),
     /** GM-only, same sensitivity tier as `worldContent.gmOnlyText` — never expose to players. */
     gmNotes: text("gm_notes"),
-    /** No FK — see table doc comment. */
-    portraitAssetId: uuid("portrait_asset_id"),
+    portraitAssetId: uuid("portrait_asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
     ownerMembershipId: uuid("owner_membership_id").references(
       () => memberships.id,
       { onDelete: "set null" },

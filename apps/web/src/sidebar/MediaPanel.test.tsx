@@ -131,7 +131,7 @@ describe("MediaPanel upload sections by role", () => {
         ],
         ["PORTRAIT", "Портрет персонажа", "Портреты персонажей", "Elena.webp"],
         ["IMAGE", "Изображение", "Другие изображения", "Замок.webp"],
-        ["AUDIO", "Аудиофайл", "Музыка и звуки", "Moonlight.ogg"],
+        ["AUDIO", "Фоновая музыка", "Музыка и звуки", "Moonlight.ogg"],
       ] as const;
       // These DTOs represent already-visible shared assets, not a claim that
       // PLAYER can see every asset stored by the GM. Server filtering is unchanged.
@@ -332,7 +332,7 @@ describe("MediaPanel upload sections by role", () => {
           name: "Загрузить",
         }),
       );
-      expect(onUpload).toHaveBeenCalledWith(expect.any(File), "TOKEN");
+      expect(onUpload).toHaveBeenCalledWith(expect.any(File), "TOKEN", undefined);
     },
   );
 
@@ -393,6 +393,32 @@ describe("MediaPanel upload sections by role", () => {
     await userEvent.click(screen.getByText("Удалить файл"));
     expect(window.confirm).toHaveBeenCalledWith(
       "Удалить файл «Замок.webp» без возможности отмены?",
+    );
+    expect(actions.onDelete).toHaveBeenCalledWith(asset.id);
+  });
+
+  it("warns before detaching shared world-content references", async () => {
+    const actions = defaultActions();
+    actions.onGetUsage.mockResolvedValue({
+      ...unused,
+      inUse: true,
+      usages: [
+        {
+          kind: "WORLD_CONTENT_COVER",
+          entityId: "world-1",
+          label: "Локация",
+          location: "Обложка материала мира",
+          visibility: "GM_ONLY",
+          deletionPolicy: "DETACH",
+        },
+      ],
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderComponent(<MediaPanel snapshot={gmSnapshot({ assets: [asset] })} {...actions} />);
+    await userEvent.click(screen.getByText("Проверить использование"));
+    await userEvent.click(await screen.findByText("Удалить файл"));
+    expect(window.confirm).toHaveBeenCalledWith(
+      "Отвязать 1 связей и удалить файл «Замок.webp» без возможности отмены? Материалы мира сохранятся; их обложки и файлы будут отвязаны. Материалов мира: 1.",
     );
     expect(actions.onDelete).toHaveBeenCalledWith(asset.id);
   });

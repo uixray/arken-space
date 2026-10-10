@@ -129,7 +129,15 @@ export function MediaPanel({
     }
   };
   const remove = async (assetId: string, assetName: string) => {
-    if (!window.confirm(`Удалить файл «${assetName}» без возможности отмены?`))
+    const usage = usageByAsset[assetId];
+    const worldContentCount = usage?.usages.filter((item) =>
+      item.kind === "WORLD_CONTENT_COVER" || item.kind === "WORLD_CONTENT_MEDIA",
+    ).length ?? 0;
+    const publishedMapCount = usage?.usages.filter((item) => item.kind === "WORLD_MAP_BACKGROUND").length ?? 0;
+    const confirmation = usage?.inUse
+      ? `Отвязать ${usage.usages.length} связей и удалить файл «${assetName}» без возможности отмены? Материалы мира сохранятся; их обложки и файлы будут отвязаны.${worldContentCount ? ` Материалов мира: ${worldContentCount}.` : ""}${publishedMapCount ? ` Опубликованные карты: ${publishedMapCount} — станут черновиками.` : ""}`
+      : `Удалить файл «${assetName}» без возможности отмены?`;
+    if (!window.confirm(confirmation))
       return;
     setDeletingAssetId(assetId);
     setError("");
@@ -415,7 +423,7 @@ export function MediaPanel({
                                 )}
                                 {usage.canDelete ? (
                                   <Button
-                                    view="outlined-danger"
+                                    view="flat-danger"
                                     loading={deletingAssetId === asset.id}
                                     disabled={deletingAssetId !== null}
                                     onClick={() =>

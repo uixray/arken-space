@@ -78,6 +78,26 @@ describe("parseSkillCard", () => {
     ).toMatchObject({ mode: "SHARE", action: null, uses: null });
   });
 
+  it("accepts and renders an executed no-roll ability with its explicit resource receipt", () => {
+    const card = parseSkillCard({
+      skillCard: {
+        version: 1,
+        execution: "EXECUTED",
+        entry: { id: "ward", name: "Ward", kind: "ABILITY", description: "Protect allies." },
+        action: null,
+        formula: null,
+        result: null,
+        uses: { before: 2, after: 1, max: 2, recharge: "DAY" },
+        activationCost: { type: "physical", amount: 2, before: 5, after: 3 },
+      },
+    });
+    expect(card).toMatchObject({ mode: "EXECUTE", action: null, result: null, activationCost: { before: 5, after: 3 } });
+    const html = renderCard(card!);
+    expect(html).toContain("Активировано без броска");
+    expect(html).toContain("5 → 3");
+    expect(html).not.toContain("Итог броска");
+  });
+
   it("falls back for legacy, malformed, and unknown card versions", () => {
     expect(parseSkillCard({ total: 12 })).toBeNull();
     expect(parseSkillCard({ skillCard: { version: 2 } })).toBeNull();
@@ -132,6 +152,7 @@ describe("SkillChatCard (UIX-389 formula humanization)", () => {
     },
     result: { total: 17, breakdown: "1d20 + 3" },
     uses: null,
+    activationCost: null,
   };
 
   it("never renders the raw stat key from the formula", () => {
@@ -217,4 +238,42 @@ it("localizes a character ability formula without changing its stored action", (
   expect(html).toContain("2d6 + Ловкость");
   expect(html).not.toContain("2d6 + agility");
   expect(entry.data.rollActions?.[0]?.dice).toBe("2d6 + agility");
+});
+
+it("keeps ability activation and passive share visible without a Details expander", () => {
+  const entry = {
+    id: "ability-2",
+    kind: "ABILITY",
+    name: "Защитная стойка",
+    description: "На один раунд повышает защиту.",
+    revision: 2,
+    data: {
+      uses: { current: 1, max: 1, recharge: "BATTLE" },
+      rollActions: [
+        {
+          id: "stance",
+          label: "Активировать стойку",
+          kind: "CUSTOM",
+          dice: "1d20",
+          modifiers: [],
+          advantage: false,
+          consumeUse: true,
+          cost: { type: "physical", amount: 2 },
+          order: 0,
+        },
+      ],
+    },
+  } as unknown as CharacterCatalogEntryDto;
+  const html = renderToStaticMarkup(
+    createElement(CharacterActionCard, {
+      entry,
+      disabled: false,
+      onAction: async () => undefined,
+    }),
+  );
+  expect(html).toContain("Активировать стойку");
+  expect(html).toContain("Выполнить · 1 использование");
+  expect(html).toContain("Показать без выполнения");
+  expect(html).not.toContain("Подробнее");
+  expect(html).not.toContain(entry.description);
 });

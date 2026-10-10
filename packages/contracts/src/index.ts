@@ -609,6 +609,13 @@ export const abilityUsesSchema = z
 export const entryDataSchema = z
   .object({
     rollActions: z.array(rollActionSchema).max(20).optional(),
+    /** Optional no-roll ability activation; costs are charged without a roll. */
+    activation: z
+      .object({
+        consumeUse: z.boolean().default(false),
+        cost: resourceCostSchema.optional(),
+      })
+      .optional(),
     values: z.record(z.string(), z.number().finite()).optional(),
     uses: abilityUsesSchema.optional(),
     notes: z.string().max(10000).optional(),
@@ -631,6 +638,12 @@ export const entryDataSchema = z
           path: ["rollActions", index, "consumeUse"],
         });
     }
+    if (data.activation?.consumeUse && !data.uses)
+      context.addIssue({
+        code: "custom",
+        message: "activation consumeUse requires uses",
+        path: ["activation", "consumeUse"],
+      });
   });
 /**
  * UIX-424 — значения характеристик персонажа.
@@ -2172,7 +2185,7 @@ const entryCardRequestBaseSchema = z.object({
 });
 export const entryCardExecuteRequestSchema = entryCardRequestBaseSchema.extend({
   mode: z.literal("EXECUTE").optional(),
-  rollActionId: z.string().min(1).max(40),
+  rollActionId: z.string().min(1).max(40).optional(),
 });
 export const entryCardShareRequestSchema = entryCardRequestBaseSchema.extend({
   mode: z.literal("SHARE"),
@@ -2278,6 +2291,7 @@ export interface AssetDto {
 export const assetUsageKindSchema = z.enum([
   "SCENE_BACKGROUND",
   "TOKEN_DEFINITION",
+  "TOKEN_INSTANCE",
   "CHARACTER_PORTRAIT",
   "CHARACTER_RESOURCE",
   "CHARACTER_MEDIA",
@@ -2286,6 +2300,7 @@ export const assetUsageKindSchema = z.enum([
   "CAMPAIGN_SOUND",
   "WORLD_CONTENT_COVER",
   "WORLD_CONTENT_MEDIA",
+  "WORLD_CONTENT_INSTANCE_PORTRAIT",
   "GENERATED_TOKEN_SOURCE",
 ]);
 export type AssetUsageKind = z.infer<typeof assetUsageKindSchema>;

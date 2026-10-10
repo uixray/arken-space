@@ -142,6 +142,15 @@ export function CatalogEntryForm({
   const [progressText, setProgressText] = useState(
     existing?.data.uses?.progressText ?? "",
   );
+  const [activationConsumesUse, setActivationConsumesUse] = useState(
+    existing?.data.activation?.consumeUse ?? Boolean(existing?.data.uses),
+  );
+  const [activationCostType, setActivationCostType] = useState<"none" | "physical" | "magic">(
+    existing?.data.activation?.cost?.type ?? "none",
+  );
+  const [activationCostAmount, setActivationCostAmount] = useState(
+    existing?.data.activation?.cost?.amount ?? 1,
+  );
   const [actions, setActions] = useState<EditableRollAction[]>(() =>
     (existing?.data.rollActions ?? []).map(editableAction),
   );
@@ -231,6 +240,12 @@ export function CatalogEntryForm({
       return setError(
         "Расход использования требует включённого лимита использований.",
       );
+    if (kind === "ABILITY" && actions.length === 0 && activationConsumesUse && !usesEnabled)
+      return setError("Расход использования требует включённого лимита использований.");
+    if (
+      kind === "ABILITY" && actions.length === 0 && activationCostType !== "none" &&
+      (!Number.isInteger(activationCostAmount) || activationCostAmount < 1 || activationCostAmount > 100000)
+    ) return setError("Стоимость активации должна быть целым числом от 1 до 100000.");
 
     const rollActions: RollAction[] = actions.map((action, index) => {
       const selectedModifier: RollModifier | null =
@@ -280,6 +295,16 @@ export function CatalogEntryForm({
     const data: CatalogEntryDto["data"] = {
       ...(existing?.data ?? {}),
       rollActions: rollActions.length ? rollActions : undefined,
+      activation:
+        kind === "ABILITY" && rollActions.length === 0
+          ? {
+              consumeUse: activationConsumesUse,
+              cost:
+                activationCostType === "none"
+                  ? undefined
+                  : { type: activationCostType, amount: Math.max(1, activationCostAmount) },
+            }
+          : undefined,
       values: values.length ? numericValues : undefined,
       uses: usesEnabled
         ? {
@@ -405,6 +430,43 @@ export function CatalogEntryForm({
           </>
         )}
       </fieldset>
+
+      {kind === "ABILITY" && actions.length === 0 && (
+        <fieldset>
+          <legend>Активация без броска</legend>
+          <FormInput
+            type="checkbox"
+            checked={activationConsumesUse}
+            disabled={!usesEnabled}
+            onChange={(event) => setActivationConsumesUse(event.target.checked)}
+          >
+            Списывать одно использование
+          </FormInput>
+          <label>
+            Стоимость активации
+            <FormSelect
+              value={activationCostType}
+              onChange={(event) => setActivationCostType(event.target.value as typeof activationCostType)}
+            >
+              <option value="none">Без стоимости</option>
+              <option value="physical">{resourceLabels.physical}</option>
+              <option value="magic">{resourceLabels.magic}</option>
+            </FormSelect>
+          </label>
+          {activationCostType !== "none" && (
+            <label>
+              Количество ресурса
+              <FormInput
+                type="number"
+                min={1}
+                max={100000}
+                value={activationCostAmount}
+                onChange={(event) => setActivationCostAmount(event.target.valueAsNumber)}
+              />
+            </label>
+          )}
+        </fieldset>
+      )}
 
       <fieldset>
         <legend>Броски</legend>
@@ -592,6 +654,9 @@ export function CatalogEntryForm({
 
       <fieldset>
         <legend>Значения</legend>
+        <p className="muted">
+          Числовые параметры записи. Укажите ключ, если бросок использует модификатор «Значение записи»; эти числа не списываются как ресурс.
+        </p>
         {values.map((row) => (
           <div key={row.id}>
             <label>

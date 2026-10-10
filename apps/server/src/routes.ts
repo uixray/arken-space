@@ -8292,14 +8292,31 @@ export function registerRoutes(
       );
       let action:
         NonNullable<typeof parsedData.data.rollActions>[number] | undefined;
+      const noRollActivation = mode === "EXECUTE" && !body.rollActionId;
+      const activationConfig = parsedData.data.activation ?? {
+        // Existing use counters are an explicit structured limit. Legacy
+        // abilities without one remain free activations (never parse prose).
+        consumeUse: Boolean(parsedData.data.uses),
+      };
       let formula: string | null = null;
       let result: ReturnType<typeof rollFormulaWithMode> | null = null;
       if (mode === "EXECUTE") {
-        action = parsedData.data.rollActions?.find(
-          (candidate) => candidate.id === body.rollActionId,
-        );
-        if (!action)
-          return reply.code(404).send({ error: "ROLL_ACTION_NOT_FOUND" });
+        if (noRollActivation) {
+          if (row.entry.kind !== "ABILITY")
+            return reply.code(400).send({ error: "ABILITY_ACTIVATION_NOT_CONFIGURED" });
+        } else {
+          action = parsedData.data.rollActions?.find(
+            (candidate) => candidate.id === body.rollActionId,
+          );
+          if (!action)
+            return reply.code(404).send({ error: "ROLL_ACTION_NOT_FOUND" });
+        }
+        if (noRollActivation && activationConfig.consumeUse &&
+            (!parsedData.data.uses || parsedData.data.uses.current < 1))
+          return reply.code(409).send({ error: "NO_ABILITY_USES" });
+        if (!action) {
+          // A configured no-roll activation has no dice/formula by design.
+        } else {
         const values: Record<string, number> = {};
         const formulaParts = [action.dice];
         for (const [index, source] of action.modifiers.entries()) {
@@ -8343,8 +8360,11 @@ export function registerRoutes(
           (!parsedData.data.uses || parsedData.data.uses.current < 1)
         )
           return reply.code(409).send({ error: "NO_ABILITY_USES" });
+        }
       }
-      const cost = mode === "EXECUTE" ? action?.cost : undefined;
+      const cost = mode === "EXECUTE"
+        ? (noRollActivation ? activationConfig.cost : action?.cost)
+        : undefined;
       const resourceKey =
         cost?.type === "physical"
           ? "physicalPower"
@@ -8373,8 +8393,12 @@ export function registerRoutes(
             }
           : resources;
       const uses = parsedData.data.uses;
+      const consumeUse = mode === "EXECUTE" &&
+        (noRollActivation
+          ? activationConfig.consumeUse
+          : action?.consumeUse);
       const afterUses =
-        mode === "EXECUTE" && action?.consumeUse && uses
+        consumeUse && uses
           ? { ...uses, current: uses.current - 1 }
           : uses;
       const skillCard = {
@@ -8417,6 +8441,14 @@ export function registerRoutes(
               recharge: uses.recharge,
             }
           : null,
+        activationCost: cost && resourceKey && resourceBefore !== null
+          ? {
+              type: cost.type,
+              amount: cost.amount,
+              before: resourceBefore,
+              after: resourceBefore - cost.amount,
+            }
+          : null,
         visibility: body.visibility,
       };
       let saved: {
@@ -8440,9 +8472,9 @@ export function registerRoutes(
                 ),
               )
               .returning({ id: characters.id });
-            if (!resourceUpdated) return null;
+            if (!resourceUpdated) throw new Error("ENTRY_CONFLICT_TX");
           }
-          if (mode === "EXECUTE" && action?.consumeUse) {
+          if (consumeUse && uses) {
             const [updated] = await tx
               .update(characterCatalogEntries)
               .set({
@@ -8457,7 +8489,18 @@ export function registerRoutes(
                 ),
               )
               .returning({ id: characterCatalogEntries.id });
-            if (!updated) return null;
+            if (!updated) throw new Error("ENTRY_CONFLICT_TX");
+          }
+          if (mode === "EXECUTE" && cost && resourceKey && !consumeUse) {
+            const [updated] = await tx
+              .update(characterCatalogEntries)
+              .set({ revision: row.entry.revision + 1, updatedAt: new Date() })
+              .where(and(
+                eq(characterCatalogEntries.id, row.entry.id),
+                eq(characterCatalogEntries.revision, row.entry.revision),
+              ))
+              .returning({ id: characterCatalogEntries.id });
+            if (!updated) throw new Error("ENTRY_CONFLICT_TX");
           }
           const [message] = await tx
             .insert(chatMessages)
@@ -8489,7 +8532,7 @@ export function registerRoutes(
               entityType: "chat",
               entityId: message.id,
               entityRevision:
-                mode === "EXECUTE" && action?.consumeUse
+                mode === "EXECUTE" && (consumeUse || (cost && resourceKey))
                   ? row.entry.revision + 1
                   : row.entry.revision,
               payload: {
@@ -8520,6 +8563,8 @@ export function registerRoutes(
           (await findAction(db, auth.campaignId, body.actionId))
         )
           return reply.code(200).send({ duplicate: true });
+        if (error instanceof Error && error.message === "ENTRY_CONFLICT_TX")
+          return reply.code(409).send({ error: "ENTRY_CONFLICT" });
         throw error;
       }
       if (!saved) {

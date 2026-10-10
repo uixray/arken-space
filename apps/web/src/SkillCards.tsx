@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { CharacterCatalogEntryDto } from "@arken/contracts";
 import type { DiceCritical } from "./dice-critical";
 import { humanizeFormula } from "./formula-display";
@@ -27,6 +27,7 @@ export type SkillCard = {
   } | null;
   result: { total: number; breakdown: string } | null;
   uses: { before: number; after: number; max: number; recharge: string } | null;
+  activationCost: { type: "physical" | "magic"; amount: number; before: number; after: number } | null;
 };
 
 const record = (value: unknown): Record<string, unknown> | null =>
@@ -93,7 +94,7 @@ export function parseSkillCard(dice: unknown): SkillCard | null {
         };
       })()
     : null;
-  if (mode === "EXECUTE" && !action) return null;
+  if (mode === "EXECUTE" && !action && kind !== "ABILITY") return null;
 
   const rawUses = record(raw.uses) ?? record(raw.resource);
   const before = rawUses && finite(rawUses.before);
@@ -112,6 +113,20 @@ export function parseSkillCard(dice: unknown): SkillCard | null {
   const total =
     finite(rawResult?.total) ?? finite(root.total) ?? finite(raw.resultTotal);
   const actor = record(raw.actor);
+  const rawActivationCost = record(raw.activationCost);
+  const activationCost =
+    rawActivationCost &&
+    (rawActivationCost.type === "physical" || rawActivationCost.type === "magic") &&
+    finite(rawActivationCost.amount) !== null &&
+    finite(rawActivationCost.before) !== null &&
+    finite(rawActivationCost.after) !== null
+      ? {
+          type: rawActivationCost.type as "physical" | "magic",
+          amount: finite(rawActivationCost.amount)!,
+          before: finite(rawActivationCost.before)!,
+          after: finite(rawActivationCost.after)!,
+        }
+      : null;
   return {
     version: 1,
     mode,
@@ -143,6 +158,7 @@ export function parseSkillCard(dice: unknown): SkillCard | null {
               "",
           },
     uses,
+    activationCost,
   };
 }
 
@@ -172,11 +188,8 @@ export function CharacterActionCard({
   }) => Promise<void>;
 }) {
   const statLabels = useCampaignStatLabels();
-  const [expanded, setExpanded] = useState(false);
   const [pending, setPending] = useState<"EXECUTE" | "SHARE" | null>(null);
   const [error, setError] = useState("");
-  const detailsId = useId();
-  const toggleRef = useRef<HTMLButtonElement>(null);
   const actions = [...(entry.data.rollActions ?? [])].sort(
     (a, b) =>
       ((a as { order?: number }).order ?? 0) -
@@ -221,12 +234,6 @@ export function CharacterActionCard({
   return (
     <article
       className="character-action-card"
-      onKeyDown={(event) => {
-        if (event.key !== "Escape" || !expanded) return;
-        event.preventDefault();
-        setExpanded(false);
-        requestAnimationFrame(() => toggleRef.current?.focus());
-      }}
     >
       <div className="character-action-card__summary">
         <div>
@@ -263,18 +270,28 @@ export function CharacterActionCard({
         </div>
       ))}
       {actions.length === 0 && (
-        <p className="muted">Нет выполняемых действий.</p>
+        entry.kind === "ABILITY" ? (
+          <div className="character-action-card__action">
+            <span>
+              <b>Активировать</b>
+              <code>
+                {(entry.data.activation?.consumeUse ?? Boolean(uses)) ? "1 использование" : "Без броска"}
+                {entry.data.activation?.cost
+                  ? ` · ${entry.data.activation.cost.amount} ${entry.data.activation.cost.type === "physical" ? "физической силы" : "магической силы"}`
+                  : ""}
+              </code>
+            </span>
+            <button
+              type="button"
+              disabled={disabled || pending !== null || ((entry.data.activation?.consumeUse ?? Boolean(uses)) && exhausted)}
+              onClick={() => void submit("EXECUTE")}
+            >
+              {pending === "EXECUTE" ? "Выполняем…" : "Активировать"}
+            </button>
+          </div>
+        ) : <p className="muted">Нет выполняемых действий.</p>
       )}
       <div className="character-action-card__controls">
-        <button
-          ref={toggleRef}
-          type="button"
-          aria-expanded={expanded}
-          aria-controls={detailsId}
-          onClick={() => setExpanded((current) => !current)}
-        >
-          {expanded ? "Свернуть" : "Подробнее"}
-        </button>
         <button
           type="button"
           disabled={disabled || pending !== null}
@@ -282,24 +299,6 @@ export function CharacterActionCard({
         >
           {pending === "SHARE" ? "Отправляем…" : "Показать без выполнения"}
         </button>
-      </div>
-      <div
-        id={detailsId}
-        hidden={!expanded}
-        className="character-action-card__details"
-      >
-        {entry.description && <p>{entry.description}</p>}
-        {uses && (
-          <p>
-            Использования: {uses.current}/{uses.max}
-            {uses.recharge ? ` · восстановление: ${uses.recharge}` : ""}
-            {uses.progressText ? ` · ${uses.progressText}` : ""}
-          </p>
-        )}
-        <p className="muted">
-          «Показать без выполнения» не бросает кубики и не расходует
-          использования.
-        </p>
       </div>
       {error && (
         <p className="field-error" role="alert">
@@ -351,26 +350,33 @@ export function SkillChatCard({
       {card.mode === "SHARE" ? (
         <p className="muted">Без броска и расходования ресурсов.</p>
       ) : (
-        <div className="skill-chat-card__result">
-          {card.result && (
-            <div className="roll-total-wrap">
-              {outcomeFrame}
-              <strong aria-label="Итог броска">{card.result.total}</strong>
-            </div>
-          )}
-          <span>
-            <b>{card.action?.label}</b>
-            <code>{visibleFormula}</code>
-            {critical && (
-              <span className="roll-critical-label">{critical.label}</span>
+        card.action ? (
+          <div className="skill-chat-card__result">
+            {card.result && (
+              <div className="roll-total-wrap">
+                {outcomeFrame}
+                <strong aria-label="Итог броска">{card.result.total}</strong>
+              </div>
             )}
-          </span>
-        </div>
+            <span>
+              <b>{card.action.label}</b>
+              <code>{visibleFormula}</code>
+              {critical && (
+                <span className="roll-critical-label">{critical.label}</span>
+              )}
+            </span>
+          </div>
+        ) : <p className="muted">Активировано без броска.</p>
       )}
       {card.uses && (
         <p className="skill-chat-card__uses">
           Использования: {card.uses.before} → {card.uses.after}/{card.uses.max}
           {card.uses.recharge ? ` · ${card.uses.recharge}` : ""}
+        </p>
+      )}
+      {card.activationCost && (
+        <p className="skill-chat-card__uses">
+          Стоимость: {card.activationCost.before} → {card.activationCost.after} · {card.activationCost.type === "physical" ? "физическая сила" : "магическая сила"}
         </p>
       )}
       <div className="skill-chat-card__details">
