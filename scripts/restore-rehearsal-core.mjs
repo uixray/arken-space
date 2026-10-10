@@ -110,7 +110,9 @@ function safeManifestRelativePath(value) {
     throw new Error("Service snapshot manifest contains an unsafe path");
   const segments = value.split("/");
   if (
-    segments.some((segment) => !segment || segment === "." || segment === "..") ||
+    segments.some(
+      (segment) => !segment || segment === "." || segment === "..",
+    ) ||
     path.posix.normalize(value) !== value
   )
     throw new Error("Service snapshot manifest contains an unsafe path");
@@ -165,7 +167,9 @@ export async function validateServiceSnapshotManifest(
   let manifestText;
   try {
     const manifestBytes = readFileSync(manifestPath);
-    actualManifestSha = createHash("sha256").update(manifestBytes).digest("hex");
+    actualManifestSha = createHash("sha256")
+      .update(manifestBytes)
+      .digest("hex");
     manifestText = manifestBytes.toString("utf8");
   } catch {
     throw new Error("Service capture manifest is unreadable");
@@ -211,7 +215,9 @@ export async function validateServiceSnapshotManifest(
       entry.bytes < 0 ||
       !/^[0-9a-f]{64}$/i.test(entry.sha256 ?? "")
     )
-      throw new Error("Service capture manifest contains an invalid file record");
+      throw new Error(
+        "Service capture manifest contains an invalid file record",
+      );
     const target = path.resolve(captureRoot, ...relative.split("/"));
     if (target !== captureRoot && !target.startsWith(captureRoot + path.sep))
       throw new Error("Service capture manifest path escaped its root");
@@ -224,7 +230,9 @@ export async function validateServiceSnapshotManifest(
     }
     const fileStat = safeLstat(target);
     if (!fileStat.isFile() || fileStat.size !== entry.bytes)
-      throw new Error("Service snapshot file is missing or has a size mismatch");
+      throw new Error(
+        "Service snapshot file is missing or has a size mismatch",
+      );
     const actualSha = await sha256File(target);
     if (actualSha !== entry.sha256.toLowerCase())
       throw new Error("Service snapshot file hash mismatch");
@@ -235,7 +243,9 @@ export async function validateServiceSnapshotManifest(
     (file) => file !== manifestPath && !file.startsWith(captureRoot + path.sep),
   );
   if (outsideFiles.length)
-    throw new Error("Service snapshot contains undeclared files outside its root");
+    throw new Error(
+      "Service snapshot contains undeclared files outside its root",
+    );
   const actualRelative = allFiles
     .filter((file) => file !== manifestPath)
     .map((file) => path.relative(captureRoot, file).split(path.sep).join("/"));
@@ -264,7 +274,9 @@ export async function validateServiceSnapshotManifest(
   if (mediaStat.isSymbolicLink() || !mediaStat.isDirectory())
     throw new Error("Service capture media root is invalid");
   if (realpathSync(mediaRoot) !== path.resolve(rootReal, "media"))
-    throw new Error("Service capture media root escaped its snapshot directory");
+    throw new Error(
+      "Service capture media root escaped its snapshot directory",
+    );
 
   return {
     manifestPath,
@@ -618,7 +630,13 @@ export function selectResticSnapshot(
 
 export function assertIsolatedComposeConfig(
   config,
-  { projectName, mediaSource, buildRevision },
+  {
+    projectName,
+    mediaSource,
+    buildRevision,
+    mediaTarget = "/srv/arken-space/media",
+    databaseName = "arken",
+  },
 ) {
   validateRestoreProjectName(projectName);
   if (config.name !== projectName)
@@ -654,10 +672,21 @@ export function assertIsolatedComposeConfig(
   const serverVolumes = services.server?.volumes ?? [];
   const expectedMedia = path.resolve(mediaSource);
   if (
+    typeof mediaTarget !== "string" ||
+    !/^\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+$/.test(mediaTarget) ||
+    mediaTarget === "/" ||
+    path.posix.normalize(mediaTarget) !== mediaTarget ||
+    mediaTarget
+      .split("/")
+      .some((segment) => segment === "." || segment === "..") ||
+    !/^[A-Za-z0-9_]+$/.test(databaseName)
+  )
+    throw new Error("Restore media target or database name is invalid");
+  if (
     serverVolumes.length !== 1 ||
     serverVolumes[0].type !== "bind" ||
     path.resolve(serverVolumes[0].source) !== expectedMedia ||
-    serverVolumes[0].target !== "/srv/arken-space/media"
+    serverVolumes[0].target !== mediaTarget
   )
     throw new Error("Restore server must mount only restored temporary media");
   const productionMedia = path.resolve(
@@ -669,8 +698,36 @@ export function assertIsolatedComposeConfig(
   const serverEnvironment = environmentObject(services.server?.environment);
   if (serverEnvironment.BUILD_REVISION !== buildRevision)
     throw new Error("Restore Compose build revision is not exact");
-  if (!/@postgres:5432\/arken$/.test(serverEnvironment.DATABASE_URL ?? ""))
+  let databaseUrl;
+  try {
+    databaseUrl = new URL(serverEnvironment.DATABASE_URL);
+  } catch {
     throw new Error("Restore database URL must target isolated postgres");
+  }
+  if (
+    databaseUrl.protocol !== "postgres:" ||
+    databaseUrl.hostname !== "postgres" ||
+    databaseUrl.port !== "5432" ||
+    decodeURIComponent(databaseUrl.pathname.slice(1)) !== databaseName ||
+    databaseUrl.username !== "arken" ||
+    !databaseUrl.password ||
+    databaseUrl.search ||
+    databaseUrl.hash
+  )
+    throw new Error("Restore database URL must target isolated postgres");
+  const postgresEnvironment = environmentObject(services.postgres?.environment);
+  if (
+    postgresEnvironment.POSTGRES_USER !== "arken" ||
+    postgresEnvironment.POSTGRES_DB !== databaseName ||
+    !postgresEnvironment.POSTGRES_PASSWORD
+  )
+    throw new Error(
+      "Restore PostgreSQL identity does not match requested database",
+    );
+  if (serverEnvironment.MEDIA_ROOT !== mediaTarget)
+    throw new Error(
+      "Restore server media root does not match captured container path",
+    );
 }
 
 export function isTransientPostgresStartupError(output) {
