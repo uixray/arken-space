@@ -53,8 +53,10 @@ const report = {
 let activeChild = null;
 let interruptedBy = null;
 
-if (!/^[a-z0-9][a-z0-9_-]+$/.test(projectName))
-  throw new Error("ARKEN_E2E_PROJECT_NAME must be lowercase and shell-safe");
+if (!/^arken-e2e-[a-z0-9][a-z0-9_-]*$/.test(projectName))
+  throw new Error(
+    "ARKEN_E2E_PROJECT_NAME must be an isolated arken-e2e-* project",
+  );
 if (!Number.isFinite(minimumFreeBytes) || minimumFreeBytes < gibibyte)
   throw new Error("ARKEN_E2E_MIN_FREE_BYTES must be at least 1 GiB");
 
@@ -68,6 +70,15 @@ const compose = [
   "test",
 ];
 
+function multiplayerEnvironment(buildRevision) {
+  return {
+    ...process.env,
+    E2E_BUILD_REVISION: buildRevision,
+    E2E_ACCOUNT_AUTH_ENABLED: "true",
+    E2E_CAMPAIGN_LINK_ACCESS_ENABLED: "true",
+    E2E_DISPOSABLE_PROJECT: projectName,
+  };
+}
 function record(name, status, details = {}) {
   report.steps.push({
     name,
@@ -228,7 +239,7 @@ async function preflight(buildRevision) {
   const configText = capture(
     docker,
     [...compose, "config", "--format", "json"],
-    { env: { ...process.env, E2E_BUILD_REVISION: buildRevision } },
+    { env: multiplayerEnvironment(buildRevision) },
   );
   const config = JSON.parse(configText);
   const serverEnvironment = composeEnvironment(config.services?.server);
@@ -238,6 +249,50 @@ async function preflight(buildRevision) {
   if (browserEnvironment.E2E_BASE_URL !== expectedOrigin)
     throw new Error("E2E_BASE_URL must be exactly " + expectedOrigin);
   record("exact-origin", "passed", { origin: expectedOrigin });
+  if (
+    config.name !== projectName ||
+    browserEnvironment.E2E_DISPOSABLE_PROJECT !== projectName
+  )
+    throw new Error(
+      "Disposable project contract must match the actual Compose project",
+    );
+  if (
+    serverEnvironment.DATABASE_URL !==
+    "postgres://arken:arken-e2e-password@postgres:5432/arken"
+  )
+    throw new Error(
+      "Multiplayer must use only the isolated postgres service database",
+    );
+  const pgVolume = config.volumes?.["postgres-e2e"];
+  if (
+    !pgVolume ||
+    pgVolume.external ||
+    pgVolume.name !== projectName + "_postgres-e2e" ||
+    config.networks?.default?.external
+  )
+    throw new Error(
+      "Postgres volume/default network must be local to the disposable project",
+    );
+  if (
+    serverEnvironment.ACCOUNT_AUTH_ENABLED !== "true" ||
+    serverEnvironment.CAMPAIGN_LINK_ACCESS_ENABLED !== "true" ||
+    serverEnvironment.LEGACY_DEV_AUTH_ENABLED !== "false"
+  )
+    throw new Error(
+      "Multiplayer requires account auth plus campaign links and no legacy alias login",
+    );
+  const existingProject = leftovers();
+  if (existingProject.containers.length || existingProject.volumes.length)
+    throw new Error(
+      "Refusing retained resources in the disposable multiplayer project",
+    );
+  record("disposable-auth-fixture-contract", "passed", {
+    projectName,
+    databaseHost: "postgres",
+    accountAuth: true,
+    campaignLinks: true,
+    legacyDev: false,
+  });
 
   if (isolatedOnly)
     record("production-health-before", "skipped", { reason: "isolated-only" });
@@ -343,15 +398,14 @@ process.once("SIGTERM", () => handleSignal("SIGTERM"));
 
 let exitCode = 1;
 let runSucceeded = false;
+let projectClaimed = false;
 let buildRevision = "unknown";
 let diskPath = process.cwd();
 try {
   buildRevision = resolveBuildRevision();
-  const environment = {
-    ...process.env,
-    E2E_BUILD_REVISION: buildRevision,
-  };
+  const environment = multiplayerEnvironment(buildRevision);
   await preflight(buildRevision);
+  projectClaimed = true;
   diskPath = report.diskBefore.path;
 
   const up = run(
@@ -463,36 +517,39 @@ try {
   report.error = error instanceof Error ? error.message : String(error);
   record("run", "failed", { error: report.error });
 } finally {
-  const environment = {
-    ...process.env,
-    E2E_BUILD_REVISION: buildRevision,
-  };
-  const cleanupArgs = [
-    ...compose,
-    "down",
-    "--volumes",
-    "--remove-orphans",
-    ...(runSucceeded ? ["--rmi", "local"] : []),
-  ];
-  const cleanup = run(docker, cleanupArgs, { env: environment });
-  report.cleanupExitCode = cleanup;
-  if (cleanup !== 0) exitCode = cleanup;
-  else
-    record("compose-cleanup", "passed", {
-      localImagesRemoved: runSucceeded,
-    });
+  const environment = multiplayerEnvironment(buildRevision);
+  if (projectClaimed) {
+    const cleanupArgs = [
+      ...compose,
+      "down",
+      "--volumes",
+      "--remove-orphans",
+      ...(runSucceeded ? ["--rmi", "local"] : []),
+    ];
+    const cleanup = run(docker, cleanupArgs, { env: environment });
+    report.cleanupExitCode = cleanup;
+    if (cleanup !== 0) exitCode = cleanup;
+    else
+      record("compose-cleanup", "passed", {
+        localImagesRemoved: runSucceeded,
+      });
 
-  try {
-    const remaining = leftovers();
-    report.leftovers = remaining;
-    if (remaining.containers.length || remaining.volumes.length) {
+    try {
+      const remaining = leftovers();
+      report.leftovers = remaining;
+      if (remaining.containers.length || remaining.volumes.length) {
+        exitCode = 1;
+        record("resource-leak-check", "failed", remaining);
+      } else record("resource-leak-check", "passed");
+    } catch (error) {
       exitCode = 1;
-      record("resource-leak-check", "failed", remaining);
-    } else record("resource-leak-check", "passed");
-  } catch (error) {
-    exitCode = 1;
-    record("resource-leak-check", "failed", {
-      error: error instanceof Error ? error.message : String(error),
+      record("resource-leak-check", "failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  } else {
+    record("compose-cleanup", "skipped", {
+      reason: "project-not-claimed; retained resources untouched",
     });
   }
 

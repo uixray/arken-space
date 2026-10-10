@@ -25,10 +25,54 @@ import type {
   ServerToClientEvents,
   TokenDto,
 } from "../../packages/contracts/src/index.js";
+import { createCampaignWithGmAccess } from "../../apps/server/src/seed.js";
 import { openWorkspaceSection } from "../e2e/workspace-nav-helper.js";
 
 const baseUrl = process.env.E2E_BASE_URL ?? "http://127.0.0.1:14180";
-const gmToken = "multiplayer-master-token-1234567890";
+const gmToken = `multiplayer-${crypto.randomUUID()}-${crypto.randomUUID()}`;
+const fixtureDatabaseUrl =
+  "postgres://arken:arken-e2e-password@postgres:5432/arken";
+const campaignOrigin = new URL(baseUrl).origin;
+
+test.beforeAll(async ({ request }) => {
+  // Account mode deliberately does not seed on startup. Only the isolated
+  // Compose database may receive this explicit synthetic campaign fixture.
+  expect(process.env.E2E_BASE_URL, "Disposable Compose runner required").toBe(
+    "http://edge",
+  );
+  expect(process.env.E2E_DISPOSABLE_PROJECT).toMatch(
+    /^arken-e2e-[a-z0-9][a-z0-9_-]*$/,
+  );
+  expect(process.env.DATABASE_URL ?? fixtureDatabaseUrl).toBe(
+    fixtureDatabaseUrl,
+  );
+  const revision = process.env.E2E_BUILD_REVISION ?? "";
+  expect(revision).toMatch(/^[a-f0-9]{40}$/);
+  const health = await expectOk(await request.get(baseUrl + "/healthz"));
+  expect(await health.json()).toMatchObject({
+    status: "ok",
+    database: "ok",
+    buildRevision: revision,
+    schemaVersion: 2,
+  });
+  const capabilities = await expectOk(
+    await request.get(baseUrl + "/api/account/capabilities"),
+  );
+  expect(await capabilities.json()).toMatchObject({
+    accountAuthEnabled: true,
+    campaignLinkAccessEnabled: true,
+  });
+  const { db, client } = createDatabase(fixtureDatabaseUrl);
+  try {
+    await createCampaignWithGmAccess(
+      db,
+      "Synthetic multiplayer campaign",
+      gmToken,
+    );
+  } finally {
+    await client.end();
+  }
+});
 const restartMarker = "ARKEN_E2E_BACKEND_RESTART_READY";
 const actionId = () => crypto.randomUUID();
 const imageBuffer = Buffer.from(
@@ -87,7 +131,10 @@ async function connectSocket(context: BrowserContext): Promise<GameConnection> {
     reconnectionDelay: 250,
     reconnectionDelayMax: 1_000,
     transports: ["websocket"],
-    extraHeaders: { Cookie: await cookieHeader(context) },
+    extraHeaders: {
+      Origin: campaignOrigin,
+      Cookie: await cookieHeader(context),
+    },
   });
   const connected = new Promise<void>((resolve, reject) => {
     socket.once("connect", resolve);
@@ -265,8 +312,8 @@ async function claimInvite(
 ) {
   const page = await context.newPage();
   await page.goto(inviteUrl);
-  await page.getByLabel("Имя").fill(displayName);
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page.getByLabel("Имя в кампании").fill(displayName);
+  await page.getByRole("button", { name: "Продолжить в игру" }).click();
   await page.getByLabel("Меню сеанса").click();
   await expect(
     page.getByRole("button", { name: "Сменить игрока" }),
@@ -304,16 +351,20 @@ test("GM and six isolated players recover authoritative state without security l
     { length: 6 },
     (_, index) => runTag + "-private-note-player-" + (index + 1),
   );
-  const gm = await browser.newContext();
+  const gm = await browser.newContext({
+    extraHTTPHeaders: { Origin: campaignOrigin },
+  });
   const players = await Promise.all(
-    Array.from({ length: 6 }, () => browser.newContext()),
+    Array.from({ length: 6 }, () =>
+      browser.newContext({ extraHTTPHeaders: { Origin: campaignOrigin } }),
+    ),
   );
   const pages: Page[] = [];
   const connections: GameConnection[] = [];
   try {
     const gmPage = await gm.newPage();
     await gmPage.goto("/gm/" + gmToken);
-    await gmPage.getByRole("button", { name: "Войти" }).click();
+    await gmPage.getByRole("button", { name: "Продолжить в игру" }).click();
     await gmPage.getByLabel("Меню сеанса").click();
     await expect(gmPage.getByRole("button", { name: "Выйти" })).toBeVisible();
     await expect(gmPage.getByText("в сети", { exact: true })).toBeVisible();
@@ -728,9 +779,7 @@ test("GM and six isolated players recover authoritative state without security l
     // Reproduce the legacy split reported by the GM: definition B is
     // canonical while an old placement snapshot still contains A. There is
     // intentionally no public API for creating this historical divergence.
-    const databaseUrl =
-      process.env.DATABASE_URL ??
-      "postgres://arken:arken-e2e-password@postgres:5432/arken";
+    const databaseUrl = fixtureDatabaseUrl;
     const legacyDb = createDatabase(databaseUrl);
     try {
       await legacyDb.db
@@ -1800,7 +1849,9 @@ test("GM and six isolated players recover authoritative state without security l
       { data: { token: oldToken, displayName: "Old link" } },
     );
     expect(oldClaim.status()).toBe(410);
-    const replacement = await browser.newContext();
+    const replacement = await browser.newContext({
+      extraHTTPHeaders: { Origin: campaignOrigin },
+    });
     await claimInvite(replacement, rotated.url, "Player 6 replacement");
     const replacementConnection = await connectSocket(replacement);
     const revokedSocketDisconnected = new Promise<void>((resolve) =>
@@ -1871,7 +1922,9 @@ test("GM and six isolated players recover authoritative state without security l
     const sameRotated = (await (
       await expectOk(sameRotateResponses.find((response) => response.ok())!)
     ).json()) as { url: string };
-    const finalPlayer = await browser.newContext();
+    const finalPlayer = await browser.newContext({
+      extraHTTPHeaders: { Origin: campaignOrigin },
+    });
     await claimInvite(finalPlayer, sameRotated.url, "Player 6 final");
     const finalConnection = await connectSocket(finalPlayer);
     const finalDisconnect = new Promise<void>((resolve) =>
@@ -1912,8 +1965,13 @@ test("a shared browser handoff revokes player A before player B uses their own i
   const playerBName = runTag + " Player B";
   const playerAPrivateNote = runTag + " private note A";
   const playerBPrivateNote = runTag + " private note B";
-  const gm = await browser.newContext();
-  const sharedBrowser = await browser.newContext({ viewport });
+  const gm = await browser.newContext({
+    extraHTTPHeaders: { Origin: campaignOrigin },
+  });
+  const sharedBrowser = await browser.newContext({
+    viewport,
+    extraHTTPHeaders: { Origin: campaignOrigin },
+  });
   let playerAConnection: GameConnection | null = null;
 
   try {
@@ -1988,8 +2046,8 @@ test("a shared browser handoff revokes player A before player B uses their own i
 
     const page = await sharedBrowser.newPage();
     await page.goto(playerAInviteUrl);
-    await page.getByLabel("Имя").fill(playerAName);
-    await page.getByRole("button", { name: "Войти" }).click();
+    await page.getByLabel("Имя в кампании").fill(playerAName);
+    await page.getByRole("button", { name: "Продолжить в игру" }).click();
     await expect(page.locator(".app-shell")).toBeVisible();
     if (await page.locator("#compact-nav-journal").isVisible())
       await page.locator("#compact-nav-journal").click();
@@ -2020,8 +2078,9 @@ test("a shared browser handoff revokes player A before player B uses their own i
     await expect(playerASocketDisconnected).resolves.toBeUndefined();
     await expect(page).toHaveURL("/");
     await expect(
-      page.getByRole("heading", { name: "Выберите игрока" }),
+      page.getByRole("heading", { name: "Войти в аккаунт" }),
     ).toBeVisible();
+    await expect(page.locator(".app-shell")).toHaveCount(0);
     await expect
       .poll(async () =>
         (await sharedBrowser.request.get(baseUrl + "/api/bootstrap")).status(),
@@ -2040,11 +2099,16 @@ test("a shared browser handoff revokes player A before player B uses their own i
     expect(playerAActionAfterHandoff.status()).toBe(401);
 
     await page.goto(playerBInviteUrl);
-    await expect(page).toHaveURL(
-      new RegExp(new URL(playerBInviteUrl).pathname + "$"),
-    );
-    await page.getByLabel("Имя").fill(playerBName);
-    await page.getByRole("button", { name: "Войти" }).click();
+    await expect(page).toHaveURL(new URL("/join", baseUrl).href);
+    const sanitizedInviteLocation = new URL(page.url());
+    expect(sanitizedInviteLocation.pathname).toBe("/join");
+    expect(sanitizedInviteLocation.search).toBe("");
+    expect(sanitizedInviteLocation.hash).toBe("");
+    const playerBPathToken = new URL(playerBInviteUrl).pathname.split("/")[2];
+    expect(Boolean(playerBPathToken)).toBe(true);
+    expect(page.url().includes(playerBPathToken!)).toBe(false);
+    await page.getByLabel("Имя в кампании").fill(playerBName);
+    await page.getByRole("button", { name: "Продолжить в игру" }).click();
     await page.getByLabel("Меню сеанса").click();
     await expect(
       page.getByText("Вы играете как: " + playerBName),
