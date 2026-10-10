@@ -37,3 +37,9 @@ Revision base: 9f23464591ee6daa6f784bbfc2e091c55b287362; UI/actions working edit
 - Lightweight3secondCPU sample aftertests:Firefoxprocesses dominated sample(1.48/0.67/0.41CPUseconds), ChatGPT0.58/0.31/0.31; Nodeaggregateworkingmemory146MB at priorcheck. This does not establish historicallagcause; noforeignapplicationskilled.
 - Root source review confirms asset delete DETACH live refs and RETAIN_HISTORY provenance; metadata transaction then blob cleanup aftercommit. Still runtime/new58migrationgatepending.
 - Current lowloadpool: refresh fullremainingevidence throughexisting76audit+677/678; ownerPCnotloadedwithnewbuild/test/container.
+
+## Focused failed-assertion gate closed
+- Actual limited run session76368 terminal exit0: MediaPanel14/14PASS, Vitest77.33s (tests2.05s, environment53.77s/import19.80s), maxWorkers1/no-file-parallelism/NODE_OPTIONS384MB, launchedBelowNormal. NoDocker/build.
+- This closes the four stale assertion failures from prior62-test run. Evidence remains two scoped runs, not a fabricated single62/62 rerun: other6files48tests passed in earlier groupedrun; updatedMediaPanel14passed now. Current application/test bytes match committedsource8916874; subsequentcommitsdocsonly.
+- Forecast2–3minutes for focusedgate; actualtestruntime1m17s plus launch/observation overhead. No browser/current58migration/realrecovery/production PASS follows.
+- Full78openissue delta committed01ec774; already approved open-signup/newhostpublication preserved, no repeatapprovalneeded. Remainingprovider/campaign-policy/runtimeinputs remainexplicit.
