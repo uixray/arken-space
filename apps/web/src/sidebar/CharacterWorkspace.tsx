@@ -6,6 +6,7 @@ import {
   useReducer,
   useRef,
   useState,
+  type FormEvent,
   type CSSProperties,
 } from "react";
 import {
@@ -959,6 +960,20 @@ export function CharacterPanel({
   const [rollPending, setRollPending] = useState(false);
   const [rollError, setRollError] = useState("");
   const [characterMutationError, setCharacterMutationError] = useState("");
+  const [editingStandardSkill, setEditingStandardSkill] = useState<
+    CharacterDto["skills"][number] | null
+  >(null);
+  const [standardSkillDraft, setStandardSkillDraft] = useState({
+    name: "",
+    rank: "",
+    formula: "",
+  });
+  const [standardSkillToDelete, setStandardSkillToDelete] = useState<
+    CharacterDto["skills"][number] | null
+  >(null);
+  const [standardSkillPending, setStandardSkillPending] = useState(false);
+  const standardSkillPendingRef = useRef(false);
+  const [standardSkillError, setStandardSkillError] = useState("");
   const [statLayoutError, setStatLayoutError] = useState("");
   const runCharacterMutation = async (action: () => Promise<unknown>) => {
     setCharacterMutationError("");
@@ -1276,6 +1291,66 @@ export function CharacterPanel({
     character.entries,
     "ABILITY",
   );
+  const saveStandardSkill = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editable || !editingStandardSkill || standardSkillPendingRef.current)
+      return;
+    const name = standardSkillDraft.name.trim();
+    const rank = Number(standardSkillDraft.rank);
+    const formula = standardSkillDraft.formula.trim();
+    if (!name || name.length > 120) {
+      setStandardSkillError("Название навыка должно содержать от 1 до 120 символов.");
+      return;
+    }
+    if (!Number.isInteger(rank) || rank < 0) {
+      setStandardSkillError("Ранг навыка должен быть целым неотрицательным числом.");
+      return;
+    }
+    if (!formula || formula.length > 160) {
+      setStandardSkillError("Формула броска должна содержать от 1 до 160 символов.");
+      return;
+    }
+    standardSkillPendingRef.current = true;
+    setStandardSkillPending(true);
+    setStandardSkillError("");
+    try {
+      await onPatch(character.id, {
+        skills: character.skills.map((skill) =>
+          skill.key === editingStandardSkill.key
+            ? { ...skill, name, rank, formula }
+            : skill,
+        ),
+        revision: character.revision,
+      });
+      setEditingStandardSkill(null);
+    } catch {
+      setStandardSkillError("Не удалось сохранить навык. Повторите попытку.");
+    } finally {
+      standardSkillPendingRef.current = false;
+      setStandardSkillPending(false);
+    }
+  };
+  const deleteStandardSkill = async () => {
+    if (!editable || !standardSkillToDelete || standardSkillPendingRef.current)
+      return;
+    standardSkillPendingRef.current = true;
+    setStandardSkillPending(true);
+    setStandardSkillError("");
+    try {
+      await onPatch(character.id, {
+        skills: character.skills.filter(
+          (skill) => skill.key !== standardSkillToDelete.key,
+        ),
+        revision: character.revision,
+      });
+      setStandardSkillToDelete(null);
+    } catch {
+      setStandardSkillError("Не удалось удалить навык. Повторите попытку.");
+    } finally {
+      standardSkillPendingRef.current = false;
+      setStandardSkillPending(false);
+    }
+  };
   const submitWallet = async (
     nextWallet: CharacterDto["wallet"],
     intent: Parameters<typeof onUpdateCounters>[3],
@@ -1678,22 +1753,58 @@ export function CharacterPanel({
               />
               <div className="character-card character-card--skills">
                 <h3 className="character-card__header">Навыки</h3>
+                {standardSkillError && (
+                  <p className="field-error" role="alert">
+                    {standardSkillError}
+                  </p>
+                )}
                 <div className="character-card__body">
                   {character.skills.length > 0 &&
                     character.skills.map((skill) => (
-                      <RollButton
-                        key={skill.key}
-                        name={skill.name}
-                        formula={skill.formula}
-                        disabled={rollPending}
-                        onClick={(event) =>
-                          void submitCharacterRoll(
-                            skill.formula,
-                            skill.name,
-                            rollModeFromEvent(event.nativeEvent),
-                          )
-                        }
-                      />
+                      <div className="character-card__row" key={skill.key}>
+                        <RollButton
+                          name={skill.name}
+                          formula={skill.formula}
+                          disabled={rollPending}
+                          onClick={(event) =>
+                            void submitCharacterRoll(
+                              skill.formula,
+                              skill.name,
+                              rollModeFromEvent(event.nativeEvent),
+                            )
+                          }
+                        />
+                        {editable && (
+                          <div className="inline-fields">
+                            <Button
+                              disabled={standardSkillPending}
+                              aria-label={`Редактировать навык ${skill.name}`}
+                              onClick={() => {
+                                setStandardSkillError("");
+                                setEditingStandardSkill(skill);
+                                setStandardSkillDraft({
+                                  name: skill.name,
+                                  rank: String(skill.rank),
+                                  formula: skill.formula,
+                                });
+                              }}
+                            >
+                              Редактировать
+                            </Button>
+                            <Button
+                              className="danger-link"
+                              disabled={standardSkillPending}
+                              aria-label={`Удалить навык ${skill.name}`}
+                              onClick={() => {
+                                setStandardSkillError("");
+                                setStandardSkillToDelete(skill);
+                              }}
+                            >
+                              Удалить
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     ))}
                   {skillEntries.length ? (
                     skillEntries.map((entry) => (
@@ -1861,6 +1972,100 @@ export function CharacterPanel({
           }
           onCreate={(input) => catalogActions.onCreateCatalogEntry(input)}
         />
+      )}
+
+      {editingStandardSkill && (
+        <ArkenDialog
+          open
+          footer={false}
+          title={`Редактировать навык «${editingStandardSkill.name}»`}
+          onClose={() => !standardSkillPending && setEditingStandardSkill(null)}
+        >
+          <form
+            className="catalog-entry-form"
+            aria-label="Редактирование стандартного навыка"
+            onSubmit={(event) => void saveStandardSkill(event)}
+          >
+            <label>
+              Название
+              <FormInput
+                value={standardSkillDraft.name}
+                maxLength={120}
+                required
+                disabled={standardSkillPending}
+                onChange={(event) =>
+                  setStandardSkillDraft((draft) => ({
+                    ...draft,
+                    name: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Ранг
+              <FormInput
+                type="number"
+                min={0}
+                step={1}
+                value={standardSkillDraft.rank}
+                required
+                disabled={standardSkillPending}
+                onChange={(event) =>
+                  setStandardSkillDraft((draft) => ({
+                    ...draft,
+                    rank: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Формула броска
+              <FormInput
+                value={standardSkillDraft.formula}
+                maxLength={160}
+                required
+                disabled={standardSkillPending}
+                onChange={(event) =>
+                  setStandardSkillDraft((draft) => ({
+                    ...draft,
+                    formula: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            {standardSkillError && (
+              <p className="field-error" role="alert">
+                {standardSkillError}
+              </p>
+            )}
+            <Button type="submit" disabled={standardSkillPending}>
+              {standardSkillPending ? "Сохранение…" : "Сохранить навык"}
+            </Button>
+          </form>
+        </ArkenDialog>
+      )}
+
+      {standardSkillToDelete && (
+        <ArkenDialog
+          open
+          title="Удалить стандартный навык?"
+          applyLabel={standardSkillPending ? "Удаление…" : "Удалить навык"}
+          danger
+          loading={standardSkillPending}
+          onApply={() => void deleteStandardSkill()}
+          onClose={() =>
+            !standardSkillPending && setStandardSkillToDelete(null)
+          }
+        >
+          <p>
+            Навык «{standardSkillToDelete.name}» будет удалён с листа персонажа.
+          </p>
+          {standardSkillError && (
+            <p className="field-error" role="alert">
+              {standardSkillError}
+            </p>
+          )}
+        </ArkenDialog>
       )}
 
       {entryEditor && (

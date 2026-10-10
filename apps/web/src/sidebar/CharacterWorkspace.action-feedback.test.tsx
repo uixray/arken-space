@@ -317,6 +317,174 @@ function selectPortrait(
 }
 
 describe("character action feedback", () => {
+  it("edits a standard skill through the revisioned character patch", async () => {
+    const patch = vi.fn().mockResolvedValue(undefined);
+    renderComponent(
+      view(
+        snapshot([
+          character({
+            revision: 23,
+            skills: [
+              { key: "sword", name: "Меч", rank: 1, formula: "1d20 + sila" },
+            ],
+          }),
+        ]),
+        { onPatch: patch },
+      ),
+    );
+    await galleryLoaded();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Редактировать навык Меч" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Редактировать навык «Меч»",
+    });
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: "Название" }),
+      {
+        target: { value: "Длинный меч" },
+      },
+    );
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "Ранг" }), {
+      target: { value: "2" },
+    });
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: "Формула броска" }),
+      { target: { value: "1d20 + sila + 2" } },
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Сохранить навык" }),
+    );
+
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patch).toHaveBeenCalledWith("character-a", {
+      skills: [
+        {
+          key: "sword",
+          name: "Длинный меч",
+          rank: 2,
+          formula: "1d20 + sila + 2",
+        },
+      ],
+      revision: 23,
+    });
+  });
+
+  it("validates standard skill edits before sending a patch", async () => {
+    const patch = vi.fn().mockResolvedValue(undefined);
+    renderComponent(
+      view(
+        snapshot([
+          character({
+            skills: [
+              { key: "sword", name: "Меч", rank: 1, formula: "1d20 + sila" },
+            ],
+          }),
+        ]),
+        { onPatch: patch },
+      ),
+    );
+    await galleryLoaded();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Редактировать навык Меч" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Редактировать навык «Меч»",
+    });
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: "Название" }),
+      {
+        target: { value: "Меч" },
+      },
+    );
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "Ранг" }), {
+      target: { value: "1" },
+    });
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: "Формула броска" }),
+      { target: { value: "   " } },
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Сохранить навык" }),
+    );
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "Формула броска должна содержать от 1 до 160 символов.",
+    );
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it("confirms standard skill deletion, keeps errors visible, and allows retry", async () => {
+    const patch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("conflict"))
+      .mockResolvedValueOnce(undefined);
+    renderComponent(
+      view(
+        snapshot([
+          character({
+            revision: 24,
+            skills: [
+              { key: "sword", name: "Меч", rank: 1, formula: "1d20 + sila" },
+            ],
+          }),
+        ]),
+        { onPatch: patch },
+      ),
+    );
+    await galleryLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Удалить навык Меч" }));
+    const dialog = screen.getByRole("dialog", {
+      name: "Удалить стандартный навык?",
+    });
+    expect(dialog).toHaveTextContent("Навык «Меч» будет удалён");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Удалить навык" }),
+    );
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "Не удалось удалить навык. Повторите попытку.",
+    );
+    expect(patch).toHaveBeenNthCalledWith(1, "character-a", {
+      skills: [],
+      revision: 24,
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Удалить навык" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Удалить стандартный навык?" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(patch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not expose standard skill mutation controls to an unrelated player", async () => {
+    const state = snapshot([
+      character({
+        skills: [{ key: "sword", name: "Меч", rank: 1, formula: "1d20" }],
+      }),
+    ]);
+    renderComponent(
+      view({
+        ...state,
+        me: {
+          ...state.me,
+          id: "player-guest",
+          role: "PLAYER",
+          characterId: null,
+        },
+      }),
+    );
+    await galleryLoaded();
+    expect(
+      screen.queryByRole("button", { name: "Редактировать навык Меч" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Удалить навык Меч" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("opens on Показатели and keeps tab navigation keyboard-operable", async () => {
     renderComponent(
       view(snapshot([character({ stats: { initiative: 2, reaction: 3 } })])),
