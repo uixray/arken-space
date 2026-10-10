@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { AssetDto, AudioPurpose, Role, SoundpadPackDto } from "@arken/contracts";
 import type { GameSocket } from "./realtime.js";
 import { SoundEffectsPlayback } from "./sound-effects-playback.js";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import "./SoundpadWorkspace.css";
 
-type Props = { campaignId: string; membershipId: string; role: Role; assets: AssetDto[]; socket: GameSocket | null; onUpload: (file: File, kind: "AUDIO", options?: { audioPurpose?: AudioPurpose }) => Promise<AssetDto>; onRefreshSnapshot?: () => Promise<void> };
+type Props = { campaignId: string; membershipId: string; role: Role; assets: AssetDto[]; socket: GameSocket | null; onUpload: (file: File, kind: "AUDIO", options?: { audioPurpose?: AudioPurpose }) => Promise<AssetDto>; onRefreshSnapshot?: () => Promise<void>; launcherTarget?: HTMLElement | null };
 type SoundpadResponse = { packs: SoundpadPackDto[]; playerPlaybackEnabled: boolean };
 const DEFAULT_CLIPS = [
   { file: "evil-laugh.ogg", label: "Злодейский смех", icon: "😈", category: "Реакции", sourceNote: "CC0 · AntumDeluge — Evil Laugh · OpenGameArt" },
@@ -30,7 +31,7 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
   return value as T;
 }
 
-export function SoundpadWorkspace({ campaignId, membershipId, role, assets, socket, onUpload, onRefreshSnapshot }: Props) {
+export function SoundpadWorkspace({ campaignId, membershipId, role, assets, socket, onUpload, onRefreshSnapshot, launcherTarget }: Props) {
   const [data, setData] = useState<SoundpadResponse>({ packs: [], playerPlaybackEnabled: true });
   const [error, setError] = useState("");
   const busRef = useRef<SoundEffectsPlayback | null>(null);
@@ -240,8 +241,10 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
   };
   const audioAssets = assets.filter((asset) => isEffectAsset(asset) && asset.durationSeconds !== null && asset.durationSeconds > 0 && asset.durationSeconds <= 10);
 
+  const launcher = <button ref={launcherRef} className="soundpad__launcher" type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>Саундпад</button>;
+
   return <>
-    <button ref={launcherRef} className="soundpad__launcher" type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>Саундпад</button>
+    {launcherTarget ? createPortal(launcher, launcherTarget) : launcher}
     <ArkenDialog open={open} title="Саундпад" footer={false} className="soundpad__dialog" onClose={closeSoundpad}>
     <section className="soundpad" aria-label="Саундпад">
     <header className="soundpad__header"><span className="soundpad__status" role="status">{unlocked ? "Звук включён" : "Эффекты включатся при первом действии"}</span>

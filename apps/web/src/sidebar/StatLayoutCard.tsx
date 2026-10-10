@@ -449,6 +449,7 @@ export function StatLayoutCard({
                       title="Переместить выше"
                     >
                       <AppIcon icon={MoveUpIcon} />
+                      <span className="stat-field__menu-label">Выше</span>
                     </Button>
                     <Button
                       view="flat"
@@ -462,6 +463,7 @@ export function StatLayoutCard({
                       title="Переместить ниже"
                     >
                       <AppIcon icon={MoveDownIcon} />
+                      <span className="stat-field__menu-label">Ниже</span>
                     </Button>
                     <Button
                       view="flat"
@@ -474,6 +476,7 @@ export function StatLayoutCard({
                       title="Переименовать строку"
                     >
                       <AppIcon icon={RenameIcon} />
+                      <span className="stat-field__menu-label">Переименовать</span>
                     </Button>
                     <Button
                       view="flat"
@@ -495,6 +498,7 @@ export function StatLayoutCard({
                       }
                     >
                       <AppIcon icon={DeleteIcon} />
+                      <span className="stat-field__menu-label">Удалить</span>
                     </Button>
                   </div>
                 </details>

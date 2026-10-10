@@ -43,6 +43,25 @@ it("keeps the soundpad closed until requested and closes its modal on Escape", a
   await waitFor(() => expect(launcher).toHaveFocus());
 });
 
+it("mounts the launcher in the provided header navigation slot", () => {
+  const slot = document.createElement("div");
+  document.body.append(slot);
+  const view = renderInTheme(
+    <SoundpadWorkspace
+      campaignId={pack.campaignId}
+      membershipId="55555555-5555-4555-8555-555555555555"
+      role="PLAYER"
+      assets={[asset]}
+      socket={null}
+      onUpload={vi.fn()}
+      launcherTarget={slot}
+    />,
+  );
+  expect(slot).toContainElement(screen.getByRole("button", { name: "Саундпад" }));
+  view.unmount();
+  slot.remove();
+});
+
 it("keeps pack management collapsed for GMs and omits it for players", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ packs: [pack], playerPlaybackEnabled: true }) }));
   const gm = renderInTheme(<SoundpadWorkspace campaignId={pack.campaignId} membershipId="55555555-5555-4555-8555-555555555555" role="GM" assets={[asset]} socket={null} onUpload={vi.fn()} />);

@@ -150,6 +150,14 @@ const renderCard = (
 };
 
 describe("карточка группы характеристик", () => {
+  it("shows concise text labels for stat row menu actions", () => {
+    renderCard();
+    expect(screen.getAllByText("Выше").length).toBe(2);
+    expect(screen.getAllByText("Ниже").length).toBe(2);
+    expect(screen.getAllByText("Переименовать").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Удалить").length).toBeGreaterThan(0);
+  });
+
   it("closes only the open row menu on Escape and returns focus before the owning dialog", async () => {
     let parentEscapeCount = 0;
     const props = defaultCardProps();

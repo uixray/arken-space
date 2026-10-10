@@ -332,6 +332,8 @@ export function App() {
     previousSurface,
   });
   const [compactSectionsOpen, setCompactSectionsOpen] = useState(false);
+  const [headerSoundpadTarget, setHeaderSoundpadTarget] =
+    useState<HTMLElement | null>(null);
   const [headerMusicTarget, setHeaderMusicTarget] =
     useState<HTMLElement | null>(null);
   const [menuMusicTarget, setMenuMusicTarget] = useState<HTMLElement | null>(
@@ -1690,6 +1692,7 @@ export function App() {
             workspace={workspace}
             personalTheme={personalTheme}
             onMusicControlsTarget={setHeaderMusicTarget}
+            onSoundpadLauncherTarget={setHeaderSoundpadTarget}
             onOpenCompactSections={() => setCompactSectionsOpen(true)}
             onSelectScene={setViewedSceneId}
             onRequestEditScene={(sceneId) => {
@@ -2081,6 +2084,7 @@ export function App() {
               socket={socket}
               onUpload={handleUploadAudio}
               onRefreshSnapshot={load}
+              launcherTarget={headerSoundpadTarget}
             />
           )}
           {compact && (

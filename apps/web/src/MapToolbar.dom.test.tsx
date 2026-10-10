@@ -133,9 +133,15 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     expect(scroller).toContainElement(
       screen.getByRole("button", { name: "Pause" }),
     );
-    expect(scroller.lastElementChild).toHaveClass("map-toolbar__pause");
+    expect(scroller).toContainElement(screen.getByRole("button", { name: "Pause" }));
+    expect(scroller.querySelector(".map-toolbar__pause")).toBeInTheDocument();
+    expect(scroller.lastElementChild).toHaveAttribute("data-tool", "STAMP");
     expect(scroller).toContainElement(screen.getByRole("button", { name: "Перемещение" }));
-    expect(scroller).toContainElement(screen.getByRole("button", { name: "Объекты карты" }));
+    const objectList = screen.getByRole("button", {
+      name: "Список объектов и токенов карты",
+    });
+    expect(scroller).toContainElement(objectList);
+    expect(objectList).toHaveTextContent("Список");
   });
 
   it("рендерит инструменты для роли PLAYER: без тумана и боевой зоны", () => {
@@ -248,6 +254,38 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     expect(fog).toBeGreaterThan(fogHeading);
     expect(markersHeading).toBeGreaterThan(fog);
     expect(ruler).toBeGreaterThan(markersHeading);
+  });
+
+  it("keeps stamp as the final GM toolbar action and opens an adjacent dismissible popup", async () => {
+    const user = userEvent.setup();
+    const props = createDefaultProps();
+    const { container } = renderComponent(<MapToolbar {...props} />);
+    const scroller = container.querySelector(".map-toolbar__scroll")!;
+    const stamp = screen.getByRole("button", { name: "Штамп рельефа" });
+    expect(scroller.lastElementChild).toBe(stamp);
+
+    await user.click(stamp);
+    const popup = screen.getByRole("dialog", { name: "Штампы рельефа" });
+    expect(scroller).not.toContainElement(popup);
+    expect(popup.parentElement).toBe(document.body);
+
+    popup.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Штампы рельефа" })).not.toBeInTheDocument());
+    await waitFor(() => expect(stamp).toHaveFocus());
+    expect(props.onToolSelect).toHaveBeenLastCalledWith("PAN");
+  });
+
+  it("dismisses the stamp popup on outside pointer interaction without stealing focus", async () => {
+    const user = userEvent.setup();
+    const props = createDefaultProps();
+    const { container } = renderComponent(<MapToolbar {...props} />);
+    const stamp = screen.getByRole("button", { name: "Штамп рельефа" });
+    await user.click(stamp);
+    expect(screen.getByRole("dialog", { name: "Штампы рельефа" })).toBeInTheDocument();
+    const outside = container.querySelector(".map-toolbar__collapse")!;
+    await user.click(outside);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Штампы рельефа" })).not.toBeInTheDocument());
+    expect(props.onToolSelect).toHaveBeenLastCalledWith("STAMP");
   });
 
   it("рендерит инструменты GM без отключённого боя (UIX-621)", () => {

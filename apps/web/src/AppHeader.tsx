@@ -2,7 +2,7 @@ import { memo, useRef } from "react";
 import type { GameSnapshot } from "@arken/contracts";
 import { AppIcon } from "./ui/AppIcon";
 import {
-  AddIcon,
+  MapObjectsIcon,
   PublishedSceneIcon,
   PublishSceneIcon,
   SessionMenuIcon,
@@ -27,6 +27,7 @@ export interface AppHeaderProps {
   workspace: WorkspaceId | null;
   personalTheme?: GameSnapshot["personalTheme"];
   onMusicControlsTarget: (target: HTMLElement | null) => void;
+  onSoundpadLauncherTarget: (target: HTMLElement | null) => void;
 
   onOpenCompactSections: () => void;
   onSelectScene: (sceneId: string) => void;
@@ -56,12 +57,12 @@ export const AppHeader = memo(function AppHeader({
   workspace,
   personalTheme,
   onMusicControlsTarget,
+  onSoundpadLauncherTarget,
 
   onOpenCompactSections,
   onSelectScene,
   onRequestEditScene,
   onPublishScene,
-  onRequestCreateScene,
   onSelectWorkspace,
   onResync,
   onOpenCampaignRename,
@@ -155,11 +156,11 @@ export const AppHeader = memo(function AppHeader({
         {!previewSnapshot && snapshot.me.role === "GM" && (
           <button
             className="topbar-icon-button"
-            aria-label="Создать сцену"
-            title="Создать новую сцену"
-            onClick={onRequestCreateScene}
+            aria-label="Список сцен"
+            title="Открыть список сцен"
+            onClick={() => onSelectWorkspace("scenes")}
           >
-            <AppIcon icon={AddIcon} />
+            <AppIcon icon={MapObjectsIcon} />
           </button>
         )}
       </div>
@@ -174,6 +175,7 @@ export const AppHeader = memo(function AppHeader({
         onSelect={onSelectWorkspace}
       />
       <div className="status-line">
+        <div ref={onSoundpadLauncherTarget} className="soundpad-header-slot" />
         <div ref={onMusicControlsTarget} className="music-controls-slot" />
         <details className="account-menu" ref={accountMenuRef}>
           <summary aria-label="Меню сеанса" title="Меню сеанса">
