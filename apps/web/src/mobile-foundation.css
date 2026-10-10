@@ -922,7 +922,7 @@
     --g-modal-margin: 8px;
     top: var(--compact-viewport-top, 0px);
     bottom: auto;
-    height: var(--compact-viewport-height, 100dvh);
+    height: min(var(--compact-viewport-height, 100dvh), 100dvh);
     padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
       env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   }
@@ -937,14 +937,14 @@
       )
     );
     max-height: calc(
-      var(--compact-viewport-height, 100dvh) - env(safe-area-inset-top, 0px) -
+      min(var(--compact-viewport-height, 100dvh), 100dvh) - env(safe-area-inset-top, 0px) -
         env(safe-area-inset-bottom, 0px) - 16px
     );
   }
 
   .g-modal .g-modal__content_has-scroll {
     max-height: calc(
-      var(--compact-viewport-height, 100dvh) - env(safe-area-inset-top, 0px) -
+      min(var(--compact-viewport-height, 100dvh), 100dvh) - env(safe-area-inset-top, 0px) -
         env(safe-area-inset-bottom, 0px) - 16px
     );
   }
