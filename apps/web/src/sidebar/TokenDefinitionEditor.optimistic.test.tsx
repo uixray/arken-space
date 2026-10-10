@@ -180,6 +180,31 @@ const unusedCampaignActions: Omit<CampaignActions, "token"> = {
   },
   statLayout: { onUpdateStatLayout: unusedAction },
   chatHistory: { onLoadThreadHistory: unusedAction },
+  character: {
+    replaceCharacterControllers: unusedAction,
+    patchCharacter: unusedAction,
+    updateCharacterCounters: unusedAction,
+    onCreateCharacter: unusedAction,
+  },
+  initiative: {
+    onUpdateInitiative: unusedAction,
+    onSetOwnInitiative: unusedAction,
+    onRollInitiative: unusedAction,
+    onSetBattleZone: unusedAction,
+    onRecruitFromBattleZone: unusedAction,
+  },
+  dice: { onRoll: unusedAction },
+  campaign: { onCampaignClock: unusedAction },
+  player: { onPreviewPlayer: unusedAction },
+  sidebar: {
+    onRequestedChatMessageHandled: unusedAction,
+    onChatVisibilityChange: unusedAction,
+    onCollapsedChange: unusedAction,
+    onResizeHandleDown: unusedAction,
+    onResizeHandleMove: unusedAction,
+    onResizeHandleUp: unusedAction,
+    onWorkspaceChange: unusedAction,
+  },
 };
 
 /** Real production chain; state plumbing replaces only App's surrounding shell. */
@@ -280,32 +305,16 @@ function Harness({
             snapshot={snapshot}
             socket={null}
             presence={[]}
-            onReplaceCharacterControllers={unusedAction}
-            onPatchCharacter={unusedAction}
             storyPosts={[]}
             storyNextCursor={null}
-            onRoll={unusedAction}
-            onCreateCharacter={unusedAction}
             viewedSceneId={scene.id}
             sceneDialogRequest={0}
             selectedTokenIds={[]}
-            onUpdateInitiative={unusedAction}
-            onSetOwnInitiative={unusedAction}
-            onRollInitiative={unusedAction}
-            onPreviewPlayer={unusedAction}
-            onUpdateCounters={unusedAction}
-            onCampaignClock={unusedAction}
+            canRecruitFromBattleZone={false}
             requestedChatMessageId={null}
-            onRequestedChatMessageHandled={unusedAction}
-            onChatVisibilityChange={unusedAction}
             collapsed={false}
-            onCollapsedChange={unusedAction}
-            onResizeHandleDown={unusedAction}
-            onResizeHandleMove={unusedAction}
-            onResizeHandleUp={unusedAction}
             workspace="tokens"
             operatorFeedbackAllowed={false}
-            onWorkspaceChange={unusedAction}
           />
         </CampaignActionsContext.Provider>
       ) : (

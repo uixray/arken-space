@@ -47,6 +47,7 @@ export interface ChatActions {
   onSticker: (
     target: { threadId: string } | { stream: "TABLE" | "STORY" },
     stickerId: string,
+    scope?: "GLOBAL_PUBLIC",
   ) => Promise<void>;
   onCreateDirectThread: (
     participantMembershipId: string,
@@ -94,12 +95,14 @@ export function useChatActions(dependencies: {
           }),
         ),
 
-      onSticker: async (target, stickerId) => {
+      onSticker: async (target, stickerId, scope) => {
         const message = await api<ChatMessageDto>("/api/chat/stickers", {
           method: "POST",
           body: JSON.stringify({
             actionId: crypto.randomUUID(),
-            stickerId,
+            ...(scope === "GLOBAL_PUBLIC"
+              ? { scope: "GLOBAL", globalStickerId: stickerId }
+              : { stickerId }),
             ...target,
           }),
         });

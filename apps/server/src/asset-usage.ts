@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
-import { and, eq, isNull, sql, sum } from "drizzle-orm";
-import { actionIdSchema } from "@arken/contracts";
+import { and, eq, inArray, isNull, sql, sum } from "drizzle-orm";
+import { actionIdSchema, audioPurposeSchema } from "@arken/contracts";
 import type {
   AssetUsageDto,
   ClientToServerEvents,
@@ -11,12 +11,16 @@ import type {
 import {
   assets,
   campaignAudioTracks,
+  campaignSounds,
   characters,
   characterMedia,
   gameEvents,
   scenes,
   tokenDefinitions,
+  tokens,
   worldContent,
+  worldContentActions,
+  worldContentInstances,
   worldContentMedia,
   worldMaps,
 } from "@arken/db";
@@ -30,6 +34,7 @@ import {
   storeUpload,
 } from "./storage.js";
 import { publicUploadError } from "./telemetry.js";
+import { postgresErrorCode } from "./database-errors.js";
 import {
   assetContentVersion,
   assetDto,
@@ -67,13 +72,16 @@ export async function resolveAssetUsages(
   const [
     sceneRows,
     definitionRows,
+    tokenRows,
     characterResourceRows,
     characterRows,
     characterMediaRows,
     mapRows,
     audioRows,
+    soundRows,
     worldContentCoverRows,
     worldContentMediaRows,
+    worldContentInstanceRows,
     provenanceRows,
   ] = await Promise.all([
     db
@@ -96,6 +104,11 @@ export async function resolveAssetUsages(
           eq(tokenDefinitions.defaultAssetId, assetId),
         ),
       ),
+    db
+      .select({ id: tokens.id, name: tokens.name })
+      .from(tokens)
+      .innerJoin(scenes, eq(tokens.sceneId, scenes.id))
+      .where(and(eq(scenes.campaignId, campaignId), eq(tokens.assetId, assetId))),
     db
       .select({
         id: characters.id,
@@ -168,6 +181,10 @@ export async function resolveAssetUsages(
         ),
       ),
     db
+      .select({ id: campaignSounds.id, label: campaignSounds.label })
+      .from(campaignSounds)
+      .where(and(eq(campaignSounds.campaignId, campaignId), eq(campaignSounds.assetId, assetId))),
+    db
       .select({ id: worldContent.id, name: worldContent.name })
       .from(worldContent)
       .where(eq(worldContent.coverAssetId, assetId)),
@@ -183,6 +200,13 @@ export async function resolveAssetUsages(
         eq(worldContentMedia.worldContentId, worldContent.id),
       )
       .where(eq(worldContentMedia.assetId, assetId)),
+    db
+      .select({ id: worldContentInstances.id, name: worldContentInstances.displayNameOverride })
+      .from(worldContentInstances)
+      .where(and(
+        eq(worldContentInstances.campaignId, campaignId),
+        eq(worldContentInstances.portraitAssetId, assetId),
+      )),
     db
       .select({ sequence: gameEvents.sequence })
       .from(gameEvents)
@@ -202,7 +226,7 @@ export async function resolveAssetUsages(
       label: row.name,
       location: "Сцена",
       visibility: "GM_ONLY" as const,
-      deletionPolicy: "BLOCK" as const,
+      deletionPolicy: "DETACH" as const,
     })),
     ...definitionRows.map((row) => ({
       kind: "TOKEN_DEFINITION" as const,
@@ -210,7 +234,15 @@ export async function resolveAssetUsages(
       label: row.name ?? row.characterName ?? "Токен",
       location: "Каталог токенов",
       visibility: "GM_ONLY" as const,
-      deletionPolicy: "BLOCK" as const,
+      deletionPolicy: "DETACH" as const,
+    })),
+    ...tokenRows.map((row) => ({
+      kind: "TOKEN_INSTANCE" as const,
+      entityId: row.id,
+      label: row.name,
+      location: "Токен на сцене",
+      visibility: "GM_ONLY" as const,
+      deletionPolicy: "DETACH" as const,
     })),
     ...characterRows.map((row) => ({
       kind: "CHARACTER_PORTRAIT" as const,
@@ -220,7 +252,7 @@ export async function resolveAssetUsages(
       visibility: row.ownerMembershipId
         ? ("PARTICIPANT" as const)
         : ("GM_ONLY" as const),
-      deletionPolicy: "BLOCK" as const,
+      deletionPolicy: "DETACH" as const,
     })),
     ...characterResourceRows.map((row) => ({
       kind: "CHARACTER_RESOURCE" as const,
@@ -230,7 +262,7 @@ export async function resolveAssetUsages(
       visibility: row.ownerMembershipId
         ? ("PARTICIPANT" as const)
         : ("GM_ONLY" as const),
-      deletionPolicy: "BLOCK" as const,
+      deletionPolicy: "DETACH" as const,
     })),
     ...characterMediaRows.map((row) => ({
       kind: "CHARACTER_MEDIA" as const,
@@ -238,7 +270,7 @@ export async function resolveAssetUsages(
       label: row.label ?? row.characterName,
       location: "Галерея персонажа",
       visibility: "GM_ONLY" as const,
-      deletionPolicy: "BLOCK" as const,
+      deletionPolicy: "DETACH" as const,
     })),
     ...mapRows.map((row) => ({
       kind: "WORLD_MAP_BACKGROUND" as const,
@@ -249,7 +281,7 @@ export async function resolveAssetUsages(
         row.lifecycle === "PUBLISHED" && row.visibility === "CAMPAIGN"
           ? ("PUBLIC" as const)
           : ("GM_ONLY" as const),
-      deletionPolicy: "BLOCK" as const,
+      deletionPolicy: "DETACH" as const,
     })),
     ...audioRows.map((row) => ({
       kind: "AUDIO_TRACK" as const,
@@ -257,7 +289,15 @@ export async function resolveAssetUsages(
       label: `Аудиодорожка ${row.slotOrder + 1}`,
       location: "Музыка",
       visibility: "PUBLIC" as const,
-      deletionPolicy: "BLOCK" as const,
+      deletionPolicy: "DETACH" as const,
+    })),
+    ...soundRows.map((row) => ({
+      kind: "CAMPAIGN_SOUND" as const,
+      entityId: row.id,
+      label: row.label,
+      location: "Саундпад кампании",
+      visibility: "GM_ONLY" as const,
+      deletionPolicy: "DETACH" as const,
     })),
     ...worldContentCoverRows.map((row) => ({
       kind: "WORLD_CONTENT_COVER" as const,
@@ -265,7 +305,7 @@ export async function resolveAssetUsages(
       label: row.name,
       location: "Обложка материала мира",
       visibility: "GM_ONLY" as const,
-      deletionPolicy: "BLOCK" as const,
+      deletionPolicy: "DETACH" as const,
     })),
     ...worldContentMediaRows.map((row) => ({
       kind: "WORLD_CONTENT_MEDIA" as const,
@@ -273,7 +313,15 @@ export async function resolveAssetUsages(
       label: row.label ?? row.worldContentName,
       location: "Файлы материала мира",
       visibility: "GM_ONLY" as const,
-      deletionPolicy: "BLOCK" as const,
+      deletionPolicy: "DETACH" as const,
+    })),
+    ...worldContentInstanceRows.map((row) => ({
+      kind: "WORLD_CONTENT_INSTANCE_PORTRAIT" as const,
+      entityId: row.id,
+      label: row.name ?? "Экземпляр материала мира",
+      location: "Портрет экземпляра материала мира",
+      visibility: "GM_ONLY" as const,
+      deletionPolicy: "DETACH" as const,
     })),
     ...provenanceRows.map((row) => ({
       kind: "GENERATED_TOKEN_SOURCE" as const,
@@ -296,6 +344,63 @@ export function registerAssetLifecycleRoutes(
     campaignId: string,
   ) => Promise<void>,
 ) {
+  app.patch("/api/assets/:id/audio-purpose", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM") return reply.code(403).send({ error: "GM_REQUIRED" });
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = z.object({ actionId: actionIdSchema, audioPurpose: audioPurposeSchema }).parse(request.body);
+    const result = await db.transaction(async (tx) => {
+      const [asset] = await tx.select().from(assets)
+        .where(and(eq(assets.id, id), eq(assets.campaignId, auth.campaignId)))
+        .for("update").limit(1);
+      if (!asset) return { kind: "missing" as const };
+      if (asset.kind !== "AUDIO") return { kind: "not_audio" as const };
+
+      const [priorAction] = await tx.select().from(gameEvents)
+        .where(and(eq(gameEvents.campaignId, auth.campaignId), eq(gameEvents.actionId, body.actionId)))
+        .limit(1);
+      if (priorAction) {
+        const payload = priorAction.payload as { audioPurpose?: string; assetId?: string } | null;
+        if (priorAction.type === "asset.audio_purpose_changed" && priorAction.entityId === id && payload?.assetId === id && payload.audioPurpose === body.audioPurpose)
+          return { kind: "updated" as const, asset };
+        return { kind: "action_conflict" as const };
+      }
+
+      const [trackUse] = await tx.select({ id: campaignAudioTracks.id }).from(campaignAudioTracks)
+        .where(and(eq(campaignAudioTracks.campaignId, auth.campaignId), eq(campaignAudioTracks.assetId, id))).limit(1);
+      const [soundUse] = await tx.select({ id: campaignSounds.id }).from(campaignSounds)
+        .where(and(eq(campaignSounds.campaignId, auth.campaignId), eq(campaignSounds.assetId, id))).limit(1);
+      if ((body.audioPurpose === "MUSIC" && soundUse) || (body.audioPurpose === "SOUND_EFFECT" && trackUse))
+        return { kind: "in_use" as const };
+
+      const [updated] = await tx.update(assets).set({ audioPurpose: body.audioPurpose })
+        .where(and(eq(assets.id, id), eq(assets.campaignId, auth.campaignId))).returning();
+      if (!updated) return { kind: "missing" as const };
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "asset.audio_purpose_changed",
+        entityType: "asset",
+        entityId: id,
+        payload: { assetId: id, audioPurpose: body.audioPurpose },
+      });
+      return { kind: "updated" as const, asset: updated };
+    }).catch((error: unknown) => {
+      if (postgresErrorCode(error) === "23505")
+        return { kind: "action_conflict" as const };
+      throw error;
+    });
+
+    if (result.kind === "missing") return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
+    if (result.kind === "not_audio") return reply.code(400).send({ error: "AUDIO_ASSET_REQUIRED" });
+    if (result.kind === "in_use") return reply.code(409).send({ error: "AUDIO_PURPOSE_IN_USE" });
+    if (result.kind === "action_conflict") return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return reply.send(assetDto(result.asset));
+  });
+
   app.get("/api/assets/:id/usage", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
@@ -336,8 +441,91 @@ export function registerAssetLifecycleRoutes(
           auth.campaignId,
           id,
         );
+        // Detach every live reference in the same transaction as metadata
+        // deletion. Keep owning records (characters, maps and global world
+        // content) intact; gallery/audio/pack rows are association records.
+        await tx.update(scenes).set({ mapAssetId: null, revision: sql`${scenes.revision} + 1`, updatedAt: new Date() })
+          .where(and(eq(scenes.campaignId, auth.campaignId), eq(scenes.mapAssetId, id)));
+        await tx.update(tokenDefinitions).set({ defaultAssetId: null, revision: sql`${tokenDefinitions.revision} + 1` })
+          .where(and(eq(tokenDefinitions.campaignId, auth.campaignId), eq(tokenDefinitions.defaultAssetId, id)));
+        await tx.update(tokens).set({ assetId: null, revision: sql`${tokens.revision} + 1`, updatedAt: new Date() })
+          .where(and(eq(tokens.assetId, id), sql`EXISTS (SELECT 1 FROM ${scenes} WHERE ${scenes.id} = ${tokens.sceneId} AND ${scenes.campaignId} = ${auth.campaignId})`));
+        await tx.update(characters).set({ portraitAssetId: null, revision: sql`${characters.revision} + 1`, updatedAt: new Date() })
+          .where(and(eq(characters.campaignId, auth.campaignId), eq(characters.portraitAssetId, id)));
+        await tx.update(characters).set({
+          resources: sql`(SELECT coalesce(jsonb_object_agg(key, CASE WHEN value->>'imageAssetId' = ${id} THEN value - 'imageAssetId' ELSE value END), '{}'::jsonb) FROM jsonb_each(${characters.resources}))`,
+          revision: sql`${characters.revision} + 1`,
+          updatedAt: new Date(),
+        }).where(and(
+          eq(characters.campaignId, auth.campaignId),
+          sql`EXISTS (SELECT 1 FROM jsonb_each(${characters.resources}) AS resource WHERE resource.value->>'imageAssetId' = ${id})`,
+        ));
+        await tx.update(worldMaps).set({
+          backgroundAssetId: null,
+          backgroundAssetApprovedByMembershipId: null,
+          backgroundAssetApprovedAt: null,
+          lifecycle: sql`CASE WHEN ${worldMaps.lifecycle} = 'PUBLISHED' THEN 'DRAFT'::world_map_lifecycle ELSE ${worldMaps.lifecycle} END`,
+          publishedAt: sql`CASE WHEN ${worldMaps.lifecycle} = 'PUBLISHED' THEN NULL ELSE ${worldMaps.publishedAt} END`,
+          revision: sql`${worldMaps.revision} + 1`,
+          updatedAt: new Date(),
+        }).where(and(
+          eq(worldMaps.campaignId, auth.campaignId),
+          eq(worldMaps.backgroundAssetId, id),
+          inArray(worldMaps.lifecycle, ["PUBLISHED", "DRAFT", "ARCHIVED"]),
+        ));
+        await tx.update(campaignAudioTracks).set({
+          assetId: null,
+          playing: false,
+          positionSeconds: 0,
+          startedAt: null,
+          revision: sql`${campaignAudioTracks.revision} + 1`,
+          updatedAt: new Date(),
+        }).where(and(eq(campaignAudioTracks.campaignId, auth.campaignId), eq(campaignAudioTracks.assetId, id)));
+        await tx.delete(campaignSounds).where(and(
+          eq(campaignSounds.campaignId, auth.campaignId),
+          eq(campaignSounds.assetId, id),
+        ));
+        await tx.delete(characterMedia).where(and(
+          eq(characterMedia.campaignId, auth.campaignId),
+          eq(characterMedia.assetId, id),
+        ));
+        await tx.update(worldContentInstances).set({
+          portraitAssetId: null,
+          revision: sql`${worldContentInstances.revision} + 1`,
+          updatedAt: new Date(),
+        }).where(and(eq(worldContentInstances.campaignId, auth.campaignId), eq(worldContentInstances.portraitAssetId, id)));
+        const detachedWorldMedia = await tx.delete(worldContentMedia)
+          .where(eq(worldContentMedia.assetId, id))
+          .returning({ worldContentId: worldContentMedia.worldContentId });
+        const detachedWorldCovers = await tx.update(worldContent).set({
+          coverAssetId: null,
+        }).where(eq(worldContent.coverAssetId, id)).returning({ id: worldContent.id });
+        const affectedWorldContentIds = new Set([
+          ...detachedWorldMedia.map((row) => row.worldContentId),
+          ...detachedWorldCovers.map((row) => row.id),
+        ]);
+        if (affectedWorldContentIds.size > 0)
+          await tx.update(worldContent).set({
+            revision: sql`${worldContent.revision} + 1`,
+            updatedAt: new Date(),
+          }).where(inArray(worldContent.id, [...affectedWorldContentIds]));
+        for (const worldContentId of affectedWorldContentIds) {
+          await tx.insert(worldContentActions).values({
+            actionId: randomUUID(),
+            type: "world_content.asset_detached",
+            entityType: "world_content",
+            entityId: worldContentId,
+            actorMembershipId: auth.membershipId,
+            payload: { assetId: id },
+          });
+        }
+        const remainingUsages = await resolveAssetUsages(
+          tx as unknown as Database,
+          auth.campaignId,
+          id,
+        );
         storageKey = asset.storageKey;
-        return deleteUnusedAsset(id, usages, {
+        return deleteUnusedAsset(id, remainingUsages, {
           deleteMetadata: async () => {
             await tx
               .delete(assets)
@@ -351,7 +539,11 @@ export function registerAssetLifecycleRoutes(
               type: "asset.deleted",
               entityType: "asset",
               entityId: id,
-              payload: { assetId: id },
+              payload: {
+                assetId: id,
+                detachedUsageCount: usages.filter((usage) => usage.deletionPolicy === "DETACH").length,
+                detachedWorldContentCount: affectedWorldContentIds.size,
+              },
             });
           },
           removeBlob: async () => undefined,

@@ -1,5 +1,5 @@
 import { createHash, randomInt, randomUUID } from "node:crypto";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Server } from "socket.io";
 import {
   and,
@@ -16,14 +16,14 @@ import {
 import { z } from "zod";
 import { canonicalizeFogGeometry, FogGeometryError } from "./fog-geometry.js";
 import { registerPublicRoadmapVoteRoutes } from "./roadmap-votes.js";
+import { registerAccountCampaignRoutes } from "./account-campaigns.js";
 import {
   activateSceneSchema,
   actionIdSchema,
   assetKindSchema,
+  audioPurposeSchema,
   characterCommandSchema,
   createCharacterSchema,
-  archiveCharacterSchema,
-  restoreCharacterSchema,
   assignCatalogEntrySchema,
   catalogEntryCommandSchema,
   characterCatalogEntryCommandSchema,
@@ -80,9 +80,10 @@ import {
   type ClientToServerEvents,
   type ServerToClientEvents,
 } from "@arken/contracts";
-import { betaPlayerByHandle, uniqueBetaPlayerIdentity } from "@arken/contracts";
 import {
   assets,
+  campaignSounds,
+  campaignSoundPacks,
   actionJournal,
   catalogEntries,
   characterCatalogEntries,
@@ -90,6 +91,9 @@ import {
   campaigns,
   characters,
   chatMessages,
+  globalStickerPacks,
+  globalStickers,
+  globalStickerMedia,
   chatReadCursors,
   chatThreads,
   chatAttachments,
@@ -117,6 +121,8 @@ import {
 } from "@arken/db";
 import { createStarterCharacter, RESOURCE_REGEN_STAT } from "@arken/system";
 import { createSession, requireAuth } from "./auth.js";
+import { registerAccountAuthRoutes } from "./account-auth-routes.js";
+import { createAccountMailContext, type AccountMailContext } from "./account-mail-context.js";
 import { DiceFormulaError, rollFormulaWithMode } from "./dice.js";
 import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
@@ -149,11 +155,19 @@ import {
 } from "./stat-layout.js";
 import { registerWorldMapRoutes } from "./world-map-routes.js";
 import { registerStoryRoutes } from "./story.js";
+import { registerStoryAttachmentLifecycleRoutes } from "./story-attachment-lifecycle.js";
+import { registerStickerPackAdminRoutes } from "./sticker-pack-admin.js";
+import { registerGlobalStickerRoutes } from "./global-sticker-catalog.js";
 import { registerAssetLifecycleRoutes } from "./asset-usage.js";
-import { assetContentVersion, assetDto } from "./asset-lifecycle.js";
+import { registerSoundpadRoutes } from "./soundpad-routes.js";
+import { assetContentVersion, assetDto, assetUploadActionMatches } from "./asset-lifecycle.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
 import { registerPlayerRequestRoutes } from "./player-requests.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
+import { registerGalleryChatShareRoutes } from "./gallery-chat-share.js";
+import { registerChatAttachmentContentRoute } from "./chat-attachment-content.js";
+import { registerTerrainStampRoutes } from "./terrain-stamp-routes.js";
+import { registerCharacterArchiveRoutes } from "./character-archive-routes.js";
 import { registerEncounterRoutes } from "./encounters.js";
 import { defaultThemeForMembership } from "./player-themes.js";
 import { registerPlayerThemeRoutes } from "./player-theme-routes.js";
@@ -227,6 +241,58 @@ const campaignRoom = (id: string) => `campaign:${id}`;
 const gmRoom = (id: string) => `campaign:${id}:gm`;
 const memberRoom = (id: string) => `member:${id}`;
 const sessionRoom = (id: string) => `session:${id}`;
+
+const isStampDrawing = (drawing: typeof drawings.$inferSelect) =>
+  drawing.kind === "STAMP";
+const isHiddenStamp = (drawing: typeof drawings.$inferSelect) =>
+  isStampDrawing(drawing) && drawing.stampLayer === "GM";
+
+function historyContainsStamp(command: typeof actionJournal.$inferSelect) {
+  const snapshots = [command.before, command.after];
+  if (command.targetType === "DRAWING")
+    return snapshots.some(
+      (snapshot) =>
+        typeof snapshot === "object" &&
+        snapshot !== null &&
+        "kind" in snapshot &&
+        snapshot.kind === "STAMP",
+    );
+  if (command.targetType !== "CANVAS_BULK") return false;
+  return snapshots.some((snapshot) => {
+    if (typeof snapshot !== "object" || snapshot === null || !("drawings" in snapshot))
+      return false;
+    const rows = snapshot.drawings;
+    return Array.isArray(rows) && rows.some(
+      (row) => typeof row === "object" && row !== null && "kind" in row && row.kind === "STAMP",
+    );
+  });
+}
+
+function drawingDto(drawing: typeof drawings.$inferSelect) {
+  const common = {
+    id: drawing.id,
+    sceneId: drawing.sceneId,
+    authorMembershipId: drawing.authorMembershipId,
+    points: drawing.points,
+    color: drawing.color,
+    strokeWidth: drawing.strokeWidth,
+    x: drawing.x,
+    y: drawing.y,
+    revision: drawing.revision,
+    createdAt: drawing.createdAt,
+    updatedAt: drawing.updatedAt,
+  };
+  if (drawing.kind !== "STAMP") return { ...common, kind: "FREEHAND" as const };
+  return {
+    ...common,
+    kind: "STAMP" as const,
+    assetKey: drawing.stampAssetKey as "forest" | "mountains" | "clouds",
+    packId: drawing.stampPackId as "builtin-terrain-v1",
+    size: drawing.stampSize!,
+    rotation: drawing.stampRotation!,
+    layer: drawing.stampLayer as "PUBLIC" | "GM",
+  };
+}
 
 /**
  * UIX-408 — видна ли этому сокету сцена, к которой относится канвас.
@@ -602,6 +668,35 @@ async function findAction(db: Database, campaignId: string, actionId: string) {
   return event ?? null;
 }
 
+/** Drawing replays are scoped to the exact actor, operation and target. */
+async function drawingActionReplay(
+  db: Database,
+  auth: { campaignId: string; membershipId: string },
+  actionId: string,
+  type: "DRAWING_CREATE" | "DRAWING_UPDATE" | "DRAWING_DELETE",
+  targetId: string | null,
+  sceneId?: string,
+): Promise<"duplicate" | "conflict" | null> {
+  const [action] = await db
+    .select()
+    .from(actionJournal)
+    .where(
+      and(
+        eq(actionJournal.campaignId, auth.campaignId),
+        eq(actionJournal.actionId, actionId),
+      ),
+    )
+    .limit(1);
+  if (!action) return null;
+  const matches =
+    action.actorMembershipId === auth.membershipId &&
+    action.type === type &&
+    action.targetType === "DRAWING" &&
+    (targetId === null || action.targetId === targetId) &&
+    (sceneId === undefined || action.sceneId === sceneId);
+  return matches ? "duplicate" : "conflict";
+}
+
 /**
  * UIX-424, шаг 6 — всё в кампании, что может сослаться на характеристику.
  *
@@ -689,6 +784,22 @@ export async function claimInviteOwnership(
   displayName: string,
 ) {
   return db.transaction(async (tx) => {
+    const [lockedInvite] = await tx.select({ id: invites.id }).from(invites)
+      .where(and(eq(invites.id, invite.id), eq(invites.campaignId, invite.campaignId)))
+      .for("update").limit(1);
+    if (!lockedInvite) throw new Error("INVITE_UNAVAILABLE");
+    const [claimed] = await tx
+      .update(invites)
+      .set({ claimedAt: new Date() })
+      .where(and(
+        eq(invites.id, invite.id),
+        eq(invites.campaignId, invite.campaignId),
+        isNull(invites.claimedAt),
+        isNull(invites.revokedAt),
+        sql`${invites.expiresAt} > clock_timestamp()`,
+      ))
+      .returning({ id: invites.id });
+    if (!claimed) throw new Error("INVITE_UNAVAILABLE");
     const membershipId = randomUUID();
     const [member] = await tx
       .insert(memberships)
@@ -719,12 +830,9 @@ export async function claimInviteOwnership(
       where d.character_id = ${invite.characterId} and d.campaign_id = ${invite.campaignId}
       and not exists (select 1 from token_controllers c where c.token_definition_id = d.id)
       on conflict do nothing`);
-    const [claimed] = await tx
-      .update(invites)
-      .set({ claimedAt: new Date(), claimedByMembershipId: member.id })
-      .where(and(eq(invites.id, invite.id), isNull(invites.claimedAt)))
-      .returning();
-    if (!claimed) throw new Error("INVITE_ALREADY_CLAIMED");
+    await tx.update(invites)
+      .set({ claimedByMembershipId: member.id })
+      .where(eq(invites.id, invite.id));
     return member;
   });
 }
@@ -925,17 +1033,77 @@ export function registerRoutes(
   app: FastifyInstance,
   db: Database,
   io: RealtimeServer,
+  mailContext: AccountMailContext = createAccountMailContext(env),
 ) {
+  registerAccountAuthRoutes(app, db, io, {
+    enabled: env.ACCOUNT_AUTH_ENABLED,
+    registrationEnabled: env.ACCOUNT_REGISTRATION_ENABLED,
+    legacyDevEnabled: env.NODE_ENV === "development" && env.LEGACY_DEV_AUTH_ENABLED,
+    campaignLinkAccessEnabled: env.CAMPAIGN_LINK_ACCESS_ENABLED,
+    campaignCreationEnabled: env.ACCOUNT_CAMPAIGN_CREATION_ENABLED,
+    sessionTtlDays: env.SESSION_TTL_DAYS,
+    cookieSecure: env.NODE_ENV === "production",
+    accountCookieName: env.ACCOUNT_SESSION_COOKIE_NAME,
+    gameCookieName: env.SESSION_COOKIE_NAME,
+    csrfCookieName: env.ACCOUNT_CSRF_COOKIE_NAME,
+    webOrigin: env.WEB_ORIGIN,
+    publicUrl: env.PUBLIC_URL,
+    mailRuntimeEnabled: mailContext.runtimeEnabled,
+    mail: mailContext.adapter,
+    mailKeyring: mailContext.keyring,
+  });
+  registerAccountCampaignRoutes(app, db, io, {
+    enabled: env.ACCOUNT_AUTH_ENABLED,
+    creationEnabled: env.ACCOUNT_CAMPAIGN_CREATION_ENABLED,
+    creationLimit: env.ACCOUNT_CAMPAIGN_CREATION_LIMIT,
+    sessionTtlDays: env.SESSION_TTL_DAYS,
+    cookieSecure: env.NODE_ENV === "production",
+    accountCookieName: env.ACCOUNT_SESSION_COOKIE_NAME,
+    gameCookieName: env.SESSION_COOKIE_NAME,
+    csrfCookieName: env.ACCOUNT_CSRF_COOKIE_NAME,
+    webOrigin: env.WEB_ORIGIN,
+  });
+  const requireCampaignLinkOrigin = async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!env.CAMPAIGN_LINK_ACCESS_ENABLED) {
+      await reply.code(410).send({ error: "CAMPAIGN_LINK_ACCESS_DISABLED" });
+      return false;
+    }
+    if (request.headers.origin !== env.WEB_ORIGIN) {
+      await reply.code(403).send({ error: "ORIGIN_FORBIDDEN" });
+      return false;
+    }
+    return true;
+  };
+  const rotateCurrentGameCookieSession = async (request: FastifyRequest) => {
+    const token = request.cookies[env.SESSION_COOKIE_NAME];
+    if (!token) return;
+    const [old] = await db.select({ id: sessions.id }).from(sessions)
+      .where(eq(sessions.tokenHash, hashToken(token))).limit(1);
+    if (!old) return;
+    await db.update(sessions).set({ expiresAt: new Date(0) }).where(eq(sessions.id, old.id));
+    io.in(sessionRoom(old.id)).disconnectSockets(true);
+  };
   registerPublicRoadmapVoteRoutes(app, db);
   const canvasTx = (campaignId: string) =>
     campaignCanvasDatabase(db, campaignId);
   registerWorldMapRoutes(app, db, (campaignId) =>
     broadcastSnapshots(io, db, campaignId),
   );
+  registerTerrainStampRoutes(app, db);
   registerStoryRoutes(app, db, io);
+  registerStoryAttachmentLifecycleRoutes(app, db);
+  registerStickerPackAdminRoutes(app, db, (request, reply) =>
+    requireAuth(request, reply, db),
+  );
+  registerGlobalStickerRoutes(app, db);
   registerOperatorFeedbackRoutes(app, db);
   registerPlayerRequestRoutes(app, db, io);
   registerCharacterMediaRoutes(app, db);
+  registerGalleryChatShareRoutes(app, db, io);
+  registerChatAttachmentContentRoute(app, db);
+  registerCharacterArchiveRoutes(app, db, (campaignId) =>
+    broadcastSnapshots(io, db, campaignId),
+  );
   registerPlayerThemeRoutes(app, db);
   registerEncounterRoutes(app, db, (campaignId) =>
     broadcastSnapshots(io, db, campaignId),
@@ -956,6 +1124,7 @@ export function registerRoutes(
   registerSpellAssignmentRoutes(app, db);
   registerSpellProjectionRoutes(app, db);
   registerAssetLifecycleRoutes(app, db, io, broadcastSnapshots);
+  registerSoundpadRoutes(app, db, io);
 
   app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
     try {
@@ -979,10 +1148,13 @@ export function registerRoutes(
   });
 
   app.post("/api/auth/gm", async (request, reply) => {
+    if (!(await requireCampaignLinkOrigin(request, reply))) return;
     const body = gmLoginSchema.parse(request.body);
     const credentials = await db
       .select({
         membershipId: memberships.id,
+        campaignId: gmAccessCredentials.campaignId,
+        credentialRevision: gmAccessCredentials.revision,
         tokenHash: gmAccessCredentials.tokenHash,
       })
       .from(gmAccessCredentials)
@@ -995,15 +1167,17 @@ export function registerRoutes(
       safeEqual(hashToken(body.token), credential.tokenHash),
     );
     if (!gm) return reply.code(403).send({ error: "INVALID_MASTER_TOKEN" });
-    await createSession(db, reply, gm.membershipId);
+    await rotateCurrentGameCookieSession(request);
+    await createSession(db, reply, gm.membershipId, { source: "GM_LINK", campaignId: gm.campaignId, credentialRevision: gm.credentialRevision });
     return { ok: true };
   });
 
   app.post("/api/auth/invite", async (request, reply) => {
+    if (!(await requireCampaignLinkOrigin(request, reply))) return;
     const body = inviteClaimSchema.parse(request.body);
     const tokenHash = hashToken(body.token);
     const [grant] = await db
-      .select({ membershipId: playerAccessGrants.membershipId })
+      .select({ membershipId: playerAccessGrants.membershipId, id: playerAccessGrants.id, campaignId: playerAccessGrants.campaignId, revision: playerAccessGrants.revision })
       .from(playerAccessGrants)
       .innerJoin(
         memberships,
@@ -1022,7 +1196,8 @@ export function registerRoutes(
           .update(memberships)
           .set({ displayName: body.displayName })
           .where(eq(memberships.id, grant.membershipId));
-      await createSession(db, reply, grant.membershipId);
+      await rotateCurrentGameCookieSession(request);
+      await createSession(db, reply, grant.membershipId, { source: "PLAYER_GRANT", grantId: grant.id, grantRevision: grant.revision });
       return { ok: true };
     }
 
@@ -1033,51 +1208,30 @@ export function registerRoutes(
         and(
           eq(invites.tokenHash, tokenHash),
           isNull(invites.claimedAt),
+          isNull(invites.revokedAt),
           gt(invites.expiresAt, new Date()),
         ),
       )
       .limit(1);
     if (!invite) return reply.code(410).send({ error: "INVITE_EXPIRED" });
 
-    const result = await claimInviteOwnership(
-      db,
-      invite,
-      body.displayName ?? invite.label,
-    );
-    await createSession(db, reply, result.id);
+    let result: Awaited<ReturnType<typeof claimInviteOwnership>>;
+    try {
+      result = await claimInviteOwnership(db, invite, body.displayName ?? invite.label);
+    } catch (error) {
+      if (errorMessage(error).includes("INVITE_UNAVAILABLE"))
+        return reply.code(410).send({ error: "INVITE_EXPIRED" });
+      throw error;
+    }
+    await rotateCurrentGameCookieSession(request);
+    await createSession(db, reply, result.id, { source: "LEGACY_INVITE", inviteId: invite.id });
     return { ok: true };
   });
 
   // Temporary closed-beta shortcut. This intentionally authenticates by a
   // public alias and must be removed when UIX-232's recorded debt is paid.
   app.post("/api/auth/player/:handle", async (request, reply) => {
-    const handle = z
-      .object({ handle: z.string().min(1).max(40) })
-      .parse(request.params).handle;
-    const player = betaPlayerByHandle(handle);
-    if (!player) return reply.code(404).send({ error: "PLAYER_NOT_FOUND" });
-    const activeGrants = await db
-      .select({
-        membershipId: playerAccessGrants.membershipId,
-        label: playerAccessGrants.label,
-        displayName: memberships.displayName,
-      })
-      .from(playerAccessGrants)
-      .innerJoin(
-        memberships,
-        eq(playerAccessGrants.membershipId, memberships.id),
-      )
-      .where(
-        and(
-          isNull(playerAccessGrants.revokedAt),
-          eq(memberships.role, "PLAYER"),
-          eq(playerAccessGrants.campaignId, memberships.campaignId),
-        ),
-      );
-    const grant = uniqueBetaPlayerIdentity(player, activeGrants);
-    if (!grant) return reply.code(404).send({ error: "PLAYER_NOT_FOUND" });
-    await createSession(db, reply, grant.membershipId);
-    return { ok: true };
+    return reply.code(410).send({ error: "PUBLIC_ALIAS_LOGIN_DISABLED" });
   });
 
   app.post("/api/auth/logout", async (request, reply) => {
@@ -1698,293 +1852,6 @@ export function registerRoutes(
     return updated;
   });
 
-  /**
-   * GM-only roster of archived characters (UIX-393). A dedicated read
-   * endpoint rather than folding archived rows into the main snapshot: the
-   * snapshot's `characters` array is gameplay-active state broadcast to
-   * every connected client (including players), so archived characters are
-   * filtered out of it entirely in `buildSnapshot` (see `snapshot.ts`).
-   * This list backs the GM-only restore UI in `CharacterWorkspace.tsx`.
-   */
-  app.get("/api/characters/archived", async (request, reply) => {
-    const auth = await requireAuth(request, reply, db);
-    if (!auth) return;
-    if (auth.role !== "GM")
-      return reply.code(403).send({ error: "GM_REQUIRED" });
-    const rows = await db
-      .select()
-      .from(characters)
-      .where(
-        and(
-          eq(characters.campaignId, auth.campaignId),
-          eq(characters.lifecycle, "ARCHIVED"),
-        ),
-      )
-      .orderBy(desc(characters.archivedAt));
-    if (rows.length === 0) return reply.send([]);
-    const entryRows = await db
-      .select()
-      .from(characterCatalogEntries)
-      .where(
-        inArray(
-          characterCatalogEntries.characterId,
-          rows.map((row) => row.id),
-        ),
-      );
-    const controllerRows = await db
-      .select()
-      .from(characterControllers)
-      .where(
-        inArray(
-          characterControllers.characterId,
-          rows.map((row) => row.id),
-        ),
-      );
-    const entriesByCharacter = new Map<string, typeof entryRows>();
-    for (const entry of entryRows) {
-      const list = entriesByCharacter.get(entry.characterId) ?? [];
-      list.push(entry);
-      entriesByCharacter.set(entry.characterId, list);
-    }
-    const controllersByCharacter = new Map<string, string[]>();
-    for (const controller of controllerRows) {
-      const list = controllersByCharacter.get(controller.characterId) ?? [];
-      list.push(controller.membershipId);
-      controllersByCharacter.set(controller.characterId, list);
-    }
-    return reply.send(
-      rows.map((row) =>
-        characterDto(
-          row,
-          entriesByCharacter.get(row.id) ?? [],
-          controllersByCharacter.get(row.id) ?? [],
-        ),
-      ),
-    );
-  });
-
-  /**
-   * UIX-393: archive a character (soft-delete — never a hard DELETE, so
-   * campaign history/audit stays intact and a GM can always restore). GM-only,
-   * campaign-scoped, revision/CAS, idempotent `actionId`. Not eligible
-   * (missing, wrong campaign, or already ARCHIVED) all collapse to the same
-   * 404 so a cross-campaign or already-archived probe cannot distinguish
-   * "doesn't exist" from "exists but not archivable" — mirrors
-   * `DELETE /api/sticker-packs/:id`.
-   *
-   * Dependent-reference policy (see also the `characters` table's doc intent
-   * and `snapshot.ts`'s filter of ARCHIVED rows out of gameplay projection):
-   *  - `character_controllers` (sheet-access grants): deleted. Purely an
-   *    access-control join table, not history; access to an archived sheet
-   *    is meaningless, and restore does not reinstate it — the GM re-grants
-   *    explicitly.
-   *  - `token_definitions.character_id` / `tokens.character_id`: detached
-   *    (set NULL), the same outcome a hard delete would already produce via
-   *    each column's `onDelete: "set null"`. An archived character must not
-   *    remain controllable or placed as a live scene token.
-   *  - `invites` for this character: any *unclaimed* invite is expired
-   *    immediately (`expiresAt` moved to now) so nobody can claim ownership
-   *    of an archived character while it is archived; already-claimed
-   *    invites are historical and untouched.
-   *  - `character_media`, `character_catalog_entries`: left untouched. Both
-   *    are per-character sheet content, not scene-live state; they simply
-   *    become unreachable while the character is archived (its sheet drops
-   *    out of the snapshot) and reappear intact on restore.
-   *  - `chat_messages.character_id`, `game_events`/audit rows: never
-   *    touched. Chat attribution and audit history must survive archiving
-   *    unchanged (AC: "retaining historical references").
-   */
-  app.post("/api/characters/:id/archive", async (request, reply) => {
-    const auth = await requireAuth(request, reply, db);
-    if (!auth) return;
-    if (auth.role !== "GM")
-      return reply.code(403).send({ error: "GM_REQUIRED" });
-    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
-    const body = archiveCharacterSchema.parse(request.body);
-    const duplicate = await findAction(db, auth.campaignId, body.actionId);
-    if (duplicate) return reply.code(200).send({ duplicate: true });
-    const [current] = await db
-      .select()
-      .from(characters)
-      .where(
-        and(
-          eq(characters.id, id),
-          eq(characters.campaignId, auth.campaignId),
-          eq(characters.lifecycle, "ACTIVE"),
-        ),
-      )
-      .limit(1);
-    if (!current) return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
-    if (current.revision !== body.revision)
-      return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
-    const now = new Date();
-    const archived = await db.transaction(async (tx) => {
-      const [updated] = await tx
-        .update(characters)
-        .set({
-          lifecycle: "ARCHIVED",
-          archivedAt: now,
-          archivedByMembershipId: auth.membershipId,
-          revision: current.revision + 1,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(characters.id, id),
-            eq(characters.campaignId, auth.campaignId),
-            eq(characters.lifecycle, "ACTIVE"),
-            eq(characters.revision, current.revision),
-          ),
-        )
-        .returning();
-      if (!updated) return null;
-      await tx
-        .delete(characterControllers)
-        .where(eq(characterControllers.characterId, id));
-      /**
-       * UIX-400: перед отвязкой имя материализуется.
-       *
-       * Определение без своего имени зовётся как персонаж; убрав ссылку и не
-       * записав имя, мы получили бы токен, у которого подписи взяться неоткуда
-       * — и `token_definitions_name_check` этого не позволит. Архивация
-       * пакетная и без формы, спросить некого, поэтому имя фиксируется молча:
-       * это ровно то, что человек видел на карте до архивации.
-       */
-      await tx
-        .update(tokenDefinitions)
-        .set({ name: sql`coalesce(${tokenDefinitions.name}, ${updated.name})` })
-        .where(
-          and(
-            eq(tokenDefinitions.characterId, id),
-            eq(tokenDefinitions.campaignId, auth.campaignId),
-          ),
-        );
-      await tx
-        .update(tokenDefinitions)
-        .set({ characterId: null })
-        .where(
-          and(
-            eq(tokenDefinitions.characterId, id),
-            eq(tokenDefinitions.campaignId, auth.campaignId),
-          ),
-        );
-      await tx
-        .update(tokens)
-        .set({ characterId: null })
-        .where(eq(tokens.characterId, id));
-      await tx
-        .update(invites)
-        .set({ expiresAt: now })
-        .where(
-          and(
-            eq(invites.characterId, id),
-            eq(invites.campaignId, auth.campaignId),
-            isNull(invites.claimedAt),
-          ),
-        );
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        membershipId: auth.membershipId,
-        type: "character.archived",
-        entityType: "character",
-        entityId: id,
-        entityRevision: updated.revision,
-        payload: { characterId: id, from: "ACTIVE", to: "ARCHIVED" },
-      });
-      return updated;
-    });
-    if (!archived) return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
-    await broadcastSnapshots(io, db, auth.campaignId);
-    return reply.send(characterDto(archived, [], []));
-  });
-
-  /**
-   * UIX-393: restore an archived character back to ACTIVE. GM-only,
-   * campaign-scoped, revision/CAS, idempotent `actionId`. Deliberately does
-   * NOT reinstate anything the archive transaction detached (character
-   * controllers, token/token-definition links, expired invites) — those
-   * were live scene/access state at archive time and may no longer be
-   * correct; the GM re-establishes them explicitly, the same way a
-   * newly-created character starts with none of them either.
-   */
-  app.post("/api/characters/:id/restore", async (request, reply) => {
-    const auth = await requireAuth(request, reply, db);
-    if (!auth) return;
-    if (auth.role !== "GM")
-      return reply.code(403).send({ error: "GM_REQUIRED" });
-    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
-    const body = restoreCharacterSchema.parse(request.body);
-    const duplicate = await findAction(db, auth.campaignId, body.actionId);
-    if (duplicate) return reply.code(200).send({ duplicate: true });
-    const [current] = await db
-      .select()
-      .from(characters)
-      .where(
-        and(
-          eq(characters.id, id),
-          eq(characters.campaignId, auth.campaignId),
-          eq(characters.lifecycle, "ARCHIVED"),
-        ),
-      )
-      .limit(1);
-    if (!current) return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
-    if (current.revision !== body.revision)
-      return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
-    const now = new Date();
-    const restored = await db.transaction(async (tx) => {
-      const [updated] = await tx
-        .update(characters)
-        .set({
-          lifecycle: "ACTIVE",
-          archivedAt: null,
-          archivedByMembershipId: null,
-          revision: current.revision + 1,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(characters.id, id),
-            eq(characters.campaignId, auth.campaignId),
-            eq(characters.lifecycle, "ARCHIVED"),
-            eq(characters.revision, current.revision),
-          ),
-        )
-        .returning();
-      if (!updated) return null;
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        membershipId: auth.membershipId,
-        type: "character.restored",
-        entityType: "character",
-        entityId: id,
-        entityRevision: updated.revision,
-        payload: { characterId: id, from: "ARCHIVED", to: "ACTIVE" },
-      });
-      return updated;
-    });
-    if (!restored) return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
-    await broadcastSnapshots(io, db, auth.campaignId);
-    const [entries, controllers] = await Promise.all([
-      db
-        .select()
-        .from(characterCatalogEntries)
-        .where(eq(characterCatalogEntries.characterId, id)),
-      db
-        .select({ membershipId: characterControllers.membershipId })
-        .from(characterControllers)
-        .where(eq(characterControllers.characterId, id)),
-    ]);
-    return reply.send(
-      characterDto(
-        restored,
-        entries,
-        controllers.map((row) => row.membershipId),
-      ),
-    );
-  });
-
   app.post("/api/catalog", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
@@ -2396,6 +2263,40 @@ export function registerRoutes(
       created: access.created,
       url: access.token ? `${env.PUBLIC_URL}/join/${access.token}` : null,
     });
+  });
+
+  app.post("/api/invites/:id/revoke", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM") return reply.code(403).send({ error: "GM_REQUIRED" });
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const body = revokePlayerAccessSchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(409).send({ error: "ACTION_ALREADY_APPLIED" });
+    const now = new Date();
+    const revoked = await db.transaction(async (tx) => {
+      const [invite] = await tx.update(invites).set({ revokedAt: now }).where(and(
+        eq(invites.id, id),
+        eq(invites.campaignId, auth.campaignId),
+        isNull(invites.revokedAt),
+      )).returning({ id: invites.id });
+      if (!invite) return null;
+      const stale = await tx.select({ id: sessions.id }).from(sessions).where(eq(sessions.legacyInviteId, invite.id));
+      if (stale.length)
+        await tx.update(sessions).set({ expiresAt: now }).where(eq(sessions.legacyInviteId, invite.id));
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "invite.revoked",
+        entityType: "invite",
+        entityId: invite.id,
+      });
+      return { invite, sessionIds: stale.map((session) => session.id) };
+    });
+    if (!revoked) return reply.code(404).send({ error: "INVITE_NOT_FOUND" });
+    for (const sessionId of revoked.sessionIds) io.in(sessionRoom(sessionId)).disconnectSockets(true);
+    return reply.send({ ok: true });
   });
 
   app.get("/api/player-access", async (request, reply) => {
@@ -4179,8 +4080,8 @@ export function registerRoutes(
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     const body = createDrawingSchema.parse(request.body);
-    if (await findAction(db, auth.campaignId, body.actionId))
-      return reply.code(200).send({ duplicate: true });
+    if (body.kind === "STAMP" && auth.role !== "GM")
+      return reply.code(403).send({ error: "STAMP_FORBIDDEN" });
     const [scene] = await db
       .select({ id: scenes.id })
       .from(scenes)
@@ -4192,12 +4093,40 @@ export function registerRoutes(
       )
       .limit(1);
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    const replay = await drawingActionReplay(
+      db, auth, body.actionId, "DRAWING_CREATE", null, scene.id,
+    );
+    if (replay === "duplicate") return reply.code(200).send({ duplicate: true });
+    if (replay === "conflict" || (await findAction(db, auth.campaignId, body.actionId)))
+      return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
     const { actionId, ...input } = body;
+    const drawingInput =
+      input.kind === "STAMP"
+        ? {
+            sceneId: input.sceneId,
+            authorMembershipId: auth.membershipId,
+            points: [] as number[],
+            color: "#ffffff",
+            strokeWidth: 3,
+            x: input.x,
+            y: input.y,
+            kind: "STAMP",
+            stampAssetKey: input.assetKey,
+            stampPackId: input.packId,
+            stampSize: input.size,
+            stampRotation: input.rotation,
+            stampLayer: input.layer,
+          }
+        : {
+            ...input,
+            authorMembershipId: auth.membershipId,
+            kind: "FREEHAND" as const,
+          };
     const saved = await canvasTx(auth.campaignId).transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, scene.id);
       const [drawing] = await tx
         .insert(drawings)
-        .values({ ...input, authorMembershipId: auth.membershipId })
+        .values(drawingInput)
         .returning();
       if (!drawing) throw new Error("DRAWING_CREATE_FAILED");
       const [event] = await tx
@@ -4221,6 +4150,7 @@ export function registerRoutes(
         type: "DRAWING_CREATE",
         targetType: "DRAWING",
         targetId: drawing.id,
+        scope: isHiddenStamp(drawing) ? "GM" : "PUBLIC",
         before: null,
         after: drawing,
         afterRevision: 0,
@@ -4229,7 +4159,7 @@ export function registerRoutes(
       return { drawing, event };
     });
     await broadcastSnapshots(io, db, auth.campaignId);
-    return reply.code(201).send(saved.drawing);
+    return reply.code(201).send(drawingDto(saved.drawing));
   });
 
   app.patch("/api/drawings/:id", async (request, reply) => {
@@ -4237,29 +4167,56 @@ export function registerRoutes(
     if (!auth) return;
     const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
     const body = updateDrawingSchema.parse(request.body);
-    if (await findAction(db, auth.campaignId, body.actionId))
-      return reply.code(200).send({ duplicate: true });
     const [row] = await db
       .select({ drawing: drawings })
       .from(drawings)
       .innerJoin(scenes, eq(drawings.sceneId, scenes.id))
       .where(and(eq(drawings.id, id), eq(scenes.campaignId, auth.campaignId)))
       .limit(1);
+    if (!row) return reply.code(403).send({ error: "DRAWING_FORBIDDEN" });
+    if (isStampDrawing(row.drawing)) {
+      if (auth.role !== "GM")
+        return reply.code(403).send({ error: "STAMP_FORBIDDEN" });
+      if (
+        body.color !== undefined ||
+        body.strokeWidth !== undefined
+      ) return reply.code(422).send({ error: "STAMP_FIELD_FORBIDDEN" });
+    } else if (
+      body.size !== undefined ||
+      body.rotation !== undefined ||
+      body.layer !== undefined
+    ) {
+      return reply.code(422).send({ error: "DRAWING_KIND_MISMATCH" });
+    }
     if (
-      !row ||
-      (auth.role !== "GM" &&
-        row.drawing.authorMembershipId !== auth.membershipId)
+      !isStampDrawing(row.drawing) &&
+      auth.role !== "GM" &&
+      row.drawing.authorMembershipId !== auth.membershipId
     )
       return reply.code(403).send({ error: "DRAWING_FORBIDDEN" });
+    const replay = await drawingActionReplay(
+      db, auth, body.actionId, "DRAWING_UPDATE", id,
+    );
+    if (replay === "duplicate") return reply.code(200).send({ duplicate: true });
+    if (replay === "conflict" || (await findAction(db, auth.campaignId, body.actionId)))
+      return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
     if (row.drawing.revision !== body.revision)
       return reply.code(409).send({ error: "DRAWING_CONFLICT" });
-    const { actionId, revision: _revision, ...changes } = body;
+    const { actionId, revision: _revision, size, rotation, layer, ...changes } = body;
+    const changesToSave = isStampDrawing(row.drawing)
+      ? {
+          ...changes,
+          ...(size === undefined ? {} : { stampSize: size }),
+          ...(rotation === undefined ? {} : { stampRotation: rotation }),
+          ...(layer === undefined ? {} : { stampLayer: layer }),
+        }
+      : changes;
     const saved = await canvasTx(auth.campaignId).transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, row.drawing.sceneId);
       const [updated] = await tx
         .update(drawings)
         .set({
-          ...changes,
+          ...changesToSave,
           revision: row.drawing.revision + 1,
           updatedAt: new Date(),
         })
@@ -4289,6 +4246,7 @@ export function registerRoutes(
         type: "DRAWING_UPDATE",
         targetType: "DRAWING",
         targetId: id,
+        scope: isHiddenStamp(row.drawing) || isHiddenStamp(updated) ? "GM" : "PUBLIC",
         before: row.drawing,
         after: updated,
         beforeRevision: row.drawing.revision,
@@ -4299,7 +4257,7 @@ export function registerRoutes(
     });
     if (!saved) return reply.code(409).send({ error: "DRAWING_CONFLICT" });
     await broadcastSnapshots(io, db, auth.campaignId);
-    return saved.updated;
+    return drawingDto(saved.updated);
   });
 
   app.post("/api/drawings/:id/copy", async (request, reply) => {
@@ -4307,35 +4265,65 @@ export function registerRoutes(
     if (!auth) return;
     const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
     const body = drawingCommandSchema.parse(request.body);
-    if (await findAction(db, auth.campaignId, body.actionId))
-      return reply.code(200).send({ duplicate: true });
     const [row] = await db
       .select({ drawing: drawings })
       .from(drawings)
       .innerJoin(scenes, eq(drawings.sceneId, scenes.id))
       .where(and(eq(drawings.id, id), eq(scenes.campaignId, auth.campaignId)))
       .limit(1);
+    if (!row) return reply.code(403).send({ error: "DRAWING_FORBIDDEN" });
+    if (isStampDrawing(row.drawing) && auth.role !== "GM")
+      return reply.code(403).send({ error: "STAMP_FORBIDDEN" });
     if (
-      !row ||
-      (auth.role !== "GM" &&
-        row.drawing.authorMembershipId !== auth.membershipId)
+      !isStampDrawing(row.drawing) &&
+      auth.role !== "GM" &&
+      row.drawing.authorMembershipId !== auth.membershipId
     )
       return reply.code(403).send({ error: "DRAWING_FORBIDDEN" });
+    const priorCopy = await findAction(db, auth.campaignId, body.actionId);
+    if (priorCopy) {
+      const payload = priorCopy.payload as { sourceDrawingId?: unknown } | null;
+      if (
+        priorCopy.membershipId === auth.membershipId &&
+        priorCopy.type === "drawing.copied" &&
+        priorCopy.entityType === "drawing" &&
+        payload?.sourceDrawingId === id
+      ) return reply.code(200).send({ duplicate: true });
+      return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
+    }
     if (row.drawing.revision !== body.revision)
       return reply.code(409).send({ error: "DRAWING_CONFLICT" });
     const saved = await canvasTx(auth.campaignId).transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, row.drawing.sceneId);
+      const copyValues = isStampDrawing(row.drawing)
+        ? {
+            sceneId: row.drawing.sceneId,
+            authorMembershipId: auth.membershipId,
+            points: row.drawing.points,
+            color: row.drawing.color,
+            strokeWidth: row.drawing.strokeWidth,
+            x: row.drawing.x + 16,
+            y: row.drawing.y + 16,
+            kind: "STAMP" as const,
+            stampAssetKey: row.drawing.stampAssetKey,
+            stampPackId: row.drawing.stampPackId,
+            stampSize: row.drawing.stampSize,
+            stampRotation: row.drawing.stampRotation,
+            stampLayer: row.drawing.stampLayer,
+          }
+        : {
+            sceneId: row.drawing.sceneId,
+            authorMembershipId: auth.membershipId,
+            points: row.drawing.points,
+            color: row.drawing.color,
+            strokeWidth: row.drawing.strokeWidth,
+            x: row.drawing.x + 16,
+            y: row.drawing.y + 16,
+            kind: "FREEHAND" as const,
+          };
       const [copy] = await tx
         .insert(drawings)
-        .values({
-          sceneId: row.drawing.sceneId,
-          authorMembershipId: auth.membershipId,
-          points: row.drawing.points,
-          color: row.drawing.color,
-          strokeWidth: row.drawing.strokeWidth,
-          x: row.drawing.x + 16,
-          y: row.drawing.y + 16,
-        })
+        .values(copyValues)
         .returning();
       if (!copy) throw new Error("DRAWING_COPY_FAILED");
       const [event] = await tx
@@ -4348,7 +4336,7 @@ export function registerRoutes(
           entityType: "drawing",
           entityId: copy.id,
           entityRevision: 0,
-          payload: copy,
+          payload: { copy, sourceDrawingId: id },
         })
         .returning();
       await tx.insert(actionJournal).values({
@@ -4359,6 +4347,7 @@ export function registerRoutes(
         type: "DRAWING_CREATE",
         targetType: "DRAWING",
         targetId: copy.id,
+        scope: isHiddenStamp(copy) ? "GM" : "PUBLIC",
         before: null,
         after: copy,
         afterRevision: 0,
@@ -4367,7 +4356,7 @@ export function registerRoutes(
       return { copy, event };
     });
     await broadcastSnapshots(io, db, auth.campaignId);
-    return reply.code(201).send(saved.copy);
+    return reply.code(201).send(drawingDto(saved.copy));
   });
 
   app.delete("/api/drawings/:id", async (request, reply) => {
@@ -4375,20 +4364,44 @@ export function registerRoutes(
     if (!auth) return;
     const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
     const body = drawingCommandSchema.parse(request.body);
-    if (await findAction(db, auth.campaignId, body.actionId))
-      return reply.code(200).send({ duplicate: true });
     const [row] = await db
       .select({ drawing: drawings })
       .from(drawings)
       .innerJoin(scenes, eq(drawings.sceneId, scenes.id))
       .where(and(eq(drawings.id, id), eq(scenes.campaignId, auth.campaignId)))
       .limit(1);
+    if (!row) {
+      const [priorDelete] = await db
+        .select()
+        .from(actionJournal)
+        .where(
+          and(
+            eq(actionJournal.campaignId, auth.campaignId),
+            eq(actionJournal.actionId, body.actionId),
+            eq(actionJournal.type, "DRAWING_DELETE"),
+            eq(actionJournal.targetType, "DRAWING"),
+            eq(actionJournal.targetId, id),
+            eq(actionJournal.actorMembershipId, auth.membershipId),
+          ),
+        )
+        .limit(1);
+      if (priorDelete) return reply.code(200).send({ duplicate: true });
+      return reply.code(403).send({ error: "DRAWING_FORBIDDEN" });
+    }
+    if (isStampDrawing(row.drawing) && auth.role !== "GM")
+      return reply.code(403).send({ error: "STAMP_FORBIDDEN" });
     if (
-      !row ||
-      (auth.role !== "GM" &&
-        row.drawing.authorMembershipId !== auth.membershipId)
+      !isStampDrawing(row.drawing) &&
+      auth.role !== "GM" &&
+      row.drawing.authorMembershipId !== auth.membershipId
     )
       return reply.code(403).send({ error: "DRAWING_FORBIDDEN" });
+    const replay = await drawingActionReplay(
+      db, auth, body.actionId, "DRAWING_DELETE", id,
+    );
+    if (replay === "duplicate") return reply.code(200).send({ duplicate: true });
+    if (replay === "conflict" || (await findAction(db, auth.campaignId, body.actionId)))
+      return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
     if (row.drawing.revision !== body.revision)
       return reply.code(409).send({ error: "DRAWING_CONFLICT" });
     await canvasTx(auth.campaignId).transaction(async (tx) => {
@@ -4417,6 +4430,7 @@ export function registerRoutes(
         type: "DRAWING_DELETE",
         targetType: "DRAWING",
         targetId: id,
+        scope: isHiddenStamp(row.drawing) ? "GM" : "PUBLIC",
         before: row.drawing,
         after: null,
         beforeRevision: row.drawing.revision,
@@ -4522,7 +4536,10 @@ export function registerRoutes(
             !row.visible ||
             row.layer === "GM",
         ) ||
-        drawingRows.some((row) => row.authorMembershipId !== auth.membershipId)
+        drawingRows.some(
+          (row) =>
+            isStampDrawing(row) || row.authorMembershipId !== auth.membershipId,
+        )
       )
         return reply.code(403).send({ error: "CANVAS_TARGET_FORBIDDEN" });
     }
@@ -4633,7 +4650,11 @@ export function registerRoutes(
           before,
           after,
           currentRevision: 0,
-          scope: tokenRows.some((row) => row.layer === "GM") ? "GM" : "PUBLIC",
+          scope:
+            tokenRows.some((row) => row.layer === "GM") ||
+            drawingRows.some(isStampDrawing)
+              ? "GM"
+              : "PUBLIC",
         });
         await tx.insert(gameEvents).values({
           campaignId: auth.campaignId,
@@ -4762,6 +4783,10 @@ export function registerRoutes(
         .limit(1);
       if (!candidateCommand)
         return reply.code(404).send({ error: "HISTORY_ACTION_NOT_FOUND" });
+      // Players may replay legacy/public freehand history, but GM-owned stamp
+      // instances are never player-editable—even while their layer is public.
+      if (auth.role !== "GM" && historyContainsStamp(candidateCommand))
+        return reply.code(403).send({ error: "STAMP_FORBIDDEN" });
       const guardedDb = canvasTx(auth.campaignId);
       const saved = await guardedDb
         .transaction(async (tx) => {
@@ -5004,6 +5029,12 @@ export function registerRoutes(
                     color: drawing.color,
                     x: drawing.x,
                     y: drawing.y,
+                    kind: drawing.kind ?? "FREEHAND",
+                    stampAssetKey: drawing.stampAssetKey ?? null,
+                    stampPackId: drawing.stampPackId ?? null,
+                    stampSize: drawing.stampSize ?? null,
+                    stampRotation: drawing.stampRotation ?? null,
+                    stampLayer: drawing.stampLayer ?? null,
                     revision: nextRevision,
                     updatedAt: new Date(),
                   })
@@ -5028,6 +5059,12 @@ export function registerRoutes(
                     color: drawing.color,
                     x: drawing.x,
                     y: drawing.y,
+                    kind: drawing.kind ?? "FREEHAND",
+                    stampAssetKey: drawing.stampAssetKey ?? null,
+                    stampPackId: drawing.stampPackId ?? null,
+                    stampSize: drawing.stampSize ?? null,
+                    stampRotation: drawing.stampRotation ?? null,
+                    stampLayer: drawing.stampLayer ?? null,
                     revision: nextRevision,
                     createdAt: new Date(drawing.createdAt),
                     updatedAt: new Date(drawing.updatedAt),
@@ -5083,6 +5120,12 @@ export function registerRoutes(
                     color: drawing.color,
                     x: drawing.x,
                     y: drawing.y,
+                    kind: drawing.kind ?? "FREEHAND",
+                    stampAssetKey: drawing.stampAssetKey ?? null,
+                    stampPackId: drawing.stampPackId ?? null,
+                    stampSize: drawing.stampSize ?? null,
+                    stampRotation: drawing.stampRotation ?? null,
+                    stampLayer: drawing.stampLayer ?? null,
                     revision: existing.revision + 1,
                     updatedAt: new Date(),
                   })
@@ -5107,6 +5150,12 @@ export function registerRoutes(
                     color: drawing.color,
                     x: drawing.x,
                     y: drawing.y,
+                    kind: drawing.kind ?? "FREEHAND",
+                    stampAssetKey: drawing.stampAssetKey ?? null,
+                    stampPackId: drawing.stampPackId ?? null,
+                    stampSize: drawing.stampSize ?? null,
+                    stampRotation: drawing.stampRotation ?? null,
+                    stampLayer: drawing.stampLayer ?? null,
                     revision: nextRevision,
                   })
                   .returning();
@@ -6242,6 +6291,38 @@ export function registerRoutes(
         })),
       });
     }
+    const globalPacks = env.GLOBAL_STICKERS_ENABLED ? await db
+      .select()
+      .from(globalStickerPacks)
+      .where(eq(globalStickerPacks.lifecycle, "ACTIVE")) : [];
+    for (const pack of globalPacks) {
+      const items = await db
+        .select({ sticker: globalStickers, media: globalStickerMedia })
+        .from(globalStickers)
+        .innerJoin(globalStickerMedia, eq(globalStickerMedia.id, globalStickers.mediaId))
+        .where(eq(globalStickers.packId, pack.id));
+      result.push({
+        id: pack.id,
+        scope: "GLOBAL_PUBLIC" as const,
+        name: pack.name,
+        subject: "COMMON" as const,
+        subjectCharacterId: null,
+        subjectMembershipId: null,
+        subjectLabel: null,
+        lifecycle: pack.lifecycle,
+        canSend: true,
+        stickers: items.map(({ sticker, media }) => ({
+          id: sticker.id,
+          packId: sticker.packId,
+          name: sticker.name,
+          altText: sticker.altText,
+          url: `/api/global-stickers/${sticker.id}/content`,
+          width: media.width,
+          height: media.height,
+          attribution: { authorCredit: sticker.authorCredit, licenseNote: sticker.licenseNote },
+        })),
+      });
+    }
     reply.header("Cache-Control", "private, no-store");
     return result;
   });
@@ -6334,6 +6415,7 @@ export function registerRoutes(
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     const body = createStickerMessageSchema.parse(request.body);
+    const globalRequest = "scope" in body;
     let thread;
     try {
       thread = await resolveChatThread(db, auth, body, ["TABLE", "STORY"], {
@@ -6348,7 +6430,15 @@ export function registerRoutes(
     )
       return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
     const duplicate = await findAction(db, auth.campaignId, body.actionId);
-    if (duplicate)
+    if (duplicate && globalRequest) {
+      const payload = duplicate.payload as Record<string, unknown>;
+      return duplicate.membershipId === auth.membershipId &&
+        duplicate.type === "chat.created" && payload.threadId === thread.id &&
+        payload.globalStickerId === body.globalStickerId
+        ? reply.code(200).send(duplicate.payload)
+        : reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
+    }
+    if (duplicate && !globalRequest)
       return isMatchingStickerReplay(duplicate, {
         membershipId: auth.membershipId,
         threadId: thread.id,
@@ -6356,6 +6446,56 @@ export function registerRoutes(
       })
         ? reply.code(200).send(duplicate.payload)
         : reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
+    if (globalRequest) {
+      if (!env.GLOBAL_STICKERS_ENABLED) return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
+      const [resolved] = await db
+        .select({ sticker: globalStickers, pack: globalStickerPacks, media: globalStickerMedia })
+        .from(globalStickers)
+        .innerJoin(globalStickerPacks, eq(globalStickerPacks.id, globalStickers.packId))
+        .innerJoin(globalStickerMedia, eq(globalStickerMedia.id, globalStickers.mediaId))
+        .where(and(eq(globalStickers.id, body.globalStickerId), eq(globalStickerPacks.lifecycle, "ACTIVE")))
+        .limit(1);
+      if (!resolved) return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
+      const viewers = thread.type === "DIRECT" ? directThreadMemberIds(thread) : [];
+      const presentation = {
+        name: resolved.sticker.name,
+        altText: resolved.sticker.altText,
+        assetUrl: `/api/global-stickers/${resolved.sticker.id}/content`,
+        width: resolved.media.width,
+        height: resolved.media.height,
+      };
+      const audienceMembershipIds = thread.type === "DIRECT" ? viewers : null;
+      let saved;
+      try {
+        saved = await db.transaction(async (tx) => {
+          const [row] = await tx.insert(chatMessages).values({
+            campaignId: auth.campaignId, membershipId: auth.membershipId, characterId: null,
+            kind: "TEXT", threadId: thread.id, visibility: "PUBLIC", body: "",
+            globalStickerId: resolved.sticker.id, stickerId: null,
+            stickerPresentation: presentation, stickerViewerMembershipIds: audienceMembershipIds,
+          }).returning();
+          const dto = chatMessageDto(row!, auth.displayName, thread.stream);
+          const [event] = await tx.insert(gameEvents).values({ campaignId: auth.campaignId, actionId: body.actionId, membershipId: auth.membershipId, type: "chat.created", entityType: "chat", entityId: row!.id, payload: dto }).returning();
+          return { dto, event: event! };
+        });
+      } catch (error) {
+        // Concurrent retries can both pass the initial lookup; the action
+        // unique constraint elects one winner and the loser replays it.
+        const winner = await findAction(db, auth.campaignId, body.actionId);
+        if (winner) {
+          const payload = winner.payload as Record<string, unknown>;
+          return winner.membershipId === auth.membershipId && winner.type === "chat.created" &&
+            payload.threadId === thread.id && payload.globalStickerId === body.globalStickerId
+            ? reply.code(200).send(winner.payload)
+            : reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
+        }
+        throw error;
+      }
+      const envelope = { sequence: Number(saved.event.sequence), actionId: body.actionId, emittedAt: saved.event.createdAt.toISOString(), data: saved.dto };
+      if (audienceMembershipIds) for (const membershipId of audienceMembershipIds) io.to(memberRoom(membershipId)).emit("chat:created", envelope);
+      else io.to(campaignRoom(auth.campaignId)).emit("chat:created", envelope);
+      return reply.code(201).send(saved.dto);
+    }
     const resolved = await resolveSticker(db, auth, body.stickerId);
     if (
       !resolved ||
@@ -6543,62 +6683,6 @@ export function registerRoutes(
     }
   });
 
-  app.get(
-    "/api/chat/attachments/:contentId/content",
-    async (request, reply) => {
-      const auth = await requireAuth(request, reply, db);
-      if (!auth) return;
-      const { contentId } = z
-        .object({ contentId: z.string().uuid() })
-        .parse(request.params);
-      const [item] = await db
-        .select({ upload: chatAttachmentUploads, thread: chatThreads })
-        .from(chatAttachments)
-        .innerJoin(
-          chatAttachmentUploads,
-          and(
-            eq(chatAttachmentUploads.campaignId, chatAttachments.campaignId),
-            eq(chatAttachmentUploads.contentId, chatAttachments.contentId),
-          ),
-        )
-        .innerJoin(
-          chatThreads,
-          and(
-            eq(chatThreads.campaignId, chatAttachments.campaignId),
-            eq(chatThreads.id, chatAttachments.threadId),
-          ),
-        )
-        .where(
-          and(
-            eq(chatAttachments.campaignId, auth.campaignId),
-            eq(chatAttachments.contentId, contentId),
-            or(
-              and(
-                eq(chatThreads.type, "STREAM"),
-                eq(
-                  chatAttachmentUploads.uploadedByMembershipId,
-                  auth.membershipId,
-                ),
-              ),
-              eq(chatThreads.participantAMembershipId, auth.membershipId),
-              eq(chatThreads.participantBMembershipId, auth.membershipId),
-            ),
-          ),
-        )
-        .limit(1);
-      if (!item) return reply.code(404).send({ error: "NOT_FOUND" });
-      try {
-        const opened = await openStoredFile(item.upload.storageKey, undefined);
-        reply.header("Content-Type", item.upload.mimeType);
-        reply.header("Content-Length", String(opened.size));
-        reply.header("Cache-Control", "private, no-store");
-        return reply.send(opened.stream);
-      } catch {
-        return reply.code(404).send({ error: "NOT_FOUND" });
-      }
-    },
-  );
-
   app.post("/api/chat/direct", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
@@ -6702,6 +6786,7 @@ export function registerRoutes(
     try {
       saved = await db.transaction(async (tx) => {
         const attachmentIds = body.attachmentContentIds;
+        const claimNow = new Date();
         const staged = attachmentIds.length
           ? await tx
               .select()
@@ -6714,13 +6799,37 @@ export function registerRoutes(
                     auth.membershipId,
                   ),
                   eq(chatAttachmentUploads.status, "STAGED"),
-                  gt(chatAttachmentUploads.expiresAt, new Date()),
+                  gt(chatAttachmentUploads.expiresAt, claimNow),
                   inArray(chatAttachmentUploads.contentId, attachmentIds),
                 ),
               )
+              .for("update")
           : [];
         if (staged.length !== attachmentIds.length)
           throw new Error("CHAT_ATTACHMENT_NOT_FOUND");
+        if (staged.length) {
+          // Serialize claims against lifecycle deletion. The lock prevents a
+          // DELETE from expiring/removing the blob between validation and ref
+          // insertion; the guarded update also rejects stale/non-owned rows.
+          const claimed = await tx
+            .update(chatAttachmentUploads)
+            .set({ status: "CLAIMED" })
+            .where(
+              and(
+                eq(chatAttachmentUploads.campaignId, auth.campaignId),
+                eq(
+                  chatAttachmentUploads.uploadedByMembershipId,
+                  auth.membershipId,
+                ),
+                eq(chatAttachmentUploads.status, "STAGED"),
+                gt(chatAttachmentUploads.expiresAt, claimNow),
+                inArray(chatAttachmentUploads.contentId, attachmentIds),
+              ),
+            )
+            .returning({ contentId: chatAttachmentUploads.contentId });
+          if (claimed.length !== attachmentIds.length)
+            throw new Error("CHAT_ATTACHMENT_NOT_FOUND");
+        }
         const [row] = await tx
           .insert(chatMessages)
           .values({
@@ -6742,10 +6851,6 @@ export function registerRoutes(
               messageId: row.id,
             })),
           );
-          await tx
-            .update(chatAttachmentUploads)
-            .set({ status: "CLAIMED" })
-            .where(inArray(chatAttachmentUploads.contentId, attachmentIds));
         }
         const dto = {
           ...chatMessageDto(row, auth.displayName, null),
@@ -8186,14 +8291,31 @@ export function registerRoutes(
       );
       let action:
         NonNullable<typeof parsedData.data.rollActions>[number] | undefined;
+      const noRollActivation = mode === "EXECUTE" && !body.rollActionId;
+      const activationConfig = parsedData.data.activation ?? {
+        // Existing use counters are an explicit structured limit. Legacy
+        // abilities without one remain free activations (never parse prose).
+        consumeUse: Boolean(parsedData.data.uses),
+      };
       let formula: string | null = null;
       let result: ReturnType<typeof rollFormulaWithMode> | null = null;
       if (mode === "EXECUTE") {
-        action = parsedData.data.rollActions?.find(
-          (candidate) => candidate.id === body.rollActionId,
-        );
-        if (!action)
-          return reply.code(404).send({ error: "ROLL_ACTION_NOT_FOUND" });
+        if (noRollActivation) {
+          if (row.entry.kind !== "ABILITY")
+            return reply.code(400).send({ error: "ABILITY_ACTIVATION_NOT_CONFIGURED" });
+        } else {
+          action = parsedData.data.rollActions?.find(
+            (candidate) => candidate.id === body.rollActionId,
+          );
+          if (!action)
+            return reply.code(404).send({ error: "ROLL_ACTION_NOT_FOUND" });
+        }
+        if (noRollActivation && activationConfig.consumeUse &&
+            (!parsedData.data.uses || parsedData.data.uses.current < 1))
+          return reply.code(409).send({ error: "NO_ABILITY_USES" });
+        if (!action) {
+          // A configured no-roll activation has no dice/formula by design.
+        } else {
         const values: Record<string, number> = {};
         const formulaParts = [action.dice];
         for (const [index, source] of action.modifiers.entries()) {
@@ -8237,8 +8359,11 @@ export function registerRoutes(
           (!parsedData.data.uses || parsedData.data.uses.current < 1)
         )
           return reply.code(409).send({ error: "NO_ABILITY_USES" });
+        }
       }
-      const cost = mode === "EXECUTE" ? action?.cost : undefined;
+      const cost = mode === "EXECUTE"
+        ? (noRollActivation ? activationConfig.cost : action?.cost)
+        : undefined;
       const resourceKey =
         cost?.type === "physical"
           ? "physicalPower"
@@ -8267,8 +8392,12 @@ export function registerRoutes(
             }
           : resources;
       const uses = parsedData.data.uses;
+      const consumeUse = mode === "EXECUTE" &&
+        (noRollActivation
+          ? activationConfig.consumeUse
+          : action?.consumeUse);
       const afterUses =
-        mode === "EXECUTE" && action?.consumeUse && uses
+        consumeUse && uses
           ? { ...uses, current: uses.current - 1 }
           : uses;
       const skillCard = {
@@ -8311,6 +8440,14 @@ export function registerRoutes(
               recharge: uses.recharge,
             }
           : null,
+        activationCost: cost && resourceKey && resourceBefore !== null
+          ? {
+              type: cost.type,
+              amount: cost.amount,
+              before: resourceBefore,
+              after: resourceBefore - cost.amount,
+            }
+          : null,
         visibility: body.visibility,
       };
       let saved: {
@@ -8334,9 +8471,9 @@ export function registerRoutes(
                 ),
               )
               .returning({ id: characters.id });
-            if (!resourceUpdated) return null;
+            if (!resourceUpdated) throw new Error("ENTRY_CONFLICT_TX");
           }
-          if (mode === "EXECUTE" && action?.consumeUse) {
+          if (consumeUse && uses) {
             const [updated] = await tx
               .update(characterCatalogEntries)
               .set({
@@ -8351,7 +8488,18 @@ export function registerRoutes(
                 ),
               )
               .returning({ id: characterCatalogEntries.id });
-            if (!updated) return null;
+            if (!updated) throw new Error("ENTRY_CONFLICT_TX");
+          }
+          if (mode === "EXECUTE" && cost && resourceKey && !consumeUse) {
+            const [updated] = await tx
+              .update(characterCatalogEntries)
+              .set({ revision: row.entry.revision + 1, updatedAt: new Date() })
+              .where(and(
+                eq(characterCatalogEntries.id, row.entry.id),
+                eq(characterCatalogEntries.revision, row.entry.revision),
+              ))
+              .returning({ id: characterCatalogEntries.id });
+            if (!updated) throw new Error("ENTRY_CONFLICT_TX");
           }
           const [message] = await tx
             .insert(chatMessages)
@@ -8383,7 +8531,7 @@ export function registerRoutes(
               entityType: "chat",
               entityId: message.id,
               entityRevision:
-                mode === "EXECUTE" && action?.consumeUse
+                mode === "EXECUTE" && (consumeUse || (cost && resourceKey))
                   ? row.entry.revision + 1
                   : row.entry.revision,
               payload: {
@@ -8414,6 +8562,8 @@ export function registerRoutes(
           (await findAction(db, auth.campaignId, body.actionId))
         )
           return reply.code(200).send({ duplicate: true });
+        if (error instanceof Error && error.message === "ENTRY_CONFLICT_TX")
+          return reply.code(409).send({ error: "ENTRY_CONFLICT" });
         throw error;
       }
       if (!saved) {
@@ -8703,12 +8853,21 @@ export function registerRoutes(
   app.post("/api/assets", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    const query = z.object({ kind: assetKindSchema }).parse(request.query);
+    const query = z.object({
+      kind: assetKindSchema,
+      audioPurpose: audioPurposeSchema.optional(),
+    }).parse(request.query);
+    if (query.kind !== "AUDIO" && query.audioPurpose !== undefined)
+      return reply.code(400).send({ error: "AUDIO_PURPOSE_REQUIRES_AUDIO" });
     if (auth.role !== "GM" && !["TOKEN", "PORTRAIT"].includes(query.kind))
       return reply.code(403).send({ error: "ASSET_FORBIDDEN" });
     const actionId = actionIdSchema.parse(request.headers["x-action-id"]);
     const duplicate = await findAction(db, auth.campaignId, actionId);
     if (duplicate?.entityId) {
+      const requestedPurpose = query.kind === "AUDIO" ? (query.audioPurpose ?? "MUSIC") : null;
+      const priorPayload = duplicate.payload as { kind?: string; audioPurpose?: string | null } | null;
+      if (!assetUploadActionMatches(priorPayload, query.kind, requestedPurpose))
+        return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
       const [existing] = await db
         .select()
         .from(assets)
@@ -8748,6 +8907,7 @@ export function registerRoutes(
               campaignId: auth.campaignId,
               uploadedByMembershipId: auth.membershipId,
               kind: query.kind,
+              audioPurpose: query.kind === "AUDIO" ? (query.audioPurpose ?? "MUSIC") : null,
               name: displayNameFromUpload(file.filename),
               ...stored,
             })
@@ -8760,7 +8920,7 @@ export function registerRoutes(
             type: "asset.created",
             entityType: "asset",
             entityId: created.id,
-            payload: { assetId: created.id, kind: created.kind },
+            payload: { assetId: created.id, kind: created.kind, audioPurpose: created.audioPurpose },
           });
           return created;
         })
@@ -8788,6 +8948,15 @@ export function registerRoutes(
       .limit(1);
     if (!asset) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
     if (auth.role !== "GM") {
+      const [soundUse] = await db.select({ id: campaignSounds.id }).from(campaignSounds)
+        .innerJoin(campaignSoundPacks, eq(campaignSoundPacks.id, campaignSounds.packId))
+        .where(and(eq(campaignSounds.campaignId, auth.campaignId), eq(campaignSounds.assetId, asset.id))).limit(1);
+      if (soundUse) {
+        const [publicSoundUse] = await db.select({ id: campaignSounds.id }).from(campaignSounds)
+          .innerJoin(campaignSoundPacks, eq(campaignSoundPacks.id, campaignSounds.packId))
+          .where(and(eq(campaignSounds.campaignId, auth.campaignId), eq(campaignSounds.assetId, asset.id), eq(campaignSounds.audience, "ALL_MEMBERS"), eq(campaignSoundPacks.published, true), eq(campaignSoundPacks.audience, "ALL_MEMBERS"))).limit(1);
+        if (!publicSoundUse) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
+      }
       const snapshot = await buildSnapshot(db, auth);
       if (!snapshot.assets.some((visible) => visible.id === asset.id))
         return reply.code(404).send({ error: "ASSET_NOT_FOUND" });

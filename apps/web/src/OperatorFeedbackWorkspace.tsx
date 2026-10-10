@@ -322,12 +322,16 @@ export const OperatorFeedbackWorkspace = memo(
               </Button>
             )}
           </nav>
-          <section>
+          <section className="operator-feedback__detail">
             {error && <p role="alert">{error}</p>}
             {notice && <p role="status">{notice}</p>}
             {detail ? (
               <>
-                <h3 ref={detailHeading} tabIndex={-1}>
+                <h3
+                  className="operator-feedback__detail-heading"
+                  ref={detailHeading}
+                  tabIndex={-1}
+                >
                   {detail.title}
                 </h3>
                 <p>{detail.description}</p>
@@ -352,7 +356,7 @@ export const OperatorFeedbackWorkspace = memo(
                     </label>
                   </div>
                 )}
-                <div>
+                <div className="operator-feedback__actions">
                   {transitions[detail.status].map((status) => {
                     const payload = transitionPayload(
                       status,
@@ -369,13 +373,22 @@ export const OperatorFeedbackWorkspace = memo(
                       </Button>
                     );
                   })}
+                  <Button disabled={busy} onClick={() => void reveal()}>
+                    Показать чувствительные данные
+                  </Button>
+                  <Button disabled={busy} onClick={() => void copy()}>
+                    Копировать обезличенную версию
+                  </Button>
+                  {detail.attachments.map((attachment) => (
+                    <Button
+                      disabled={busy}
+                      key={attachment.id}
+                      onClick={() => void openAttachment(attachment.id)}
+                    >
+                      Открыть изображение
+                    </Button>
+                  ))}
                 </div>
-                <Button disabled={busy} onClick={() => void reveal()}>
-                  Показать чувствительные данные
-                </Button>
-                <Button disabled={busy} onClick={() => void copy()}>
-                  Копировать обезличенную версию
-                </Button>
                 {detail.contact !== undefined && (
                   <pre>
                     {detail.contact}
@@ -383,15 +396,6 @@ export const OperatorFeedbackWorkspace = memo(
                     {JSON.stringify(detail.diagnostics, null, 2)}
                   </pre>
                 )}
-                {detail.attachments.map((attachment) => (
-                  <Button
-                    disabled={busy}
-                    key={attachment.id}
-                    onClick={() => void openAttachment(attachment.id)}
-                  >
-                    Открыть изображение
-                  </Button>
-                ))}
                 {imageUrl && (
                   <img src={imageUrl} alt="Вложение обратной связи" />
                 )}

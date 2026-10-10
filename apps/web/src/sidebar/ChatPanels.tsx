@@ -87,7 +87,7 @@ import {
   physicalRollChatRequest,
   type ActivityFilter,
 } from "../activity-roll-controls";
-import type { Props } from "../Sidebar";
+import type { CampaignActions } from "../campaign-actions-context";
 import type { ChatActions } from "../use-chat-actions";
 import { useFollowScroll } from "../ui/useFollowScroll";
 import { decideComposerKeydown } from "../composer-keyboard-intent";
@@ -98,6 +98,7 @@ import {
 } from "../use-thread-history";
 import { QuickRollPanel } from "./QuickRollPanel";
 import { ResourceCounters } from "./ResourceCounters";
+import { ActivityInitiativePanel } from "./ActivityInitiativePanel";
 import type { ResourceCounterIntent } from "../resource-counter-intent";
 import { useSubmissionDraft } from "../ui/useSubmissionDraft";
 
@@ -272,22 +273,26 @@ function ChatMessageBodyComponent({
         onOpen={onOpenPlayerRequests ?? (() => {})}
       />
     );
-  if (message.stickerId || message.stickerPresentation) {
+  if (message.globalStickerId || message.stickerId || message.stickerPresentation) {
     const presentation = message.stickerPresentation;
-    if (!message.stickerId || !presentation)
+    const stickerId = message.globalStickerId ?? message.stickerId;
+    if (!stickerId || !presentation)
       return (
         <p className="chat-sticker-tombstone">{"Стикер больше недоступен"}</p>
       );
     return (
       <figure className="chat-sticker">
         <img
-          src={`/api/stickers/${message.stickerId}/content`}
+          src={
+            message.globalStickerId
+              ? `/api/global-stickers/${message.globalStickerId}/content`
+              : `/api/stickers/${stickerId}/content`
+          }
           alt={presentation.altText}
           width={presentation.width}
           height={presentation.height}
           loading="lazy"
         />
-        <figcaption>{presentation.name}</figcaption>
       </figure>
     );
   }
@@ -452,6 +457,11 @@ export function ActivityPanel({
   onMessageFocused,
   onOpenPlayerRequestCreate,
   onUpdateCounters,
+  selectedTokenIds,
+  onUpdateInitiative,
+  onSetOwnInitiative,
+  onRollInitiative,
+  onRecruitFromBattleZone,
 }: {
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
@@ -459,12 +469,12 @@ export function ActivityPanel({
   onActivityFiltersChange: (filters: Set<ActivityFilter>) => void;
   onChat: ChatActions["onChat"];
   onSticker: ChatActions["onSticker"];
-  onRoll: Props["onRoll"];
+  onRoll: CampaignActions["dice"]["onRoll"];
   focusedMessageId: string | null;
   onMessageFocused: () => void;
   onOpenPlayerRequestCreate: () => void;
   /** UIX-424, шаг 8: счётчики выносливости и маны правят те же `resources`. */
-  onUpdateCounters: Props["onUpdateCounters"];
+  onUpdateCounters: CampaignActions["character"]["updateCharacterCounters"];
   /** Сохранённая панель инициативы остаётся вне этого feed; данные/API сохранены. */
   selectedTokenIds: readonly string[];
   onUpdateInitiative: (
@@ -794,6 +804,14 @@ export function ActivityPanel({
         snapshot.me.role === "GM" ? undefined : "chat-tab-activity"
       }
     >
+      <ActivityInitiativePanel
+        snapshot={snapshot}
+        selectedTokenIds={selectedTokenIds}
+        onUpdateInitiative={onUpdateInitiative}
+        onSetOwnInitiative={onSetOwnInitiative}
+        onRollInitiative={onRollInitiative}
+        onRecruitFromZone={onRecruitFromBattleZone}
+      />
       <div
         className="activity-feed__controls"
         role="region"
@@ -1080,8 +1098,8 @@ export function ActivityPanel({
             {!composer.trim() && (
               <StickerPicker
                 iconOnly
-                onSelect={(stickerId) =>
-                  onSticker({ stream: "TABLE" }, stickerId)
+                onSelect={(stickerId, scope) =>
+                  onSticker({ stream: "TABLE" }, stickerId, scope)
                 }
               />
             )}
@@ -1494,8 +1512,8 @@ export function DirectChatPanel({
           </div>
           <StickerPicker
             disabled={uploading}
-            onSelect={(stickerId) =>
-              onSticker({ threadId: activeThread.id }, stickerId)
+            onSelect={(stickerId, scope) =>
+              onSticker({ threadId: activeThread.id }, stickerId, scope)
             }
           />
           <label className="direct-attach-button">
@@ -1546,7 +1564,7 @@ export function ChatPanel({
   visible?: boolean;
   onChat: ChatActions["onChat"];
   onSticker: ChatActions["onSticker"];
-  onRoll: Props["onRoll"];
+  onRoll: CampaignActions["dice"]["onRoll"];
   onMarkChatRead: ChatActions["onMarkChatRead"];
   activeStream: ChatStream;
   focusedMessageId: string | null;
@@ -1857,10 +1875,11 @@ export function ChatPanel({
                 {!composer.trim() && (
                   <StickerPicker
                     iconOnly
-                    onSelect={(stickerId) =>
+                    onSelect={(stickerId, scope) =>
                       onSticker(
                         { stream: activeStream as "TABLE" | "STORY" },
                         stickerId,
+                        scope,
                       )
                     }
                   />

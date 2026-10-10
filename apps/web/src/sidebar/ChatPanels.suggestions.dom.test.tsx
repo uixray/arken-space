@@ -119,6 +119,31 @@ function actions(
     },
     statLayout: { onUpdateStatLayout: unexpectedAction },
     chatHistory: { onLoadThreadHistory: unexpectedAction },
+    character: {
+      replaceCharacterControllers: unexpectedAction,
+      patchCharacter: unexpectedAction,
+      updateCharacterCounters: unexpectedAction,
+      onCreateCharacter: unexpectedAction,
+    },
+    initiative: {
+      onUpdateInitiative: unexpectedAction,
+      onSetOwnInitiative: unexpectedAction,
+      onRollInitiative: unexpectedAction,
+      onSetBattleZone: unexpectedAction,
+      onRecruitFromBattleZone: unexpectedAction,
+    },
+    dice: { onRoll: unexpectedAction },
+    campaign: { onCampaignClock: unexpectedAction },
+    player: { onPreviewPlayer: unexpectedAction },
+    sidebar: {
+      onRequestedChatMessageHandled: unexpectedAction,
+      onChatVisibilityChange: unexpectedAction,
+      onCollapsedChange: unexpectedAction,
+      onResizeHandleDown: unexpectedAction,
+      onResizeHandleMove: unexpectedAction,
+      onResizeHandleUp: unexpectedAction,
+      onWorkspaceChange: unexpectedAction,
+    },
   };
 }
 

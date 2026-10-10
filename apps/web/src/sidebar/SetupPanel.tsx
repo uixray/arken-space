@@ -29,6 +29,9 @@ export function SetupPanel(props: Props) {
     token: tokenActions,
     catalog: catalogActions,
     access: accessActions,
+    character: characterActions,
+    campaign: campaignActions,
+    player: playerActions,
   } = useCampaignActions();
   const [activeSetupTab, setActiveSetupTab] = useState<
     "OVERVIEW" | "CHARACTERS" | "CATALOG"
@@ -106,7 +109,7 @@ export function SetupPanel(props: Props) {
         <CampaignClockDialog
           open={campaignClockOpen}
           snapshot={props.snapshot}
-          onCommand={props.onCampaignClock}
+          onCommand={campaignActions.onCampaignClock}
           onClose={() => setCampaignClockOpen(false)}
         />
         <h3>Игроки</h3>
@@ -377,7 +380,7 @@ export function SetupPanel(props: Props) {
         ) : null}
         <Button
           disabled={!previewMembership}
-          onClick={() => props.onPreviewPlayer(previewMembership)}
+          onClick={() => playerActions.onPreviewPlayer(previewMembership)}
         >
           Посмотреть глазами игрока
         </Button>
@@ -449,7 +452,7 @@ export function SetupPanel(props: Props) {
           onSubmit={async (event) => {
             event.preventDefault();
             if (!characterName) return;
-            await props.onCreateCharacter(characterName);
+            await characterActions.onCreateCharacter(characterName);
             setCharacterName("");
           }}
         >

@@ -46,3 +46,13 @@ docs/stickers/
 
 *storybook.log
 storybook-static
+
+# Privately supplied Pragmatica font; inject only into local build context.
+/apps/web/public/assets/pragmatica-next_vf.woff
+/tools/terrain-stamp-prototype/public/fonts/pragmatica-next_vf.woff
+
+# Private player content is injected locally, never published as source.
+infra/static/players/*
+!infra/static/players/build-player-pages.mjs
+!infra/static/players/player-page.css
+!infra/static/players/player-page.js

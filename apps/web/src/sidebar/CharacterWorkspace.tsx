@@ -6,6 +6,7 @@ import {
   useReducer,
   useRef,
   useState,
+  type FormEvent,
   type CSSProperties,
 } from "react";
 import {
@@ -18,6 +19,7 @@ import {
   uniqueStatKey,
 } from "../stat-keys";
 import { useCampaignActions } from "../campaign-actions-context";
+import type { CampaignActions } from "../campaign-actions-context";
 import { createPortal } from "react-dom";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
 import { RESOURCE_REGEN_STAT, isSystemRegenStatKey } from "@arken/system";
@@ -41,6 +43,7 @@ import {
   type CharacterTemplateFields,
 } from "../character-workspace-state";
 import { CharacterMediaGallery } from "./CharacterMediaGallery";
+import { CharacterSpellBranches } from "../CharacterSpellBranches";
 import { CharacterActionCard } from "../SkillCards";
 import { humanizeFormula } from "../formula-display";
 import { rollModeFromEvent } from "../roll-modifier-keys";
@@ -97,7 +100,12 @@ export function CharacterWorkspace({
   ...props
 }: Props & { onClose: () => void; active?: boolean }) {
   // UIX-398 step B: archive/restore come from context, not through Sidebar.
-  const { worldMap: worldMapActions } = useCampaignActions();
+  const {
+    worldMap: worldMapActions,
+    character: characterActions,
+    campaign: campaignActions,
+    dice: diceActions,
+  } = useCampaignActions();
   const characters = useMemo(() => {
     const visible =
       props.snapshot.me.role === "GM"
@@ -265,7 +273,7 @@ export function CharacterWorkspace({
               setDayPending(true);
               void Promise.resolve()
                 .then(() =>
-                  props.onCampaignClock(
+                  campaignActions.onCampaignClock(
                     "ADVANCE_DAY",
                     props.snapshot.campaign.revision,
                   ),
@@ -435,10 +443,14 @@ export function CharacterWorkspace({
                         dispatch({ type: "OPEN", id: nextId })
                       }
                       showCharacterPicker={false}
-                      onPatch={props.onPatchCharacter}
-                      onReplaceControllers={props.onReplaceCharacterControllers}
-                      onRoll={props.onRoll}
-                      onUpdateCounters={props.onUpdateCounters}
+                      onPatch={characterActions.patchCharacter}
+                      onReplaceControllers={
+                        characterActions.replaceCharacterControllers
+                      }
+                      onRoll={diceActions.onRoll}
+                      onUpdateCounters={
+                        characterActions.updateCharacterCounters
+                      }
                       onArchive={
                         props.snapshot.me.role === "GM"
                           ? () => setArchiveTarget(character)
@@ -456,7 +468,7 @@ export function CharacterWorkspace({
         open={createCharacterOpen}
         characters={props.snapshot.characters}
         onCreate={async (name, template) => {
-          await props.onCreateCharacter(name, template);
+          await characterActions.onCreateCharacter(name, template);
           setCreateCharacterOpen(false);
         }}
         onClose={() => setCreateCharacterOpen(false)}
@@ -795,7 +807,7 @@ function CharacterControllerAccess({
 }: {
   character: CharacterDto;
   members: GameSnapshot["members"];
-  onSave: Props["onReplaceCharacterControllers"];
+  onSave: CampaignActions["character"]["replaceCharacterControllers"];
 }) {
   const canonical = useMemo(
     () =>
@@ -913,10 +925,10 @@ export function CharacterPanel({
   selectedId: string;
   setSelectedId: (value: string) => void;
   showCharacterPicker?: boolean;
-  onPatch: Props["onPatchCharacter"];
-  onReplaceControllers: Props["onReplaceCharacterControllers"];
-  onRoll: Props["onRoll"];
-  onUpdateCounters: Props["onUpdateCounters"];
+  onPatch: CampaignActions["character"]["patchCharacter"];
+  onReplaceControllers: CampaignActions["character"]["replaceCharacterControllers"];
+  onRoll: CampaignActions["dice"]["onRoll"];
+  onUpdateCounters: CampaignActions["character"]["updateCharacterCounters"];
   onArchive?: () => void;
 }) {
   // The catalog handlers are read here rather than passed in: this panel is
@@ -940,14 +952,28 @@ export function CharacterPanel({
   const resourceLabels = resourceCostLabels(snapshot.campaign.statLayout);
   const [countersPending, setCountersPending] = useState(0);
   const [vitalsTab, setVitalsTab] = useState<
-    "resources" | "stats" | "inventory" | "bio"
-  >("resources");
+    "stats" | "inventory" | "bio"
+  >("stats");
   const vitalsTabId = useId();
   const [countersError, setCountersError] = useState("");
   // Undefined preserves each catalog action's legacy advantage setting until the player explicitly overrides it.
   const [rollPending, setRollPending] = useState(false);
   const [rollError, setRollError] = useState("");
   const [characterMutationError, setCharacterMutationError] = useState("");
+  const [editingStandardSkill, setEditingStandardSkill] = useState<
+    CharacterDto["skills"][number] | null
+  >(null);
+  const [standardSkillDraft, setStandardSkillDraft] = useState({
+    name: "",
+    rank: "",
+    formula: "",
+  });
+  const [standardSkillToDelete, setStandardSkillToDelete] = useState<
+    CharacterDto["skills"][number] | null
+  >(null);
+  const [standardSkillPending, setStandardSkillPending] = useState(false);
+  const standardSkillPendingRef = useRef(false);
+  const [standardSkillError, setStandardSkillError] = useState("");
   const [statLayoutError, setStatLayoutError] = useState("");
   const runCharacterMutation = async (action: () => Promise<unknown>) => {
     setCharacterMutationError("");
@@ -1265,6 +1291,66 @@ export function CharacterPanel({
     character.entries,
     "ABILITY",
   );
+  const saveStandardSkill = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editable || !editingStandardSkill || standardSkillPendingRef.current)
+      return;
+    const name = standardSkillDraft.name.trim();
+    const rank = Number(standardSkillDraft.rank);
+    const formula = standardSkillDraft.formula.trim();
+    if (!name || name.length > 120) {
+      setStandardSkillError("Название навыка должно содержать от 1 до 120 символов.");
+      return;
+    }
+    if (!Number.isInteger(rank) || rank < 0) {
+      setStandardSkillError("Ранг навыка должен быть целым неотрицательным числом.");
+      return;
+    }
+    if (!formula || formula.length > 160) {
+      setStandardSkillError("Формула броска должна содержать от 1 до 160 символов.");
+      return;
+    }
+    standardSkillPendingRef.current = true;
+    setStandardSkillPending(true);
+    setStandardSkillError("");
+    try {
+      await onPatch(character.id, {
+        skills: character.skills.map((skill) =>
+          skill.key === editingStandardSkill.key
+            ? { ...skill, name, rank, formula }
+            : skill,
+        ),
+        revision: character.revision,
+      });
+      setEditingStandardSkill(null);
+    } catch {
+      setStandardSkillError("Не удалось сохранить навык. Повторите попытку.");
+    } finally {
+      standardSkillPendingRef.current = false;
+      setStandardSkillPending(false);
+    }
+  };
+  const deleteStandardSkill = async () => {
+    if (!editable || !standardSkillToDelete || standardSkillPendingRef.current)
+      return;
+    standardSkillPendingRef.current = true;
+    setStandardSkillPending(true);
+    setStandardSkillError("");
+    try {
+      await onPatch(character.id, {
+        skills: character.skills.filter(
+          (skill) => skill.key !== standardSkillToDelete.key,
+        ),
+        revision: character.revision,
+      });
+      setStandardSkillToDelete(null);
+    } catch {
+      setStandardSkillError("Не удалось удалить навык. Повторите попытку.");
+    } finally {
+      standardSkillPendingRef.current = false;
+      setStandardSkillPending(false);
+    }
+  };
   const submitWallet = async (
     nextWallet: CharacterDto["wallet"],
     intent: Parameters<typeof onUpdateCounters>[3],
@@ -1555,7 +1641,7 @@ export function CharacterPanel({
         role="tablist"
         aria-label="Ключевые показатели персонажа"
       >
-        {(["resources", "stats", "inventory", "bio"] as const).map((tab) => (
+        {(["stats", "inventory", "bio"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -1571,15 +1657,15 @@ export function CharacterPanel({
               )
                 return;
               event.preventDefault();
-              const tabs = ["resources", "stats", "inventory", "bio"] as const;
+              const tabs = ["stats", "inventory", "bio"] as const;
               const current = tabs.indexOf(vitalsTab);
               const next =
                 event.key === "Home"
                   ? tabs[0]
                   : event.key === "End"
-                    ? tabs[3]
+                    ? tabs[2]
                     : (tabs[
-                        (current + (event.key === "ArrowLeft" ? 3 : 1)) %
+                        (current + (event.key === "ArrowLeft" ? 2 : 1)) %
                           tabs.length
                       ] ?? tabs[0]);
               setVitalsTab(next);
@@ -1588,9 +1674,8 @@ export function CharacterPanel({
           >
             {
               {
-                resources: "Ресурсы",
                 stats: "Показатели",
-                inventory: "Инвентарь",
+                inventory: "Инвентарь и ресурсы",
                 bio: "Личность",
               }[tab]
             }
@@ -1598,13 +1683,428 @@ export function CharacterPanel({
         ))}
       </div>
       <div
-        className="character-vitals"
+        className="character-sheet-stat-panel"
         role="tabpanel"
-        id={`${vitalsTabId}-resources-panel`}
-        aria-labelledby={`${vitalsTabId}-resources-tab`}
-        aria-label="Ключевые показатели"
-        hidden={vitalsTab !== "resources"}
+        id={`${vitalsTabId}-stats-panel`}
+        aria-labelledby={`${vitalsTabId}-stats-tab`}
+        hidden={vitalsTab !== "stats"}
       >
+        <div className="character-sheet-stat-grid">
+          {/* Секция 1: Характеристики и боевые параметры */}
+          <div
+            className="character-section character-section--stats"
+            data-character-section="stats"
+          >
+            <div className="character-card-row">
+              <StatLayoutCard
+                title="Характеристики"
+                modifier="stats"
+                rows={characteristicRows}
+                values={character.stats}
+                editable={Boolean(editable)}
+                rollPending={rollPending}
+                canEditLayout={snapshot.me.role === "GM"}
+                onChangeValue={(key, value) =>
+                  changeStatValue(character, key, value)
+                }
+                onRoll={(formula, label, mode) =>
+                  void submitCharacterRoll(formula, label, mode)
+                }
+                onRenameRow={renameStatRow}
+                onAddRow={(label) => addStatRow("characteristics", label)}
+                onDeleteRow={deleteStatRow}
+                onMoveRow={moveStatRowBy}
+                onReorderRow={reorderStatRow}
+              />
+            </div>
+          </div>
+          <div
+            className="character-section character-section--combat"
+            data-character-section="combat"
+          >
+            <div className="character-card-row">
+              <StatLayoutCard
+                title="Боевые характеристики"
+                modifier="combat"
+                rows={[
+                  ...initiativeRows,
+                  ...combatRows.filter(
+                    (row) =>
+                      !isSystemRegenStatKey(row.key) &&
+                      row.key !== "initiative" &&
+                      row.key !== "reaction",
+                  ),
+                ]}
+                values={character.stats}
+                editable={Boolean(editable)}
+                rollPending={rollPending}
+                canEditLayout={snapshot.me.role === "GM"}
+                onChangeValue={(key, value) =>
+                  changeStatValue(character, key, value)
+                }
+                onRoll={(formula, label, mode) =>
+                  void submitCharacterRoll(formula, label, mode)
+                }
+                onRenameRow={renameStatRow}
+                onAddRow={(label) => addStatRow("combat", label)}
+                onDeleteRow={deleteStatRow}
+                onMoveRow={moveStatRowBy}
+                onReorderRow={reorderStatRow}
+              />
+              <div className="character-card character-card--skills">
+                <h3 className="character-card__header">Навыки</h3>
+                {standardSkillError && (
+                  <p className="field-error" role="alert">
+                    {standardSkillError}
+                  </p>
+                )}
+                <div className="character-card__body">
+                  {character.skills.length > 0 &&
+                    character.skills.map((skill) => (
+                      <div className="character-card__row" key={skill.key}>
+                        <RollButton
+                          name={skill.name}
+                          formula={skill.formula}
+                          disabled={rollPending}
+                          onClick={(event) =>
+                            void submitCharacterRoll(
+                              skill.formula,
+                              skill.name,
+                              rollModeFromEvent(event.nativeEvent),
+                            )
+                          }
+                        />
+                        {editable && (
+                          <div className="inline-fields">
+                            <Button
+                              disabled={standardSkillPending}
+                              aria-label={`Редактировать навык ${skill.name}`}
+                              onClick={() => {
+                                setStandardSkillError("");
+                                setEditingStandardSkill(skill);
+                                setStandardSkillDraft({
+                                  name: skill.name,
+                                  rank: String(skill.rank),
+                                  formula: skill.formula,
+                                });
+                              }}
+                            >
+                              Редактировать
+                            </Button>
+                            <Button
+                              className="danger-link"
+                              disabled={standardSkillPending}
+                              aria-label={`Удалить навык ${skill.name}`}
+                              onClick={() => {
+                                setStandardSkillError("");
+                                setStandardSkillToDelete(skill);
+                              }}
+                            >
+                              Удалить
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  {skillEntries.length ? (
+                    skillEntries.map((entry) => (
+                      <div className="character-card__row" key={entry.id}>
+                        <CharacterActionCard
+                          entry={entry}
+                          disabled={!editable}
+                          onAction={(input) =>
+                            catalogActions.onRollEntry(character.id, entry.id, {
+                              ...input,
+                            })
+                          }
+                        />
+                        {entry.data.uses && (
+                          <Button
+                            disabled={!editable}
+                            onClick={() =>
+                              catalogActions.onRechargeEntry(
+                                character.id,
+                                entry.id,
+                                entry.revision,
+                              )
+                            }
+                          >
+                            Перезарядить
+                          </Button>
+                        )}
+                        {editable && (
+                          <div className="inline-fields">
+                            <Button onClick={() => setEntryEditor(entry)}>
+                              Редактировать
+                            </Button>
+                            <Button
+                              className="danger-link"
+                              onClick={() =>
+                                void catalogActions.onDeleteCharacterEntry(
+                                  character.id,
+                                  entry.id,
+                                  entry.revision,
+                                )
+                              }
+                            >
+                              Удалить
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : character.skills.length === 0 ? (
+                    <p className="muted">Навыки ещё не добавлены.</p>
+                  ) : null}
+                </div>
+                {editable && (
+                  <div className="character-card__add">
+                    <Button onClick={() => setCatalogPicker("SKILL")}>
+                      + Добавить навык…
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <div className="character-card character-card--abilities">
+                <h3 className="character-card__header">
+                  Способности и заклинания
+                </h3>
+                <div className="character-card__body">
+                  {character.spells.length > 0 &&
+                    character.spells.map((spell) => (
+                      <div className="plain-row" key={spell.key}>
+                        <strong>{spell.name}</strong>
+                        <p>{spell.description}</p>
+                        {spell.formula && (
+                          <Button
+                            disabled={rollPending}
+                            onClick={(event) =>
+                              void submitCharacterRoll(
+                                spell.formula!,
+                                spell.name,
+                                rollModeFromEvent(event.nativeEvent),
+                              )
+                            }
+                          >
+                            Бросить {humanizeFormula(spell.formula, statLabels)}
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  {abilityEntries.length ? (
+                    abilityEntries.map((entry) => (
+                      <div className="character-card__row" key={entry.id}>
+                        <CharacterActionCard
+                          entry={entry}
+                          disabled={!editable}
+                          onAction={(input) =>
+                            catalogActions.onRollEntry(character.id, entry.id, {
+                              ...input,
+                            })
+                          }
+                        />
+                        {entry.data.uses && (
+                          <Button
+                            disabled={!editable}
+                            onClick={() =>
+                              catalogActions.onRechargeEntry(
+                                character.id,
+                                entry.id,
+                                entry.revision,
+                              )
+                            }
+                          >
+                            Перезарядить
+                          </Button>
+                        )}
+                        {editable && (
+                          <div className="inline-fields">
+                            <Button onClick={() => setEntryEditor(entry)}>
+                              Редактировать
+                            </Button>
+                            <Button
+                              className="danger-link"
+                              onClick={() =>
+                                void catalogActions.onDeleteCharacterEntry(
+                                  character.id,
+                                  entry.id,
+                                  entry.revision,
+                                )
+                              }
+                            >
+                              Удалить
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : character.spells.length === 0 ? (
+                    <p className="muted">Способности ещё не добавлены.</p>
+                  ) : null}
+                </div>
+                {editable && (
+                  <div className="character-card__add">
+                    <Button onClick={() => setCatalogPicker("ABILITY")}>
+                      + Добавить способность…
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {editable && catalogPicker && (
+        <CatalogEntryPicker
+          statLabels={statLabels}
+          resourceLabels={resourceLabels}
+          open
+          kind={catalogPicker}
+          options={
+            catalogPicker === "SKILL"
+              ? skillCatalogOptions
+              : abilityCatalogOptions
+          }
+          onClose={() => setCatalogPicker(null)}
+          onAssign={(catalogEntryId) =>
+            catalogActions.onAssignCatalogEntry(character.id, catalogEntryId)
+          }
+          onCreate={(input) => catalogActions.onCreateCatalogEntry(input)}
+        />
+      )}
+
+      {editingStandardSkill && (
+        <ArkenDialog
+          open
+          footer={false}
+          title={`Редактировать навык «${editingStandardSkill.name}»`}
+          onClose={() => !standardSkillPending && setEditingStandardSkill(null)}
+        >
+          <form
+            className="catalog-entry-form"
+            aria-label="Редактирование стандартного навыка"
+            onSubmit={(event) => void saveStandardSkill(event)}
+          >
+            <label>
+              Название
+              <FormInput
+                value={standardSkillDraft.name}
+                maxLength={120}
+                required
+                disabled={standardSkillPending}
+                onChange={(event) =>
+                  setStandardSkillDraft((draft) => ({
+                    ...draft,
+                    name: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Ранг
+              <FormInput
+                type="number"
+                min={0}
+                step={1}
+                value={standardSkillDraft.rank}
+                required
+                disabled={standardSkillPending}
+                onChange={(event) =>
+                  setStandardSkillDraft((draft) => ({
+                    ...draft,
+                    rank: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Формула броска
+              <FormInput
+                value={standardSkillDraft.formula}
+                maxLength={160}
+                required
+                disabled={standardSkillPending}
+                onChange={(event) =>
+                  setStandardSkillDraft((draft) => ({
+                    ...draft,
+                    formula: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            {standardSkillError && (
+              <p className="field-error" role="alert">
+                {standardSkillError}
+              </p>
+            )}
+            <Button type="submit" disabled={standardSkillPending}>
+              {standardSkillPending ? "Сохранение…" : "Сохранить навык"}
+            </Button>
+          </form>
+        </ArkenDialog>
+      )}
+
+      {standardSkillToDelete && (
+        <ArkenDialog
+          open
+          title="Удалить стандартный навык?"
+          applyLabel={standardSkillPending ? "Удаление…" : "Удалить навык"}
+          danger
+          loading={standardSkillPending}
+          onApply={() => void deleteStandardSkill()}
+          onClose={() =>
+            !standardSkillPending && setStandardSkillToDelete(null)
+          }
+        >
+          <p>
+            Навык «{standardSkillToDelete.name}» будет удалён с листа персонажа.
+          </p>
+          {standardSkillError && (
+            <p className="field-error" role="alert">
+              {standardSkillError}
+            </p>
+          )}
+        </ArkenDialog>
+      )}
+
+      {entryEditor && (
+        <ArkenDialog
+          open
+          footer={false}
+          title={`Редактирование ${entryEditor.name}`}
+          onClose={() => setEntryEditor(null)}
+        >
+          <CatalogEntryForm
+            statLabels={statLabels}
+            resourceLabels={resourceLabels}
+            key={entryEditor.id}
+            existing={entryEditor}
+            onCancel={() => setEntryEditor(null)}
+            onSubmit={async (input) => {
+              await catalogActions.onUpdateCharacterEntry(
+                character.id,
+                entryEditor.id,
+                {
+                  ...input,
+                  revision: entryEditor.revision,
+                },
+              );
+              setEntryEditor(null);
+            }}
+          />
+        </ArkenDialog>
+      )}
+
+      {/* Секция 2: Ресурсы и кошелёк */}
+      <div
+        className="character-vitals-panel"
+        role="tabpanel"
+        id={`${vitalsTabId}-inventory-panel`}
+        aria-labelledby={`${vitalsTabId}-inventory-tab`}
+        hidden={vitalsTab !== "inventory"}
+      >
+      <div className="character-vitals" aria-label="Ключевые показатели">
         <div className="character-vitals__actions">
           <Button
             view="outlined"
@@ -1815,295 +2315,10 @@ export function CharacterPanel({
           );
         })}
       </div>
-      <div
-        className="character-sheet-stat-panel"
-        role="tabpanel"
-        id={`${vitalsTabId}-stats-panel`}
-        aria-labelledby={`${vitalsTabId}-stats-tab`}
-        hidden={vitalsTab !== "stats"}
-      >
-        <div className="character-sheet-stat-grid">
-          {/* Секция 1: Характеристики и боевые параметры */}
-          <div
-            className="character-section character-section--stats"
-            data-character-section="stats"
-          >
-            <div className="character-card-row">
-              <StatLayoutCard
-                title="Характеристики"
-                modifier="stats"
-                rows={characteristicRows}
-                values={character.stats}
-                editable={Boolean(editable)}
-                rollPending={rollPending}
-                canEditLayout={snapshot.me.role === "GM"}
-                onChangeValue={(key, value) =>
-                  changeStatValue(character, key, value)
-                }
-                onRoll={(formula, label, mode) =>
-                  void submitCharacterRoll(formula, label, mode)
-                }
-                onRenameRow={renameStatRow}
-                onAddRow={(label) => addStatRow("characteristics", label)}
-                onDeleteRow={deleteStatRow}
-                onMoveRow={moveStatRowBy}
-                onReorderRow={reorderStatRow}
-              />
-            </div>
-          </div>
-          <div
-            className="character-section character-section--combat"
-            data-character-section="combat"
-          >
-            <div className="character-card-row">
-              <StatLayoutCard
-                title="Боевые характеристики"
-                modifier="combat"
-                rows={[
-                  ...initiativeRows,
-                  ...combatRows.filter(
-                    (row) =>
-                      !isSystemRegenStatKey(row.key) &&
-                      row.key !== "initiative" &&
-                      row.key !== "reaction",
-                  ),
-                ]}
-                values={character.stats}
-                editable={Boolean(editable)}
-                rollPending={rollPending}
-                canEditLayout={snapshot.me.role === "GM"}
-                onChangeValue={(key, value) =>
-                  changeStatValue(character, key, value)
-                }
-                onRoll={(formula, label, mode) =>
-                  void submitCharacterRoll(formula, label, mode)
-                }
-                onRenameRow={renameStatRow}
-                onAddRow={(label) => addStatRow("combat", label)}
-                onDeleteRow={deleteStatRow}
-                onMoveRow={moveStatRowBy}
-                onReorderRow={reorderStatRow}
-              />
-              <div className="character-card character-card--skills">
-                <h3 className="character-card__header">Навыки</h3>
-                <div className="character-card__body">
-                  {character.skills.length > 0 &&
-                    character.skills.map((skill) => (
-                      <RollButton
-                        key={skill.key}
-                        name={skill.name}
-                        formula={skill.formula}
-                        disabled={rollPending}
-                        onClick={(event) =>
-                          void submitCharacterRoll(
-                            skill.formula,
-                            skill.name,
-                            rollModeFromEvent(event.nativeEvent),
-                          )
-                        }
-                      />
-                    ))}
-                  {skillEntries.length ? (
-                    skillEntries.map((entry) => (
-                      <div className="character-card__row" key={entry.id}>
-                        <CharacterActionCard
-                          entry={entry}
-                          disabled={!editable}
-                          onAction={(input) =>
-                            catalogActions.onRollEntry(character.id, entry.id, {
-                              ...input,
-                            })
-                          }
-                        />
-                        {entry.data.uses && (
-                          <Button
-                            disabled={!editable}
-                            onClick={() =>
-                              catalogActions.onRechargeEntry(
-                                character.id,
-                                entry.id,
-                                entry.revision,
-                              )
-                            }
-                          >
-                            Перезарядить
-                          </Button>
-                        )}
-                        {editable && (
-                          <div className="inline-fields">
-                            <Button onClick={() => setEntryEditor(entry)}>
-                              Редактировать
-                            </Button>
-                            <Button
-                              className="danger-link"
-                              onClick={() =>
-                                void catalogActions.onDeleteCharacterEntry(
-                                  character.id,
-                                  entry.id,
-                                  entry.revision,
-                                )
-                              }
-                            >
-                              Удалить
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  ) : character.skills.length === 0 ? (
-                    <p className="muted">Навыки ещё не добавлены.</p>
-                  ) : null}
-                </div>
-                {editable && (
-                  <div className="character-card__add">
-                    <Button onClick={() => setCatalogPicker("SKILL")}>
-                      + Добавить навык…
-                    </Button>
-                  </div>
-                )}
-              </div>
-              <div className="character-card character-card--abilities">
-                <h3 className="character-card__header">
-                  Способности и заклинания
-                </h3>
-                <div className="character-card__body">
-                  {character.spells.length > 0 &&
-                    character.spells.map((spell) => (
-                      <div className="plain-row" key={spell.key}>
-                        <strong>{spell.name}</strong>
-                        <p>{spell.description}</p>
-                        {spell.formula && (
-                          <Button
-                            disabled={rollPending}
-                            onClick={(event) =>
-                              void submitCharacterRoll(
-                                spell.formula!,
-                                spell.name,
-                                rollModeFromEvent(event.nativeEvent),
-                              )
-                            }
-                          >
-                            Бросить {humanizeFormula(spell.formula, statLabels)}
-                          </Button>
-                        )}
-                      </div>
-                    ))}
-                  {abilityEntries.length ? (
-                    abilityEntries.map((entry) => (
-                      <div className="character-card__row" key={entry.id}>
-                        <CharacterActionCard
-                          entry={entry}
-                          disabled={!editable}
-                          onAction={(input) =>
-                            catalogActions.onRollEntry(character.id, entry.id, {
-                              ...input,
-                            })
-                          }
-                        />
-                        {entry.data.uses && (
-                          <Button
-                            disabled={!editable}
-                            onClick={() =>
-                              catalogActions.onRechargeEntry(
-                                character.id,
-                                entry.id,
-                                entry.revision,
-                              )
-                            }
-                          >
-                            Перезарядить
-                          </Button>
-                        )}
-                        {editable && (
-                          <div className="inline-fields">
-                            <Button onClick={() => setEntryEditor(entry)}>
-                              Редактировать
-                            </Button>
-                            <Button
-                              className="danger-link"
-                              onClick={() =>
-                                void catalogActions.onDeleteCharacterEntry(
-                                  character.id,
-                                  entry.id,
-                                  entry.revision,
-                                )
-                              }
-                            >
-                              Удалить
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  ) : character.spells.length === 0 ? (
-                    <p className="muted">Способности ещё не добавлены.</p>
-                  ) : null}
-                </div>
-                {editable && (
-                  <div className="character-card__add">
-                    <Button onClick={() => setCatalogPicker("ABILITY")}>
-                      + Добавить способность…
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {editable && catalogPicker && (
-        <CatalogEntryPicker
-          statLabels={statLabels}
-          resourceLabels={resourceLabels}
-          open
-          kind={catalogPicker}
-          options={
-            catalogPicker === "SKILL"
-              ? skillCatalogOptions
-              : abilityCatalogOptions
-          }
-          onClose={() => setCatalogPicker(null)}
-          onAssign={(catalogEntryId) =>
-            catalogActions.onAssignCatalogEntry(character.id, catalogEntryId)
-          }
-          onCreate={(input) => catalogActions.onCreateCatalogEntry(input)}
-        />
-      )}
-
-      {entryEditor && (
-        <ArkenDialog
-          open
-          footer={false}
-          title={`Редактирование ${entryEditor.name}`}
-          onClose={() => setEntryEditor(null)}
-        >
-          <CatalogEntryForm
-            statLabels={statLabels}
-            resourceLabels={resourceLabels}
-            key={entryEditor.id}
-            existing={entryEditor}
-            onCancel={() => setEntryEditor(null)}
-            onSubmit={async (input) => {
-              await catalogActions.onUpdateCharacterEntry(
-                character.id,
-                entryEditor.id,
-                {
-                  ...input,
-                  revision: entryEditor.revision,
-                },
-              );
-              setEntryEditor(null);
-            }}
-          />
-        </ArkenDialog>
-      )}
-
-      {/* Секция 2: Ресурсы и кошелёк */}
       <div
         className="character-section character-section--resources"
         data-character-section="resources"
-        hidden={vitalsTab !== "resources"}
       >
         <h3 className="character-block-heading">Дополнительные ресурсы</h3>
         <div className="subsection character-resource-editor">
@@ -2458,10 +2673,6 @@ export function CharacterPanel({
       <div
         className="character-section character-section--inventory"
         data-character-section="inventory"
-        role="tabpanel"
-        id={`${vitalsTabId}-inventory-panel`}
-        aria-labelledby={`${vitalsTabId}-inventory-tab`}
-        hidden={vitalsTab !== "inventory"}
       >
         <h3 className="character-block-heading">Инвентарь и снаряжение</h3>
         <label className="field">
@@ -2500,6 +2711,7 @@ export function CharacterPanel({
           />
         </label>
       </div>
+      </div>
 
       {/* Секция 4: Личность, медиа и доступ */}
       <div
@@ -2510,6 +2722,13 @@ export function CharacterPanel({
         aria-labelledby={`${vitalsTabId}-bio-tab`}
         hidden={vitalsTab !== "bio"}
       >
+        {vitalsTab === "bio" && (
+          <CharacterSpellBranches
+            key={character.id}
+            character={character}
+            isGm={snapshot.me.role === "GM"}
+          />
+        )}
         {snapshot.me.role === "GM" && (
           <CharacterControllerAccess
             character={character}

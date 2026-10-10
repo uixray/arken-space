@@ -4,13 +4,14 @@
       "sans": {
         "$type": "fontFamily",
         "$value": [
+          "Pragmatica Next",
           "system-ui",
           "-apple-system",
           "BlinkMacSystemFont",
           "Segoe UI",
           "sans-serif"
         ],
-        "$description": "Интерфейсный шрифт. Системный: своих начертаний проект не грузит."
+        "$description": "Локальный variable font интерфейса с системными fallback."
       },
       "mono": {
         "$type": "fontFamily",

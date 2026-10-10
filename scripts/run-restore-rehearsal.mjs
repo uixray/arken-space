@@ -4,17 +4,22 @@ import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   closeSync,
+  chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   openSync,
+  realpathSync,
   readFileSync,
   readdirSync,
   rmSync,
+  rmdirSync,
+  statSync,
   statfsSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { platform } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -37,16 +42,25 @@ import {
   verifyRetiredTableMigration,
   validateRestoreProjectName,
 } from "./restore-rehearsal-core.mjs";
+import {
+  assertPrivateWindowsAcl,
+  assertRestoreProjectVacant,
+  resolveRestoreMode,
+  resolveServiceSnapshot,
+  serviceImageOverride,
+} from "./service-snapshot-restore.mjs";
 
 const gibibyte = 1024 ** 3;
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const composeFile = path.join(projectRoot, "docker-compose.restore.yml");
 const reportDirectory = path.join(projectRoot, "test-results", "restore");
 const migrationsDirectory = path.join(projectRoot, "packages", "db", "drizzle");
-const expectedMigrationLedger = readExpectedMigrationLedger({
-  journalPath: path.join(migrationsDirectory, "meta", "_journal.json"),
-  migrationsDirectory,
-});
+function readCheckoutMigrationLedger() {
+  return readExpectedMigrationLedger({
+    journalPath: path.join(migrationsDirectory, "meta", "_journal.json"),
+    migrationsDirectory,
+  });
+}
 const productionHealthUrl =
   process.env.ARKEN_PRODUCTION_HEALTH_URL ??
   "https://arken.uixray.tech/healthz";
@@ -58,8 +72,11 @@ const projectName = validateRestoreProjectName(
   process.env.ARKEN_RESTORE_PROJECT_NAME ??
     "arken-restore-" + Date.now().toString(36) + "-" + process.pid,
 );
+const restoreFormat = process.env.RESTORE_FORMAT ?? "legacy";
 const snapshotRequest = process.env.SNAPSHOT_ID ?? "latest";
-const backupHost = process.env.BACKUP_HOST ?? "arken-production";
+const backupHost =
+  process.env.BACKUP_HOST ??
+  (restoreFormat === "service-v1" ? "arken-space-service" : "arken-production");
 const backupTag = process.env.BACKUP_TAG ?? "arken-space";
 const backupMediaRoot =
   process.env.BACKUP_MEDIA_ROOT ??
@@ -68,15 +85,21 @@ const backupMediaRoot =
 const restorePassword =
   process.env.RESTORE_POSTGRES_PASSWORD ?? randomBytes(24).toString("hex");
 const postgresReadinessPolicy = resolvePostgresReadinessPolicy(process.env);
-const workingDirectory = mkdtempSync(
-  path.join(tmpdir(), "arken-restore-data-"),
-);
-const snapshotRoot = path.join(workingDirectory, "snapshot");
-const expectedMediaSource = resolveRestoredPath(snapshotRoot, backupMediaRoot);
+let workingDirectory = null;
+let snapshotRoot;
+let expectedMediaSource = null;
+let serviceComposeOverride = null;
+let serviceSnapshot = null;
+let migrationLedgerExpected = null;
+let privateReportPath = null;
+let privateReportDirectory = null;
+const newlyLoadedCapturedImages = [];
+const capturedImageTags = [];
 const report = {
   projectName,
   startedAt: new Date().toISOString(),
-  productionHealthUrl,
+  restoreFormat,
+  ...(restoreFormat === "legacy" ? { productionHealthUrl } : {}),
   isolatedOnly,
   requestedSnapshot: snapshotRequest,
   steps: [],
@@ -86,6 +109,7 @@ let buildRevision = "unknown";
 let diskPath = projectRoot;
 let runSucceeded = false;
 let exitCode = 1;
+let projectMayHaveResources = false;
 
 function record(name, status, details = {}) {
   report.steps.push({
@@ -136,6 +160,120 @@ function commandWorks(command, args) {
   return !result.error && (result.status ?? 1) === 0;
 }
 
+function currentWindowsSid() {
+  const identity = capture("whoami", ["/user", "/fo", "csv", "/nh"]);
+  const match = identity.match(/S-1-[0-9-]+/i);
+  if (!match) throw new Error("Could not resolve current Windows user SID");
+  return match[0];
+}
+
+function verifyWindowsAcl(target) {
+  const script =
+    "$p=$env:ARKEN_ACL_PATH; $a=Get-Acl -LiteralPath $p; " +
+    "$r=@($a.Access | ForEach-Object { [pscustomobject]@{ " +
+    "sid=$_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value; " +
+    "type=$_.AccessControlType.ToString(); rights=$_.FileSystemRights.ToString(); " +
+    "inherited=$_.IsInherited } }); " +
+    "[pscustomobject]@{ protected=$a.AreAccessRulesProtected; entries=$r } | ConvertTo-Json -Compress";
+  const result = execute(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", script],
+    { env: { ...process.env, ARKEN_ACL_PATH: target } },
+  );
+  if (result.error || (result.status ?? 1) !== 0)
+    throw new Error("Could not inspect protected restore ACL");
+  let entries;
+  try {
+    const acl = JSON.parse(result.stdout || "null");
+    entries = Array.isArray(acl?.entries) ? acl.entries : [acl?.entries];
+    assertPrivateWindowsAcl(
+      entries,
+      currentWindowsSid(),
+      acl?.protected === true,
+    );
+  } catch {
+    throw new Error(
+      "Protected restore ACL is invalid or allows inherited access",
+    );
+  }
+}
+
+function protectPath(target, { directory }) {
+  if (platform() === "win32") {
+    const sid = currentWindowsSid();
+    const grant = directory ? "(OI)(CI)F" : "F";
+    const reset = execute("icacls", [target, "/reset"], { stdio: "ignore" });
+    if (reset.error || (reset.status ?? 1) !== 0)
+      throw new Error("Could not reset restore path ACL safely");
+    const inheritance = execute("icacls", [target, "/inheritance:r"], {
+      stdio: "ignore",
+    });
+    if (inheritance.error || (inheritance.status ?? 1) !== 0)
+      throw new Error("Could not disable restore path ACL inheritance");
+    const grantResult = execute(
+      "icacls",
+      [target, "/grant:r", `*${sid}:${grant}`],
+      { stdio: "ignore" },
+    );
+    if (grantResult.error || (grantResult.status ?? 1) !== 0)
+      throw new Error("Could not apply protected restore path ACL");
+    verifyWindowsAcl(target);
+    return;
+  }
+
+  chmodSync(target, directory ? 0o700 : 0o600);
+  const mode = statSync(target).mode & 0o777;
+  const forbidden = directory ? 0o077 : 0o177;
+  if (mode & forbidden)
+    throw new Error("Restore path permissions are not private");
+}
+
+function isPathWithin(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return (
+    relative !== ".." &&
+    !relative.startsWith(".." + path.sep) &&
+    !path.isAbsolute(relative)
+  );
+}
+
+function createProtectedWorkingDirectory() {
+  const privateRoot = realpathSync(
+    path.resolve(projectRoot, ".data", "qa-prep"),
+  );
+  const directory = mkdtempSync(path.join(privateRoot, "restore-run-"));
+  try {
+    protectPath(directory, { directory: true });
+    if (!isPathWithin(privateRoot, realpathSync(directory)))
+      throw new Error("Restore staging path escaped private workspace root");
+    return directory;
+  } catch (error) {
+    rmSync(directory, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+function prepareProtectedReportDirectory(reportPath, privateRoot) {
+  const reportParent = path.dirname(reportPath);
+  if (
+    path.dirname(reportParent) !== privateRoot ||
+    !isPathWithin(privateRoot, reportParent) ||
+    existsSync(reportParent)
+  )
+    throw new Error(
+      "Private report directory must be a new path inside .data/qa-prep",
+    );
+  mkdirSync(reportParent);
+  try {
+    protectPath(reportParent, { directory: true });
+    if (!isPathWithin(privateRoot, realpathSync(reportParent)))
+      throw new Error("Private report directory escaped .data/qa-prep");
+  } catch (error) {
+    rmdirSync(reportParent);
+    throw error;
+  }
+}
+
 function detectDocker() {
   if (commandWorks("docker", ["info"]))
     return { command: "docker", prefix: [] };
@@ -181,7 +319,7 @@ function waitForPostgresReady() {
         "--username",
         "arken",
         "--dbname",
-        "arken",
+        serviceSnapshot?.databaseName ?? "arken",
         "--no-align",
         "--tuples-only",
         "--command",
@@ -238,7 +376,7 @@ function resolveBuildRevision() {
 }
 
 function composeBase() {
-  return [
+  const args = [
     "compose",
     "--project-name",
     projectName,
@@ -247,14 +385,24 @@ function composeBase() {
     "--file",
     composeFile,
   ];
+  if (serviceComposeOverride) args.push("--file", serviceComposeOverride);
+  return args;
 }
 
 function composeEnvironment() {
+  const databaseName = serviceSnapshot?.databaseName ?? "arken";
+  const mediaTarget =
+    serviceSnapshot?.mediaContainerPath ?? "/srv/arken-space/media";
   return {
     ...process.env,
     RESTORE_POSTGRES_PASSWORD: restorePassword,
     RESTORE_BUILD_REVISION: buildRevision,
     RESTORE_MEDIA_HOST_PATH: expectedMediaSource,
+    RESTORE_MEDIA_CONTAINER_PATH: mediaTarget,
+    RESTORE_DATABASE_NAME: databaseName,
+    RESTORE_DATABASE_URL:
+      `postgres://arken:${encodeURIComponent(restorePassword)}` +
+      `@postgres:5432/${encodeURIComponent(databaseName)}`,
   };
 }
 
@@ -314,7 +462,7 @@ function verifyChecksums(dumpFile, manifests, restoredMedia) {
   });
 }
 
-function restoreDatabase(dumpFile) {
+function restoreDatabase(dumpFile, databaseName) {
   for (
     let attempt = 1;
     attempt <= postgresReadinessPolicy.restoreAttempts;
@@ -339,7 +487,7 @@ function restoreDatabase(dumpFile) {
           "--username",
           "arken",
           "--dbname",
-          "arken",
+          databaseName,
         ]),
         { env: composeEnvironment(), stdio: [descriptor, "pipe", "pipe"] },
       );
@@ -365,7 +513,7 @@ function restoreDatabase(dumpFile) {
   }
 }
 
-function readRestoredCounts(expectedCounts) {
+function readRestoredCounts(expectedCounts, databaseName) {
   const query = buildDatabaseCountsQuery(expectedCounts);
   const output = captureDocker(
     [
@@ -377,7 +525,7 @@ function readRestoredCounts(expectedCounts) {
       "--username",
       "arken",
       "--dbname",
-      "arken",
+      databaseName,
       "--no-align",
       "--tuples-only",
       "--field-separator=|",
@@ -390,7 +538,7 @@ function readRestoredCounts(expectedCounts) {
   return parseDatabaseCounts(output);
 }
 
-function readRestoredMigrationLedger() {
+function readRestoredMigrationLedger(databaseName) {
   const output = captureDocker(
     [
       ...composeBase(),
@@ -401,7 +549,7 @@ function readRestoredMigrationLedger() {
       "--username",
       "arken",
       "--dbname",
-      "arken",
+      databaseName,
       "--no-align",
       "--tuples-only",
       "--field-separator=|",
@@ -430,31 +578,144 @@ function inspectLeftovers() {
     "--filter",
     "label=com.docker.compose.project=" + projectName,
   ]);
+  const networks = captureDocker([
+    "network",
+    "ls",
+    "--quiet",
+    "--filter",
+    "label=com.docker.compose.project=" + projectName,
+  ]);
   return {
     containers: containers ? containers.split(/\s+/) : [],
     volumes: volumes ? volumes.split(/\s+/) : [],
+    networks: networks ? networks.split(/\s+/) : [],
   };
 }
 
+function assertProjectVacant() {
+  assertRestoreProjectVacant(inspectLeftovers());
+}
+
 function removeWorkingDirectory() {
+  if (!workingDirectory) return;
   const resolved = path.resolve(workingDirectory);
-  const allowedPrefix =
-    path.resolve(tmpdir()) + path.sep + "arken-restore-data-";
-  if (!resolved.startsWith(allowedPrefix))
+  const privateRoot = realpathSync(
+    path.resolve(projectRoot, ".data", "qa-prep"),
+  );
+  const stat = lstatSync(resolved);
+  if (
+    !isPathWithin(privateRoot, realpathSync(resolved)) ||
+    !stat.isDirectory() ||
+    stat.isSymbolicLink()
+  )
     throw new Error("Refusing to remove unexpected restore working directory");
   rmSync(resolved, { recursive: true, force: true });
 }
 
 function writeReport() {
   report.finishedAt = new Date().toISOString();
-  mkdirSync(reportDirectory, { recursive: true });
-  writeFileSync(
-    path.join(reportDirectory, "runner.json"),
-    JSON.stringify(report, null, 2) + "\n",
-  );
+  const destination =
+    privateReportPath ?? path.join(reportDirectory, "runner.json");
+  if (!privateReportPath)
+    mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
+  writeFileSync(destination, JSON.stringify(report, null, 2) + "\n", {
+    mode: privateReportPath ? 0o600 : 0o644,
+  });
 }
 
 try {
+  let privateRoot = null;
+  if (restoreFormat === "service-v1") {
+    privateRoot = realpathSync(path.resolve(projectRoot, ".data", "qa-prep"));
+    const requestedReceiptPath = path.resolve(
+      process.env.RESTORE_CAPTURE_RECEIPT_PATH ?? "",
+    );
+    const requestedReportPath = path.resolve(
+      process.env.RESTORE_REPORT_PATH ?? "",
+    );
+    if (
+      !/^[0-9a-f]{64}$/i.test(process.env.SNAPSHOT_ID ?? "") ||
+      !/^[0-9a-f]{64}$/i.test(
+        process.env.RESTORE_CAPTURE_RECEIPT_SHA256 ?? "",
+      ) ||
+      !process.env.RESTORE_REPORT_PATH
+    )
+      throw new Error(
+        "service-v1 requires a full snapshot ID, receipt digest, and report path",
+      );
+    if (!isPathWithin(privateRoot, requestedReceiptPath))
+      throw new Error(
+        "service-v1 capture receipt must be inside ignored .data/qa-prep",
+      );
+    if (!isPathWithin(privateRoot, realpathSync(requestedReceiptPath)))
+      throw new Error(
+        "service-v1 capture receipt resolves outside .data/qa-prep",
+      );
+    const receiptStat = lstatSync(requestedReceiptPath);
+    if (!receiptStat.isFile() || receiptStat.isSymbolicLink())
+      throw new Error(
+        "service-v1 capture receipt must be a regular private file",
+      );
+    if (platform() === "win32") verifyWindowsAcl(requestedReceiptPath);
+    else {
+      const receiptMode = statSync(requestedReceiptPath).mode & 0o777;
+      if (receiptMode & 0o177)
+        throw new Error("service-v1 capture receipt is not private");
+    }
+    const requestedReportDirectory = path.dirname(requestedReportPath);
+    if (
+      !isPathWithin(privateRoot, requestedReportDirectory) ||
+      existsSync(requestedReportDirectory) ||
+      existsSync(requestedReportPath) ||
+      requestedReportPath === requestedReceiptPath
+    )
+      throw new Error(
+        "service-v1 report must use a new private directory in .data/qa-prep",
+      );
+    prepareProtectedReportDirectory(requestedReportPath, privateRoot);
+    privateReportDirectory = requestedReportDirectory;
+  }
+  if (process.env.RESTORE_COPY_RECEIPT_PATH) {
+    const mappingPath = path.resolve(process.env.RESTORE_COPY_RECEIPT_PATH);
+    if (
+      !isPathWithin(privateRoot, mappingPath) ||
+      !isPathWithin(privateRoot, realpathSync(mappingPath)) ||
+      !lstatSync(mappingPath).isFile() ||
+      lstatSync(mappingPath).isSymbolicLink()
+    )
+      throw new Error(
+        "Copy mapping receipt must be a regular private file inside .data/qa-prep",
+      );
+    if (platform() === "win32") verifyWindowsAcl(mappingPath);
+    else if (statSync(mappingPath).mode & 0o177)
+      throw new Error("Copy mapping receipt is not private");
+  }
+  const restoreRequest = resolveRestoreMode(process.env);
+  if (restoreRequest.format === "service-v1") {
+    const receiptRealPath = realpathSync(restoreRequest.receiptPath);
+    const reportParent = realpathSync(path.dirname(restoreRequest.reportPath));
+    if (
+      !isPathWithin(privateRoot, receiptRealPath) ||
+      !isPathWithin(privateRoot, reportParent) ||
+      restoreRequest.reportPath === restoreRequest.receiptPath ||
+      existsSync(restoreRequest.reportPath) ||
+      !lstatSync(restoreRequest.receiptPath).isFile()
+    )
+      throw new Error(
+        "service-v1 receipt and report must be inside ignored .data/qa-prep",
+      );
+    privateReportPath = restoreRequest.reportPath;
+    report.snapshotIdRequired = restoreRequest.snapshotId;
+    report.captureManifestSha256 = restoreRequest.manifestSha256;
+    report.captureReceiptSha256 = restoreRequest.receiptSha256;
+    report.sourceSnapshotId = restoreRequest.sourceSnapshotId;
+    report.copyReceiptSha256 = restoreRequest.copyReceiptSha256;
+    report.recoveryMode =
+      "captured server and PostgreSQL images; no source-build equivalence claim";
+  }
+  workingDirectory = createProtectedWorkingDirectory();
+  snapshotRoot = path.join(workingDirectory, "snapshot");
+  expectedMediaSource = resolveRestoredPath(snapshotRoot, backupMediaRoot);
   if (process.env.ARKEN_RESTORE_CONFIRM !== "isolated-clean-target")
     throw new Error(
       "Refusing restore without ARKEN_RESTORE_CONFIRM=isolated-clean-target",
@@ -466,9 +727,16 @@ try {
   if (!Number.isFinite(minimumFreeBytes) || minimumFreeBytes < gibibyte)
     throw new Error("ARKEN_RESTORE_MIN_FREE_BYTES must be at least 1 GiB");
 
-  buildRevision = resolveBuildRevision();
+  if (restoreRequest.format === "legacy") {
+    buildRevision = resolveBuildRevision();
+    migrationLedgerExpected = readCheckoutMigrationLedger();
+  } else {
+    buildRevision = "captured-image-pending-manifest-validation";
+  }
   docker = detectDocker();
   record("docker-permission", "passed");
+  assertProjectVacant();
+  record("restore-project-collision-preflight", "passed");
   record("restic-version", "passed", {
     version: capture("restic", ["version"]),
   });
@@ -508,18 +776,7 @@ try {
     });
   }
 
-  const environment = composeEnvironment();
-  const config = JSON.parse(
-    captureDocker([...composeBase(), "config", "--format", "json"], {
-      env: environment,
-    }),
-  );
-  assertIsolatedComposeConfig(config, {
-    projectName,
-    mediaSource: expectedMediaSource,
-    buildRevision,
-  });
-  record("isolated-compose-config", "passed");
+  let environment = composeEnvironment();
 
   capture("restic", ["check"]);
   record("restic-check", "passed");
@@ -539,6 +796,13 @@ try {
     expectedHost: backupHost,
     expectedTag: backupTag,
   });
+  if (
+    restoreRequest.format === "service-v1" &&
+    selectedSnapshot.id.toLowerCase() !== restoreRequest.snapshotId
+  )
+    throw new Error(
+      "Selected Restic snapshot ID does not exactly match request",
+    );
   report.snapshot = {
     id: selectedSnapshot.id,
     shortId: selectedSnapshot.short_id,
@@ -568,16 +832,144 @@ try {
     throw new Error("restic restore exited " + restoreStatus);
   record("restic-restore", "passed");
 
-  const dumps = findDumpFiles(snapshotRoot);
-  if (dumps.length !== 1)
-    throw new Error(
-      "Expected one PostgreSQL dump in snapshot, found " + dumps.length,
+  let dumpFile;
+  let manifests = null;
+  let expectedCounts;
+  if (restoreRequest.format === "service-v1") {
+    serviceSnapshot = await resolveServiceSnapshot(
+      snapshotRoot,
+      restoreRequest,
     );
+    dumpFile = serviceSnapshot.databaseDumpPath;
+    expectedMediaSource = serviceSnapshot.mediaRootPath;
+    migrationLedgerExpected = serviceSnapshot.migrationLedger;
+    expectedCounts = serviceSnapshot.databaseCounts;
+    const capturedTags = {
+      postgres: `arken-restore-${projectName}-postgres:service-v1`,
+      server: `arken-restore-${projectName}-server:service-v1`,
+    };
+    serviceComposeOverride = path.join(
+      workingDirectory,
+      "compose.service-v1.override.yml",
+    );
+    writeFileSync(
+      serviceComposeOverride,
+      serviceImageOverride({
+        postgresImage: capturedTags.postgres,
+        serverImage: capturedTags.server,
+        mediaContainerPath: serviceSnapshot.mediaContainerPath,
+      }),
+      { mode: 0o600 },
+    );
+    for (const [kind, file, expectedId, localTag] of [
+      [
+        "postgres",
+        path.join(serviceSnapshot.captureRoot, "images", "postgres.tar"),
+        serviceSnapshot.postgresImageId,
+        capturedTags.postgres,
+      ],
+      [
+        "server",
+        path.join(serviceSnapshot.captureRoot, "images", "server.tar"),
+        serviceSnapshot.serverImageId,
+        capturedTags.server,
+      ],
+    ]) {
+      const tagExists = execute(
+        docker.command,
+        dockerArgs(["image", "inspect", localTag]),
+        { stdio: "ignore" },
+      );
+      if (!tagExists.error && (tagExists.status ?? 1) === 0)
+        throw new Error("Isolated captured-image tag is already in use");
+      const existedBefore = execute(
+        docker.command,
+        dockerArgs(["image", "inspect", expectedId]),
+        { stdio: "ignore" },
+      );
+      if (existedBefore.error || (existedBefore.status ?? 1) !== 0)
+        newlyLoadedCapturedImages.push(expectedId);
+      captureDocker(["load", "--input", file]);
+      const loadedId = captureDocker([
+        "image",
+        "inspect",
+        "--format",
+        "{{.Id}}",
+        expectedId,
+      ]);
+      if (loadedId.toLowerCase() !== expectedId.toLowerCase())
+        throw new Error(
+          "Loaded captured " + kind + " image ID does not match manifest",
+        );
+      captureDocker(["image", "tag", expectedId, localTag]);
+      capturedImageTags.push(localTag);
+      const taggedId = captureDocker([
+        "image",
+        "inspect",
+        "--format",
+        "{{.Id}}",
+        localTag,
+      ]);
+      if (taggedId.toLowerCase() !== expectedId.toLowerCase())
+        throw new Error(
+          "Isolated " + kind + " tag does not resolve to captured image ID",
+        );
+    }
+    buildRevision = serviceSnapshot.buildRevision;
+    environment = composeEnvironment();
+    record("service-v1-capture-manifest", "passed", {
+      manifestSha256: serviceSnapshot.manifestSha256,
+      fileCount: serviceSnapshot.files,
+      capturedSchemaVersion: serviceSnapshot.schemaVersion,
+      capturedMigrationCount: migrationLedgerExpected.length,
+      imagePinning:
+        "server-and-postgres image IDs verified through isolated local tags; source build disabled",
+    });
+  } else {
+    const dumps = findDumpFiles(snapshotRoot);
+    if (dumps.length !== 1)
+      throw new Error(
+        "Expected one PostgreSQL dump in snapshot, found " + dumps.length,
+      );
+    dumpFile = dumps[0];
+    manifests = assertManifestFiles(dumpFile);
+    expectedCounts = parseDatabaseCounts(
+      readFileSync(manifests.databaseCounts, "utf8"),
+    );
+  }
   if (!existsSync(expectedMediaSource))
     throw new Error("Restored media directory was not found");
-  const manifests = assertManifestFiles(dumps[0]);
-  verifyChecksums(dumps[0], manifests, expectedMediaSource);
+  if (restoreRequest.format === "legacy")
+    verifyChecksums(dumpFile, manifests, expectedMediaSource);
 
+  const config = JSON.parse(
+    captureDocker([...composeBase(), "config", "--format", "json"], {
+      env: composeEnvironment(),
+    }),
+  );
+  assertIsolatedComposeConfig(config, {
+    projectName,
+    mediaSource: expectedMediaSource,
+    buildRevision,
+    mediaTarget:
+      serviceSnapshot?.mediaContainerPath ?? "/srv/arken-space/media",
+    databaseName: serviceSnapshot?.databaseName ?? "arken",
+  });
+  if (
+    serviceSnapshot &&
+    (config.services?.server?.build ||
+      config.services?.server?.image !==
+        `arken-restore-${projectName}-server:service-v1` ||
+      config.services?.postgres?.image !==
+        `arken-restore-${projectName}-postgres:service-v1`)
+  )
+    throw new Error(
+      "Isolated compose did not resolve to the captured server and PostgreSQL images",
+    );
+  record("isolated-compose-config", "passed");
+
+  assertProjectVacant();
+  projectMayHaveResources = true;
   const postgresUp = runDocker(
     [...composeBase(), "up", "--detach", "--wait", "postgres"],
     { env: environment },
@@ -590,24 +982,26 @@ try {
     attempts: postgresReady.attempts,
   });
 
-  const restoreResult = restoreDatabase(dumps[0]);
+  const restoredDatabaseName = serviceSnapshot?.databaseName ?? "arken";
+  const restoreResult = restoreDatabase(dumpFile, restoredDatabaseName);
   record("postgresql-restore", "passed", { attempts: restoreResult.attempts });
 
-  const restoredMigrationPrefix = readRestoredMigrationLedger();
+  const restoredMigrationPrefix =
+    readRestoredMigrationLedger(restoredDatabaseName);
   compareMigrationLedgerPrefix(
-    expectedMigrationLedger,
+    migrationLedgerExpected,
     restoredMigrationPrefix,
   );
   report.databaseMigrationPrefix = restoredMigrationPrefix;
   record("database-migration-prefix", "passed", {
     restoredCount: restoredMigrationPrefix.length,
-    checkoutCount: expectedMigrationLedger.length,
+    comparisonReferenceCount: migrationLedgerExpected.length,
   });
 
-  const expectedCounts = parseDatabaseCounts(
-    readFileSync(manifests.databaseCounts, "utf8"),
+  const restoredCounts = readRestoredCounts(
+    expectedCounts,
+    restoredDatabaseName,
   );
-  const restoredCounts = readRestoredCounts(expectedCounts);
   const retiredTableMigration = verifyRetiredTableMigration(
     expectedCounts,
     restoredCounts,
@@ -627,16 +1021,23 @@ try {
   record("database-counts", "passed", report.databaseCountCoverage);
 
   const serverUp = runDocker(
-    [...composeBase(), "up", "--detach", "--build", "--wait", "server"],
-    { env: environment },
+    [
+      ...composeBase(),
+      "up",
+      "--detach",
+      ...(serviceSnapshot ? [] : ["--build"]),
+      "--wait",
+      "server",
+    ],
+    { env: composeEnvironment() },
   );
   if (serverUp !== 0)
     throw new Error("Isolated server startup exited " + serverUp);
   record("isolated-server", "passed");
 
-  const migratedLedger = readRestoredMigrationLedger();
-  compareMigrationLedger(expectedMigrationLedger, migratedLedger);
-  report.databaseMigrations = expectedMigrationLedger.map((entry, index) => ({
+  const migratedLedger = readRestoredMigrationLedger(restoredDatabaseName);
+  compareMigrationLedger(migrationLedgerExpected, migratedLedger);
+  report.databaseMigrations = migrationLedgerExpected.map((entry, index) => ({
     ...entry,
     databaseId: migratedLedger[index].id,
   }));
@@ -662,7 +1063,7 @@ try {
     restoredHealth.status !== "ok" ||
     restoredHealth.database !== "ok" ||
     restoredHealth.buildRevision !== buildRevision ||
-    restoredHealth.schemaVersion !== 2
+    restoredHealth.schemaVersion !== (serviceSnapshot?.schemaVersion ?? 2)
   )
     throw new Error("Restored application health is not authoritative");
   report.restoredHealth = restoredHealth;
@@ -678,33 +1079,53 @@ try {
   record("run", "failed", { error: report.error });
 } finally {
   if (docker) {
-    const cleanup = runDocker(
-      [
-        ...composeBase(),
-        "down",
-        "--volumes",
-        "--remove-orphans",
-        "--rmi",
-        "local",
-      ],
-      { env: composeEnvironment() },
-    );
-    report.cleanupExitCode = cleanup;
-    if (cleanup !== 0) exitCode = cleanup;
-    else record("compose-cleanup", "passed");
-
-    try {
-      const remaining = inspectLeftovers();
-      report.leftovers = remaining;
-      if (remaining.containers.length || remaining.volumes.length) {
-        exitCode = 1;
-        record("resource-leak-check", "failed", remaining);
-      } else record("resource-leak-check", "passed");
-    } catch (error) {
-      exitCode = 1;
-      record("resource-leak-check", "failed", {
-        error: error instanceof Error ? error.message : String(error),
+    if (projectMayHaveResources) {
+      const cleanup = runDocker([...composeBase(), "down", "--volumes"], {
+        env: composeEnvironment(),
       });
+      report.cleanupExitCode = cleanup;
+      if (cleanup !== 0) exitCode = cleanup;
+      else record("compose-cleanup", "passed");
+    }
+
+    for (const tag of capturedImageTags) {
+      const removed = runDocker(["image", "rm", tag], { stdio: "ignore" });
+      if (removed !== 0) {
+        exitCode = 1;
+        record("captured-image-tag-cleanup", "failed", { tag });
+      }
+    }
+
+    for (const imageId of newlyLoadedCapturedImages) {
+      const removed = runDocker(["image", "rm", imageId], { stdio: "ignore" });
+      if (removed === 0)
+        record("captured-image-cleanup", "passed", { imageId });
+      else
+        record("captured-image-cleanup", "retained", {
+          imageId,
+          reason:
+            "image could not be removed without affecting another Docker reference",
+        });
+    }
+
+    if (projectMayHaveResources) {
+      try {
+        const remaining = inspectLeftovers();
+        report.leftovers = remaining;
+        if (
+          remaining.containers.length ||
+          remaining.volumes.length ||
+          remaining.networks.length
+        ) {
+          exitCode = 1;
+          record("resource-leak-check", "failed", remaining);
+        } else record("resource-leak-check", "passed");
+      } catch (error) {
+        exitCode = 1;
+        record("resource-leak-check", "failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 
@@ -716,6 +1137,18 @@ try {
     record("restored-data-cleanup", "failed", {
       error: error instanceof Error ? error.message : String(error),
     });
+  }
+
+  if (
+    privateReportDirectory &&
+    !privateReportPath &&
+    existsSync(privateReportDirectory)
+  ) {
+    try {
+      rmdirSync(privateReportDirectory);
+    } catch {
+      // Preserve an unexpected non-empty directory rather than recursively removing it.
+    }
   }
 
   try {
@@ -759,7 +1192,11 @@ try {
   }
 
   report.runSucceeded = runSucceeded;
-  writeReport();
+  if (restoreFormat === "service-v1" && !privateReportPath) {
+    process.stderr.write(
+      "[restore] private report omitted because service-v1 receipt/report validation did not complete\n",
+    );
+  } else writeReport();
 }
 
 process.exitCode = exitCode;

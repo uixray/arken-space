@@ -17,6 +17,7 @@ import type {
   WorldMapScope,
   WorldMapVisibility,
 } from "@arken/contracts";
+import { WorldMapCanonicalLocationPicker } from "./WorldMapCanonicalLocationPicker";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { AppIcon } from "./ui/AppIcon";
 import { PartyLocationIcon, WorldLocationIcon } from "./ui/icons";
@@ -36,6 +37,7 @@ export type MapDraft = {
 };
 
 export type LocationDraft = {
+  canonicalLocationId: string | null;
   name: string;
   kind: WorldMapLocationKind;
   summary: string;
@@ -52,6 +54,7 @@ const newMapDraft = (): MapDraft => ({
 });
 
 const newLocationDraft = (): LocationDraft => ({
+  canonicalLocationId: null,
   name: "",
   kind: "OTHER",
   summary: "",
@@ -64,6 +67,7 @@ const toDraft = (
   location: WorldMapLocationDto,
   gmNotes?: string,
 ): LocationDraft => ({
+  canonicalLocationId: location.canonicalLocationId ?? null,
   name: location.name,
   kind: location.kind,
   summary: location.summary,
@@ -813,6 +817,14 @@ export function WorldMapsWorkspace({
               }
             />
           </label>
+          {isGm && (
+            <WorldMapCanonicalLocationPicker
+              value={draft.canonicalLocationId}
+              onChange={(canonicalLocationId) =>
+                setDraft((current) => ({ ...current, canonicalLocationId }))
+              }
+            />
+          )}
           <label>
             Тип
             <select

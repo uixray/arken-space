@@ -14,6 +14,7 @@ export type WorkspaceId =
   | "operator-feedback"
   | "player-requests"
   | "world-encyclopedia"
+  | "spell-schools"
   | "world-codex";
 
 export interface WorkspaceNavItem {
@@ -46,6 +47,7 @@ export function workspaceNavItems(context: {
       { id: "setup", label: "Подготовка" },
       { id: "world-encyclopedia", label: WORLD_EDITOR_TITLE },
       { id: "world-maps", label: "Карты мира" },
+      { id: "spell-schools", label: "Школы заклинаний" },
       { id: "world-codex", label: WORLD_READER_TITLE },
     );
   items.push({

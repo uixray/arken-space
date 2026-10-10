@@ -13,7 +13,20 @@ RUN pnpm install --frozen-lockfile
 COPY apps/web apps/web
 COPY packages/contracts packages/contracts
 COPY packages/system packages/system
-RUN pnpm --filter @arken/contracts build && pnpm --filter @arken/system build && pnpm --filter @arken/web build
+COPY scripts/font-release-preflight.mjs scripts/font-release-preflight.mjs
+ARG WEB_BUILD_PROFILE=production
+RUN if [ "$WEB_BUILD_PROFILE" = "public-ci" ]; then \
+      pnpm --filter @arken/contracts build && \
+      pnpm --filter @arken/system build && \
+      pnpm --filter @arken/web exec vite build --mode public-ci; \
+    elif [ "$WEB_BUILD_PROFILE" = "production" ]; then \
+      pnpm --filter @arken/contracts build && \
+      pnpm --filter @arken/system build && \
+      pnpm --filter @arken/web build && \
+      pnpm release:font:preflight; \
+    else \
+      echo "Unsupported WEB_BUILD_PROFILE" >&2; exit 2; \
+    fi
 
 FROM nginx:1.27-alpine
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html

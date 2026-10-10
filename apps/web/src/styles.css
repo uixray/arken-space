@@ -1,3 +1,12 @@
+@font-face {
+  font-family: "Pragmatica Next";
+  src: url("/assets/pragmatica-next_vf.woff") format("woff");
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 10% 400%;
+  font-display: swap;
+}
+
 :root {
   /* Токены приходят из `design-system/tokens.generated.css`, который собран из
    * `tokens/*.tokens.json` командой `pnpm tokens:build`. Здесь остаются только
@@ -38,6 +47,18 @@
   font-size: var(--font-size-root);
   color: var(--color-text);
   background: var(--color-canvas);
+}
+
+/* Gravity UI defines its typography on each .g-root, shadowing inherited
+   :root values. Override that component scope so portals and controls use the
+   same local variable font as the app shell. */
+.g-root {
+  --g-font-family-sans: var(--font-family-sans);
+  --g-text-body-font-family: var(--font-family-sans);
+  --g-text-caption-font-family: var(--font-family-sans);
+  --g-text-header-font-family: var(--font-family-sans);
+  --g-text-subheader-font-family: var(--font-family-sans);
+  --g-text-display-font-family: var(--font-family-sans);
 }
 
 /* UIX-387: documented overlay layer order (lowest to highest), gathered by
@@ -477,6 +498,12 @@ html[data-player-theme="light"] .brand__mark {
   max-height: 280px;
   overflow: auto;
 }
+
+.music-mixer-list { display: grid; gap: .75rem; }
+.music-mixer-track { display: grid; grid-template-columns: minmax(8rem, 1fr) auto minmax(8rem, 1fr) auto; align-items: center; gap: .75rem; padding: .75rem; border: 1px solid var(--border); border-radius: .75rem; }
+.music-mixer-track label { display: grid; gap: .25rem; font-size: .8rem; }
+.music-mixer-track input[type="range"] { width: 100%; }
+@media (max-width: 600px) { .music-mixer-track { grid-template-columns: 1fr auto; } }
 .music-track {
   display: flex;
   justify-content: space-between;
@@ -687,16 +714,26 @@ html[data-player-theme="light"] .brand__mark {
   background: var(--surface);
   box-shadow: 0 10px 28px rgb(0 0 0 / 35%);
   min-width: 0;
-  overflow: visible;
+  overflow: hidden;
 }
-.map-toolbar > .toolbar-group {
+.map-toolbar__scroll {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: contain;
 }
-.map-toolbar
+.map-toolbar__collapse {
+  flex: 0 0 auto;
+}
+.map-toolbar__scroll > .toolbar-group {
+  flex: 0 0 auto;
+  min-height: auto;
+  overflow: visible;
+}
+.map-toolbar__scroll
   > :is(
     .toolbar-history,
     .toolbar-overflow,
@@ -705,7 +742,7 @@ html[data-player-theme="light"] .brand__mark {
   ) {
   flex: 0 0 auto;
 }
-.map-toolbar > .toolbar-shortcuts {
+.map-toolbar__scroll > .toolbar-shortcuts {
   margin-top: auto;
 }
 .game-pause-control {
@@ -773,12 +810,15 @@ html[data-player-theme="light"] .brand__mark {
   min-height: 28px;
   cursor: pointer;
   list-style: none;
+  anchor-name: --map-toolbar-overflow-trigger;
 }
 .toolbar-overflow-menu {
-  position: absolute;
+  position: fixed;
   z-index: 30;
-  top: 0;
-  left: calc(100% + 6px);
+  top: anchor(bottom);
+  left: anchor(right);
+  position-anchor: --map-toolbar-overflow-trigger;
+  position-try-fallbacks: flip-inline, flip-block;
   display: grid;
   gap: 4px;
   min-width: 220px;
@@ -5254,6 +5294,9 @@ body:has(.landing-shell) {
   position: absolute;
   top: 100%;
   right: 0;
+  max-height: var(--stat-field-menu-max-height, none);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   z-index: 5;
   display: flex;
   flex-direction: column;
@@ -5261,6 +5304,10 @@ body:has(.landing-shell) {
   padding: 4px;
   background: var(--surface-2);
   box-shadow: 0 8px 20px rgb(0 0 0 / 30%);
+}
+.stat-field__menu[data-menu-side="above"] > .stat-field__menu-items {
+  top: auto;
+  bottom: 100%;
 }
 .stats-grid,
 .vitals-card,
@@ -7569,4 +7616,150 @@ button:not([role="tab"]),
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Owner review: keep the soundpad launcher in the header and use open space,
+   not another floating surface. Keyboard focus remains explicitly visible. */
+.soundpad-header-slot {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+.soundpad__launcher {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: none;
+  font: inherit;
+  font-size: max(12px, 0.78rem);
+  white-space: nowrap;
+}
+.soundpad__launcher:hover {
+  background: var(--surface-3);
+}
+.soundpad__launcher:focus-visible {
+  outline: 2px solid var(--focus-ring, #86c7ff);
+  outline-offset: 2px;
+}
+
+/* A square avatar shows the supplied artwork without cropping its silhouette. */
+.character-hero__avatar-img {
+  object-fit: contain;
+  object-position: center;
+}
+
+/* The GM token action belongs to the heading's trailing action cluster. */
+.token-palette__heading {
+  align-items: center;
+}
+.token-palette__heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.token-palette__heading-actions .g-button {
+  min-height: 36px;
+  white-space: nowrap;
+}
+.palette-card {
+  gap: var(--space-sm);
+}
+.palette-card .danger-link {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Stat row actions retain their icons but no longer require tooltips to decode. */
+.stat-field__menu-items {
+  min-width: 12rem;
+  padding: var(--space-xs);
+  background: var(--surface);
+  color: var(--text);
+}
+.stat-field__menu-items > .stat-field__rename {
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  min-height: 2.4rem;
+  padding: var(--space-xs) var(--space-sm);
+  text-align: left;
+  white-space: normal;
+}
+.stat-field__menu-items > .stat-field__rename .g-button__text {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+}
+.stat-field__menu-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: max(12px, 0.78rem);
+}
+
+/* Keep the combat, skills, and spell cards in a readable single-column stack
+   in the narrow desktop character pane. */
+@media (min-width: 720px) and (max-width: 1279px) {
+  .character-sheet-stat-grid .character-section--combat > .character-card-row {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+.message header > .roll-avatar {
+  border-radius: 0;
+}
+.roll-avatar img {
+  object-fit: contain;
+  transform: none;
+}
+
+/* CatalogEntryForm is rendered inside ArkenDialog, not the legacy entity modal.
+   Keep field grouping through spacing and native focus affordances, not strokes. */
+.arken-dialog form.catalog-entry-form {
+  display: grid;
+  gap: var(--space-md);
+}
+.arken-dialog form.catalog-entry-form fieldset {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-sm) 0;
+  border: 0;
+}
+
+/* Share the same quiet hierarchy and number spacing as ordinary roll results. */
+.skill-chat-card__result {
+  column-gap: var(--space-md);
+  align-items: center;
+}
+.skill-chat-card__result .roll-total-wrap {
+  flex: 0 0 58px;
+}
+
+/* Every nested value/action cluster remains spaced, not only outer fieldsets. */
+.arken-dialog .catalog-entry-form > div,
+.arken-dialog .catalog-entry-form fieldset > div,
+.arken-dialog .catalog-entry-form label {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+.arken-dialog .catalog-entry-form fieldset {
+  padding: var(--space-md);
+  background: var(--surface-2);
+}
+.arken-dialog .catalog-entry-form fieldset fieldset {
+  background: var(--surface-3);
 }

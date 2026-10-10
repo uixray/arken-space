@@ -1,4 +1,5 @@
-FROM node:20-bookworm-slim
+ARG NATIVE_RUNTIME_STAGE=native-build
+FROM --platform=linux/amd64 node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS app-build
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
@@ -14,7 +15,34 @@ RUN pnpm install --frozen-lockfile
 
 COPY apps/server apps/server
 COPY packages packages
-RUN pnpm --filter @arken/contracts build && pnpm --filter @arken/system build && pnpm --filter @arken/db build && pnpm --filter @arken/server build
+RUN pnpm --filter @arken/contracts build && pnpm --filter @arken/system build && pnpm --filter @arken/db build && pnpm --filter @arken/server exec tsup src/index.ts src/env.ts --format esm --clean --sourcemap
 
-EXPOSE 4100
-CMD ["sh", "-c", "pnpm db:migrate && node apps/server/dist/index.js"]
+FROM --platform=linux/amd64 node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS native-build
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential python3 pkg-config meson ninja-build cmake curl xz-utils ca-certificates libglib2.0-dev libexpat1-dev libjpeg62-turbo-dev libpng-dev libwebp-dev libtiff-dev libaom-dev libdav1d-dev librsvg2-dev libpango1.0-dev liblcms2-dev libexif-dev libarchive-dev zlib1g-dev libcgif-dev libimagequant-dev
+COPY scripts/native-sharp/package.json scripts/native-sharp/package-lock.json /work/sharp-build/
+COPY scripts/native-sharp/build-native.sh /work/build-native.sh
+RUN test "$(uname -m)" = x86_64 && node -e 'if(process.arch!=="x64") process.exit(1)' && bash /work/build-native.sh
+
+# Optional release shortcut: named context native-input contains ONLY a reviewed
+# runtime archive. Default builds from pinned public sources above.
+FROM --platform=linux/amd64 node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS native-reviewed-artifact
+ARG NATIVE_RUNTIME_SHA256
+RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
+COPY scripts/native-sharp/validate-runtime-archive.py /tmp/validate-runtime-archive.py
+COPY --from=native-input /native-runtime.tar.gz /tmp/native-runtime.tar.gz
+RUN test -n "$NATIVE_RUNTIME_SHA256" && printf '%s  %s\n' "$NATIVE_RUNTIME_SHA256" /tmp/native-runtime.tar.gz | sha256sum -c - && python3 /tmp/validate-runtime-archive.py /tmp/native-runtime.tar.gz && mkdir /runtime && tar -xzf /tmp/native-runtime.tar.gz -C /runtime && rm /tmp/native-runtime.tar.gz
+
+FROM ${NATIVE_RUNTIME_STAGE} AS native-selected
+FROM --platform=linux/amd64 node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS runtime
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+WORKDIR /app
+RUN corepack enable && apt-get update && apt-get install -y --no-install-recommends libglib2.0-0 libexpat1 libjpeg62-turbo libpng16-16 libwebp7 libwebpmux3 libwebpdemux2 libtiff6 libaom3 libdav1d6 librsvg2-2 libpango-1.0-0 libpangocairo-1.0-0 liblcms2-2 libexif12 libarchive13 libcgif0 libimagequant0 fontconfig && rm -rf /var/lib/apt/lists/*
+COPY --from=app-build /app /app
+COPY --from=app-build /root/.cache/node/corepack /root/.cache/node/corepack
+COPY --from=app-build /pnpm /pnpm
+ENV COREPACK_ENABLE_NETWORK=0
+COPY --from=native-selected /runtime/ /
+COPY scripts/native-sharp/verify-runtime.mjs /opt/arken-native/verify-runtime.mjs
+RUN sharpdir=$(readlink -f /app/apps/server/node_modules/sharp) && test -n "$sharpdir" && mkdir -p "$sharpdir/src/build/Release" && cp /opt/arken-native/sharp-linux-x64-0.35.4.node "$sharpdir/src/build/Release/" && ldconfig && ! command -v gcc && ! command -v g++ && node /opt/arken-native/verify-runtime.mjs
+CMD ["sh", "-c", "node --input-type=module -e 'import(\"./apps/server/dist/env.js\").catch(() => { console.error(\"Invalid runtime configuration; aborting before migration.\"); process.exitCode = 1; })' && pnpm db:migrate && exec node apps/server/dist/index.js"]

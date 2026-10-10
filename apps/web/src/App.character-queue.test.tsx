@@ -19,11 +19,18 @@ import {
   waitFor,
 } from "./test-support/render";
 import { appToaster } from "./ui/toaster";
+import {
+  CAMPAIGN_ACTION_DOMAIN_KEYS,
+  type CampaignActions,
+} from "./campaign-actions-context";
+import { sidebarCollapsedStorageKey } from "./sidebar-preference";
+import { sidebarWidthStorageKey } from "./sidebar-width-preference";
 
 const boundary = vi.hoisted(() => ({
   api: vi.fn(),
   events: new Map<string, (snapshot: GameSnapshot) => void>(),
   results: [] as string[],
+  actionValues: [] as unknown[],
 }));
 vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
@@ -46,24 +53,51 @@ vi.mock("./realtime", () => ({
 }));
 // Only the visual shell is replaced. These controls call the actual App queue;
 // the queue, snapshot reconciliation, HTTP boundary and notification UI are real.
-vi.mock("./Sidebar", () => ({
-  Sidebar: (props: ComponentProps<typeof Sidebar>) => (
-    <button
-      onClick={() => {
-        void props
-          .onPatchCharacter("character-queue", { notes: "edited" })
-          .then(() => boundary.results.push("saved"))
-          .catch((error: unknown) =>
-            boundary.results.push(
-              error instanceof Error ? error.message : "unknown",
-            ),
-          );
-      }}
-    >
-      Edit character queue
-    </button>
-  ),
-}));
+vi.mock("./Sidebar", async () => {
+  const { useCampaignActions } = await vi.importActual<
+    typeof import("./campaign-actions-context")
+  >("./campaign-actions-context");
+  return {
+    Sidebar: (_props: ComponentProps<typeof Sidebar>) => {
+      const actions = useCampaignActions();
+      boundary.actionValues.push(actions);
+      return (
+        <aside className="sidebar" data-testid="app-sidebar">
+          <button
+            onClick={() => {
+              void actions.character
+                .patchCharacter("character-queue", { notes: "edited" })
+                .then(() => boundary.results.push("saved"))
+                .catch((error: unknown) =>
+                  boundary.results.push(
+                    error instanceof Error ? error.message : "unknown",
+                  ),
+                );
+            }}
+          >
+            Edit character queue
+          </button>
+          <button
+            type="button"
+            data-testid="collapse-action"
+            onClick={() => actions.sidebar.onCollapsedChange(true)}
+          >
+            Collapse using context
+          </button>
+          <button
+            type="button"
+            data-testid="resize-action"
+            onPointerDown={actions.sidebar.onResizeHandleDown}
+            onPointerMove={actions.sidebar.onResizeHandleMove}
+            onPointerUp={actions.sidebar.onResizeHandleUp}
+          >
+            Resize using context
+          </button>
+        </aside>
+      );
+    },
+  };
+});
 vi.mock("./MusicBar", () => ({ MusicBar: () => null }));
 vi.mock("./FeedbackReporter", () => ({ FeedbackReporter: () => null }));
 
@@ -92,6 +126,7 @@ beforeEach(() => {
   installMatchMediaMock();
   boundary.events.clear();
   boundary.results.length = 0;
+  boundary.actionValues.length = 0;
   boundary.api.mockReset();
   window.localStorage.clear();
 });
@@ -167,4 +202,69 @@ it("reports removed canonical character in Russian, skips the queued phantom PAT
     revision: 2,
     notes: "edited",
   });
+
+  // This is the value actually assembled by App and read by the mocked
+  // Sidebar, not a fixed provider fixture. Bootstrap recovery and the realtime
+  // snapshot above both forced App to rerender and recreate group containers.
+  expect(boundary.actionValues.length).toBeGreaterThan(1);
+  const initialActions = boundary.actionValues[0] as CampaignActions;
+  const commandReferences = (actions: CampaignActions) =>
+    Object.fromEntries(
+      CAMPAIGN_ACTION_DOMAIN_KEYS.map((domain) => [
+        domain,
+        Object.fromEntries(Object.entries(actions[domain])),
+      ]),
+    );
+  const initialCommandReferences = commandReferences(initialActions);
+  for (const value of boundary.actionValues as CampaignActions[]) {
+    expect(value).toBe(initialActions);
+    expect(Object.keys(value)).toEqual(CAMPAIGN_ACTION_DOMAIN_KEYS);
+    expect(commandReferences(value)).toEqual(initialCommandReferences);
+  }
+
+  // Retain the original context callback across the App snapshot refresh. It
+  // must still write the current campaign/member preference through its latest
+  // committed closure, while preserving the stable action reference.
+  act(() => initialActions.sidebar.onCollapsedChange(true));
+  expect(
+    window.localStorage.getItem(
+      sidebarCollapsedStorageKey(canonical.campaign.id, canonical.me.id),
+    ),
+  ).toBe("true");
+
+  const sidebar = screen.getByTestId("app-sidebar");
+  const resizeHandle = screen.getByTestId("resize-action");
+  vi.spyOn(sidebar, "getBoundingClientRect").mockReturnValue({
+    x: 0,
+    y: 0,
+    left: 0,
+    top: 0,
+    right: 500,
+    bottom: 900,
+    width: 500,
+    height: 900,
+    toJSON: () => ({}),
+  } as DOMRect);
+  Object.defineProperty(resizeHandle, "setPointerCapture", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  Object.defineProperty(resizeHandle, "hasPointerCapture", {
+    configurable: true,
+    value: () => true,
+  });
+  Object.defineProperty(resizeHandle, "releasePointerCapture", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  fireEvent.pointerDown(resizeHandle, { button: 0, pointerId: 7 });
+  fireEvent.pointerMove(resizeHandle, { clientX: 120, pointerId: 7 });
+  fireEvent.pointerUp(resizeHandle, { pointerId: 7 });
+  expect(
+    window.localStorage.getItem(
+      sidebarWidthStorageKey(canonical.campaign.id, canonical.me.id),
+    ),
+  ).toBe("380");
+  for (const value of boundary.actionValues as CampaignActions[])
+    expect(value).toBe(initialActions);
 });

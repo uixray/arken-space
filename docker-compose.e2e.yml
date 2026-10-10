@@ -19,6 +19,11 @@ services:
       dockerfile: Dockerfile.server
     environment:
       NODE_ENV: test
+      ACCOUNT_AUTH_ENABLED: ${E2E_ACCOUNT_AUTH_ENABLED:-false}
+      CAMPAIGN_LINK_ACCESS_ENABLED: ${E2E_CAMPAIGN_LINK_ACCESS_ENABLED:-false}
+      LEGACY_DEV_AUTH_ENABLED: "false"
+      ACCOUNT_REGISTRATION_ENABLED: "false"
+      ACCOUNT_MAIL_RUNTIME_ENABLED: "false"
       APP_VERSION: e2e
       BUILD_REVISION: ${E2E_BUILD_REVISION:-multiplayer-test}
       SCHEMA_VERSION: 2
@@ -54,6 +59,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web
+      args:
+        WEB_BUILD_PROFILE: public-ci
     depends_on:
       server:
         condition: service_healthy
@@ -82,6 +89,7 @@ services:
       dockerfile: Dockerfile.e2e
     environment:
       E2E_BASE_URL: http://edge
+      E2E_DISPOSABLE_PROJECT: ${E2E_DISPOSABLE_PROJECT:-}
       E2E_BUILD_REVISION: ${E2E_BUILD_REVISION:-multiplayer-test}
     volumes:
       - ./test-results/multiplayer:/app/test-results

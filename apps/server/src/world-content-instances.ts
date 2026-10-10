@@ -2,9 +2,12 @@ import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
+  assets,
   worldContent,
   worldContentInstanceActions,
   worldContentInstances,
+  memberships,
+  worldMapLocations,
 } from "@arken/db";
 import {
   createWorldContentInstanceSchema,
@@ -110,6 +113,82 @@ async function findCanonicalEntity(db: RequestDb, id: string) {
   return row ?? null;
 }
 
+async function ownerBelongsToCampaign(
+  db: RequestDb,
+  campaignId: string,
+  membershipId: string | null | undefined,
+) {
+  if (membershipId == null) return true;
+  const [membership] = await db
+    .select({ id: memberships.id })
+    .from(memberships)
+    .where(
+      and(
+        eq(memberships.id, membershipId),
+        eq(memberships.campaignId, campaignId),
+      ),
+    )
+    .limit(1);
+  return Boolean(membership);
+}
+
+async function portraitAssetError(
+  db: RequestDb,
+  campaignId: string,
+  assetId: string | null | undefined,
+): Promise<string | null> {
+  if (assetId == null) return null;
+  const [asset] = await db
+    .select({ kind: assets.kind, mimeType: assets.mimeType })
+    .from(assets)
+    .where(and(eq(assets.id, assetId), eq(assets.campaignId, campaignId)))
+    .limit(1);
+  if (!asset) return "WORLD_CONTENT_PORTRAIT_ASSET_UNAVAILABLE";
+  if (
+    (asset.kind !== "IMAGE" && asset.kind !== "PORTRAIT") ||
+    !asset.mimeType.startsWith("image/")
+  )
+    return "WORLD_CONTENT_PORTRAIT_NOT_IMAGE";
+  return null;
+}
+
+async function locationBelongsToCampaign(
+  db: RequestDb,
+  campaignId: string,
+  locationId: string | null | undefined,
+) {
+  if (locationId == null) return true;
+  const [location] = await db
+    .select({ id: worldMapLocations.id })
+    .from(worldMapLocations)
+    .where(
+      and(
+        eq(worldMapLocations.id, locationId),
+        eq(worldMapLocations.campaignId, campaignId),
+      ),
+    )
+    .limit(1);
+  return Boolean(location);
+}
+
+function isInstanceLocationForeignKeyFailure(reason: unknown): boolean {
+  let current: unknown = reason;
+  while (current && typeof current === "object") {
+    const error = current as {
+      cause?: unknown;
+      code?: string;
+      constraint?: string;
+    };
+    if (
+      error.code === "23503" &&
+      error.constraint === "world_content_instances_campaign_location_fk"
+    )
+      return true;
+    current = error.cause;
+  }
+  return false;
+}
+
 const idParams = z.object({ id: z.string().uuid() }).strict();
 const listQuerySchema = z
   .object({
@@ -155,38 +234,67 @@ export function registerWorldContentInstanceRoutes(
     const body = createWorldContentInstanceSchema.parse(request.body);
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(200).send({ duplicate: true });
+    if (
+      !(await ownerBelongsToCampaign(
+        db,
+        auth.campaignId,
+        body.ownerMembershipId,
+      ))
+    )
+      return fail(reply, 400, "WORLD_CONTENT_OWNER_NOT_IN_CAMPAIGN");
+    const portraitError = await portraitAssetError(
+      db,
+      auth.campaignId,
+      body.portraitAssetId,
+    );
+    if (portraitError) return fail(reply, 400, portraitError);
+    if (
+      !(await locationBelongsToCampaign(
+        db,
+        auth.campaignId,
+        body.currentLocationId,
+      ))
+    )
+      return fail(reply, 400, "WORLD_CONTENT_LOCATION_NOT_IN_CAMPAIGN");
     const entity = await findCanonicalEntity(db, body.worldContentId);
     if (!entity) return fail(reply, 404, "WORLD_CONTENT_NOT_FOUND");
-    const created = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .insert(worldContentInstances)
-        .values({
+    let created: WorldContentInstanceRow;
+    try {
+      created = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(worldContentInstances)
+          .values({
+            campaignId: auth.campaignId,
+            worldContentId: body.worldContentId,
+            displayNameOverride: body.displayNameOverride ?? null,
+            currentState: body.currentState ?? null,
+            gmNotes: body.gmNotes ?? null,
+            portraitAssetId: body.portraitAssetId ?? null,
+            ownerMembershipId: body.ownerMembershipId ?? null,
+            currentLocationId: body.currentLocationId ?? null,
+            quantity: body.quantity ?? null,
+            condition: body.condition ?? null,
+            discovered: body.discovered ?? false,
+          })
+          .returning();
+        if (!row) throw new Error("WORLD_CONTENT_INSTANCE_CREATE_FAILED");
+        await tx.insert(worldContentInstanceActions).values({
           campaignId: auth.campaignId,
-          worldContentId: body.worldContentId,
-          displayNameOverride: body.displayNameOverride ?? null,
-          currentState: body.currentState ?? null,
-          gmNotes: body.gmNotes ?? null,
-          portraitAssetId: body.portraitAssetId ?? null,
-          ownerMembershipId: body.ownerMembershipId ?? null,
-          currentLocationId: body.currentLocationId ?? null,
-          quantity: body.quantity ?? null,
-          condition: body.condition ?? null,
-          discovered: body.discovered ?? false,
-        })
-        .returning();
-      if (!row) throw new Error("WORLD_CONTENT_INSTANCE_CREATE_FAILED");
-      await tx.insert(worldContentInstanceActions).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        type: "world_content_instance.created",
-        entityType: "world_content_instance",
-        entityId: row.id,
-        entityRevision: row.revision,
-        actorMembershipId: auth.membershipId,
-        payload: row,
+          actionId: body.actionId,
+          type: "world_content_instance.created",
+          entityType: "world_content_instance",
+          entityId: row.id,
+          entityRevision: row.revision,
+          actorMembershipId: auth.membershipId,
+          payload: row,
+        });
+        return row;
       });
-      return row;
-    });
+    } catch (reason) {
+      if (isInstanceLocationForeignKeyFailure(reason))
+        return fail(reply, 400, "WORLD_CONTENT_LOCATION_NOT_IN_CAMPAIGN");
+      throw reason;
+    }
     return reply.code(201).send(toDto(created));
   });
 
@@ -202,36 +310,72 @@ export function registerWorldContentInstanceRoutes(
     if (!existing) return fail(reply, 404, "WORLD_CONTENT_INSTANCE_NOT_FOUND");
     if (existing.revision !== body.revision)
       return fail(reply, 409, "WORLD_CONTENT_INSTANCE_CONFLICT");
+    if (
+      !(await ownerBelongsToCampaign(
+        db,
+        auth.campaignId,
+        body.ownerMembershipId,
+      ))
+    )
+      return fail(reply, 400, "WORLD_CONTENT_OWNER_NOT_IN_CAMPAIGN");
     const { actionId, revision: _revision, ...changes } = body;
-    const updated = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .update(worldContentInstances)
-        .set({
-          ...changes,
-          revision: existing.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(worldContentInstances.id, id),
-            eq(worldContentInstances.campaignId, auth.campaignId),
-            eq(worldContentInstances.revision, existing.revision),
-          ),
-        )
-        .returning();
-      if (!row) return null;
-      await tx.insert(worldContentInstanceActions).values({
-        campaignId: auth.campaignId,
-        actionId,
-        type: "world_content_instance.updated",
-        entityType: "world_content_instance",
-        entityId: id,
-        entityRevision: row.revision,
-        actorMembershipId: auth.membershipId,
-        payload: row,
+    if (
+      changes.portraitAssetId != null &&
+      changes.portraitAssetId !== existing.portraitAssetId
+    ) {
+      const portraitError = await portraitAssetError(
+        db,
+        auth.campaignId,
+        changes.portraitAssetId,
+      );
+      if (portraitError) return fail(reply, 400, portraitError);
+    }
+    if (
+      changes.currentLocationId != null &&
+      changes.currentLocationId !== existing.currentLocationId &&
+      !(await locationBelongsToCampaign(
+        db,
+        auth.campaignId,
+        changes.currentLocationId,
+      ))
+    )
+      return fail(reply, 400, "WORLD_CONTENT_LOCATION_NOT_IN_CAMPAIGN");
+    let updated: WorldContentInstanceRow | null;
+    try {
+      updated = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(worldContentInstances)
+          .set({
+            ...changes,
+            revision: existing.revision + 1,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(worldContentInstances.id, id),
+              eq(worldContentInstances.campaignId, auth.campaignId),
+              eq(worldContentInstances.revision, existing.revision),
+            ),
+          )
+          .returning();
+        if (!row) return null;
+        await tx.insert(worldContentInstanceActions).values({
+          campaignId: auth.campaignId,
+          actionId,
+          type: "world_content_instance.updated",
+          entityType: "world_content_instance",
+          entityId: id,
+          entityRevision: row.revision,
+          actorMembershipId: auth.membershipId,
+          payload: row,
+        });
+        return row;
       });
-      return row;
-    });
+    } catch (reason) {
+      if (isInstanceLocationForeignKeyFailure(reason))
+        return fail(reply, 400, "WORLD_CONTENT_LOCATION_NOT_IN_CAMPAIGN");
+      throw reason;
+    }
     if (!updated) return fail(reply, 409, "WORLD_CONTENT_INSTANCE_CONFLICT");
     return reply.send(toDto(updated));
   });

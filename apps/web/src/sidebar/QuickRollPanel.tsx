@@ -142,11 +142,13 @@ export function QuickRollPanel({
     setEntryPending(entry.id);
     setEntryError("");
     try {
-      // Description-only entries have no executable roll. Match the character
-      // card: post their description without consuming uses or resources.
+      // A no-roll ability is still an activation. Only description-only skills
+      // fall back to the explicit, no-cost SHARE path.
       await onEntryAction(
         entry,
-        mode === "EXECUTE" && !rollActionId ? "SHARE" : mode,
+        mode === "EXECUTE" && !rollActionId && entry.kind !== "ABILITY"
+          ? "SHARE"
+          : mode,
         rollActionId,
       );
     } catch (reason) {

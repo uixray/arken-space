@@ -1,6 +1,7 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   campaigns,
+  worldContent,
   worldMapLocations,
   worldMapLocationScenes,
   worldMapPartyPosition,
@@ -12,6 +13,7 @@ import {
   canViewWorldMap,
   canViewWorldMapLocation,
 } from "./world-map-access.js";
+import { worldContentVisibility } from "./world-content.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -74,9 +76,29 @@ export async function buildWorldMapsSnapshot(
     sceneIds.push(link.sceneId);
     sceneIdsByLocation.set(link.locationId, sceneIds);
   }
+  const canonicalIds = visibleLocations.flatMap((location) =>
+    location.canonicalLocationId ? [location.canonicalLocationId] : [],
+  );
+  const canonicalRows = canonicalIds.length
+    ? await db
+        .select({ id: worldContent.id })
+        .from(worldContent)
+        .where(
+          and(
+            inArray(worldContent.id, canonicalIds),
+            eq(worldContent.type, "LOCATION"),
+            worldContentVisibility(auth),
+          ),
+        )
+    : [];
+  const visibleCanonicalIds = new Set(canonicalRows.map((row) => row.id));
   const locations = visibleLocations.map((location) => ({
     id: location.id,
     mapId: location.mapId,
+    ...(location.canonicalLocationId === null ||
+    visibleCanonicalIds.has(location.canonicalLocationId)
+      ? { canonicalLocationId: location.canonicalLocationId }
+      : {}),
     name: location.name,
     kind: location.kind,
     summary: location.summary,

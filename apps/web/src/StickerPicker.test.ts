@@ -42,5 +42,16 @@ describe("filterStickerPacks", () => {
     expect(filterStickerPacks(packs, "CHARACTER", "Lyra")).toHaveLength(1);
     expect(filterStickerPacks(packs, "CHARACTER", "WAVES")).toHaveLength(1);
     expect(filterStickerPacks(packs, "CHARACTER", "missing")).toEqual([]);
+    expect(filterStickerPacks(packs, "CHARACTER", "Greeting")).toEqual([]);
+  });
+  it("treats public global packs as COMMON, not as campaign character packs", () => {
+    const global = {
+      ...pack("CHARACTER"),
+      id: "global-pack",
+      scope: "GLOBAL_PUBLIC" as const,
+      subject: "COMMON" as const,
+    };
+    expect(filterStickerPacks([global], "COMMON", "")).toHaveLength(1);
+    expect(filterStickerPacks([global], "CHARACTER", "")).toEqual([]);
   });
 });

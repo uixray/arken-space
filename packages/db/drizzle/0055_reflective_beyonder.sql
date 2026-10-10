@@ -1,0 +1,2 @@
+ALTER TABLE "world_map_locations" ADD COLUMN "canonical_location_id" uuid;--> statement-breakpoint
+ALTER TABLE "world_map_locations" ADD CONSTRAINT "world_map_locations_canonical_location_id_world_content_id_fk" FOREIGN KEY ("canonical_location_id") REFERENCES "public"."world_content"("id") ON DELETE restrict ON UPDATE no action;

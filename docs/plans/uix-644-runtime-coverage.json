@@ -74,9 +74,84 @@
       "rule": "Historical37/76 denominator and every old status/evidence remain immutable. Both new reachable theme Select rows have scoped PASS and exact e67 checks/E2E/multiplayer SUCCESS. This does not waive the original ResizeObserver causal gap, native Firefox popup acceptance or the rest of UIX-644.",
       "passBuckets": 2,
       "blockedBuckets": 0
+    },
+    "currentStaticRegistryRefresh": {
+      "sourceRevision": "5815ce59a1264391fcd15e2db76e32c6fc2c2cd2",
+      "inventoryTest": {
+        "command": "pnpm exec vitest run apps/web/src/overlay-inventory.test.ts --reporter=verbose",
+        "result": "1 failed / 7 passed before registry refresh; only failure was two new GlobalStickerPackManager buckets, with no removed rows.",
+        "afterRefresh": "EXIT0: 1 file / 8 tests passed. Static coverage only, no runtime acceptance."
+      },
+      "previousRegistryDenominator": {
+        "buckets": 48,
+        "jsxOccurrences": 90,
+        "revision": "917af2d"
+      },
+      "currentStaticInventory": {
+        "buckets": 50,
+        "jsxOccurrences": 92
+      },
+      "addedBuckets": [
+        {
+          "key": "apps/web/src/GlobalStickerPackManager.tsx::tag:details",
+          "count": 1,
+          "owner": "GM-only GlobalStickerPackManager rendered by MediaPanel within the media workspace/sidebar owner; in-flow native details disclosure.",
+          "ancestors": "MediaPanel GM conditional → GlobalStickerPackManager → details/summary → global pack management section",
+          "runtimeStatus": "BLOCKED"
+        },
+        {
+          "key": "apps/web/src/GlobalStickerPackManager.tsx::tag:select",
+          "count": 1,
+          "owner": "GM-only GlobalStickerPackManager rendered by MediaPanel within the media workspace/sidebar owner; native select for choosing an owned global pack.",
+          "ancestors": "MediaPanel GM conditional → GlobalStickerPackManager → packs-present conditional → select/option",
+          "runtimeStatus": "BLOCKED"
+        }
+      ],
+      "rule": "Static discovery only. Both rows are BLOCKED_RUNTIME_PENDING: no placement, keyboard, focus, lifecycle, or hit-test runtime evidence is claimed. Historical acceptance denominators, rows and evidence remain unchanged; overall acceptance remains INCOMPLETE."
     }
   },
   "evidence": {
+    "compactReachableControls20261009": {
+      "status": "PARTIAL",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifact": "docs/plans/uix644-reachable-controls-gate20261009.md",
+      "receiptSha256": "AC81BED7D8DBD8385A0E53AC72CD1FDBD035D14808F42847B111287A13D6219C",
+      "scope": "Root elevated missing-cases gate: GM Chrome/Firefox compact actual Sections→Files, manager pointer/Enter/Escape/focus and parent preserved, DOM filter alternative/restoration, Character+Setup StatLayout disclosures passed. PLAYER Chrome/Firefox compact current-role Files/stat-menu absence observed. Native pack selects still unproved: nested-label caption/option-text resolver counts0 are not absence proof. Measured104GET/6auth/4readmarker/0domain/pageerrors; Chrome9 resource errors correlate initial bootstrap401 and other403, final family interpretation open. Not native OS popup, full registry or true zoom."
+    },
+    "reachableControls20261009": {
+      "status": "PARTIAL",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifact": "docs/plans/uix644-reachable-controls-gate20261009.md",
+      "receiptSha256": "740CB91C4310F89FE3582F7B5118472AEE84E17266EBBCA70EFB4CA77D067859",
+      "scope": "Six connected cells: GM Chrome/Firefox desktop Files disclosure and DOM filter, Character and Setup StatLayout disclosures; listed TokenTray summary tooltips. Compact workspace traversal and native pack draft/owned selects unresolved by harness locators, not proven absent. Measured domain writes0/pageerrors0; Chrome12 resource-load console errors unresolved, Firefox0. Native OS popup, all toolbar callers, full lifecycle and whole registry not accepted. Prior invalid audits and failed receipts preserved."
+    },
+    "ownedCharacterSelect20261009": {
+      "status": "PARTIAL",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifact": "docs/plans/uix644-select-contract-gate20261009.md",
+      "receiptSha256": "3D0D9A2AFD1CDF8E7DB00E162DD15098297C1F9D8055C17E724BCCE7074D6D70",
+      "scope": "Chrome/Firefox desktop/compact retained PLAYER owned-character accessible pointer selection, trigger label and reopened aria-selected; final selection after Home/ArrowDown/Enter, Escape preserving selection and outside-field focus/reopen observed. Intermediate active-option indices unproved because unsupported aria-activedescendant probe returned -1. No request submission. Not all six FormSelect callers, outside-pointer dismissal, native zoom or registration acceptance. Prior failed receipts preserved."
+    },
+    "compactSceneRestore20261009": {
+      "status": "SCOPED_PASS",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifact": "docs/plans/uix644-select-contract-gate20261009.md",
+      "receiptSha256": "6CDF56ADDE430F20A92407B131220916B9BA67046D6FEE154C1605087A40F5D4",
+      "scope": "Firefox compact non-modal GM scene workspace: Shift+Tab twice from body then Enter restores original viewed scene; actual scene:view and four unchanged published-identity snapshots. Resolves only prior compact keyboard-restore gap, not forward-Tab wrap, whole scene lifecycle or zoom. No product focus edit warranted by broader impossibility hypothesis."
+    },
+    "sceneSelection20261009": {
+      "status": "PARTIAL",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifact": "docs/plans/uix644-scene-diagnostics20261009.md",
+      "receiptSha256": "392BCBAC38DE30FE4A04633E6800204B5E527105FEDD82CE9383A04CEA2BC57A",
+      "scope": "Actual retained B fixture: Chrome desktop and compact and Firefox desktop pointer/keyboard scene selection/restoration with scene:view/server snapshot and unchanged broadcast passed. Desktop header menu and compact scene-manager route are distinct callers. Firefox compact keyboard restore remains unresolved. Does not prove edit action, full dismissal/zoom contract or causal ResizeObserver."
+    },
+    "globalManagerSummaryEscape": {
+      "status": "PASS",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifact": "docs/plans/uix644-global-manager-escape20261008.md",
+      "scope": "Partial lifecycle only: real local B GM Chrome/Firefox desktop/compact summary open, owned Escape close/focus, held repeat suppression, keyup and next deliberate parent Escape. Connected 25 unit tests/typecheck passed. Native select/input passthrough is unit-only; native OS popup, geometry/scroll/zoom and broader manager selection acceptance remain open."
+    },
     "compactSectionsBreakpoint": {
       "status": "PASS",
       "revision": "ecf66e62bb2c5cfb9fa679074bc7cdbfe2f176f2",
@@ -289,6 +364,36 @@
       "artifact": "selection-closure-2026-09-18/ci-e67bacc-summary.json",
       "workflowRuns": ["35412873275", "35412873288", "35412873306"],
       "scope": "Exact checks, four-shard Chrome/Firefox E2E and multiplayer SUCCESS. E2E1063 PASS/29 existing SKIP/0 FAIL/0 FLAKY; includes both real-server personal-theme persistence cases. Individual component pending/error/CAS coverage is also included in exact checks. Not full UIX-644 or production acceptance."
+    },
+    "uix644NativeSelectDom24": {
+      "status": "PASS",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifact": ".data/qa-prep/uix644-reachable-controls-20261009/reachable-controls-missing-cases-20261009-042937736Z.json",
+      "receiptSha256": "9b845600f6302075b5d6d444766fe6c6119582d7499896b4c8386a3a1d117464",
+      "scope": "Exactly 24/24 named native-select DOM-value assertions: global owned-pack selector plus campaign subject PLAYER/CHARACTER branch, audience and send policy across GM Chrome/Firefox desktop/compact. Each source-direct label/select resolved uniquely, was focused, changed and restored. Revision is the exact product source commit. 80 API GETs, 4 auth writes, 4 read-marker writes, 0 domain writes/page errors. Does not prove native OS popup/keyboard chooser, true zoom, visual/device acceptance, creation/upload or publish. Chrome console/resource and auth/feedback HTTP statuses remain scoped diagnostics, not waived errors."
+    },
+    "uix644PerFileProvenanceDom4of4": {
+      "status": "PARTIAL",
+      "scopedAssertionStatus": "PASS",
+      "revision": "52013d43e6f2fca1bb268c38608afde9cd76424a",
+      "artifacts": [
+        {
+          "artifact": ".data/qa-prep/uix644-per-file-provenance-20261009/per-file-provenance-4cell-20261009-044131982Z.json",
+          "receiptSha256": "29c9cd3fccd6ffdfd704acb9603d49e3e7df0063fe2e18e0741adef0bd148658",
+          "cell": "GM Chrome desktop; local per-file assertion passed, but containing run stopped after this cell on an unclassified blocked GET. Do not call the four-cell run complete or waive that request."
+        },
+        {
+          "artifact": ".data/qa-prep/uix644-per-file-provenance-20261009/per-file-provenance-4cell-20261009-044546591Z.json",
+          "receiptSha256": "f2f7d260d6faea125838ccdc2e1d1bd5dfd9b098927876de2a68c0c86d779108",
+          "cells": "GM Firefox desktop, Chrome compact, Firefox compact; Firefox desktop and compact per-file assertions passed; initial Chrome compact draft target was unresolved due async list-loading race and is superseded only for that scoped assertion by the follow-up receipt below. Whole cells are partial where external font GET was blocked."
+        },
+        {
+          "artifact": ".data/qa-prep/uix644-per-file-provenance-20261009/per-file-provenance-4cell-20261009-044823267Z.json",
+          "receiptSha256": "81b7ee7859d52afa2796d37749b53817e250482905f77db44a6805a9c271c12f",
+          "cell": "GM Chrome compact follow-up only; source-synchronized async list wait, per-file assertion passed; whole cell partial because the external font GET remained blocked."
+        }
+      ],
+      "scope": "Union of named local per-file provenance assertions passes in all four GM browser/viewport contexts at exact source revision 52013d43e6f2fca1bb268c38608afde9cd76424a: one local synthetic PNG, unique direct Происхождение label, focus verified, IMPORTED→ORIGINAL→IMPORTED, pending row restored then removed locally, final server detail unchanged at DRAFT revision 0 with 0 stickers. No upload/publish/delete. All receipts measure 0 domain writes/attempts; auth and read-marker writes are separate. Overall per-file pool remains PARTIAL: the initial Chrome desktop run stopped after an unclassified blocked GET; the other three whole cells observed blocked external HTTPS stylesheet from fonts.googleapis.com, which remains blocked and is not allowlisted. The Chrome compact follow-up fixes only harness list readiness; it does not waive the external read. `setInputFiles` is not native OS file chooser evidence. No external visual/font acceptance, upload, publication, or release readiness is claimed."
     }
   },
   "sites": [
@@ -321,6 +426,26 @@
       "scope": "One feedback category selector, GM/PLAYER, 1280→390→360 short→1280; keyboard/pointer/Escape/outside and visible close focus.",
       "evidence": ["feedback"],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/GlobalStickerPackManager.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "GM-only in-flow GlobalStickerPackManager disclosure mounted from MediaPanel. Partial current-source runtime evidence proves summary open/owned Escape close/focus/held repeat and next parent Escape in four browser cells, not whole lifecycle/placement acceptance.",
+      "evidence": ["globalManagerSummaryEscape"],
+      "next": "Reuse exact-source Escape slice; complete appropriate keyboard open, geometry/scroll/resize/zoom and actual pack selection. In-flow disclosure outside-click behavior must follow its contract, not a generic popup assumption. Whole bucket remains BLOCKED."
+    },
+    {
+      "file": "apps/web/src/GlobalStickerPackManager.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "GM-only native select for choosing an owned global pack, conditional on packs being present. No runtime render, keyboard, focus, popup or selection evidence is recorded.",
+      "evidence": [],
+      "next": "With an authorized GM fixture containing packs, verify actual open/select/close, focus and placement in desktop/compact browsers; do not infer runtime PASS from static discovery."
     },
     {
       "file": "apps/web/src/MapToolbar.tsx",
@@ -362,8 +487,8 @@
       "count": 6,
       "status": "BLOCKED",
       "classification": "reachable",
-      "scope": "Six controls migrated from native select to FormSelect in UIX-674. Prior native browser evidence no longer proves the new popup lifecycle; local screenshot only confirms arrow inset/open state.",
-      "evidence": ["requestsCurrent", "requestsBuilt"],
+      "scope": "Six controls migrated from native select to FormSelect in UIX-674. Retained PLAYER owned-character caller has exact-source partial four-cell pointer/final keyboard selection and dismissal evidence; no whole six-control PASS. Prior native evidence does not prove new popup lifecycle.",
+      "evidence": ["requestsCurrent", "requestsBuilt", "ownedCharacterSelect20261009"],
       "next": "Run current-revision keyboard, dismissal, focus return and narrow viewport FormSelect lifecycle before marking PASS."
     },
     {
@@ -373,8 +498,8 @@
       "status": "BLOCKED",
       "classification": "reachable",
       "scope": "UIX-674 changed the inner scene list from listbox/options to menu/menuitemradio with a separate menuitem edit action. Earlier listbox evidence is historical and does not prove the new role contract.",
-      "evidence": ["scenePicker"],
-      "next": "Run scoped current-revision keyboard, focus-return, dismissal and edit-action browser checks before claiming this role bucket PASS."
+      "evidence": ["scenePicker", "sceneSelection20261009"],
+      "next": "Retain historical role evidence separately; actual current desktop pointer/keyboard scene selection is now scoped evidence. Complete focus-return/dismissal/edit action and Firefox compact's distinct manager restore before full acceptance."
     },
     {
       "file": "apps/web/src/ScenePicker.tsx",
@@ -385,6 +510,16 @@
       "scope": "Scene picker dropdown details element in topbar.",
       "evidence": ["scenePicker"],
       "next": "Real multiplayer persistence and physical devices remain separate gates."
+    },
+    {
+      "file": "apps/web/src/StickerPackManager.tsx",
+      "kind": "tag:select",
+      "count": 6,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "GM sticker manager: subject, character, player, audience, send policy, per-file provenance. Conditional branches remain separately testable.",
+      "evidence": [],
+      "next": "Verify real pointer/keyboard open/select/close, Escape/focus and desktop/compact in Chrome/Firefox; no runtime PASS from inventory."
     },
     {
       "file": "apps/web/src/StickerPicker.tsx",
@@ -709,6 +844,16 @@
       }
     },
     {
+      "file": "apps/web/src/sidebar/MediaPanel.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "GM media catalog kind filter.",
+      "evidence": [],
+      "next": "Verify real pointer/keyboard open/select/close, Escape/focus and desktop/compact in Chrome/Firefox; no runtime PASS from inventory."
+    },
+    {
       "file": "apps/web/src/sidebar/QuickRollPanel.tsx",
       "kind": "tag:Popup",
       "count": 1,
@@ -941,5 +1086,22 @@
     "revision": "c8d76655e737ec48ad2dcc4becc331b912ac379d",
     "document": "docs/plans/uix-644-applicability.md",
     "scope": "Source reachability only; preserves all static buckets, not runtime acceptance."
+  },
+  "currentInventoryReconciliation": {
+    "revision": "5815ce59a1264391fcd15e2db76e32c6fc2c2cd2",
+    "buckets": 50,
+    "jsxOccurrences": 92,
+    "statusCounts": {
+      "PASS": 27,
+      "FAIL": 2,
+      "BLOCKED": 21
+    },
+    "historicalDenominator": {
+      "revision": "917af2deee0f80d02adcc66634ffc504b5e249e4",
+      "buckets": 48,
+      "jsxOccurrences": 90
+    },
+    "note": "Current source index now has 50/92 including two BLOCKED GlobalStickerPackManager rows. Prior 48/90 is preserved as the historical denominator; reconciliation37/76 and additions39/78 remain revision-scoped history. No historical PASS transferred to current SHA."
   }
 }
+

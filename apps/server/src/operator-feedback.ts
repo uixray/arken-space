@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { and, asc, eq, gt, gte, lte, or, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -8,7 +8,7 @@ import {
   feedbackOperatorAudits,
   feedbackReports,
 } from "@arken/db";
-import { requireAuth } from "./auth.js";
+import { requireOperator } from "./auth.js";
 import { env } from "./env.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
@@ -86,28 +86,6 @@ const safeAttachmentMimeTypes = new Set([
   "image/jpeg",
   "image/webp",
 ]);
-
-function operatorIds() {
-  return new Set(
-    env.OPERATOR_MEMBERSHIP_IDS.split(",")
-      .map((value) => value.trim())
-      .filter(Boolean),
-  );
-}
-
-async function requireOperator(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  db: Database,
-) {
-  const auth = await requireAuth(request, reply, db);
-  if (!auth) return null;
-  if (!operatorIds().has(auth.membershipId)) {
-    await reply.code(403).send({ error: "OPERATOR_REQUIRED" });
-    return null;
-  }
-  return auth;
-}
 
 function encodeCursor(createdAt: Date, id: string) {
   return Buffer.from(JSON.stringify([createdAt.toISOString(), id])).toString(

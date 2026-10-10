@@ -149,20 +149,26 @@ export type WorldContentListQuery = {
   type?: WorldContentType;
   tags?: string[];
   q?: string;
+  relatedTo?: string;
 };
 
-function listQueryString(query: WorldContentListQuery): string {
+export function worldContentListQueryString(
+  query: WorldContentListQuery,
+): string {
   const params = new URLSearchParams();
   if (query.type) params.set("type", query.type);
   if (query.tags && query.tags.length > 0)
     params.set("tags", query.tags.join(","));
   if (query.q) params.set("q", query.q);
+  if (query.relatedTo) params.set("relatedTo", query.relatedTo);
   const qs = params.toString();
   return qs ? `?${qs}` : "";
 }
 
 export const fetchWorldContentList = (query: WorldContentListQuery = {}) =>
-  api<WorldContentDto[]>(`/api/world-content${listQueryString(query)}`);
+  api<WorldContentDto[]>(
+    `/api/world-content${worldContentListQueryString(query)}`,
+  );
 
 export const fetchWorldContentDetail = (id: string) =>
   api<WorldContentDto>(`/api/world-content/${encodeURIComponent(id)}`);
@@ -179,7 +185,9 @@ export const fetchWorldContentDetail = (id: string) =>
 export const fetchWorldContentPlayerList = (
   query: WorldContentListQuery = {},
 ) =>
-  api<WorldContentPlayerDto[]>(`/api/world-content${listQueryString(query)}`);
+  api<WorldContentPlayerDto[]>(
+    `/api/world-content${worldContentListQueryString(query)}`,
+  );
 
 export const fetchWorldContentPlayerDetail = (id: string) =>
   api<WorldContentPlayerDto>(`/api/world-content/${encodeURIComponent(id)}`);
@@ -227,14 +235,28 @@ export type UpdateWorldContentInput = {
   coverAssetId?: string | null;
 };
 
+export type UpdateWorldContentResult = WorldContentDto | { duplicate: true };
+
 export const updateWorldContent = (
   id: string,
   input: UpdateWorldContentInput,
+  actionId: string = crypto.randomUUID(),
 ) =>
-  api<WorldContentDto>(`/api/world-content/${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    body: JSON.stringify({ ...input, actionId: crypto.randomUUID() }),
-  });
+  api<UpdateWorldContentResult>(
+    `/api/world-content/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ ...input, actionId }),
+    },
+  );
+
+export const isDuplicateWorldContentUpdate = (
+  result: UpdateWorldContentResult,
+): result is { duplicate: true } =>
+  typeof result === "object" &&
+  result !== null &&
+  "duplicate" in result &&
+  result.duplicate === true;
 
 export const transitionWorldContentLifecycle = (
   id: string,

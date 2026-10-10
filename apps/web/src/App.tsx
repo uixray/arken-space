@@ -20,6 +20,7 @@ import type {
   StoryPostAdminDto,
   StoryPostDto,
   TokenDto,
+  AudioPurpose,
 } from "@arken/contracts";
 import { api, ApiError } from "./api";
 import { mergeTokenPlacementUpdate } from "./token-projection";
@@ -32,6 +33,7 @@ import {
   workspaceReturnTarget,
 } from "./WorkspaceNav";
 import { MusicBar } from "./MusicBar";
+import { SoundpadWorkspace } from "./SoundpadWorkspace";
 import { AppModals } from "./AppModals";
 import { TokenTray } from "./TokenTray";
 import { CompactMenuSurface } from "./ui/CompactMenuSurface";
@@ -56,7 +58,7 @@ import {
 import { useMutationRunners } from "./use-mutation-runners";
 import { useSceneActions } from "./use-scene-actions";
 import { useWorldMapActions } from "./use-world-map-actions";
-import { useLatestRef } from "./use-latest-ref";
+import { useLatestCallback, useLatestRef } from "./use-latest-ref";
 import { useTokenDefinitionActions } from "./use-token-definition-actions";
 import { OptimisticTokenMutations } from "./optimistic-token-mutations";
 import {
@@ -67,33 +69,28 @@ import { useChatActions } from "./use-chat-actions";
 import { useAccessActions } from "./use-access-actions";
 import { useCatalogActions } from "./use-catalog-actions";
 import { useStatLayoutActions } from "./use-stat-layout-actions";
-import { useInitiativeActions } from "./use-initiative-actions";
+import {
+  createBattleZoneRecruitHandler,
+  useInitiativeActions,
+} from "./use-initiative-actions";
 import { CompactNavigation } from "./CompactNavigation";
 import {
   useCompactNavigation,
   type CompactSurface,
 } from "./ui/useCompactNavigation";
 import { MapToolbar } from "./MapToolbar";
+import { type TerrainStampSettings } from "./renderers/TerrainStampControls";
 import { GamePauseOverlay } from "./GamePauseOverlay";
 import { useChatHistoryActions } from "./use-chat-history-actions";
 import { useStoryActions } from "./use-story-actions";
 import { usePlayerRequestActions } from "./use-player-request-actions";
 import { useAssetActions } from "./use-asset-actions";
-import { CampaignActionsContext } from "./campaign-actions-context";
+import {
+  CampaignActionsContext,
+  useCampaignActionsValue,
+} from "./campaign-actions-context";
 import type { MapTool } from "./renderers/map-interaction";
-import {
-  buildCharacterCounterPatch,
-  isCharacterCounterPatchNoop,
-  shouldRetryCharacterCounterConflict,
-  type CharacterCounterMutationIntent,
-  type CharacterCounterPatch,
-} from "./character-counter-mutation";
 import type { RollMode } from "./RollModeControl";
-import {
-  applyCharacterMutationToSnapshot,
-  mergeCharacterMutationResponse,
-  reconcileGameSnapshot,
-} from "./character-mutation";
 import {
   readSidebarCollapsed,
   writeSidebarCollapsed,
@@ -109,6 +106,7 @@ import {
 import { usePlayerThemeRuntime } from "./design-system/player-theme-runtime-context";
 import { usePlayerThemePreference } from "./design-system/usePlayerThemePreference";
 import { patchPersonalThemePreference } from "./design-system/personal-theme-api";
+import { useCharacterActions } from "./use-character-actions";
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
     default: module.Orthographic2DRenderer,
@@ -126,6 +124,7 @@ type WorkspaceDestination =
   | "operator-feedback"
   | "player-requests"
   | "world-encyclopedia"
+  | "spell-schools"
   | "world-codex";
 
 function replacePersonalTheme(
@@ -245,6 +244,12 @@ export function App() {
     Array<{ membershipId: string; online: boolean }>
   >([]);
   const [tool, setTool] = useState<MapTool>("PAN");
+  const [stampSettings, setStampSettings] = useState<TerrainStampSettings>({
+    assetKey: "forest",
+    size: 160,
+    rotation: 0,
+    layer: "PUBLIC",
+  });
   // UIX-313: shared brush radius (world units) for the circular fog brush,
   // reused for both FOG_BRUSH and COVER_BRUSH.
   const [fogBrushRadius, setFogBrushRadius] = useState(40);
@@ -296,6 +301,9 @@ export function App() {
   const [previewSnapshot, setPreviewSnapshot] = useState<GameSnapshot | null>(
     null,
   );
+  // Read the latest preview-aware campaign source without changing the
+  // function-only action context when a preview is entered or exited.
+  const campaignViewRef = useLatestRef(previewSnapshot ?? snapshot);
   const [error, setError] = useState("");
   const [sceneDialogRequest, setSceneDialogRequest] = useState(0);
   const [requestedSceneEditId, setRequestedSceneEditId] = useState<
@@ -324,6 +332,8 @@ export function App() {
     previousSurface,
   });
   const [compactSectionsOpen, setCompactSectionsOpen] = useState(false);
+  const [headerSoundpadTarget, setHeaderSoundpadTarget] =
+    useState<HTMLElement | null>(null);
   const [headerMusicTarget, setHeaderMusicTarget] =
     useState<HTMLElement | null>(null);
   const [menuMusicTarget, setMenuMusicTarget] = useState<HTMLElement | null>(
@@ -427,6 +437,9 @@ export function App() {
     handleSidebarResizeMove,
     handleSidebarResizeEnd,
   } = useSidebarResize(sidebarCampaignId, sidebarMembershipId);
+  const stableHandleSidebarResizeEnd = useLatestCallback(
+    handleSidebarResizeEnd,
+  );
   useEffect(() => {
     if (!sidebarCampaignId || !sidebarMembershipId) return;
     setSidebarCollapsed(
@@ -449,6 +462,9 @@ export function App() {
       );
     },
     [snapshot],
+  );
+  const stableHandleSidebarCollapsedChange = useLatestCallback(
+    handleSidebarCollapsedChange,
   );
   const handleRequestedChatMessage = useCallback(
     () => setRequestedChatMessageId(null),
@@ -490,6 +506,7 @@ export function App() {
   const { socket, setSocket, connection, setConnection } =
     useGameSocketSubscriptions({
       campaignId: campaignId ?? null,
+      initialSnapshotVersion: snapshot?.snapshotVersion,
       authRequired,
       ownMembershipId: snapshot?.me.id,
       viewedSceneId,
@@ -669,26 +686,28 @@ export function App() {
     }
   };
 
-  const submitRoll = async (
-    formula: string,
-    label?: string,
-    visibility = "PUBLIC" as MessageVisibility,
-    characterId: string | null = null,
-    rollMode: RollMode = "NORMAL",
-  ) =>
-    run(() =>
-      api("/api/dice", {
-        method: "POST",
-        body: JSON.stringify({
-          actionId: crypto.randomUUID(),
-          formula,
-          label,
-          visibility,
-          characterId,
-          rollMode,
+  const submitRoll = useLatestCallback(
+    async (
+      formula: string,
+      label?: string,
+      visibility = "PUBLIC" as MessageVisibility,
+      characterId: string | null = null,
+      rollMode: RollMode = "NORMAL",
+    ) =>
+      run(() =>
+        api("/api/dice", {
+          method: "POST",
+          body: JSON.stringify({
+            actionId: crypto.randomUUID(),
+            formula,
+            label,
+            visibility,
+            characterId,
+            rollMode,
+          }),
         }),
-      }),
-    );
+      ),
+  );
 
   /*
    * UIX-398 — the character domain is the first that genuinely reads live
@@ -768,254 +787,12 @@ export function App() {
     [snapshotRef, tokenMutations],
   );
 
-  const replaceCharacterControllers = useCallback(
-    async (
-      characterId: string,
-      revision: number,
-      controllerMembershipIds: string[],
-    ) => {
-      try {
-        const response = await api<{
-          ok: true;
-          controllerMembershipIds: string[];
-          revision: number;
-        }>(`/api/characters/${characterId}/controllers`, {
-          method: "PUT",
-          body: JSON.stringify({
-            actionId: crypto.randomUUID(),
-            revision,
-            controllerMembershipIds,
-          }),
-        });
-        setSnapshot((current) =>
-          current
-            ? {
-                ...current,
-                characters: current.characters.map((character) =>
-                  character.id === characterId &&
-                  character.revision <= response.revision
-                    ? {
-                        ...character,
-                        controllerMembershipIds:
-                          response.controllerMembershipIds,
-                        revision: response.revision,
-                      }
-                    : character,
-                ),
-              }
-            : current,
-        );
-      } catch (reason) {
-        const canonical = await api<GameSnapshot>("/api/bootstrap");
-        setSnapshot((current) => reconcileGameSnapshot(current, canonical));
-        throw reason;
-      }
-    },
-    [],
-  );
-
-  const patchCharacter = useCallback(
-    (id: string, patch: Partial<import("@arken/contracts").CharacterDto>) => {
-      const requestedRevision =
-        patch.revision ??
-        snapshotRef.current?.characters.find((character) => character.id === id)
-          ?.revision;
-      setSnapshot((current) =>
-        current
-          ? {
-              ...current,
-              characters: current.characters.map((character) =>
-                character.id === id
-                  ? {
-                      ...character,
-                      ...patch,
-                      stats: patch.stats
-                        ? { ...character.stats, ...patch.stats }
-                        : character.stats,
-                    }
-                  : character,
-              ),
-            }
-          : current,
-      );
-      const previousQueue = characterMutationQueuesRef.current.get(id);
-      const previous = previousQueue ?? Promise.resolve(undefined);
-      const operation = previous.then(async (previousCharacter) => {
-        const { revision: _revision, ...updates } = patch;
-        // An existing tail resolving undefined confirms canonical absence;
-        // only a new queue may read the current snapshot as its initial base.
-        const base = previousQueue
-          ? previousCharacter
-          : snapshotRef.current?.characters.find(
-              (character) => character.id === id,
-            );
-        if (!base)
-          throw new Error(
-            "Персонаж больше недоступен. Обновите список персонажей.",
-          );
-        const response = await api<unknown>(`/api/characters/${id}`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            ...updates,
-            actionId: crypto.randomUUID(),
-            revision: base.revision ?? requestedRevision,
-          }),
-        });
-        let updated = mergeCharacterMutationResponse(base, response);
-        if (!updated) {
-          const refreshed = await api<GameSnapshot>("/api/bootstrap");
-          setSnapshot((current) => reconcileGameSnapshot(current, refreshed));
-          updated =
-            refreshed.characters.find((character) => character.id === id) ??
-            null;
-        }
-        if (!updated)
-          throw new Error(
-            "Персонаж больше недоступен. Обновите список персонажей.",
-          );
-        setSnapshot((current) =>
-          applyCharacterMutationToSnapshot(current, updated),
-        );
-        return updated;
-      });
-      // Keep the queue tail fulfilled after a failed mutation. Later local edits
-      // then rebase on the freshly loaded canonical revision instead of being
-      // skipped because an earlier promise rejected.
-      const queueTail = operation
-        .catch(async (reason) => {
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "Не удалось сохранить персонажа",
-          );
-          const canonical = await api<GameSnapshot>("/api/bootstrap");
-          setSnapshot(canonical);
-          return canonical.characters.find((character) => character.id === id);
-        })
-        .finally(() => {
-          if (characterMutationQueuesRef.current.get(id) === queueTail)
-            characterMutationQueuesRef.current.delete(id);
-        });
-      characterMutationQueuesRef.current.set(id, queueTail);
-      return operation
-        .then(() => undefined)
-        .catch(async (reason) => {
-          await queueTail;
-          throw reason;
-        });
-    },
-    [snapshotRef],
-  );
-
-  const updateCharacterCounters = (
-    characterId: string,
-    requestedRevision: number,
-    patch: CharacterCounterPatch,
-    intent?: CharacterCounterMutationIntent,
-  ) => {
-    const previous =
-      characterMutationQueuesRef.current.get(characterId) ??
-      Promise.resolve(
-        snapshotRef.current?.characters.find(
-          (character) => character.id === characterId,
-        ),
-      );
-    const operation = previous.then(async (queuedCharacter) => {
-      let canonical = queuedCharacter;
-      const submit = async (base: import("@arken/contracts").CharacterDto) => {
-        const nextPatch = buildCharacterCounterPatch(base, patch, intent);
-        if (isCharacterCounterPatchNoop(base, nextPatch)) return base;
-        const response = await api<unknown>(
-          `/api/characters/${characterId}/counters`,
-          {
-            method: "PATCH",
-            body: JSON.stringify({
-              ...nextPatch,
-              actionId: crypto.randomUUID(),
-              revision: base.revision,
-            }),
-          },
-        );
-        const updated = mergeCharacterMutationResponse(base, response);
-        if (updated) return updated;
-
-        // Older servers returned `{ duplicate: true }` for a successfully
-        // replayed request. Reconcile the canonical DTO rather than placing
-        // that placeholder in React state and tripping the error boundary.
-        const refreshed = await api<GameSnapshot>("/api/bootstrap");
-        setSnapshot((current) => reconcileGameSnapshot(current, refreshed));
-        const replayed = refreshed.characters.find(
-          (character) => character.id === characterId,
-        );
-        if (!replayed)
-          throw new Error("Персонаж больше не доступен. Обновите страницу.");
-        return replayed;
-      };
-      if (!canonical) {
-        const refreshed = await api<GameSnapshot>("/api/bootstrap");
-        setSnapshot((current) => reconcileGameSnapshot(current, refreshed));
-        canonical = refreshed.characters.find(
-          (character) => character.id === characterId,
-        );
-      }
-      if (!canonical)
-        throw new Error("Персонаж больше не доступен. Обновите страницу.");
-      try {
-        const updated = await submit({
-          ...canonical,
-          revision: canonical.revision ?? requestedRevision,
-        });
-        setSnapshot((current) =>
-          applyCharacterMutationToSnapshot(current, updated),
-        );
-        return updated;
-      } catch (reason) {
-        if (
-          !(reason instanceof ApiError) ||
-          reason.code !== "CHARACTER_CONFLICT"
-        )
-          throw reason;
-        const refreshed = await api<GameSnapshot>("/api/bootstrap");
-        setSnapshot((current) => reconcileGameSnapshot(current, refreshed));
-        const freshCharacter = refreshed.characters.find(
-          (character) => character.id === characterId,
-        );
-        if (!freshCharacter) throw reason;
-        const freshPatch = buildCharacterCounterPatch(
-          freshCharacter,
-          patch,
-          intent,
-        );
-        if (isCharacterCounterPatchNoop(freshCharacter, freshPatch))
-          return freshCharacter;
-        if (!shouldRetryCharacterCounterConflict(intent, patch)) throw reason;
-        const updated = await submit(freshCharacter);
-        setSnapshot((current) =>
-          applyCharacterMutationToSnapshot(current, updated),
-        );
-        return updated;
-      }
-    });
-    const queueTail = operation
-      .catch(async () => {
-        const refreshed = await api<GameSnapshot>("/api/bootstrap");
-        setSnapshot((current) => reconcileGameSnapshot(current, refreshed));
-        return refreshed.characters.find(
-          (character) => character.id === characterId,
-        );
-      })
-      .finally(() => {
-        if (characterMutationQueuesRef.current.get(characterId) === queueTail)
-          characterMutationQueuesRef.current.delete(characterId);
-      });
-    characterMutationQueuesRef.current.set(characterId, queueTail);
-    return operation
-      .then(() => undefined)
-      .catch(async (reason) => {
-        await queueTail;
-        throw reason;
-      });
-  };
+  const characterActions = useCharacterActions({
+    snapshotRef,
+    queuesRef: characterMutationQueuesRef,
+    setSnapshot,
+    setError,
+  });
 
   const renderedActiveSceneId = (previewSnapshot ?? snapshot)?.scenes.find(
     (scene) => scene.active,
@@ -1105,41 +882,105 @@ export function App() {
     activeChatThreadIdRef,
   });
 
-  /*
-   * UIX-398 step B. Every domain object above is stable, so this one is too —
-   * which is what makes delivering them by context safe. Context has no
-   * selective subscription, so a value that changed would re-render every
-   * consumer on every change; see `campaign-actions-context.tsx`, and the
-   * test that rejects any non-function smuggled in here.
-   */
-  const campaignActions = useMemo(
-    () => ({
-      scene: sceneActions,
-      worldMap: worldMapActions,
-      token: tokenActions,
-      chat: chatActions,
-      access: accessActions,
-      catalog: catalogActions,
-      story: storyActions,
-      playerRequest: playerRequestActions,
-      asset: assetActions,
-      statLayout: statLayoutActions,
-      chatHistory: chatHistoryActions,
-    }),
-    [
-      sceneActions,
-      worldMapActions,
-      tokenActions,
-      chatActions,
-      accessActions,
-      catalogActions,
-      storyActions,
-      playerRequestActions,
-      assetActions,
-      statLayoutActions,
-      chatHistoryActions,
-    ],
+  const handleCreateCharacter = useCallback(
+    async (
+      name: string,
+      template?: import("./character-workspace-state").CharacterTemplateFields,
+    ) =>
+      run(
+        () =>
+          api("/api/characters", {
+            method: "POST",
+            body: JSON.stringify({
+              name,
+              actionId: crypto.randomUUID(),
+              ...(template ? { template } : {}),
+            }),
+          }),
+        true,
+      ),
+    [run],
   );
+
+  const handlePreviewPlayer = useCallback(async (membershipId: string) => {
+    const playerView = await api<GameSnapshot>(`/api/preview/${membershipId}`);
+    setTool("PAN");
+    setPreviewSnapshot(playerView);
+  }, []);
+
+  const handleCampaignClock = useCallback(
+    (
+      command:
+        | "ADVANCE_DAY"
+        | "LONG_REST"
+        | "START_BATTLE"
+        | "END_BATTLE"
+        | "RESET_CLOCK",
+      revision: number,
+    ) =>
+      run(
+        () =>
+          api("/api/campaign/clock", {
+            method: "POST",
+            body: JSON.stringify({
+              actionId: crypto.randomUUID(),
+              command,
+              revision,
+            }),
+          }),
+        true,
+      ),
+    [run],
+  );
+
+  const handleRecruitFromBattleZone = useLatestCallback(
+    () =>
+      createBattleZoneRecruitHandler(
+        () => campaignViewRef.current,
+        run,
+        initiativeActions.onRecruitFromBattleZone,
+      )(),
+  );
+
+  /*
+   * UIX-398 step B. Group objects may be rebuilt in this assembly, so the
+   * production hook memoizes by the flattened command functions rather than
+   * those containers. Context has no selective subscription; its invariant
+   * and rerender behavior are covered by campaign-actions-context.test.tsx.
+   */
+  const campaignActions = useCampaignActionsValue({
+    scene: sceneActions,
+    worldMap: worldMapActions,
+    token: tokenActions,
+    chat: chatActions,
+    access: accessActions,
+    catalog: catalogActions,
+    story: storyActions,
+    playerRequest: playerRequestActions,
+    asset: assetActions,
+    statLayout: statLayoutActions,
+    chatHistory: chatHistoryActions,
+    character: {
+      ...characterActions,
+      onCreateCharacter: handleCreateCharacter,
+    },
+    initiative: {
+      ...initiativeActions,
+      onRecruitFromBattleZone: handleRecruitFromBattleZone,
+    },
+    dice: { onRoll: submitRoll },
+    campaign: { onCampaignClock: handleCampaignClock },
+    player: { onPreviewPlayer: handlePreviewPlayer },
+    sidebar: {
+      onRequestedChatMessageHandled: handleRequestedChatMessage,
+      onChatVisibilityChange: handleChatVisibilityChange,
+      onCollapsedChange: stableHandleSidebarCollapsedChange,
+      onResizeHandleDown: handleSidebarResizeStart,
+      onResizeHandleMove: handleSidebarResizeMove,
+      onResizeHandleUp: stableHandleSidebarResizeEnd,
+      onWorkspaceChange: handleWorkspaceChange,
+    },
+  });
 
   const viewSnapshot = useMemo(() => {
     // Reproject optimistic tokens whenever the external mutation store changes.
@@ -1337,6 +1178,73 @@ export function App() {
       return created;
     },
     [activeScene?.id, run],
+  );
+
+  const handleStampCreate = useCallback(
+    async (stamp: {
+      kind: "STAMP";
+      assetKey: "forest" | "mountains" | "clouds";
+      packId: "builtin-terrain-v1";
+      size: number;
+      rotation: number;
+      layer: "PUBLIC" | "GM";
+      x: number;
+      y: number;
+    }) => {
+      if (!activeScene || snapshot?.me.role !== "GM") return undefined;
+      const requestedSceneId = activeScene.id;
+      const requestedCampaignId = snapshot.campaign.id;
+      const requestedSnapshotVersion = snapshot.snapshotVersion;
+      let created: import("@arken/contracts").DrawingDto | undefined;
+      await run(async () => {
+        created = await api<import("@arken/contracts").DrawingDto>(
+          "/api/drawings",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              actionId: crypto.randomUUID(),
+              sceneId: requestedSceneId,
+              ...stamp,
+            }),
+          },
+        );
+      });
+      if (created) {
+        const reconciled = created;
+        setSnapshot((current) => {
+          // The API acknowledgement can arrive after a newer authoritative
+          // canvas snapshot has already created/deleted the drawing. Do not
+          // resurrect an item absent from that newer projection, nor append an
+          // old-scene result into the currently viewed scene/campaign.
+          if (
+            !current ||
+            current.campaign.id !== requestedCampaignId ||
+            current.snapshotVersion !== requestedSnapshotVersion ||
+            current.me.role !== "GM" ||
+            activeSceneRef.current?.id !== requestedSceneId ||
+            reconciled.sceneId !== requestedSceneId
+          )
+            return current;
+          if (
+            (current.drawings ?? []).some((item) => item.id === reconciled.id)
+          )
+            return current;
+          return {
+            ...current,
+            drawings: [...(current.drawings ?? []), reconciled],
+          };
+        });
+      }
+      return created;
+    },
+    [
+      activeScene,
+      activeSceneRef,
+      run,
+      snapshot?.campaign.id,
+      snapshot?.me.role,
+      snapshot?.snapshotVersion,
+    ],
   );
 
   const handlePing = useCallback(
@@ -1655,64 +1563,6 @@ export function App() {
     [run],
   );
 
-  const battleZone = viewSnapshot?.campaign.battleZone;
-  const campaignRevision = viewSnapshot?.campaign.revision;
-  const handleRecruitFromBattleZone = useCallback(() => {
-    if (!battleZone || campaignRevision === undefined) return;
-    void run(() => initiativeActions.onRecruitFromBattleZone(campaignRevision));
-  }, [battleZone, campaignRevision, initiativeActions, run]);
-
-  const handleCreateCharacter = useCallback(
-    async (
-      name: string,
-      template?: import("./character-workspace-state").CharacterTemplateFields,
-    ) =>
-      run(
-        () =>
-          api("/api/characters", {
-            method: "POST",
-            body: JSON.stringify({
-              name,
-              actionId: crypto.randomUUID(),
-              ...(template ? { template } : {}),
-            }),
-          }),
-        true,
-      ),
-    [run],
-  );
-
-  const handlePreviewPlayer = useCallback(async (membershipId: string) => {
-    const playerView = await api<GameSnapshot>(`/api/preview/${membershipId}`);
-    setTool("PAN");
-    setPreviewSnapshot(playerView);
-  }, []);
-
-  const handleCampaignClock = useCallback(
-    (
-      command:
-        | "ADVANCE_DAY"
-        | "LONG_REST"
-        | "START_BATTLE"
-        | "END_BATTLE"
-        | "RESET_CLOCK",
-      revision: number,
-    ) =>
-      run(
-        () =>
-          api("/api/campaign/clock", {
-            method: "POST",
-            body: JSON.stringify({
-              actionId: crypto.randomUUID(),
-              command,
-              revision,
-            }),
-          }),
-        true,
-      ),
-    [run],
-  );
-
   const handlePublishActiveScene = useCallback(() => {
     if (!activeScene) return;
     if ([broadcastScene?.id, recentlyPublishedSceneId].includes(activeScene.id))
@@ -1785,7 +1635,8 @@ export function App() {
   }, [themePreference]);
 
   const handleUploadAudio = useCallback(
-    (file: File, kind: "AUDIO") => assetActions.uploadAsset(file, kind),
+    (file: File, kind: "AUDIO", options?: { audioPurpose?: AudioPurpose }) =>
+      assetActions.uploadAsset(file, kind, options),
     [assetActions],
   );
 
@@ -1842,6 +1693,7 @@ export function App() {
             workspace={workspace}
             personalTheme={personalTheme}
             onMusicControlsTarget={setHeaderMusicTarget}
+            onSoundpadLauncherTarget={setHeaderSoundpadTarget}
             onOpenCompactSections={() => setCompactSectionsOpen(true)}
             onSelectScene={setViewedSceneId}
             onRequestEditScene={(sceneId) => {
@@ -2009,6 +1861,8 @@ export function App() {
                   gmFogVisible={gmFogVisible}
                   onGmFogVisibleChange={setGmFogVisible}
                   gmGridVisible={gmGridVisible}
+                  stampSettings={stampSettings}
+                  onStampSettingsChange={setStampSettings}
                   onGmGridVisibleChange={(visible) => {
                     setGmGridVisible(visible);
                     localStorage.setItem(
@@ -2044,7 +1898,9 @@ export function App() {
                     membershipId={viewSnapshot.me.id}
                     onSelectionChange={setSelectedTokenIds}
                     socket={snapshot.campaign.paused ? null : socket}
-                    tool={snapshot.campaign.paused ? "PAN" : tool}
+                    tool={
+                      snapshot.campaign.paused || previewSnapshot ? "PAN" : tool
+                    }
                     onToolSelect={setTool}
                     pings={activePings}
                     rulers={activeRulers}
@@ -2063,6 +1919,10 @@ export function App() {
                     onCanvasPatch={handleCanvasPatch}
                     onFogCreate={handleFogCreate}
                     onDrawingCreate={handleDrawingCreate}
+                    onStampCreate={
+                      previewSnapshot ? undefined : handleStampCreate
+                    }
+                    stampTool={stampSettings}
                     onPing={handlePing}
                     onPlaceTokenDefinition={async (definitionId, point) => {
                       void placeOptimistically({
@@ -2168,42 +2028,23 @@ export function App() {
                   compactNavigation.characterVisited
                 }
                 selectedTokenIds={selectedTokenIds}
-                onUpdateInitiative={initiativeActions.onUpdateInitiative}
-                onSetOwnInitiative={initiativeActions.onSetOwnInitiative}
-                onRollInitiative={initiativeActions.onRollInitiative}
-                onRecruitFromBattleZone={
-                  viewSnapshot.campaign.battleZone
-                    ? handleRecruitFromBattleZone
-                    : undefined
-                }
+                canRecruitFromBattleZone={Boolean(
+                  viewSnapshot.campaign.battleZone,
+                )}
                 snapshot={snapshot}
                 requestedCharacterId={requestedCharacterId}
                 socket={socket}
                 presence={presence}
                 requestedChatMessageId={requestedChatMessageId}
-                onRequestedChatMessageHandled={handleRequestedChatMessage}
-                onChatVisibilityChange={handleChatVisibilityChange}
                 collapsed={compact ? false : sidebarCollapsed}
-                onCollapsedChange={handleSidebarCollapsedChange}
-                onResizeHandleDown={handleSidebarResizeStart}
-                onResizeHandleMove={handleSidebarResizeMove}
-                onResizeHandleUp={handleSidebarResizeEnd}
                 workspaceSidebarWidth={sidebarWidth}
                 workspace={workspace}
                 operatorFeedbackAllowed={operatorFeedbackAllowed}
-                onWorkspaceChange={handleWorkspaceChange}
-                onPatchCharacter={patchCharacter}
-                onReplaceCharacterControllers={replaceCharacterControllers}
                 storyPosts={storyPosts}
                 storyNextCursor={storyNextCursor}
-                onRoll={submitRoll}
-                onCreateCharacter={handleCreateCharacter}
                 sceneDialogRequest={sceneDialogRequest}
                 requestedSceneEditId={requestedSceneEditId}
                 viewedSceneId={activeScene?.id ?? null}
-                onPreviewPlayer={handlePreviewPlayer}
-                onUpdateCounters={updateCharacterCounters}
-                onCampaignClock={handleCampaignClock}
               />
             )}
             {compact && compactSurface === "menu" && (
@@ -2224,6 +2065,7 @@ export function App() {
           </div>
           <MusicBar
             audio={snapshot.audio}
+            audioTracks={snapshot.audioTracks}
             assets={snapshot.assets}
             role={snapshot.me.role}
             socket={socket}
@@ -2234,6 +2076,18 @@ export function App() {
                 : headerMusicTarget
             }
           />
+          {!previewSnapshot && snapshot && (
+            <SoundpadWorkspace
+              campaignId={snapshot.campaign.id}
+              membershipId={snapshot.me.id}
+              role={snapshot.me.role}
+              assets={snapshot.assets}
+              socket={socket}
+              onUpload={handleUploadAudio}
+              onRefreshSnapshot={load}
+              launcherTarget={headerSoundpadTarget}
+            />
+          )}
           {compact && (
             <CompactNavigation
               active={compactSurface}

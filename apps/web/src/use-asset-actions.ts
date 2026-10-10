@@ -3,6 +3,7 @@ import type {
   AssetDto,
   AssetKind,
   AssetUsageResponseDto,
+  AudioPurpose,
   DeleteAssetResponseDto,
 } from "@arken/contracts";
 import { api } from "./api";
@@ -28,7 +29,7 @@ export interface AssetActions {
     intent: AssetReplacementIntent,
   ) => Promise<AssetReplacementResult>;
   refreshAssets: () => Promise<void>;
-  uploadAsset: (file: File, kind: AssetKind) => Promise<AssetDto>;
+  uploadAsset: (file: File, kind: AssetKind, options?: { audioPurpose?: AudioPurpose }) => Promise<AssetDto>;
   getAssetUsage: (assetId: string) => Promise<AssetUsageResponseDto>;
   deleteAsset: (assetId: string) => Promise<DeleteAssetResponseDto>;
   generateTokenImage: (
@@ -54,10 +55,13 @@ export function useAssetActions(dependencies: {
     () => ({
       replaceAsset: commitAssetReplacement,
       refreshAssets: load,
-      uploadAsset: async (file, kind) => {
+      uploadAsset: async (file, kind, options) => {
         const form = new FormData();
         form.append("file", file);
-        const asset = await api<AssetDto>(`/api/assets?kind=${kind}`, {
+        const purposeQuery = kind === "AUDIO" && options?.audioPurpose
+          ? `&audioPurpose=${options.audioPurpose}`
+          : "";
+        const asset = await api<AssetDto>(`/api/assets?kind=${kind}${purposeQuery}`, {
           method: "POST",
           headers: { "x-action-id": crypto.randomUUID() },
           body: form,

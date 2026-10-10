@@ -1,5 +1,13 @@
 import { z } from "zod";
+import {
+  soundpadTriggerSchema,
+  type SoundpadTriggeredEvent,
+} from "./soundpad.js";
+export * from "./soundpad.js";
+export * from "./account-auth.js";
 export * from "./fog-geometry.js";
+export * from "./story-attachment-lifecycle.js";
+export * from "./sticker-pack-admin.js";
 export * from "./fog-visibility.js";
 export * from "./spell-schools.js";
 import { fogGeometrySchema } from "./fog-geometry.js";
@@ -26,6 +34,7 @@ export const assetKindSchema = z.enum([
   "IMAGE",
   "AUDIO",
 ]);
+export const audioPurposeSchema = z.enum(["MUSIC", "SOUND_EFFECT", "BOTH"]);
 export const tokenFramePresetSchema = z.enum([
   "NONE",
   "BRONZE",
@@ -106,6 +115,7 @@ export const worldMapLocationVisibilitySchema = z.enum([
 export type Role = z.infer<typeof roleSchema>;
 export type Projection = z.infer<typeof projectionSchema>;
 export type AssetKind = z.infer<typeof assetKindSchema>;
+export type AudioPurpose = z.infer<typeof audioPurposeSchema>;
 export type TokenFramePreset = z.infer<typeof tokenFramePresetSchema>;
 export type MessageVisibility = z.infer<typeof messageVisibilitySchema>;
 export type ChatStream = z.infer<typeof chatStreamSchema>;
@@ -599,6 +609,13 @@ export const abilityUsesSchema = z
 export const entryDataSchema = z
   .object({
     rollActions: z.array(rollActionSchema).max(20).optional(),
+    /** Optional no-roll ability activation; costs are charged without a roll. */
+    activation: z
+      .object({
+        consumeUse: z.boolean().default(false),
+        cost: resourceCostSchema.optional(),
+      })
+      .optional(),
     values: z.record(z.string(), z.number().finite()).optional(),
     uses: abilityUsesSchema.optional(),
     notes: z.string().max(10000).optional(),
@@ -621,6 +638,12 @@ export const entryDataSchema = z
           path: ["rollActions", index, "consumeUse"],
         });
     }
+    if (data.activation?.consumeUse && !data.uses)
+      context.addIssue({
+        code: "custom",
+        message: "activation consumeUse requires uses",
+        path: ["activation", "consumeUse"],
+      });
   });
 /**
  * UIX-424 — значения характеристик персонажа.
@@ -1320,15 +1343,31 @@ export const drawingPointsSchema = z
   .min(4)
   .max(4096)
   .refine((points) => points.length % 2 === 0, "points must be x/y pairs");
-export const createDrawingSchema = z.object({
-  actionId: actionIdSchema,
-  sceneId: z.string().uuid(),
-  points: drawingPointsSchema,
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  strokeWidth: z.number().finite().min(1).max(100).default(3).optional(),
-  x: z.number().finite().default(0),
-  y: z.number().finite().default(0),
-});
+export const createDrawingSchema = z
+  .object({
+    actionId: actionIdSchema,
+    sceneId: z.string().uuid(),
+    kind: z.literal("FREEHAND").optional(),
+    points: drawingPointsSchema,
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+    strokeWidth: z.number().finite().min(1).max(100).default(3).optional(),
+    x: z.number().finite().default(0),
+    y: z.number().finite().default(0),
+  })
+  .or(
+    z.object({
+      actionId: actionIdSchema,
+      sceneId: z.string().uuid(),
+      kind: z.literal("STAMP"),
+      assetKey: z.enum(["forest", "mountains", "clouds"]),
+      packId: z.literal("builtin-terrain-v1"),
+      size: z.number().finite().min(16).max(1024),
+      rotation: z.number().finite().min(-360).max(360),
+      layer: z.enum(["PUBLIC", "GM"]),
+      x: z.number().finite().min(-32768).max(32768),
+      y: z.number().finite().min(-32768).max(32768),
+    }),
+  );
 export const updateDrawingSchema = z.object({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),
@@ -1339,6 +1378,9 @@ export const updateDrawingSchema = z.object({
   strokeWidth: z.number().finite().min(1).max(100).optional(),
   x: z.number().finite().optional(),
   y: z.number().finite().optional(),
+  size: z.number().finite().min(16).max(1024).optional(),
+  rotation: z.number().finite().min(-360).max(360).optional(),
+  layer: z.enum(["PUBLIC", "GM"]).optional(),
 });
 export const drawingCommandSchema = z.object({
   actionId: actionIdSchema,
@@ -1738,6 +1780,19 @@ export type ChatAttachmentMetadata = z.infer<
   typeof chatAttachmentMetadataSchema
 >;
 
+/** Publish a campaign-visible character-gallery image as a durable chat copy. */
+export const createGalleryChatShareSchema = z
+  .object({
+    actionId: actionIdSchema,
+    characterMediaId: z.string().uuid(),
+    /** Omitted copies the gallery caption; null or empty explicitly posts without one. */
+    caption: z.string().trim().max(500).nullable().optional(),
+  })
+  .strict();
+export type CreateGalleryChatShare = z.infer<
+  typeof createGalleryChatShareSchema
+>;
+
 export const createOrGetDirectChatThreadSchema = z.object({
   participantMembershipId: z.string().uuid(),
 });
@@ -1873,6 +1928,7 @@ export const createWorldMapLocationSchema = z
   .object({
     actionId: actionIdSchema,
     mapId: z.string().uuid(),
+    canonicalLocationId: z.string().uuid().nullable().optional(),
     name: z.string().trim().min(1).max(120),
     kind: worldMapLocationKindSchema.default("OTHER"),
     /** Player-safe location-card text. */
@@ -1900,6 +1956,7 @@ export const updateWorldMapLocationSchema = z
     visibility: worldMapLocationVisibilitySchema.optional(),
     x: worldMapCoordinateSchema.optional(),
     y: worldMapCoordinateSchema.optional(),
+    canonicalLocationId: z.string().uuid().nullable().optional(),
   })
   .strict()
   .refine(
@@ -1910,7 +1967,8 @@ export const updateWorldMapLocationSchema = z
       command.gmNotes !== undefined ||
       command.visibility !== undefined ||
       command.x !== undefined ||
-      command.y !== undefined,
+      command.y !== undefined ||
+      command.canonicalLocationId !== undefined,
     "At least one location field is required",
   );
 export type UpdateWorldMapLocation = z.infer<
@@ -1970,6 +2028,22 @@ export const createStickerMessageSchema = z.union([
     .strict(),
   createStickerMessageBaseSchema
     .extend({ stream: z.enum(["TABLE", "STORY"]) })
+    .strict(),
+  z
+    .object({
+      actionId: actionIdSchema,
+      scope: z.literal("GLOBAL"),
+      globalStickerId: z.string().uuid(),
+      threadId: z.string().uuid(),
+    })
+    .strict(),
+  z
+    .object({
+      actionId: actionIdSchema,
+      scope: z.literal("GLOBAL"),
+      globalStickerId: z.string().uuid(),
+      stream: z.enum(["TABLE", "STORY"]),
+    })
     .strict(),
 ]);
 export type CreateStickerMessage = z.infer<typeof createStickerMessageSchema>;
@@ -2111,7 +2185,7 @@ const entryCardRequestBaseSchema = z.object({
 });
 export const entryCardExecuteRequestSchema = entryCardRequestBaseSchema.extend({
   mode: z.literal("EXECUTE").optional(),
-  rollActionId: z.string().min(1).max(40),
+  rollActionId: z.string().min(1).max(40).optional(),
 });
 export const entryCardShareRequestSchema = entryCardRequestBaseSchema.extend({
   mode: z.literal("SHARE"),
@@ -2202,6 +2276,8 @@ export const rechargeEntryCommandSchema = z.object({
 export interface AssetDto {
   id: string;
   kind: AssetKind;
+  /** Null for non-audio assets; legacy audio assets are backfilled to MUSIC. */
+  audioPurpose?: AudioPurpose | null;
   name: string;
   mimeType: string;
   sizeBytes: number;
@@ -2215,13 +2291,16 @@ export interface AssetDto {
 export const assetUsageKindSchema = z.enum([
   "SCENE_BACKGROUND",
   "TOKEN_DEFINITION",
+  "TOKEN_INSTANCE",
   "CHARACTER_PORTRAIT",
   "CHARACTER_RESOURCE",
   "CHARACTER_MEDIA",
   "WORLD_MAP_BACKGROUND",
   "AUDIO_TRACK",
+  "CAMPAIGN_SOUND",
   "WORLD_CONTENT_COVER",
   "WORLD_CONTENT_MEDIA",
+  "WORLD_CONTENT_INSTANCE_PORTRAIT",
   "GENERATED_TOKEN_SOURCE",
 ]);
 export type AssetUsageKind = z.infer<typeof assetUsageKindSchema>;
@@ -2433,6 +2512,14 @@ export interface DrawingDto {
   x: number;
   y: number;
   revision: number;
+  kind?: "FREEHAND" | "STAMP";
+  assetKey?: "forest" | "mountains" | "clouds";
+  packId?: "builtin-terrain-v1";
+  size?: number;
+  rotation?: number;
+  layer?: "PUBLIC" | "GM";
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /** Map rows are returned only after server-side lifecycle and visibility filtering. */
@@ -2451,6 +2538,8 @@ export interface WorldMapDto {
 export interface WorldMapLocationDto {
   id: string;
   mapId: string;
+  /** Omitted when the associated canonical location is not visible to this viewer. */
+  canonicalLocationId?: string | null;
   name: string;
   kind: WorldMapLocationKind;
   /** Player-safe card text. */
@@ -2497,13 +2586,25 @@ export interface StickerDto {
 /** Entitlement and consent rows are intentionally not exposed. */
 export interface StickerPackDto {
   id: string;
+  /** Absent on older campaign DTOs; global catalog entries are explicitly tagged. */
+  scope?: "CAMPAIGN" | "GLOBAL_PUBLIC";
   name: string;
-  subject: StickerPackSubject;
+  subject: StickerPackSubject | "COMMON";
   subjectCharacterId: string | null;
   subjectMembershipId: string | null;
   subjectLabel: string | null;
   lifecycle: "ACTIVE" | "DEPRECATED";
   canSend: boolean;
+  stickers: StickerDto[];
+}
+
+export interface GlobalStickerPackDto {
+  id: string;
+  scope: "GLOBAL_PUBLIC";
+  name: string;
+  subject: "COMMON";
+  lifecycle: "ACTIVE" | "DEPRECATED";
+  canSend: true;
   stickers: StickerDto[];
 }
 
@@ -2582,6 +2683,7 @@ export interface ChatMessageDto {
   /** Immutable v1 skill/ability card stored with the message, when present. */
   skillCard?: SkillCardSnapshot | null;
   stickerId?: string | null;
+  globalStickerId?: string | null;
   stickerPresentation?: StickerPresentation | null;
   attachments?: ChatAttachmentMetadata[];
   createdAt: string;
@@ -2957,6 +3059,11 @@ export interface ServerToClientEvents {
   "audio:track:state": (event: EventEnvelope<AudioTrackDto>) => void;
   /** UIX-382: broadcast when a track is removed from the mixer. */
   "audio:track:removed": (event: EventEnvelope<{ trackId: string }>) => void;
+  "soundpad:triggered": (event: SoundpadTriggeredEvent) => void;
+  "soundpad:stopped": (event: { generation: number }) => void;
+  "soundpad:policy": (event: { playerPlaybackEnabled: boolean }) => void;
+  /** Invalidation only; clients refetch the role-filtered catalogue over HTTP. */
+  "soundpad:catalog:changed": () => void;
   "map:ping": (ping: MapPing) => void;
   "ruler:updated": (
     ruler: z.infer<typeof rulerUpdateSchema> & {
@@ -2998,6 +3105,13 @@ export interface ClientToServerEvents {
   "audio:track:set": (
     command: z.infer<typeof audioTrackCommandSchema>,
     ack?: (result: CommandAck<AudioTrackDto>) => void,
+  ) => void;
+  "soundpad:trigger": (
+    command: z.infer<typeof soundpadTriggerSchema>,
+    ack?: (result: CommandAck<SoundpadTriggeredEvent>) => void,
+  ) => void;
+  "soundpad:stop": (
+    ack?: (result: CommandAck<{ generation: number }>) => void,
   ) => void;
   "map:ping": (
     ping: { sceneId: string; x: number; y: number },

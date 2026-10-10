@@ -24,7 +24,11 @@ import { Empty } from "./MediaPanel";
 import { canPlaceTokenDefinition } from "../token-placement";
 
 export function PalettePanel(props: Props) {
-  const { token: tokenActions, asset: assetActions } = useCampaignActions();
+  const {
+    token: tokenActions,
+    asset: assetActions,
+    sidebar: sidebarActions,
+  } = useCampaignActions();
   const definitions = props.snapshot.tokenDefinitions ?? [];
   const [editor, setEditor] = useState<
     (typeof definitions)[number] | "NEW" | null
@@ -42,24 +46,26 @@ export function PalettePanel(props: Props) {
     );
   return (
     <section className="panel-section token-palette">
-      <div className="section-heading">
+      <div className="section-heading token-palette__heading">
         <div>
           <span className="eyebrow">Палитра</span>
           <h2>Токены</h2>
         </div>
-        <span className="revision">{definitions.length}</span>
+        <div className="token-palette__heading-actions">
+          <span className="revision">{definitions.length}</span>
+          {props.snapshot.me.role === "GM" && (
+            <Button
+              view="action"
+              onClick={() => {
+                setEditorNotice("");
+                setEditor("NEW");
+              }}
+            >
+              Создать токен
+            </Button>
+          )}
+        </div>
       </div>
-      {props.snapshot.me.role === "GM" && (
-        <Button
-          view="action"
-          onClick={() => {
-            setEditorNotice("");
-            setEditor("NEW");
-          }}
-        >
-          Создать токен
-        </Button>
-      )}
       {editorNotice && (
         <p className="field-notice" role="status">
           {editorNotice}
@@ -228,11 +234,11 @@ export function PalettePanel(props: Props) {
           onPatch={tokenActions.onPatchTokenDefinition}
           onOpenCharacters={() => {
             setEditor(null);
-            props.onWorkspaceChange("setup");
+            sidebarActions.onWorkspaceChange("setup");
           }}
           onOpenMedia={() => {
             setEditor(null);
-            props.onWorkspaceChange("media");
+            sidebarActions.onWorkspaceChange("media");
           }}
         />
       )}

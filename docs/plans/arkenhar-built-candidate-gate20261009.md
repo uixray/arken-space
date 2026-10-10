@@ -1,0 +1,66 @@
+# ArkenHar — retained built-web candidate / local served smoke, 2026-10-09
+
+## Baseline and claim
+
+Plan only; no packaging/server/browser operation executed by this planner. Inspected HEAD `691d352582961c16963a20c5f368e103bfc3180d`; product source `52013d43e6f2fca1bb268c38608afde9cd76424a`; `git diff 52013d4 HEAD -- apps packages infra` empty. Root reports fresh full `pnpm build` exit0 at HEAD691d352 with chunk >500k warning. Root must attach exact terminal/log hash/time to the retained artifact receipt; file timestamps alone cannot establish build provenance.
+
+Verified source contracts: root build=`pnpm -r --workspace-concurrency=1 build`; web build=`vite build`; Vite target es2022/sourcemap true. No package preview script. Current `apps/web/dist/index.html` references `/assets/index-wvGTtVvy.js`, `/assets/index-CbFR2RZ4.css` and favicon `/assets/brand/arkpath-hat-white.png`. Names are observation, not permanent constants: manifest derives references from retained HTML. Server has `dist/index.js`/map; contracts/db/system have own dist outputs. API uses relative fetch with credentials included; Socket.IO uses same-origin `io({withCredentials:true,...})`. Thus a static origin alone cannot prove authenticated app/realtime compatibility.
+
+Goal of next gate: serve **exact retained fresh build bytes**, distinguish them from current-worktree Vite source, and smoke narrow real existing QA flows. Not production package acceptance, deployed image, backup/recovery, native/human QA, public registration or whole E2E. Preserve chunk warning; successful smoke does not waive load/performance risk.
+
+## Common worker contract
+
+Luna owns only new ignored artifact directory/harness/receipts plus one new sanitized checkpoint explicitly assigned by root. You are not alone; preserve dirty goal/QA/recovery docs and `.tmp`. No product edits, rebuild loops, currentAPI14182/Vite14183 changes, seed, migration, DB import, server startup, remote/deploy/push/merge. Root coordinates execution after conflicting browser/output-producing pools, accepts stage gate once. No full legacy E2E. Never emit credentials, cookie values, private fixture contents, storage keys or secret URLs. No browser or launch is authorized by this planning document itself.
+
+## Pool 1 — freeze and retain the exact artifacts
+
+1. Confirm full build process completed and no concurrent build writes outputs. Record full HEAD/tree, product SHA, Node/pnpm versions, lockfile SHA, build command/exit/log hash and build start/end. Record dirty paths separately; no claim the worktree is clean. Recheck source delta; source change invalidates assumed provenance until reconciled.
+2. Create a unique ignored root `.data/qa-prep/built-candidate-20261009-<unique>/` with exclusive-create semantics. Resolve/check containment; reject existing destination and symlink/reparse escapes. Copy **whole `apps/web/dist` recursively** into `web/`, preserving bytes, not only JS/CSS. Do not import `.data`, `.tmp`, `.env`, fixtures, node_modules, media, screenshots or repository metadata. Never edit original dist.
+3. Produce deterministic sorted manifest entries: normalized relative path, byte length, SHA256, logical MIME/category. Include recursive assets/fonts/images/source maps and index. Reject links/path traversal, missing HTML refs and unexpected sensitive files. Compare source-output manifest before/after copy and retained-copy manifest exactly; if different, concurrent build/copy race => discard claim and stop, not partial acceptance.
+4. Source maps stay in the **private retained diagnostic package**, because original build produces them. Review for embedded secrets/internal content before any future sharing; local smoke is not publication permission. If production later excludes maps, create a separately identified derived package with changed manifest; do not silently remove them from this exact artifact. No raw map/source content in reports.
+5. Retain `server/` and workspace `contracts/`, `db/`, `system/` dist as separate diagnostic build artifacts, each manifest/hash; archive relevant nonsecret package manifests/lock identity alongside. These are NOT a deployable server image: external dependencies, native modules, migration files, runtime configuration and image provenance are separate. Do not run server dist/index.js (it seeds and binds wildcard) to validate packaging.
+6. Zip the explicit retained artifact allowlist into a new immutable archive; compute SHA/size. Independently extract into another unique directory and compare all file hashes/counts to manifest (ZIP timestamp determinism not assumed). Record both archive hash and file manifest hash. Keep original retained tree/archive/receipt for root; no cleanup/deletion by habit. Exclude helper logs/private metadata from a future shareable package unless reviewed.
+
+Gate1 PASS = build proof linked, full recursive retained manifests match, archive round-trip matches, no excluded private inputs included. Gate1 does not prove served app. Prefer retaining existing fresh build now; no second build solely because a documentation commit changes HEAD. Record exact built691d352 and product52013d4 equivalence rather than relabeling it as a newer build.
+
+## Pool 2 — isolated static preview and byte-level proof
+
+Proposed origin **http://127.0.0.1:14233**, subject to immediate free-port check/root allocation. Do not reuse14231/14232 historicalRO,14185 restoredAPI,14182 API or14183 Vite. No listener inventory result is asserted by this plan.
+
+Use locked locally installed Vite8.2.1 `preview()` via an ignored ESM launcher, importing the exact existing web-package Vite resolution (record resolved package/version). Explicit inline config with **`configFile:false`**, controlled root, `build.outDir=<retained web absolute path>`, `preview.host:'127.0.0.1'`, `preview.port:14233`, `preview.strictPort:true`. No inherited web vite.config proxy: it points at4100. Do not use `vite dev`, original source root, `pnpm dev`, Storybook or a fallback webServer. The preview is local test infrastructure, not a production hosting recommendation.
+
+Start hidden with explicit cwd/private logs and record PID/starttime/launcher hash. Check exact127.0.0.1 listener, no wildcard. If occupied or unexpected bind, STOP; never kill someone else's listener. Stop only the owned preview handle/PID after gate; on timeout verify PID/starttime identity before terminating it, no blanket Node cleanup.
+
+Serve static artifact with API proxy disabled first. From HTTP, GET index and **all manifest assets** (bounded sequential fetch; no cache/conditional request): body hashes match retained disk manifest and content types are appropriate. Verify favicon/recursive assets too; filename is not proof of bytes. Keep asset transfer evidence separate from browser-cache loads. Check no `/@vite/client` or `/src/main.tsx` dependency/HMR websocket is requested, and browser module/CSS requests resolve to built assets. SPA fallback may return index for unknown routes; do not treat an HTML200 as successful JS/image/API. There is no confirmed `/acceptance` app route.
+
+Gate2 PASS = actual static HTTP bytes equal manifest, entry/asset loading comes from retained build, no Vite source/HMR. Landing/login shell without backend may be observed, but expected API errors must be labelled disabled-backend, not product defects or authenticated app PASS.
+
+## Pool 3 — targeted existing-API compatibility smoke
+
+**Precondition: resolve Origin/security contract without modifying current API.** Same-origin relative API/socket calls need explicit preview proxy `/api`, `/healthz`, `/socket.io` (ws:true) → **127.0.0.1:14182 only**. ExistingAPI unsafe-method guard requires its configured WEB_ORIGIN; the new14233 browser Origin may be rejected403. `changeOrigin:true` changes Host, not a reliable fix for Origin. Current live WEB_ORIGIN is not assumed from defaults or historical source config.
+
+Root may approve a narrow local edge mapping: programmatically obtain only the actual nonsecret configured WEB_ORIGIN from an already authorized provenance source and configure preview proxy outgoing Origin to that exact value, for these loopback upstream routes only, preserving real cookies and auth. Record that intentional proxy adaptation. Do not strip Origin globally, set wildcard CORS, disable server auth/rate limits, modify current API env, or use test auth headers. If root does not approve/reconcile this mapping, authenticated smoke stays BLOCKED; static byte gate remains useful. Mapping proves built-client compatibility through an adapted local edge, **not production CORS/origin-security equivalence**.
+
+Validate proxy/WS configuration separately before browser; no redirect outside designated target. `/healthz` via preview reports API revision, not web artifact identity. Record liveAPI buildRevision and source-equivalence bridge separately; do not label existingAPI freshly built merely because full build produced new dist.
+
+Use existing root-authorized synthetic QA identities/fixtures, never create/seed them here. New isolated browser contexts avoid cross-port cookie confusion (cookies are host/path, not port isolated). Login through real supported flow using private programmatic credentials; no credentials in URL/screenshots/traces. Root must approve incidental official session/login, chat-read cursor and client-telemetry writes that ordinary UI causes, within currentQA only. No blanket “zero DB writes” assertion. If strictly no writes are permitted, authenticated browser smoke is BLOCKED; do not mock away persistence and call it real.
+
+One bounded matrix after artifact freeze: Chrome and Firefox, GM desktop1360×900 and PLAYER compact390×844 (four cells, desktop-browser emulation, not physical devices). Reuse source-proven current harness locators from accepted connected pools rather than redoing failed locator guesses. Do not duplicate the whole UIX644 suite.
+
+- Browser loads retained index/JS/CSS without fatal page/module errors; capture actual build-asset URLs and safe response identity, not only screenshot.
+- Real login/bootstrap succeeds; correct synthetic role/known campaign shown, no private record text in public receipt. Landing/login does not establish registration/MyCampaigns.
+- GM opens Files/global-pack area; PLAYER opens sticker picker. Both expected global packs/counts24+115 appear; decode representative images from each via real API content. Do not send/create/publish/upload/edit to prove readability.
+- GM open-summary Escape sequence: first closes owned summary with parent retained, held repeat does not dismiss parent, deliberate next Escape follows parent contract. PLAYER picker opens/closes/reopens with visible focus. This is a bounded built-bundle regression, not native OS popup/human acceptance.
+- Establish actual Socket.IO connection/upgrade and record connection status. Without an approved real message action this proves transport establishment only, NOT realtime delivery. Do not send synthetic messages silently to upgrade the claim.
+- Record all page/window errors, failed network requests and actual429. Do not swallow client logs or mask errors with retries. Missing historical media173 remains an existing separate limitation; if a chosen fixture hits it, record exact class/step and use no fabricated replacement. Do not mark all static failures as API/media without evidence.
+- Stop each case after these checks; no full E2E, true-zoom claim, native popup claim, setup mutations or broad gameplay sweep. If a defect is reproducible, return narrow implicated bundle/source evidence for a new owner-assigned repair pool, not ad hoc product edits.
+
+Gate3 PASS only for the actual named cells/assertions on the recorded artifact+existingAPI. Unsupported role/fixture/origin/locator gives precise BLOCKED/PARTIAL, not blanket PASS. A failure in one cell remains retained; independent static integrity may still PASS.
+
+## Root handoff / final result schema
+
+Checkpoint: decisions/scope; built source691d352/product52013d4 and actual runtime-source differences; changed owned artifact/harness/docs only; manifest/archive/log hashes; static HTTP count/hash result; browser versions/roles/viewports and case outcomes; authenticated backend/proxy mapping and permitted incidental writes; currentAPI/Vite unchanged checks; owned preview shutdown evidence; warning/failures/blockers; next bounded action. Whitelist output, no cookie/token/storage-key values.
+
+Verdicts separately: `BUILD root-reported exit0`; `RETAINED artifact PASS/FAIL/NOT RUN`; `SERVED byte identity PASS/FAIL/NOT RUN`; `BUILT browser smoke scoped PASS/PARTIAL/FAIL/BLOCKED`; `PRODUCTION package/deploy NOT RUN`. Chunk>500k warning persists as a warning, not erased or falsely escalated to functional failure. No automatic Linear completion, push/merge, server/deploy permission or public auth implementation follows.
+
+Planning checkpoint: only this new plan added; narrow Git/scripts/config/dist metadata/index/API/realtime source inspection; no output copy/hash archive, runtime launch/browser, data/private-fixture/Linear/commit action. Next: root assign Gate1 retention, then explicitly coordinated14233 preview/origin/allowed-write scope for a single connected Gate2/3 pool.

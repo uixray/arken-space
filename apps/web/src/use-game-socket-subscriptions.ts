@@ -6,7 +6,7 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from "react";
-import type { GameSnapshot, MapPing } from "@arken/contracts";
+import type { AudioTrackDto, GameSnapshot, MapPing } from "@arken/contracts";
 import { reportClientEvent } from "./api";
 import { createGameSocket, type GameSocket } from "./realtime";
 import { appendChatMessage } from "./chat-state";
@@ -24,6 +24,7 @@ import {
   reconcileGameSnapshot,
 } from "./character-mutation";
 import { applyPlayerRequestChanged } from "./player-request-realtime";
+import { applyAudioTrackRemoved, applyAudioTrackState, type AudioTrackEventCursor } from "./audio-tracks-state";
 import {
   applyCursorMoved,
   type CursorPresence,
@@ -76,6 +77,7 @@ export function emitSceneViewIfNeeded(
 
 export interface UseGameSocketSubscriptionsOptions {
   campaignId: string | null;
+  initialSnapshotVersion?: number;
   authRequired: boolean;
   ownMembershipId?: string;
   viewedSceneId: string | null;
@@ -101,6 +103,7 @@ export interface UseGameSocketSubscriptionsResult {
 
 export function useGameSocketSubscriptions({
   campaignId,
+  initialSnapshotVersion,
   authRequired,
   ownMembershipId,
   viewedSceneId,
@@ -122,12 +125,18 @@ export function useGameSocketSubscriptions({
   const lastSceneViewEmissionRef = useRef<SceneViewEmission | null>(null);
   const viewedSceneIdRef = useLatestRef(viewedSceneId);
   const ownMembershipIdRef = useLatestRef(ownMembershipId);
+  const initialSnapshotVersionRef = useLatestRef(initialSnapshotVersion);
   const loadStoryPostsRef = useLatestRef(loadStoryPosts);
   const toastAppearanceRef = useRef(0);
 
   useEffect(() => {
     if (!campaignId || authRequired) return;
     const next = createGameSocket();
+    // Scoped to this socket/campaign. Track events have a per-track cursor;
+    // the global snapshot version is used only to seed canonical state and is
+    // never a gate that can discard an interleaved track event.
+    const audioTrackCursor: AudioTrackEventCursor = new Map();
+    let canonicalAudioFloor = initialSnapshotVersionRef.current ?? 0;
     setSocket(next);
     next.on("connect", () => {
       setConnection("ONLINE");
@@ -150,7 +159,25 @@ export function useGameSocketSubscriptions({
     next.io.on("reconnect_attempt", () => setConnection("RECONNECTING"));
     next.io.on("reconnect_failed", () => setConnection("OFFLINE"));
     next.on("game:snapshot", (nextSnapshot) => {
-      setSnapshot((current) => reconcileGameSnapshot(current, nextSnapshot));
+      setSnapshot((current) => {
+        const reconciled = reconcileGameSnapshot(current, nextSnapshot);
+        if (reconciled.campaign.id !== campaignId) return reconciled;
+        if (nextSnapshot.snapshotVersion >= canonicalAudioFloor)
+          canonicalAudioFloor = nextSnapshot.snapshotVersion;
+        for (const track of reconciled.audioTracks ?? []) {
+          const seen = audioTrackCursor.get(track.id);
+          if (!seen || seen.sequence <= reconciled.snapshotVersion)
+            audioTrackCursor.set(track.id, { sequence: reconciled.snapshotVersion, revision: track.revision });
+        }
+        // Retain tombstones when a canonical snapshot supersedes a locally
+        // active row; otherwise a delayed pre-snapshot state event could revive it.
+        if (current?.campaign.id === campaignId) {
+          const present = new Set((reconciled.audioTracks ?? []).map((track) => track.id));
+          for (const previous of current.audioTracks ?? [])
+            if (!present.has(previous.id)) audioTrackCursor.set(previous.id, { sequence: reconciled.snapshotVersion, revision: Number.MAX_SAFE_INTEGER });
+        }
+        return reconciled;
+      });
       setConnection("ONLINE");
     });
     next.on("scene:activated", (event) =>
@@ -318,6 +345,24 @@ export function useGameSocketSubscriptions({
           : current,
       ),
     );
+    next.on("audio:track:state", (event) =>
+      setSnapshot((current) => {
+        if (!current || current.campaign.id !== campaignId) return current;
+        if (event.sequence <= canonicalAudioFloor) return current;
+        const audioTracks = applyAudioTrackState(current.audioTracks ?? [], event.data as AudioTrackDto, event.sequence, audioTrackCursor);
+        if (audioTracks === (current.audioTracks ?? [])) return current;
+        return { ...current, audioTracks, snapshotVersion: Math.max(current.snapshotVersion, event.sequence) };
+      }),
+    );
+    next.on("audio:track:removed", (event) =>
+      setSnapshot((current) => {
+        if (!current || current.campaign.id !== campaignId) return current;
+        if (event.sequence <= canonicalAudioFloor) return current;
+        const audioTracks = applyAudioTrackRemoved(current.audioTracks ?? [], event.data.trackId, event.sequence, audioTrackCursor);
+        if (audioTracks === (current.audioTracks ?? [])) return current;
+        return { ...current, audioTracks, snapshotVersion: Math.max(current.snapshotVersion, event.sequence) };
+      }),
+    );
     next.on("presence:updated", setPresence);
     next.on("server:error", (problem) => setError(problem.message));
     return () => {
@@ -335,6 +380,7 @@ export function useGameSocketSubscriptions({
     chatOpenRef,
     loadStoryPostsRef,
     ownMembershipIdRef,
+    initialSnapshotVersionRef,
     setCursors,
     setError,
     setPings,

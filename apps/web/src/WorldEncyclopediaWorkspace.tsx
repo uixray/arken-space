@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type {
   AssetDto,
   WorldContentMediaDto,
@@ -73,9 +73,17 @@ export const WorldEncyclopediaWorkspace = memo(
     const [filterType, setFilterType] = useState<WorldContentType | "">("");
     const [filterTags, setFilterTags] = useState("");
     const [filterQ, setFilterQ] = useState("");
+    const [activeRelation, setActiveRelation] = useState<{
+      id: string;
+      name: string;
+    } | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const latestRequest = useRef(0);
 
-    const load = async () => {
+    const load = async (
+      relatedTo: string | null | undefined = activeRelation?.id,
+    ) => {
+      const requestId = ++latestRequest.current;
       setLoading(true);
       setListError("");
       try {
@@ -83,17 +91,24 @@ export const WorldEncyclopediaWorkspace = memo(
           type: filterType || undefined,
           tags: parseTagList(filterTags),
           q: filterQ.trim() || undefined,
+          relatedTo: relatedTo ?? undefined,
         });
+        if (requestId !== latestRequest.current) return;
         setItems(list);
       } catch (reason) {
+        if (requestId !== latestRequest.current) return;
         setListError(formatApiError(reason, safeError));
       } finally {
-        setLoading(false);
+        if (requestId === latestRequest.current) setLoading(false);
       }
     };
 
     useEffect(() => {
-      if (!open) return;
+      if (!open) {
+        latestRequest.current += 1;
+        setLoading(false);
+        return;
+      }
       void load();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
@@ -149,6 +164,23 @@ export const WorldEncyclopediaWorkspace = memo(
                   }}
                 />
               </label>
+              {activeRelation && (
+                <div className="world-encyclopedia-workspace__relation-filter">
+                  <span>
+                    Связано с: <strong>{activeRelation.name}</strong>
+                  </span>
+                  <Button
+                    view="flat"
+                    size="s"
+                    onClick={() => {
+                      setActiveRelation(null);
+                      void load(null);
+                    }}
+                  >
+                    Сбросить связь
+                  </Button>
+                </div>
+              )}
               <Button onClick={() => void load()} disabled={loading}>
                 Применить
               </Button>
@@ -161,7 +193,11 @@ export const WorldEncyclopediaWorkspace = memo(
             {loading ? (
               <p className="muted">Загрузка…</p>
             ) : items.length === 0 ? (
-              <p className="muted">Ничего не найдено.</p>
+              <p className="muted">
+                {activeRelation
+                  ? `Нет связанных статей для «${activeRelation.name}» с текущими фильтрами.`
+                  : "Ничего не найдено."}
+              </p>
             ) : (
               <ul className="world-encyclopedia-workspace__list">
                 {items.map((item) => (
@@ -203,6 +239,10 @@ export const WorldEncyclopediaWorkspace = memo(
                 id={selectedId}
                 assets={assets}
                 onNavigate={setSelectedId}
+                onFilterRelated={(subject) => {
+                  setActiveRelation(subject);
+                  void load(subject.id);
+                }}
                 onMissing={() => setSelectedId(null)}
               />
             ) : (
@@ -221,11 +261,13 @@ function EntityPage({
   id,
   assets,
   onNavigate,
+  onFilterRelated,
   onMissing,
 }: {
   id: string;
   assets: readonly Pick<AssetDto, "id" | "url">[];
   onNavigate: (id: string) => void;
+  onFilterRelated: (subject: { id: string; name: string }) => void;
   onMissing: () => void;
 }) {
   const [entity, setEntity] = useState<WorldContentPlayerDto | null>(null);
@@ -298,6 +340,13 @@ function EntityPage({
             Также известен(а) как: {entity.aliases.join(", ")}
           </p>
         )}
+        <Button
+          size="s"
+          view="flat"
+          onClick={() => onFilterRelated({ id: entity.id, name: entity.name })}
+        >
+          Показать связанные статьи
+        </Button>
       </header>
       {entity.coverAssetId && (
         <img
