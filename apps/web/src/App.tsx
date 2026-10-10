@@ -2078,6 +2078,7 @@ export function App() {
               assets={snapshot.assets}
               socket={socket}
               onUpload={handleUploadAudio}
+              onRefreshSnapshot={load}
             />
           )}
           {compact && (

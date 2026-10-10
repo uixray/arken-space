@@ -4,7 +4,7 @@ import type { GameSocket } from "./realtime.js";
 import { SoundEffectsPlayback } from "./sound-effects-playback.js";
 import "./SoundpadWorkspace.css";
 
-type Props = { campaignId: string; membershipId: string; role: Role; assets: AssetDto[]; socket: GameSocket | null; onUpload: (file: File, kind: "AUDIO") => Promise<AssetDto> };
+type Props = { campaignId: string; membershipId: string; role: Role; assets: AssetDto[]; socket: GameSocket | null; onUpload: (file: File, kind: "AUDIO") => Promise<AssetDto>; onRefreshSnapshot?: () => Promise<void> };
 type SoundpadResponse = { packs: SoundpadPackDto[]; playerPlaybackEnabled: boolean };
 const DEFAULT_CLIPS = [
   { file: "evil-laugh.ogg", label: "Злодейский смех", icon: "😈", category: "Реакции", sourceNote: "CC0 · AntumDeluge — Evil Laugh · OpenGameArt" },
@@ -25,7 +25,7 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
   return value as T;
 }
 
-export function SoundpadWorkspace({ campaignId, membershipId, role, assets, socket, onUpload }: Props) {
+export function SoundpadWorkspace({ campaignId, membershipId, role, assets, socket, onUpload, onRefreshSnapshot }: Props) {
   const busRef = useRef<SoundEffectsPlayback | null>(null);
   if (!busRef.current) busRef.current = new SoundEffectsPlayback();
   const bus = busRef.current;
@@ -68,6 +68,7 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
   const loadInFlight = useRef<Promise<SoundpadResponse | null> | null>(null);
   const loadAgain = useRef(false);
   const playbackSession = useRef(0);
+  const catalogueSession = useRef(0);
   const load = () => {
     if (loadInFlight.current) {
       loadAgain.current = true;
@@ -96,6 +97,7 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
   useEffect(() => { void load(); }, [campaignId]);
   useEffect(() => {
     if (!socket) return;
+    const session = ++catalogueSession.current;
     const connect = () => { playbackSession.current++; bus.setConnected(); void load(); };
     const disconnect = () => { playbackSession.current++; bus.setDisconnected(); };
     const onTrigger = (event: Parameters<typeof bus.play>[0]) => {
@@ -115,11 +117,24 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
     };
     const onStop = () => { playbackSession.current++; bus.stop(); };
     const onPolicy = (policy: { playerPlaybackEnabled: boolean }) => setData((current) => ({ ...current, playerPlaybackEnabled: policy.playerPlaybackEnabled }));
-    const onCatalogueChanged = () => { void load(); };
+    const onCatalogueChanged = async () => {
+      try {
+        // A newly published sound may reference an asset that was not yet
+        // eligible for the previous snapshot projection. Refresh metadata
+        // after the server's catalog mutation has committed, then re-read
+        // the role-filtered pack list.
+        await onRefreshSnapshot?.();
+      } catch {
+        // Still refresh the catalogue; a later invalidation/reconnect can
+        // retry snapshot metadata without an unhandled rejection.
+      }
+      if (catalogueSession.current !== session) return;
+      await load();
+    };
     socket.on("connect", connect); socket.on("disconnect", disconnect); socket.on("soundpad:triggered", onTrigger); socket.on("soundpad:stopped", onStop); socket.on("soundpad:policy", onPolicy); socket.on("soundpad:catalog:changed", onCatalogueChanged);
     if (socket.connected) connect();
-    return () => { playbackSession.current++; socket.off("connect", connect); socket.off("disconnect", disconnect); socket.off("soundpad:triggered", onTrigger); socket.off("soundpad:stopped", onStop); socket.off("soundpad:policy", onPolicy); socket.off("soundpad:catalog:changed", onCatalogueChanged); bus.disposeAll(); };
-  }, [socket, bus]);
+    return () => { catalogueSession.current++; playbackSession.current++; socket.off("connect", connect); socket.off("disconnect", disconnect); socket.off("soundpad:triggered", onTrigger); socket.off("soundpad:stopped", onStop); socket.off("soundpad:policy", onPolicy); socket.off("soundpad:catalog:changed", onCatalogueChanged); bus.disposeAll(); };
+  }, [socket, bus, onRefreshSnapshot]);
   useEffect(() => { localStorage.setItem(`arken.effects.volume.${campaignId}.${membershipId}`, String(volume)); }, [campaignId, membershipId, volume]);
   useEffect(() => { localStorage.setItem(`arken.effects.muted.${campaignId}.${membershipId}`, String(muted)); if (muted) bus.mute(); }, [campaignId, membershipId, muted, bus]);
 

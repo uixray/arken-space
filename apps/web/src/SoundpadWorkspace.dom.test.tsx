@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useCallback, useState } from "react";
 import { SoundpadWorkspace } from "./SoundpadWorkspace";
 
 const sound = { id: "11111111-1111-4111-8111-111111111111", packId: "22222222-2222-4222-8222-222222222222", assetId: "33333333-3333-4333-8333-333333333333", label: "Злодейский смех", icon: "😈", category: "Реакции", sortOrder: 0, defaultGain: 0.5, audience: "ALL_MEMBERS" as const, sourceNote: "CC0" };
@@ -96,6 +97,43 @@ it("refetches the role-filtered catalogue after reconnect/change and then plays 
   await screen.findByRole("button", { name: "Запустить звук: Злодейский смех" });
   callbacks.get("soundpad:triggered")?.({ eventId: "published-event", soundId: sound.id, serverTime: new Date().toISOString(), defaultGain: 0.5 });
   await waitFor(() => expect(audio.src).toBe("/api/assets/test/content"));
+});
+
+it("refreshes player snapshot assets before reloading a newly published catalogue", async () => {
+  const callbacks = new Map<string, (event?: any) => void | Promise<void>>();
+  let current = { packs: [] as typeof pack[], playerPlaybackEnabled: true };
+  const fetchMock = vi.fn().mockImplementation(async () => ({
+    ok: true,
+    json: async () => current,
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  const socket = {
+    connected: false,
+    on: vi.fn((name: string, cb: (event?: any) => void) => callbacks.set(name, cb)),
+    off: vi.fn((name: string) => callbacks.delete(name)),
+    emit: vi.fn(),
+  };
+  const refreshSnapshot = vi.fn(async () => undefined);
+  function PlayerHarness() {
+    const [assets, setAssets] = useState<typeof asset[]>([]);
+    const refresh = useCallback(async () => {
+      await refreshSnapshot();
+      setAssets([asset]);
+    }, []);
+    return <SoundpadWorkspace campaignId={pack.campaignId} membershipId="55555555-5555-4555-8555-555555555555" role="PLAYER" assets={assets} socket={socket as never} onUpload={vi.fn()} onRefreshSnapshot={refresh} />;
+  }
+  render(<PlayerHarness />);
+  await screen.findByText(/Пока нет паков/);
+
+  current = { packs: [pack], playerPlaybackEnabled: true };
+  await act(async () => {
+    socket.connected = true;
+    await callbacks.get("soundpad:catalog:changed")?.();
+  });
+
+  expect(refreshSnapshot).toHaveBeenCalledTimes(1);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole("button", { name: "Запустить звук: Злодейский смех" })).toBeTruthy();
 });
 
 it("does not play an unknown trigger if catalogue lookup resolves after GM stop", async () => {
