@@ -129,8 +129,8 @@ NODE
 fi
 # Reject symlink/junction ancestors as well as a symlink at the leaf. Native
 # Node paths preserve Windows junction semantics in cloned local review mode.
-if [[ $CAPTURE_MODE == cloned-review ]]; then
-  node - "$ARKEN_REVIEW_RUNTIME_ENV_FILE" "$ARKEN_REVIEW_MEDIA_SOURCE" "$ARKEN_REVIEW_EDGE_CONFIG_SOURCE" <<'NODE' || die 'review source path contains a symlink, junction, or noncanonical ancestor'
+assert_canonical_sources() {
+  node - "$@" <<'NODE' || die 'review source path contains a symlink, junction, or noncanonical ancestor'
 const fs=require('node:fs'), path=require('node:path');
 try {
  for(const input of process.argv.slice(2)) {
@@ -146,6 +146,12 @@ try {
  }
 } catch { process.exit(4); }
 NODE
+}
+
+if [[ $CAPTURE_MODE == cloned-review ]]; then
+  assert_canonical_sources "$ARKEN_REVIEW_RUNTIME_ENV_FILE" "$ARKEN_REVIEW_MEDIA_SOURCE" "$ARKEN_REVIEW_EDGE_CONFIG_SOURCE"
+else
+  assert_canonical_sources "$COMPOSE_FILE" "$ENV_FILE"
 fi
 
 # Capture the safe health fields while the API container is still running.
@@ -175,6 +181,13 @@ if [[ -z ${ARKEN_DATABASE_COUNTS_SQL:-} && ! -f $counts_sql ]]; then
 fi
 [[ -f $counts_sql && -s $counts_sql && ! -L $counts_sql ]] || die 'database counts SQL must be a nonempty regular non-symlink file'
 
+assert_canonical_sources "$counts_sql"
+if [[ $CAPTURE_MODE == compose ]]; then assert_canonical_sources "$runtime_env_path"; fi
+if [[ -n ${ARKEN_CAPTURE_CONFIG_FILES:-} ]]; then
+  while IFS= read -r f; do
+    [[ -z $f ]] || assert_canonical_sources "$f"
+  done <<< "$ARKEN_CAPTURE_CONFIG_FILES"
+fi
 work_parent=${ARKEN_CAPTURE_TMPDIR:-${TMPDIR:-/tmp}}
 mkdir -p -m 700 "$work_parent"
 work=$(mktemp -d "$work_parent/arken-service-capture.XXXXXXXX")
