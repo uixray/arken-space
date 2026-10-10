@@ -2,6 +2,7 @@ import { AssetReplacementDialog } from "./AssetReplacementDialog";
 import { AssetAudioPreview } from "./AssetAudioPreview";
 import { useId, useMemo, useState } from "react";
 import type {
+  AudioPurpose,
   AssetKind,
   AssetUsageResponseDto,
   GameSnapshot,
@@ -9,6 +10,7 @@ import type {
 import { Button } from "../design-system/Button";
 import { ApiError, formatApiError } from "../api";
 import { ASSET_KIND_LABELS } from "../asset-labels";
+import { api } from "../api";
 import { ImageUploadField } from "../ui/ImageUploadField";
 import { AudioUploadField } from "../ui/AudioUploadField";
 import type { AssetActions } from "../use-asset-actions";
@@ -33,6 +35,9 @@ export function MediaPanel({
   const uploadStatusPrefix = useId();
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<AssetKind | "ALL">("ALL");
+  const [audioPurposeFilter, setAudioPurposeFilter] = useState<"ALL" | "MUSIC" | "SOUND_EFFECT">("ALL");
+  const [audioUploadPurpose, setAudioUploadPurpose] = useState<AudioPurpose | "">("");
+  const [updatingAudioPurposeId, setUpdatingAudioPurposeId] = useState<string | null>(null);
   const [replacementId, setReplacementId] = useState<string | null>(null);
   const replacement = snapshot.assets.find(
     (asset) => asset.id === replacementId,
@@ -77,10 +82,15 @@ export function MediaPanel({
   const upload = async (kind: AssetKind) => {
     const file = drafts[kind];
     if (!file) return;
+    if (kind === "AUDIO" && !audioUploadPurpose) return;
     setUploading(kind);
     setError("");
     try {
-      await onUpload(file, kind);
+      await onUpload(
+        file,
+        kind,
+        kind === "AUDIO" ? { audioPurpose: audioUploadPurpose as AudioPurpose } : undefined,
+      );
       setDrafts((current) => ({ ...current, [kind]: undefined }));
     } catch (reason) {
       setError(
@@ -88,6 +98,22 @@ export function MediaPanel({
       );
     } finally {
       setUploading(null);
+    }
+  };
+  const changeAudioPurpose = async (assetId: string, audioPurpose: AudioPurpose) => {
+    if (!onRefresh) return;
+    setUpdatingAudioPurposeId(assetId);
+    setError("");
+    try {
+      await api(`/api/assets/${assetId}/audio-purpose`, {
+        method: "PATCH",
+        body: JSON.stringify({ actionId: crypto.randomUUID(), audioPurpose }),
+      });
+      await onRefresh();
+    } catch (reason) {
+      setError(formatApiError(reason, "Не удалось изменить назначение аудио."));
+    } finally {
+      setUpdatingAudioPurposeId(null);
     }
   };
   const checkUsage = async (assetId: string, clearError = true) => {
@@ -150,15 +176,33 @@ export function MediaPanel({
           return (
             <section className="upload-section" key={kind}>
               {kind === "AUDIO" ? (
-                <AudioUploadField
-                  label={labels[kind]}
-                  value={drafts[kind]}
-                  hint="MP3 или OGG"
-                  disabled={uploading !== null}
-                  onUpdate={(file) =>
-                    setDrafts((current) => ({ ...current, [kind]: file }))
-                  }
-                />
+                <>
+                  <label>
+                    Назначение аудиофайла
+                    <select
+                      aria-label="Назначение аудиофайла"
+                      value={audioUploadPurpose}
+                      disabled={uploading !== null}
+                      onChange={(event) =>
+                        setAudioUploadPurpose(event.currentTarget.value as AudioPurpose | "")
+                      }
+                    >
+                      <option value="">Выберите назначение</option>
+                      <option value="MUSIC">Фоновая музыка</option>
+                      <option value="SOUND_EFFECT">Звуковые эффекты</option>
+                      <option value="BOTH">Музыка и звуковые эффекты</option>
+                    </select>
+                  </label>
+                  <AudioUploadField
+                    label={labels[kind]}
+                    value={drafts[kind]}
+                    hint="MP3 или OGG"
+                    disabled={uploading !== null}
+                    onUpdate={(file) =>
+                      setDrafts((current) => ({ ...current, [kind]: file }))
+                    }
+                  />
+                </>
               ) : (
                 <ImageUploadField
                   label={labels[kind]}
@@ -177,7 +221,7 @@ export function MediaPanel({
               </p>
               <Button
                 view="action"
-                disabled={!drafts[kind] || uploading !== null}
+                disabled={!drafts[kind] || uploading !== null || (kind === "AUDIO" && !audioUploadPurpose)}
                 loading={uploading === kind}
                 aria-describedby={statusId}
                 onClick={() => void upload(kind)}
@@ -215,6 +259,23 @@ export function MediaPanel({
           ))}
         </select>
       </label>
+      {(kindFilter === "ALL" || kindFilter === "AUDIO") &&
+        snapshot.assets.some((asset) => asset.kind === "AUDIO") && (
+          <label>
+            Аудио по назначению
+            <select
+              aria-label="Фильтр аудио по назначению"
+              value={audioPurposeFilter}
+              onChange={(event) =>
+                setAudioPurposeFilter(event.currentTarget.value as typeof audioPurposeFilter)
+              }
+            >
+              <option value="ALL">Фоновая музыка и звуковые эффекты</option>
+              <option value="MUSIC">Фоновая музыка</option>
+              <option value="SOUND_EFFECT">Звуковые эффекты</option>
+            </select>
+          </label>
+        )}
       <div className="asset-list">
         {snapshot.assets.length === 0 ||
         (kindFilter !== "ALL" &&
@@ -230,13 +291,26 @@ export function MediaPanel({
               (asset) => asset.kind === kind,
             );
             if (assets.length === 0) return null;
-            return (
-              <section aria-label={`Файлы: ${labels[kind]}`} key={kind}>
+            const audioGroups = kind === "AUDIO"
+              ? ([
+                  { key: "MUSIC", label: "Фоновая музыка", includes: (purpose: AudioPurpose) => purpose !== "SOUND_EFFECT" },
+                  { key: "SOUND_EFFECT", label: "Звуковые эффекты", includes: (purpose: AudioPurpose) => purpose !== "MUSIC" },
+                ] as const).filter((group) => audioPurposeFilter === "ALL" || group.key === audioPurposeFilter)
+              : null;
+            const groups = audioGroups
+              ? audioGroups.map((group) => ({
+                  key: group.key,
+                  label: group.label,
+                  assets: assets.filter((asset) => group.includes(asset.audioPurpose ?? "MUSIC")),
+                }))
+              : [{ key: kind, label: labels[kind], assets }];
+            return groups.map((group) => group.assets.length === 0 ? null : (
+              <section aria-label={`Файлы: ${group.label}`} key={`${kind}:${group.key}`}>
                 <h3>
-                  {labels[kind]}{" "}
-                  <span className="revision">{assets.length}</span>
+                  {group.label}{" "}
+                  <span className="revision">{group.assets.length}</span>
                 </h3>
-                {assets.map((asset) => {
+                {group.assets.map((asset) => {
                   const usage = usageByAsset[asset.id];
                   return (
                     <div className="asset-row" key={asset.id}>
@@ -254,11 +328,28 @@ export function MediaPanel({
                       <div>
                         <strong>{asset.name}</strong>
                         <small>
-                          {ASSET_KIND_LABELS[asset.kind]} ·{" "}
+                          {asset.kind === "AUDIO" ? group.label : ASSET_KIND_LABELS[asset.kind]} ·{" "}
                           {(asset.sizeBytes / 1024 / 1024).toFixed(1)} МБ
                         </small>
                         {asset.kind === "AUDIO" && (
                           <>
+                            {snapshot.me.role === "GM" && (
+                              <label>
+                                Назначение аудио
+                                <select
+                                  aria-label={`Назначение аудио: ${asset.name}`}
+                                  value={asset.audioPurpose ?? "MUSIC"}
+                                  disabled={!onRefresh || updatingAudioPurposeId !== null}
+                                  onChange={(event) =>
+                                    void changeAudioPurpose(asset.id, event.currentTarget.value as AudioPurpose)
+                                  }
+                                >
+                                  <option value="MUSIC">Фоновая музыка</option>
+                                  <option value="SOUND_EFFECT">Звуковые эффекты</option>
+                                  <option value="BOTH">Музыка и звуковые эффекты</option>
+                                </select>
+                              </label>
+                            )}
                             <Button
                               aria-expanded={previewId === asset.id}
                               onClick={() =>
@@ -347,7 +438,7 @@ export function MediaPanel({
                   );
                 })}
               </section>
-            );
+            ));
           })
         )}
       </div>

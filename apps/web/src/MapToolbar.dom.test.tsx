@@ -121,17 +121,21 @@ describe("MapToolbar — панель инструментов карты (UIX-4
   beforeEach(() => {
     writeToolbarCollapsed(window.localStorage, "m1", false);
   });
-  it("keeps pause below shortcuts, outside scrolling tools", () => {
+  it("keeps every toolbar control in the single full-height scroller", () => {
     const { container } = renderComponent(
       <MapToolbar
-        {...createDefaultProps({ pauseControl: <button>Pause</button> })}
+        {...createDefaultProps({ pauseControl: <button>Pause</button>, onToggleObjectList: vi.fn() })}
       />,
     );
     const toolbar = container.querySelector(".map-toolbar")!;
-    expect(toolbar.lastElementChild).toHaveClass("map-toolbar__pause");
-    expect(toolbar.lastElementChild).toContainElement(
+    const scroller = toolbar.querySelector(".map-toolbar__scroll")!;
+    expect(toolbar.firstElementChild).toHaveClass("map-toolbar__collapse");
+    expect(scroller).toContainElement(
       screen.getByRole("button", { name: "Pause" }),
     );
+    expect(scroller.lastElementChild).toHaveClass("map-toolbar__pause");
+    expect(scroller).toContainElement(screen.getByRole("button", { name: "Перемещение" }));
+    expect(scroller).toContainElement(screen.getByRole("button", { name: "Объекты карты" }));
   });
 
   it("рендерит инструменты для роли PLAYER: без тумана и боевой зоны", () => {

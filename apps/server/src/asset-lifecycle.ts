@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type {
+  AssetKind,
+  AudioPurpose,
   AssetDto,
   AssetUsageDto,
   AssetUsageResponseDto,
@@ -9,6 +11,17 @@ import type {
 /** Stable opaque validator for one concrete blob revision. */
 export function assetContentVersion(storageKey: string) {
   return `"${createHash("sha256").update(storageKey).digest("hex")}"`;
+}
+
+/** Compare upload idempotency receipts without letting purpose drift on replay. */
+export function assetUploadActionMatches(
+  payload: { kind?: string; audioPurpose?: string | null } | null,
+  kind: AssetKind,
+  audioPurpose: AudioPurpose | null,
+) {
+  if (payload?.kind !== kind) return false;
+  if (kind !== "AUDIO") return payload.audioPurpose == null && audioPurpose === null;
+  return (payload.audioPurpose ?? "MUSIC") === (audioPurpose ?? "MUSIC");
 }
 
 export const ASSET_DEPENDENCY_REGISTRY = [
@@ -33,6 +46,7 @@ export function assetDto(asset: AssetMetadata): AssetDto {
   return {
     id: asset.id,
     kind: asset.kind,
+    audioPurpose: asset.audioPurpose,
     name: asset.name,
     mimeType: asset.mimeType,
     sizeBytes: asset.sizeBytes,

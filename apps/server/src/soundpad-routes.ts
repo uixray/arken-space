@@ -99,17 +99,25 @@ export function registerSoundpadRoutes(app: FastifyInstance, db: Database, io: R
     const params = (request.params ?? {}) as { packId?: string };
     const parsed = soundpadSoundCreateSchema.safeParse(request.body);
     if (!params.packId || !parsed.success) return reply.code(400).send({ error: "INVALID_COMMAND" });
-    const [pack] = await db.select({ id: campaignSoundPacks.id }).from(campaignSoundPacks)
-      .where(and(eq(campaignSoundPacks.id, params.packId), eq(campaignSoundPacks.campaignId, auth.campaignId))).limit(1);
-    const [asset] = await db.select({ id: assets.id, kind: assets.kind, durationSeconds: assets.durationSeconds }).from(assets)
-      .where(and(eq(assets.id, parsed.data.assetId), eq(assets.campaignId, auth.campaignId))).limit(1);
-    if (!pack) return reply.code(404).send({ error: "PACK_NOT_FOUND" });
-    if (!asset || asset.kind !== "AUDIO") return reply.code(400).send({ error: "AUDIO_ASSET_REQUIRED" });
-    if (!asset.durationSeconds || asset.durationSeconds <= 0 || asset.durationSeconds > 10) return reply.code(400).send({ error: "SOUND_DURATION_INVALID" });
-    const [sound] = await db.insert(campaignSounds).values({ campaignId: auth.campaignId, packId: pack.id, ...parsed.data }).onConflictDoNothing().returning({ id: campaignSounds.id });
-    if (sound) { invalidateCatalogue(auth.campaignId); return reply.code(201).send({ soundId: sound.id }); }
+    const outcome = await db.transaction(async (tx) => {
+      const [pack] = await tx.select({ id: campaignSoundPacks.id }).from(campaignSoundPacks)
+        .where(and(eq(campaignSoundPacks.id, params.packId!), eq(campaignSoundPacks.campaignId, auth.campaignId))).limit(1);
+      if (!pack) return { error: "PACK_NOT_FOUND" as const };
+      const [asset] = await tx.select({ id: assets.id, kind: assets.kind, audioPurpose: assets.audioPurpose, durationSeconds: assets.durationSeconds }).from(assets)
+        .where(and(eq(assets.id, parsed.data.assetId), eq(assets.campaignId, auth.campaignId))).for("update").limit(1);
+      if (!asset || asset.kind !== "AUDIO") return { error: "AUDIO_ASSET_REQUIRED" as const };
+      if (asset.audioPurpose !== "SOUND_EFFECT" && asset.audioPurpose !== "BOTH") return { error: "SOUND_EFFECT_PURPOSE_REQUIRED" as const };
+      if (!asset.durationSeconds || asset.durationSeconds <= 0 || asset.durationSeconds > 10) return { error: "SOUND_DURATION_INVALID" as const };
+      const [sound] = await tx.insert(campaignSounds).values({ campaignId: auth.campaignId, packId: pack.id, ...parsed.data }).onConflictDoNothing().returning({ id: campaignSounds.id });
+      return sound ? { soundId: sound.id, created: true as const } : { soundId: null, created: false as const, packId: pack.id };
+    });
+    if ("error" in outcome) {
+      const status = outcome.error === "PACK_NOT_FOUND" ? 404 : 400;
+      return reply.code(status).send({ error: outcome.error });
+    }
+    if (outcome.created) { invalidateCatalogue(auth.campaignId); return reply.code(201).send({ soundId: outcome.soundId }); }
     const [concurrent] = await db.select({ id: campaignSounds.id }).from(campaignSounds)
-      .where(and(eq(campaignSounds.packId, pack.id), eq(campaignSounds.assetId, parsed.data.assetId))).limit(1);
+      .where(and(eq(campaignSounds.packId, outcome.packId), eq(campaignSounds.assetId, parsed.data.assetId))).limit(1);
     if (!concurrent) return reply.code(500).send({ error: "SOUND_CREATE_FAILED" });
     return reply.send({ soundId: concurrent.id });
   });
@@ -121,14 +129,23 @@ export function registerSoundpadRoutes(app: FastifyInstance, db: Database, io: R
     const params = (request.params ?? {}) as { soundId?: string };
     const parsed = soundpadSoundUpdateSchema.safeParse(request.body);
     if (!params.soundId || !parsed.success) return reply.code(400).send({ error: "INVALID_COMMAND" });
-    if (parsed.data.assetId) {
-      const [asset] = await db.select({ id: assets.id, kind: assets.kind, durationSeconds: assets.durationSeconds }).from(assets)
-        .where(and(eq(assets.id, parsed.data.assetId), eq(assets.campaignId, auth.campaignId))).limit(1);
-      if (!asset || asset.kind !== "AUDIO") return reply.code(400).send({ error: "AUDIO_ASSET_REQUIRED" });
-      if (!asset.durationSeconds || asset.durationSeconds <= 0 || asset.durationSeconds > 10) return reply.code(400).send({ error: "SOUND_DURATION_INVALID" });
+    const outcome = await db.transaction(async (tx) => {
+      if (parsed.data.assetId) {
+        const [asset] = await tx.select({ id: assets.id, kind: assets.kind, audioPurpose: assets.audioPurpose, durationSeconds: assets.durationSeconds }).from(assets)
+          .where(and(eq(assets.id, parsed.data.assetId), eq(assets.campaignId, auth.campaignId))).for("update").limit(1);
+        if (!asset || asset.kind !== "AUDIO") return { error: "AUDIO_ASSET_REQUIRED" as const };
+        if (asset.audioPurpose !== "SOUND_EFFECT" && asset.audioPurpose !== "BOTH") return { error: "SOUND_EFFECT_PURPOSE_REQUIRED" as const };
+        if (!asset.durationSeconds || asset.durationSeconds <= 0 || asset.durationSeconds > 10) return { error: "SOUND_DURATION_INVALID" as const };
+      }
+      const [sound] = await tx.update(campaignSounds).set({ ...parsed.data, updatedAt: new Date() })
+        .where(and(eq(campaignSounds.id, params.soundId!), eq(campaignSounds.campaignId, auth.campaignId))).returning({ id: campaignSounds.id });
+      return sound ? { id: sound.id } : { error: "SOUND_NOT_FOUND" as const };
+    });
+    if ("error" in outcome) {
+      const status = outcome.error === "SOUND_NOT_FOUND" ? 404 : 400;
+      return reply.code(status).send({ error: outcome.error });
     }
-    const [sound] = await db.update(campaignSounds).set({ ...parsed.data, updatedAt: new Date() })
-      .where(and(eq(campaignSounds.id, params.soundId), eq(campaignSounds.campaignId, auth.campaignId))).returning({ id: campaignSounds.id });
+    const sound = outcome;
     if (!sound) return reply.code(404).send({ error: "SOUND_NOT_FOUND" });
     invalidateCatalogue(auth.campaignId);
     return { ok: true };

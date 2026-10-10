@@ -113,6 +113,7 @@ beforeAll(async () => {
       campaignId: ids.campaign,
       uploadedByMembershipId: ids.gm,
       kind: "AUDIO",
+      audioPurpose: "MUSIC",
       name: "Sound",
       storageKey: `test/${ids.audioAsset}`,
       mimeType: "audio/ogg",

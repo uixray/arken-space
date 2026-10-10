@@ -237,6 +237,8 @@ export function MapToolbar({
         />
       </ToolbarButton>
 
+      <div className="map-toolbar__scroll">
+
       <div className="toolbar-group">
         <ToolbarButton
           aria-label="Перемещение"
@@ -532,6 +534,7 @@ export function MapToolbar({
         />
       </div>
       {pauseControl && <div className="map-toolbar__pause">{pauseControl}</div>}
+      </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { createElement } from "react";
+import type { ReactNode } from "react";
 import type { AssetDto, AudioStateDto, AudioTrackDto, CommandAck } from "@arken/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isAudioConsentError } from "./audio-playback";
@@ -14,7 +15,7 @@ vi.mock("@gravity-ui/uikit", () => ({
   Checkbox: () => null,
   Loader: () => null,
 }));
-vi.mock("./ui/ArkenDialog", () => ({ ArkenDialog: () => null }));
+vi.mock("./ui/ArkenDialog", () => ({ ArkenDialog: ({ open, children }: { open: boolean; children: ReactNode }) => open ? createElement("div", { role: "dialog" }, children) : null }));
 vi.mock("./ui/notifications", () => ({ notify: vi.fn() }));
 
 const { MusicBar: ActualMusicBar } = await import("./MusicBar");
@@ -161,6 +162,42 @@ describe("UIX-417 audio acknowledgement copy", () => {
 });
 
 describe("personal music volume", () => {
+  it("keeps effect-only audio out of the music picker and uploads explicit MUSIC", async () => {
+    const effects = { ...audioAsset, id: "effect-only", name: "Footsteps", audioPurpose: "SOUND_EFFECT" as const };
+    const both = { ...audioAsset, id: "both-audio", name: "Both", audioPurpose: "BOTH" as const };
+    const onUpload = vi.fn().mockResolvedValue({ ...audioAsset, id: "new-music" });
+    const view = renderComponent(createElement(MusicBar, {
+      audio: playingAudio, assets: [audioAsset, effects, both], role: "GM", socket: null, onUpload,
+    }));
+    fireEvent.click(screen.getByLabelText("Плейлист"));
+    const menu = view.container.querySelector(".music-overflow__menu")!;
+    expect(menu.firstElementChild).toHaveClass("music-overflow__library");
+    expect(menu.firstElementChild?.querySelector(".lucide-list-music")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Quiet track" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Footsteps" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Both" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Открыть библиотеку" }));
+    const file = new File(["synthetic music"], "music.mp3", { type: "audio/mpeg" });
+    fireEvent.change(screen.getByLabelText("Аудиофайл"), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить и выбрать" }));
+    await vi.waitFor(() => expect(onUpload).toHaveBeenCalledWith(file, "AUDIO", { audioPurpose: "MUSIC" }));
+    view.unmount();
+  });
+
+  it("shows Pause from the canonical active-track state when the legacy audio projection is stale", () => {
+    const canonicalTrack = { ...trackFromAudio(playingAudio), playing: true };
+    renderComponent(createElement(MusicBar, {
+      audio: { ...playingAudio, playing: false },
+      audioTracks: [canonicalTrack],
+      assets: [audioAsset],
+      role: "GM",
+      socket: null,
+      onUpload: vi.fn(),
+    }));
+    const toggle = screen.getByRole("button", { name: "Пауза" });
+    expect(toggle.querySelector(".lucide-pause")).not.toBeNull();
+  });
+
   it("plays two canonical tracks while player master remains local-only and gain does not restart them", () => {
     const secondAsset = { ...audioAsset, id: "audio-second", name: "Second track" };
     const tracks = [trackFromAudio(playingAudio), { ...trackFromAudio(playingAudio), id: "track-second", assetId: secondAsset.id, slotOrder: 1 }];
@@ -249,7 +286,7 @@ describe("personal music volume", () => {
       target: { value: "0" },
     });
     expect(container.querySelector("audio")!.volume).toBe(0);
-    expect(screen.getByRole("button", { name: "Включить звук" })).toBeTruthy();
+    expect(document.querySelector(".music-enable-button")).toBeNull();
     expect(play).not.toHaveBeenCalled();
   });
 
@@ -268,18 +305,11 @@ describe("personal music volume", () => {
         onUpload: vi.fn(),
       }),
     );
-    await vi.waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Включить звук" }),
-      ).toBeTruthy(),
-    );
+    await vi.waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+    expect(document.querySelector(".music-enable-button")).toBeNull();
     expect(localStorage.getItem("arken.audio.enabled")).toBeNull();
     fireEvent.pointerDown(document.body);
-    await vi.waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: "Включить звук" }),
-      ).toBeNull(),
-    );
+    await vi.waitFor(() => expect(play).toHaveBeenCalledTimes(2));
     expect(play).toHaveBeenCalledTimes(2);
     expect(notify).not.toHaveBeenCalled();
   });
@@ -298,11 +328,8 @@ describe("personal music volume", () => {
         onUpload: vi.fn(),
       }),
     );
-    await vi.waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Включить звук" }),
-      ).toBeTruthy(),
-    );
+    await vi.waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+    expect(document.querySelector(".music-enable-button")).toBeNull();
     fireEvent.pointerDown(container);
     await vi.waitFor(() => expect(play).toHaveBeenCalledTimes(2));
     expect(localStorage.getItem("arken.audio.enabled")).toBeNull();
@@ -321,11 +348,8 @@ describe("personal music volume", () => {
         onUpload: vi.fn(),
       }),
     );
-    await vi.waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Включить звук" }),
-      ).toBeTruthy(),
-    );
+    await vi.waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1));
+    expect(document.querySelector(".music-enable-button")).toBeNull();
     expect(localStorage.getItem("arken.audio.enabled")).toBeNull();
   });
   it("keeps the first slider step quiet instead of jumping to 5% gain", () => {

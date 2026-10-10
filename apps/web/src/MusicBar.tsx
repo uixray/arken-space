@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AssetDto, AudioStateDto, AudioTrackDto, AudioTrackCommand, CommandAck, Role } from "@arken/contracts";
+import type { AssetDto, AudioStateDto, AudioTrackDto, AudioTrackCommand, AudioPurpose, CommandAck, Role } from "@arken/contracts";
 import { Checkbox } from "./design-system/Checkbox";
 import { Loader } from "./design-system/Loader";
 import { Button } from "./design-system/Button";
@@ -96,7 +96,7 @@ function AudioTrackPlayback({ track, asset, enabled, masterVolume, retryToken, o
   useEffect(() => {
     if (!enabled || !track.playing || !asset) return;
     const retry = (event: Event) => {
-      if (event.target instanceof Element && event.target.closest(".music-volume-control, .music-enable-button")) return;
+      if (event.target instanceof Element && event.target.closest(".music-volume-control")) return;
       const el = ref.current;
       if (!el || !blocked.current) return;
       blocked.current = false;
@@ -149,7 +149,7 @@ export function MusicBar({
   assets: AssetDto[];
   role: Role;
   socket: GameSocket | null;
-  onUpload: (file: File, kind: "AUDIO") => Promise<AssetDto>;
+  onUpload: (file: File, kind: "AUDIO", options?: { audioPurpose?: AudioPurpose }) => Promise<AssetDto>;
   controlsTarget?: HTMLElement | null;
 }) {
   const element = useRef<HTMLAudioElement>(null);
@@ -164,8 +164,7 @@ export function MusicBar({
     () => localStorage.getItem(ENABLED_KEY) !== "false",
   );
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
-  const [blockedTrackId, setBlockedTrackId] = useState<string | null>(null);
-  const [retryToken, setRetryToken] = useState(0);
+  const [, setBlockedTrackId] = useState<string | null>(null);
   const playbackBlockedRef = useRef(false);
   const [volume, setVolume] = useState(() => {
     const stored = localStorage.getItem(VOLUME_KEY);
@@ -179,7 +178,7 @@ export function MusicBar({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const tracks = useMemo(
-    () => assets.filter((asset) => asset.kind === "AUDIO"),
+    () => assets.filter((asset) => asset.kind === "AUDIO" && (asset.audioPurpose ?? "MUSIC") !== "SOUND_EFFECT"),
     [assets],
   );
   const mixerTracks = audioTracks.slice().sort((a, b) => a.slotOrder - b.slotOrder).slice(0, 4);
@@ -308,7 +307,7 @@ export function MusicBar({
     const onGesture = (event: Event) => {
       if (
         event.target instanceof Element &&
-        event.target.closest(".music-volume-control, .music-enable-button")
+        event.target.closest(".music-volume-control")
       )
         return;
       if (!playbackBlockedRef.current) return;
@@ -325,12 +324,6 @@ export function MusicBar({
     };
   }, [playbackBlocked, enabled, audio.playing, current]);
 
-  const retryPlayback = () => {
-    const player = element.current;
-    if (!enabled || !audio.playing || !current || !player) return;
-    playbackBlockedRef.current = false;
-    attemptPlayback(player);
-  };
   const setAudioEnabled = (next: boolean) => {
     localStorage.setItem(ENABLED_KEY, String(next));
     setEnabled(next);
@@ -391,7 +384,7 @@ export function MusicBar({
     setUploading(true);
     setUploadError(null);
     try {
-      const asset = await onUpload(pending.file, "AUDIO");
+      const asset = await onUpload(pending.file, "AUDIO", { audioPurpose: "MUSIC" });
       if (activeTrack) sendTrackCommand(activeTrack, { command: "SELECT", assetId: asset.id });
       else addTrack(asset.id);
       setPending(null);
@@ -414,15 +407,6 @@ export function MusicBar({
       >
         {activeAsset?.name ?? current?.name ?? "Композиция 4'33"}
       </strong>
-      {((playbackBlocked && enabled && audio.playing && current) || (blockedTrackId && activeTrack?.id === blockedTrackId)) ? (
-        <button
-          type="button"
-          className="music-enable-button"
-          onClick={() => { setRetryToken((value) => value + 1); retryPlayback(); }}
-        >
-          Включить звук
-        </button>
-      ) : null}
       <button
         type="button"
         className="music-icon-button"
@@ -431,7 +415,7 @@ export function MusicBar({
         disabled={role !== "GM" || !activeTrack}
         onClick={togglePlayback}
       >
-        <AppIcon icon={audio.playing ? PauseIcon : PlayIcon} />
+        <AppIcon icon={activeTrack?.playing ? PauseIcon : PlayIcon} />
       </button>
       <details className="music-volume-control" ref={volumeRef}>
         <summary aria-label="Громкость" title="Громкость">
@@ -466,6 +450,20 @@ export function MusicBar({
             <AppIcon icon={PlaylistIcon} />
           </summary>
           <div className="music-overflow__menu">
+            <button
+              type="button"
+              className="music-overflow__library"
+              onClick={() => {
+                if (overflowRef.current) {
+                  overflowRef.current.open = false;
+                  overflowRef.current.querySelector<HTMLElement>("summary")?.focus();
+                }
+                setLibraryOpen(true);
+              }}
+            >
+              <AppIcon icon={PlaylistIcon} />
+              Открыть библиотеку
+            </button>
             <span className="music-overflow__now-playing">
               {current?.name ?? "Трек не выбран"}
             </span>
@@ -495,20 +493,6 @@ export function MusicBar({
                 Нет доступных треков
               </span>
             )}
-            <button
-              type="button"
-              onClick={() => {
-                if (overflowRef.current) {
-                  overflowRef.current.open = false;
-                  overflowRef.current
-                    .querySelector<HTMLElement>("summary")
-                    ?.focus();
-                }
-                setLibraryOpen(true);
-              }}
-            >
-              Открыть библиотеку
-            </button>
           </div>
         </details>
       ) : null}
@@ -517,7 +501,7 @@ export function MusicBar({
 
   return (
     <>
-      {mixerTracks.map((track) => <AudioTrackPlayback key={`${track.id}:${track.assetId ?? "none"}`} track={track} asset={tracks.find((item) => item.id === track.assetId)} enabled={enabled} masterVolume={volume} retryToken={blockedTrackId === track.id ? retryToken : 0} onBlocked={setBlockedTrackId} />)}
+      {mixerTracks.map((track) => <AudioTrackPlayback key={`${track.id}:${track.assetId ?? "none"}`} track={track} asset={tracks.find((item) => item.id === track.assetId)} enabled={enabled} masterVolume={volume} retryToken={0} onBlocked={setBlockedTrackId} />)}
       {controlsTarget ? createPortal(controls, controlsTarget) : controls}
       {role === "GM" ? (
         <ArkenDialog

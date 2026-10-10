@@ -20,6 +20,7 @@ import type {
   StoryPostAdminDto,
   StoryPostDto,
   TokenDto,
+  AudioPurpose,
 } from "@arken/contracts";
 import { api, ApiError } from "./api";
 import { mergeTokenPlacementUpdate } from "./token-projection";
@@ -1631,7 +1632,8 @@ export function App() {
   }, [themePreference]);
 
   const handleUploadAudio = useCallback(
-    (file: File, kind: "AUDIO") => assetActions.uploadAsset(file, kind),
+    (file: File, kind: "AUDIO", options?: { audioPurpose?: AudioPurpose }) =>
+      assetActions.uploadAsset(file, kind, options),
     [assetActions],
   );
 

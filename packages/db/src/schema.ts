@@ -31,6 +31,11 @@ export const assetKindEnum = pgEnum("asset_kind", [
   "IMAGE",
   "AUDIO",
 ]);
+export const audioPurposeEnum = pgEnum("audio_purpose", [
+  "MUSIC",
+  "SOUND_EFFECT",
+  "BOTH",
+]);
 export const messageVisibilityEnum = pgEnum("message_visibility", [
   "PUBLIC",
   "GM_ONLY",
@@ -769,6 +774,7 @@ export const assets = pgTable(
       .notNull()
       .references(() => memberships.id),
     kind: assetKindEnum("kind").notNull(),
+    audioPurpose: audioPurposeEnum("audio_purpose"),
     name: text("name").notNull(),
     storageKey: text("storage_key").notNull().unique(),
     mimeType: text("mime_type").notNull(),
@@ -782,6 +788,10 @@ export const assets = pgTable(
   },
   (table) => [
     uniqueIndex("assets_campaign_id_id_idx").on(table.campaignId, table.id),
+    check(
+      "assets_audio_purpose_kind_check",
+      sql`(${table.kind} = 'AUDIO' AND ${table.audioPurpose} IS NOT NULL) OR (${table.kind} <> 'AUDIO' AND ${table.audioPurpose} IS NULL)`,
+    ),
   ],
 );
 

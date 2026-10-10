@@ -1,15 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { AssetDto, Role, SoundpadPackDto } from "@arken/contracts";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AssetDto, AudioPurpose, Role, SoundpadPackDto } from "@arken/contracts";
 import type { GameSocket } from "./realtime.js";
 import { SoundEffectsPlayback } from "./sound-effects-playback.js";
+import { ArkenDialog } from "./ui/ArkenDialog";
 import "./SoundpadWorkspace.css";
 
-type Props = { campaignId: string; membershipId: string; role: Role; assets: AssetDto[]; socket: GameSocket | null; onUpload: (file: File, kind: "AUDIO") => Promise<AssetDto>; onRefreshSnapshot?: () => Promise<void> };
+type Props = { campaignId: string; membershipId: string; role: Role; assets: AssetDto[]; socket: GameSocket | null; onUpload: (file: File, kind: "AUDIO", options?: { audioPurpose?: AudioPurpose }) => Promise<AssetDto>; onRefreshSnapshot?: () => Promise<void> };
 type SoundpadResponse = { packs: SoundpadPackDto[]; playerPlaybackEnabled: boolean };
 const DEFAULT_CLIPS = [
   { file: "evil-laugh.ogg", label: "Злодейский смех", icon: "😈", category: "Реакции", sourceNote: "CC0 · AntumDeluge — Evil Laugh · OpenGameArt" },
   { file: "surprise-oh-my.wav", label: "О, боже!", icon: "😮", category: "Реакции", sourceNote: "CC0 · rubenwardy — Oh My / Help Me (English voice) · OpenGameArt" },
 ] as const;
+
+function isEffectAsset(asset: AssetDto | undefined): asset is AssetDto {
+  return Boolean(asset && asset.kind === "AUDIO" && (asset.audioPurpose === "SOUND_EFFECT" || asset.audioPurpose === "BOTH"));
+}
 
 function readFavoriteIds(storageKey: string) {
   try {
@@ -32,6 +37,9 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
   if (!busRef.current) busRef.current = new SoundEffectsPlayback(undefined, 4, () => setError("Не удалось воспроизвести звуковой эффект."));
   const bus = busRef.current;
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const launcherRef = useRef<HTMLButtonElement>(null);
+  const unlockPending = useRef(false);
   const [unlocked, setUnlocked] = useState(false);
   const [volume, setVolume] = useState(() => {
     const stored = localStorage.getItem(`arken.effects.volume.${campaignId}.${membershipId}`);
@@ -49,13 +57,15 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
   const [favoriteSnapshot, setFavoriteSnapshot] = useState(() => ({ key: favoriteStorageKey, ids: readFavoriteIds(favoriteStorageKey) }));
   const favorites = favoriteSnapshot.key === favoriteStorageKey ? favoriteSnapshot.ids : readFavoriteIds(favoriteStorageKey);
   const assetsById = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
+  const [managePackId, setManagePackId] = useState("");
+  const managementPack = data.packs.find((pack) => pack.id === managePackId) ?? data.packs[0];
   const filteredPacks = useMemo(() => {
     const query = searchTerm.trim().toLocaleLowerCase();
     return data.packs.map((pack) => {
       const packMatches = query.length === 0 || pack.name.toLocaleLowerCase().includes(query);
       const sounds = pack.sounds.filter((sound) => {
         const asset = assetsById.get(sound.assetId);
-        const available = asset?.kind === "AUDIO" && asset.durationSeconds !== null && asset.durationSeconds > 0 && asset.durationSeconds <= 10;
+        const available = isEffectAsset(asset) && asset.durationSeconds !== null && asset.durationSeconds > 0 && asset.durationSeconds <= 10;
         const matchesQuery = query.length === 0 || packMatches || sound.label.toLocaleLowerCase().includes(query);
         return available && matchesQuery && (!onlyFavorites || favorites.has(sound.id));
       }).sort((left, right) => Number(favorites.has(right.id)) - Number(favorites.has(left.id)));
@@ -105,8 +115,8 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
         const state = latestRef.current;
         const sound = packs.flatMap((pack) => pack.sounds).find((item) => item.id === event.soundId);
         const asset = sound ? state.assetsById.get(sound.assetId) : undefined;
-        if (sound && asset && state.unlocked) bus.play(event, asset.url, state.volume, state.muted);
-        return Boolean(sound && asset);
+        if (sound && isEffectAsset(asset)) bus.play(event, asset.url, state.volume, state.muted);
+        return Boolean(sound && isEffectAsset(asset));
       };
       if (!playFrom(latestRef.current.packs)) {
         const capturedSession = playbackSession.current;
@@ -166,12 +176,16 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
       if (!response.ok) throw new Error("BUNDLED_CLIP_UNAVAILABLE");
       const blob = await response.blob();
       const file = new File([blob], clip.file, { type: blob.type || (clip.file.endsWith(".ogg") ? "audio/ogg" : "audio/wav") });
-      const asset = await onUpload(file, "AUDIO");
+      const asset = await onUpload(file, "AUDIO", { audioPurpose: "SOUND_EFFECT" });
       await request(`/api/soundpad/packs/${pack.packId}/sounds`, "POST", { assetId: asset.id, label: clip.label, icon: clip.icon, category: clip.category, sourceNote: clip.sourceNote, defaultGain: 0.5, audience: "ALL_MEMBERS" });
     }
   });
   const setPackPublished = (packId: string, published: boolean) => mutate(() => request(`/api/soundpad/packs/${packId}`, "PATCH", { published }));
   const setPackAudience = (packId: string, audience: "ALL_MEMBERS" | "GM_ONLY") => mutate(() => request(`/api/soundpad/packs/${packId}`, "PATCH", { audience }));
+  const closeSoundpad = () => {
+    setOpen(false);
+    requestAnimationFrame(() => launcherRef.current?.focus());
+  };
   const setPlayerPolicy = (playerPlaybackEnabled: boolean) => mutate(() => request("/api/soundpad/player-policy", "PUT", { playerPlaybackEnabled }));
   const toggleFavorite = (soundId: string) => {
     const next = new Set(favorites);
@@ -179,11 +193,12 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
     setFavoriteSnapshot({ key: favoriteStorageKey, ids: next });
     try { localStorage.setItem(favoriteStorageKey, JSON.stringify([...next])); } catch { setError("Не удалось сохранить избранное на этом устройстве."); }
   };
-  const enableEffects = () => {
+  const enableEffects = useCallback(() => {
+    if (muted || unlocked || unlockPending.current) return;
+    unlockPending.current = true;
     setError("");
-    setUnlocked(true); bus.setConnected(Date.now());
-    // A 1-sample silent WAV performs the unlock attempt inside the user's
-    // gesture; it is never a pack sound and contains no audible test tone.
+    // A 1-sample silent WAV attempts to unlock during a genuine user action;
+    // it is never a pack sound and contains no audible test tone.
     const bytes = new Uint8Array(45); const view = new DataView(bytes.buffer);
     const ascii = (offset: number, text: string) => [...text].forEach((character, index) => bytes[offset + index] = character.charCodeAt(0));
     ascii(0, "RIFF"); view.setUint32(4, 37, true); ascii(8, "WAVEfmt "); view.setUint32(16, 16, true);
@@ -192,17 +207,44 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
     ascii(36, "data"); view.setUint32(40, 1, true); bytes[44] = 128;
     const url = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
     const unlockAudio = new Audio(url); unlockAudio.volume = 0;
-    void unlockAudio.play().catch(() => { setUnlocked(false); setError("Браузер пока блокирует звук. Нажмите кнопку ещё раз."); }).finally(() => { unlockAudio.pause(); URL.revokeObjectURL(url); });
-  };
+    void unlockAudio.play().then(() => {
+      if (!latestRef.current.muted) {
+        setUnlocked(true);
+        bus.setConnected(Date.now());
+      }
+    }).catch(() => {
+      setUnlocked(false);
+      setError("Браузер блокирует звук. Следующее действие повторит попытку.");
+    }).finally(() => {
+      unlockPending.current = false;
+      unlockAudio.pause();
+      URL.revokeObjectURL(url);
+    });
+  }, [bus, muted, unlocked]);
+  useEffect(() => {
+    const unlockFromTrustedGesture = (event: Event) => {
+      if (!event.isTrusted || latestRef.current.muted || latestRef.current.unlocked || unlockPending.current) return;
+      if (event.type === "keydown" && ["Tab", "Shift", "Control", "Alt", "Meta", "Escape"].includes((event as KeyboardEvent).key)) return;
+      enableEffects();
+    };
+    document.addEventListener("pointerdown", unlockFromTrustedGesture, true);
+    document.addEventListener("keydown", unlockFromTrustedGesture, true);
+    return () => {
+      document.removeEventListener("pointerdown", unlockFromTrustedGesture, true);
+      document.removeEventListener("keydown", unlockFromTrustedGesture, true);
+    };
+  }, [enableEffects]);
   const trigger = (soundId: string) => {
     if (!unlocked) enableEffects();
     socket?.emit("soundpad:trigger", { soundId, actionId: crypto.randomUUID() });
   };
-  const audioAssets = assets.filter((asset) => asset.kind === "AUDIO" && asset.durationSeconds !== null && asset.durationSeconds > 0 && asset.durationSeconds <= 10);
+  const audioAssets = assets.filter((asset) => isEffectAsset(asset) && asset.durationSeconds !== null && asset.durationSeconds > 0 && asset.durationSeconds <= 10);
 
-  return <section className="soundpad" aria-label="Саундпад">
-    <header className="soundpad__header"><h2>Саундпад</h2><span className="soundpad__status" role="status">{unlocked ? "Звук включён" : "Нажмите, чтобы включить звук"}</span>
-      <button type="button" onClick={enableEffects}>Включить звук</button>
+  return <>
+    <button ref={launcherRef} className="soundpad__launcher" type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>Саундпад</button>
+    <ArkenDialog open={open} title="Саундпад" footer={false} className="soundpad__dialog" onClose={closeSoundpad}>
+    <section className="soundpad" aria-label="Саундпад">
+    <header className="soundpad__header"><span className="soundpad__status" role="status">{unlocked ? "Звук включён" : "Эффекты включатся при первом действии"}</span>
       <label>Эффекты <input aria-label="Громкость эффектов" type="range" min="0" max="1" step="0.01" value={volume} onChange={(event) => { setVolume(Number(event.target.value)); bus.setVolume(Number(event.target.value)); }} /></label>
       <button type="button" aria-pressed={muted} onClick={() => setMuted((value) => !value)}>{muted ? "Включить эффекты" : "Выключить эффекты"}</button>
       {role === "GM" && <button type="button" onClick={() => socket?.emit("soundpad:stop")}>Остановить эффекты</button>}
@@ -212,8 +254,13 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
       <label>Поиск по звукам и пакам <input type="search" aria-label="Поиск звуков и паков" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Название звука или пака" /></label>
       <label className="soundpad__favorites-filter"><input type="checkbox" checked={onlyFavorites} onChange={(event) => setOnlyFavorites(event.target.checked)} /> Только избранное</label>
     </div>
-    {role === "GM" && <div className="soundpad__manager">
+    {role === "GM" && <details className="soundpad__manager-disclosure"><summary>Управление паками</summary><div className="soundpad__manager">
       <button type="button" disabled={busy} onClick={() => void installStarter()}>Добавить стартовый CC0-пак</button>
+      {managementPack && <>
+        <label>Управляемый пак <select value={managementPack.id} onChange={(event) => setManagePackId(event.target.value)}>{data.packs.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select></label>
+        <button type="button" disabled={busy} onClick={() => void setPackPublished(managementPack.id, !managementPack.published)}>{managementPack.published ? "Скрыть пак" : "Опубликовать пак"}</button>
+        <label>Кому доступен <select aria-label={`Кому доступен ${managementPack.name}`} value={managementPack.audience} disabled={busy} onChange={(event) => void setPackAudience(managementPack.id, event.target.value as "ALL_MEMBERS" | "GM_ONLY")}><option value="ALL_MEMBERS">Всем участникам</option><option value="GM_ONLY">Только ведущему</option></select></label>
+      </>}
       <form onSubmit={(event) => { event.preventDefault(); void createPack(); }}>
         <label>Название пака <input value={newPackName} maxLength={80} onChange={(event) => setNewPackName(event.target.value)} /></label>
         <button type="submit" disabled={busy || !newPackName.trim()}>Создать пак</button>
@@ -226,14 +273,11 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
         <option value="">Выберите файл ≤ 10 секунд</option>{audioAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
       </select></label>
       <label className="soundpad__policy"><input type="checkbox" checked={data.playerPlaybackEnabled} onChange={(event) => void setPlayerPolicy(event.target.checked)} disabled={busy} /> Игрокам можно запускать звуки</label>
-    </div>}
+    </div></details>}
     {data.packs.length === 0 && <p className="soundpad__empty">Пока нет паков. Ведущий может создать пак или добавить стартовый CC0-пак.</p>}
     {data.packs.length > 0 && filteredPacks.length === 0 && <p className="soundpad__empty" role="status">Ничего не найдено. Измените поиск или фильтр избранного.</p>}
     {filteredPacks.map((pack) => <section className="soundpad__pack" key={pack.id} aria-label={pack.name}>
-      <div className="soundpad__pack-heading"><h3>{pack.name}</h3>{role === "GM" && <>
-        <button type="button" disabled={busy} onClick={() => void setPackPublished(pack.id, !pack.published)}>{pack.published ? "Скрыть" : "Опубликовать"}</button>
-        <select aria-label={`Кому доступен ${pack.name}`} value={pack.audience} disabled={busy} onChange={(event) => void setPackAudience(pack.id, event.target.value as "ALL_MEMBERS" | "GM_ONLY")}><option value="ALL_MEMBERS">Всем участникам</option><option value="GM_ONLY">Только ведущему</option></select>
-      </>}</div>
+      <div className="soundpad__pack-heading"><h3>{pack.name}</h3></div>
       {pack.sounds.length === 0 ? <p>В этом паке пока нет доступных звуков.</p> : <div className="soundpad__grid">{pack.sounds.map((sound) => {
         return <div className="soundpad__sound-card" key={sound.id}>
           <button type="button" className="soundpad__sound" aria-label={`Запустить звук: ${sound.label}`} disabled={!data.playerPlaybackEnabled && role !== "GM"} onClick={() => trigger(sound.id)} title={sound.sourceNote ?? undefined}>
@@ -244,5 +288,7 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
       })}</div>}
     </section>)}
     <p className="soundpad__limits">Предложенные лимиты первого среза: эффект до 10 с, не более 4 голосов на устройстве; более старый голос завершается первым. Эффекты не управляют музыкой.</p>
-  </section>;
+    </section>
+    </ArkenDialog>
+  </>;
 }

@@ -714,16 +714,26 @@ html[data-player-theme="light"] .brand__mark {
   background: var(--surface);
   box-shadow: 0 10px 28px rgb(0 0 0 / 35%);
   min-width: 0;
-  overflow: visible;
+  overflow: hidden;
 }
-.map-toolbar > .toolbar-group {
+.map-toolbar__scroll {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: contain;
 }
-.map-toolbar
+.map-toolbar__collapse {
+  flex: 0 0 auto;
+}
+.map-toolbar__scroll > .toolbar-group {
+  flex: 0 0 auto;
+  min-height: auto;
+  overflow: visible;
+}
+.map-toolbar__scroll
   > :is(
     .toolbar-history,
     .toolbar-overflow,
@@ -732,7 +742,7 @@ html[data-player-theme="light"] .brand__mark {
   ) {
   flex: 0 0 auto;
 }
-.map-toolbar > .toolbar-shortcuts {
+.map-toolbar__scroll > .toolbar-shortcuts {
   margin-top: auto;
 }
 .game-pause-control {
@@ -800,12 +810,15 @@ html[data-player-theme="light"] .brand__mark {
   min-height: 28px;
   cursor: pointer;
   list-style: none;
+  anchor-name: --map-toolbar-overflow-trigger;
 }
 .toolbar-overflow-menu {
-  position: absolute;
+  position: fixed;
   z-index: 30;
-  top: 0;
-  left: calc(100% + 6px);
+  top: anchor(bottom);
+  left: anchor(right);
+  position-anchor: --map-toolbar-overflow-trigger;
+  position-try-fallbacks: flip-inline, flip-block;
   display: grid;
   gap: 4px;
   min-width: 220px;

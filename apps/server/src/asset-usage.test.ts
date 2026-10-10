@@ -5,6 +5,7 @@ import {
   assetUsagePolicy,
   assetDto,
   assetContentVersion,
+  assetUploadActionMatches,
   deleteUnusedAsset,
 } from "./asset-lifecycle.js";
 
@@ -185,4 +186,12 @@ it("changes rendered content URL only when blob version changes, retaining canon
     assetContentVersion("new-private-blob.webp").slice(1, -1),
   );
   expect(JSON.stringify(replaced)).not.toContain("new-private-blob");
+});
+
+it("binds upload action replay to audio purpose while retaining the legacy MUSIC default", () => {
+  expect(assetUploadActionMatches({ kind: "AUDIO" }, "AUDIO", "MUSIC")).toBe(true);
+  expect(assetUploadActionMatches({ kind: "AUDIO", audioPurpose: "SOUND_EFFECT" }, "AUDIO", "SOUND_EFFECT")).toBe(true);
+  expect(assetUploadActionMatches({ kind: "AUDIO", audioPurpose: "MUSIC" }, "AUDIO", "SOUND_EFFECT")).toBe(false);
+  expect(assetUploadActionMatches({ kind: "IMAGE" }, "IMAGE", null)).toBe(true);
+  expect(assetUploadActionMatches({ kind: "IMAGE", audioPurpose: "MUSIC" }, "IMAGE", null)).toBe(false);
 });

@@ -21,6 +21,7 @@ import {
   activateSceneSchema,
   actionIdSchema,
   assetKindSchema,
+  audioPurposeSchema,
   characterCommandSchema,
   createCharacterSchema,
   assignCatalogEntrySchema,
@@ -160,7 +161,7 @@ import { registerStickerPackAdminRoutes } from "./sticker-pack-admin.js";
 import { registerGlobalStickerRoutes } from "./global-sticker-catalog.js";
 import { registerAssetLifecycleRoutes } from "./asset-usage.js";
 import { registerSoundpadRoutes } from "./soundpad-routes.js";
-import { assetContentVersion, assetDto } from "./asset-lifecycle.js";
+import { assetContentVersion, assetDto, assetUploadActionMatches } from "./asset-lifecycle.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
 import { registerPlayerRequestRoutes } from "./player-requests.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
@@ -8860,12 +8861,21 @@ export function registerRoutes(
   app.post("/api/assets", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    const query = z.object({ kind: assetKindSchema }).parse(request.query);
+    const query = z.object({
+      kind: assetKindSchema,
+      audioPurpose: audioPurposeSchema.optional(),
+    }).parse(request.query);
+    if (query.kind !== "AUDIO" && query.audioPurpose !== undefined)
+      return reply.code(400).send({ error: "AUDIO_PURPOSE_REQUIRES_AUDIO" });
     if (auth.role !== "GM" && !["TOKEN", "PORTRAIT"].includes(query.kind))
       return reply.code(403).send({ error: "ASSET_FORBIDDEN" });
     const actionId = actionIdSchema.parse(request.headers["x-action-id"]);
     const duplicate = await findAction(db, auth.campaignId, actionId);
     if (duplicate?.entityId) {
+      const requestedPurpose = query.kind === "AUDIO" ? (query.audioPurpose ?? "MUSIC") : null;
+      const priorPayload = duplicate.payload as { kind?: string; audioPurpose?: string | null } | null;
+      if (!assetUploadActionMatches(priorPayload, query.kind, requestedPurpose))
+        return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
       const [existing] = await db
         .select()
         .from(assets)
@@ -8905,6 +8915,7 @@ export function registerRoutes(
               campaignId: auth.campaignId,
               uploadedByMembershipId: auth.membershipId,
               kind: query.kind,
+              audioPurpose: query.kind === "AUDIO" ? (query.audioPurpose ?? "MUSIC") : null,
               name: displayNameFromUpload(file.filename),
               ...stored,
             })
@@ -8917,7 +8928,7 @@ export function registerRoutes(
             type: "asset.created",
             entityType: "asset",
             entityId: created.id,
-            payload: { assetId: created.id, kind: created.kind },
+            payload: { assetId: created.id, kind: created.kind, audioPurpose: created.audioPurpose },
           });
           return created;
         })

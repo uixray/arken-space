@@ -995,10 +995,10 @@ export function registerRealtime(
               : command.assetId;
         if (requestedAssetId) {
           const [asset] = await tx
-            .select({ campaignId: assets.campaignId, kind: assets.kind })
+            .select({ campaignId: assets.campaignId, kind: assets.kind, audioPurpose: assets.audioPurpose })
             .from(assets)
             .where(eq(assets.id, requestedAssetId))
-            .limit(1);
+            .for("update").limit(1);
           if (
             !asset ||
             asset.campaignId !== auth.campaignId ||
@@ -1006,6 +1006,8 @@ export function registerRealtime(
           ) {
             return { rejection: "ASSET_NOT_FOUND" as const };
           }
+          if (asset.audioPurpose !== "MUSIC" && asset.audioPurpose !== "BOTH")
+            return { rejection: "AUDIO_PURPOSE_NOT_MUSIC" as const };
         }
         // UIX-382 compat: the legacy singular audio:set path operates on the
         // "slot 0" track — the lowest slotOrder row for this campaign,
@@ -1259,10 +1261,10 @@ export function registerRealtime(
         if (command.command === "ADD_TRACK") {
           if (command.assetId) {
             const [asset] = await tx
-              .select({ campaignId: assets.campaignId, kind: assets.kind })
+              .select({ campaignId: assets.campaignId, kind: assets.kind, audioPurpose: assets.audioPurpose })
               .from(assets)
               .where(eq(assets.id, command.assetId))
-              .limit(1);
+              .for("update").limit(1);
             if (
               !asset ||
               asset.campaignId !== auth.campaignId ||
@@ -1270,6 +1272,8 @@ export function registerRealtime(
             ) {
               return { rejection: "ASSET_NOT_FOUND" as const };
             }
+            if (asset.audioPurpose !== "MUSIC" && asset.audioPurpose !== "BOTH")
+              return { rejection: "AUDIO_PURPOSE_NOT_MUSIC" as const };
           }
           const [activeCountRow] = await tx
             .select({ value: count() })
@@ -1362,10 +1366,10 @@ export function registerRealtime(
 
         if (command.command === "SELECT" && command.assetId) {
           const [asset] = await tx
-            .select({ campaignId: assets.campaignId, kind: assets.kind })
+            .select({ campaignId: assets.campaignId, kind: assets.kind, audioPurpose: assets.audioPurpose })
             .from(assets)
             .where(eq(assets.id, command.assetId))
-            .limit(1);
+            .for("update").limit(1);
           if (
             !asset ||
             asset.campaignId !== auth.campaignId ||
@@ -1373,6 +1377,8 @@ export function registerRealtime(
           ) {
             return { rejection: "ASSET_NOT_FOUND" as const };
           }
+          if (asset.audioPurpose !== "MUSIC" && asset.audioPurpose !== "BOTH")
+            return { rejection: "AUDIO_PURPOSE_NOT_MUSIC" as const };
         }
 
         const [selectedAsset] = current.assetId

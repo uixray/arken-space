@@ -34,6 +34,7 @@ export const assetKindSchema = z.enum([
   "IMAGE",
   "AUDIO",
 ]);
+export const audioPurposeSchema = z.enum(["MUSIC", "SOUND_EFFECT", "BOTH"]);
 export const tokenFramePresetSchema = z.enum([
   "NONE",
   "BRONZE",
@@ -114,6 +115,7 @@ export const worldMapLocationVisibilitySchema = z.enum([
 export type Role = z.infer<typeof roleSchema>;
 export type Projection = z.infer<typeof projectionSchema>;
 export type AssetKind = z.infer<typeof assetKindSchema>;
+export type AudioPurpose = z.infer<typeof audioPurposeSchema>;
 export type TokenFramePreset = z.infer<typeof tokenFramePresetSchema>;
 export type MessageVisibility = z.infer<typeof messageVisibilitySchema>;
 export type ChatStream = z.infer<typeof chatStreamSchema>;
@@ -2248,6 +2250,8 @@ export const rechargeEntryCommandSchema = z.object({
 export interface AssetDto {
   id: string;
   kind: AssetKind;
+  /** Null for non-audio assets; legacy audio assets are backfilled to MUSIC. */
+  audioPurpose?: AudioPurpose | null;
   name: string;
   mimeType: string;
   sizeBytes: number;

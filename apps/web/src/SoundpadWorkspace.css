@@ -1,8 +1,26 @@
+.soundpad__launcher {
+  position: fixed;
+  inset-inline-end: max(1rem, env(safe-area-inset-right));
+  inset-block-start: max(5rem, calc(env(safe-area-inset-top) + 4rem));
+  z-index: 30;
+  min-height: 2.75rem;
+  padding: 0.625rem 1rem;
+  border: 1px solid var(--border-subtle, #52606d88);
+  border-radius: 999px;
+  background: var(--surface-elevated, #17212b);
+  color: var(--text-primary, #f3f5f7);
+  box-shadow: 0 0.25rem 1rem #0005;
+  cursor: pointer;
+}
+.soundpad__launcher:focus-visible { outline: 2px solid var(--focus-ring, #86c7ff); outline-offset: 2px; }
+.soundpad__dialog { width: min(68rem, calc(100vw - 2rem)); }
+.soundpad__dialog .g-modal__content { max-height: min(88dvh, 56rem); }
+.soundpad__dialog .g-modal__body { overflow: auto; }
 .soundpad {
   display: grid;
   gap: 0.75rem;
   width: min(100%, 68rem);
-  margin: 0.75rem auto;
+  margin: 0 auto;
   padding: 0.875rem;
   border: 1px solid var(--border-subtle, #52606d55);
   border-radius: 0.75rem;
@@ -20,6 +38,7 @@
 .soundpad__pack-heading h3 { margin: 0 auto 0 0; }
 .soundpad__header label { display: inline-flex; align-items: center; gap: 0.5rem; }
 .soundpad__manager { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; padding: 0.75rem 0; border-block: 1px solid var(--border-subtle, #52606d55); }
+.soundpad__manager-disclosure > summary { width: fit-content; margin-block: 0.25rem 0.5rem; cursor: pointer; }
 .soundpad__discovery { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; }
 .soundpad__discovery > label:first-child { display: grid; gap: 0.25rem; min-width: min(100%, 18rem); }
 .soundpad__favorites-filter { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 2.5rem; }
@@ -46,7 +65,8 @@
 .soundpad__limits { margin: 0; }
 .soundpad__error { color: var(--text-danger, #ff8a8a); }
 @media (max-width: 42rem) {
-  .soundpad { margin: 0.5rem; padding: 0.625rem; }
+  .soundpad__launcher { inset-block-start: max(4.5rem, calc(env(safe-area-inset-top) + 3.5rem)); }
+  .soundpad { padding: 0.625rem; }
   .soundpad__header { align-items: stretch; }
   .soundpad__header > * { flex: 1 1 45%; }
   .soundpad__manager form { flex-wrap: wrap; }

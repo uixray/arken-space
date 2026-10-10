@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
 import { and, eq, isNull, sql, sum } from "drizzle-orm";
-import { actionIdSchema } from "@arken/contracts";
+import { actionIdSchema, audioPurposeSchema } from "@arken/contracts";
 import type {
   AssetUsageDto,
   ClientToServerEvents,
@@ -310,6 +310,63 @@ export function registerAssetLifecycleRoutes(
     campaignId: string,
   ) => Promise<void>,
 ) {
+  app.patch("/api/assets/:id/audio-purpose", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM") return reply.code(403).send({ error: "GM_REQUIRED" });
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = z.object({ actionId: actionIdSchema, audioPurpose: audioPurposeSchema }).parse(request.body);
+    const result = await db.transaction(async (tx) => {
+      const [asset] = await tx.select().from(assets)
+        .where(and(eq(assets.id, id), eq(assets.campaignId, auth.campaignId)))
+        .for("update").limit(1);
+      if (!asset) return { kind: "missing" as const };
+      if (asset.kind !== "AUDIO") return { kind: "not_audio" as const };
+
+      const [priorAction] = await tx.select().from(gameEvents)
+        .where(and(eq(gameEvents.campaignId, auth.campaignId), eq(gameEvents.actionId, body.actionId)))
+        .limit(1);
+      if (priorAction) {
+        const payload = priorAction.payload as { audioPurpose?: string; assetId?: string } | null;
+        if (priorAction.type === "asset.audio_purpose_changed" && priorAction.entityId === id && payload?.assetId === id && payload.audioPurpose === body.audioPurpose)
+          return { kind: "updated" as const, asset };
+        return { kind: "action_conflict" as const };
+      }
+
+      const [trackUse] = await tx.select({ id: campaignAudioTracks.id }).from(campaignAudioTracks)
+        .where(and(eq(campaignAudioTracks.campaignId, auth.campaignId), eq(campaignAudioTracks.assetId, id))).limit(1);
+      const [soundUse] = await tx.select({ id: campaignSounds.id }).from(campaignSounds)
+        .where(and(eq(campaignSounds.campaignId, auth.campaignId), eq(campaignSounds.assetId, id))).limit(1);
+      if ((body.audioPurpose === "MUSIC" && soundUse) || (body.audioPurpose === "SOUND_EFFECT" && trackUse))
+        return { kind: "in_use" as const };
+
+      const [updated] = await tx.update(assets).set({ audioPurpose: body.audioPurpose })
+        .where(and(eq(assets.id, id), eq(assets.campaignId, auth.campaignId))).returning();
+      if (!updated) return { kind: "missing" as const };
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "asset.audio_purpose_changed",
+        entityType: "asset",
+        entityId: id,
+        payload: { assetId: id, audioPurpose: body.audioPurpose },
+      });
+      return { kind: "updated" as const, asset: updated };
+    }).catch((error: unknown) => {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "23505")
+        return { kind: "action_conflict" as const };
+      throw error;
+    });
+
+    if (result.kind === "missing") return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
+    if (result.kind === "not_audio") return reply.code(400).send({ error: "AUDIO_ASSET_REQUIRED" });
+    if (result.kind === "in_use") return reply.code(409).send({ error: "AUDIO_PURPOSE_IN_USE" });
+    if (result.kind === "action_conflict") return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
+    await broadcastSnapshots(io, db, auth.campaignId);
+    return reply.send(assetDto(result.asset));
+  });
+
   app.get("/api/assets/:id/usage", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
