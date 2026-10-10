@@ -54,6 +54,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web
+      args:
+        WEB_BUILD_PROFILE: public-ci
     depends_on:
       server:
         condition: service_healthy

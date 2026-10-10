@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
+import { publicCiFontFallback } from "../../font-build-profile";
 
 const repoFile = (path: string) =>
   new URL(`../../../../${path}`, import.meta.url);
@@ -22,6 +23,20 @@ describe("local Pragmatica Next font contract", () => {
     expect(styles).toMatch(/font-weight:\s*100 900/);
     expect(styles).toMatch(/font-stretch:\s*10% 400%/);
     expect(styles).toMatch(/font-display:\s*swap/);
+  });
+  it("keeps production font source strict while public CI uses a local system fallback", async () => {
+    const styles = await readFile(repoFile("apps/web/src/styles.css"), "utf8");
+    const id = "/repo/apps/web/src/styles.css";
+    expect(publicCiFontFallback(styles, id, "production")).toBeNull();
+    const publicCi = publicCiFontFallback(styles, id, "public-ci");
+    expect(publicCi).toContain('src: local("Arial");');
+    expect(publicCi).not.toContain("/assets/pragmatica-next_vf.woff");
+    expect(await readFile(repoFile("Dockerfile.web"), "utf8")).toMatch(
+      /ARG WEB_BUILD_PROFILE=production[\s\S]*pnpm release:font:preflight/,
+    );
+    expect(await readFile(repoFile("docker-compose.e2e.yml"), "utf8")).toMatch(
+      /WEB_BUILD_PROFILE: public-ci/,
+    );
   });
   it("uses the local font for app and Gravity typography without Google imports", async () => {
     const [entry, styles, gravity] = await Promise.all(
