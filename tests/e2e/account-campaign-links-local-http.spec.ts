@@ -99,7 +99,7 @@ test("real local GM link creates role-specific game bootstrap in account mode", 
   await expect(page.locator(".app-shell")).toBeVisible();
 });
 
-test("real local PLAYER grant link creates isolated role-specific game bootstrap", async ({ page, browser }) => {
+test("real local PLAYER grant link creates isolated role-specific game bootstrap", async ({ browser }) => {
   playerContext = await browser.newContext();
   const playerPage = await playerContext.newPage();
   await connectLocalApi(playerPage);

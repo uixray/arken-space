@@ -640,7 +640,7 @@ describe("WorldContentInstancesPanel", () => {
         }),
     );
     const view = renderComponent(
-      <WorldContentInstancesPanel key="canon-1" canonical={canonical} />,
+      <WorldContentInstancesPanel canonical={canonical} />,
     );
     await screen.findByText(
       "В этой кампании пока нет экземпляров этой сущности.",
@@ -659,7 +659,6 @@ describe("WorldContentInstancesPanel", () => {
 
     view.rerender(
       <WorldContentInstancesPanel
-        key="canon-2"
         canonical={{ id: "canon-2", name: "Новый канон", type: "LOCATION" }}
       />,
     );
@@ -758,7 +757,9 @@ describe("WorldContentInstancesPanel", () => {
 
   it("cancels by default, then deletes only the selected campaign instance and selects its sibling", async () => {
     const first = row("instance-delete-a", { displayNameOverride: "Сторож" });
-    const sibling = row("instance-delete-b", { displayNameOverride: "Дубликат в кампании" });
+    const sibling = row("instance-delete-b", {
+      displayNameOverride: "Дубликат в кампании",
+    });
     vi.mocked(fetchWorldContentInstances)
       .mockResolvedValueOnce([first, sibling])
       .mockResolvedValueOnce([sibling]);
@@ -770,41 +771,66 @@ describe("WorldContentInstancesPanel", () => {
     await userEvent.click(trigger);
     const dialog = screen.getByRole("dialog", { name: "Удаление экземпляра" });
     expect(dialog).toHaveTextContent("«Сторож»");
-    expect(dialog).toHaveTextContent("Каноническая сущность и другие экземпляры не изменятся.");
+    expect(dialog).toHaveTextContent(
+      "Каноническая сущность и другие экземпляры не изменятся.",
+    );
     await userEvent.click(screen.getByRole("button", { name: "Отмена" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(trigger);
     expect(deleteWorldContentInstance).not.toHaveBeenCalled();
 
-    await userEvent.click(screen.getByRole("button", { name: "Удалить экземпляр…" }));
-    await userEvent.click(screen.getByRole("button", { name: "Удалить экземпляр" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить экземпляр…" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить экземпляр" }),
+    );
     await screen.findByRole("button", { name: /Дубликат в кампании/ });
     expect(deleteWorldContentInstance).toHaveBeenCalledWith(
       first.id,
-      expect.objectContaining({ revision: first.revision, actionId: expect.any(String) }),
+      expect.objectContaining({
+        revision: first.revision,
+        actionId: expect.any(String),
+      }),
     );
     expect(fetchWorldContentInstances).toHaveBeenLastCalledWith(canonical.id);
-    expect(await screen.findByText(/Экземпляр удалён из этой кампании/)).toBeTruthy();
+    expect(
+      await screen.findByText(/Экземпляр удалён из этой кампании/),
+    ).toBeTruthy();
     expect(sibling.worldContentId).toBe(first.worldContentId);
   });
 
   it("requires explicit discard of dirty edit before deletion", async () => {
-    const selected = row("instance-dirty-delete", { displayNameOverride: "Текущий караван" });
+    const selected = row("instance-dirty-delete", {
+      displayNameOverride: "Текущий караван",
+    });
     vi.mocked(fetchWorldContentInstances).mockResolvedValue([selected]);
     vi.mocked(deleteWorldContentInstance).mockResolvedValue(null);
     renderComponent(<WorldContentInstancesPanel canonical={canonical} />);
     await screen.findByRole("button", { name: /Текущий караван/ });
-    await userEvent.click(screen.getByRole("button", { name: "Изменить выбранный экземпляр" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Изменить выбранный экземпляр" }),
+    );
     await userEvent.type(screen.getByLabelText("Состояние"), "Новая заметка");
-    await userEvent.click(screen.getByRole("button", { name: "Удалить экземпляр…" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить экземпляр…" }),
+    );
     const dialog = screen.getByRole("dialog", { name: "Удаление экземпляра" });
-    expect(dialog).toHaveTextContent("Несохранённые изменения этого экземпляра будут отброшены");
+    expect(dialog).toHaveTextContent(
+      "Несохранённые изменения этого экземпляра будут отброшены",
+    );
     await userEvent.click(screen.getByRole("button", { name: "Отмена" }));
     expect(screen.getByLabelText("Состояние")).toHaveValue("Новая заметка");
     expect(deleteWorldContentInstance).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Удалить экземпляр…" }));
-    await userEvent.click(screen.getByRole("button", { name: "Отбросить изменения и удалить" }));
-    await waitFor(() => expect(deleteWorldContentInstance).toHaveBeenCalledTimes(1));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить экземпляр…" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Отбросить изменения и удалить" }),
+    );
+    await waitFor(() =>
+      expect(deleteWorldContentInstance).toHaveBeenCalledTimes(1),
+    );
     expect(deleteWorldContentInstance).toHaveBeenCalledWith(
       selected.id,
       expect.objectContaining({ revision: selected.revision }),
@@ -812,7 +838,9 @@ describe("WorldContentInstancesPanel", () => {
   });
 
   it("retries an ambiguous deletion with the exact same revision and action id", async () => {
-    const selected = row("instance-ambiguous-delete", { displayNameOverride: "Сундук" });
+    const selected = row("instance-ambiguous-delete", {
+      displayNameOverride: "Сундук",
+    });
     vi.mocked(fetchWorldContentInstances)
       .mockResolvedValueOnce([selected])
       .mockResolvedValueOnce([selected])
@@ -822,38 +850,71 @@ describe("WorldContentInstancesPanel", () => {
       .mockResolvedValueOnce(null);
     renderComponent(<WorldContentInstancesPanel canonical={canonical} />);
     await screen.findByRole("button", { name: /Сундук/ });
-    await userEvent.click(screen.getByRole("button", { name: "Удалить экземпляр…" }));
-    await userEvent.click(screen.getByRole("button", { name: "Удалить экземпляр" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить экземпляр…" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить экземпляр" }),
+    );
     await screen.findByText(/Ответ на удаление не подтверждён/);
-    expect(screen.getByRole("dialog", { name: "Удаление экземпляра" })).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "Повторить то же удаление" }));
+    expect(
+      screen.getByRole("dialog", { name: "Удаление экземпляра" }),
+    ).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Повторить то же удаление" }),
+    );
     await screen.findByText(/Экземпляр удалён из этой кампании/);
     expect(vi.mocked(deleteWorldContentInstance).mock.calls[1]).toEqual(
       vi.mocked(deleteWorldContentInstance).mock.calls[0],
     );
-    expect(screen.getByText("В этой кампании пока нет экземпляров этой сущности.")).toBeTruthy();
+    expect(
+      screen.getByText("В этой кампании пока нет экземпляров этой сущности."),
+    ).toBeTruthy();
   });
 
   it("requires a new confirmation and action envelope after a delete CAS conflict", async () => {
-    const initial = row("instance-delete-conflict", { displayNameOverride: "Страж", revision: 4 });
-    const latest = row(initial.id, { ...initial, revision: 5, currentState: "Обновлён другим мастером" });
+    const initial = row("instance-delete-conflict", {
+      displayNameOverride: "Страж",
+      revision: 4,
+    });
+    const latest = row(initial.id, {
+      ...initial,
+      revision: 5,
+      currentState: "Обновлён другим мастером",
+    });
     vi.mocked(fetchWorldContentInstances)
       .mockResolvedValueOnce([initial])
       .mockResolvedValueOnce([]);
     vi.mocked(fetchWorldContentInstance).mockResolvedValue(latest);
     vi.mocked(deleteWorldContentInstance)
-      .mockRejectedValueOnce(new ApiError(409, "WORLD_CONTENT_INSTANCE_REVISION_CONFLICT", "Conflict"))
+      .mockRejectedValueOnce(
+        new ApiError(
+          409,
+          "WORLD_CONTENT_INSTANCE_REVISION_CONFLICT",
+          "Conflict",
+        ),
+      )
       .mockResolvedValueOnce(null);
     renderComponent(<WorldContentInstancesPanel canonical={canonical} />);
     await screen.findByRole("button", { name: /Страж/ });
-    await userEvent.click(screen.getByRole("button", { name: "Удалить экземпляр…" }));
-    await userEvent.click(screen.getByRole("button", { name: "Удалить экземпляр" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить экземпляр…" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить экземпляр" }),
+    );
     await screen.findByText(/не удалён.*ревизия 5/i);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByRole("button", { name: /ревизия 5/ })).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "Удалить экземпляр…" }));
-    await userEvent.click(screen.getByRole("button", { name: "Удалить экземпляр" }));
-    await screen.findByText("В этой кампании пока нет экземпляров этой сущности.");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить экземпляр…" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить экземпляр" }),
+    );
+    await screen.findByText(
+      "В этой кампании пока нет экземпляров этой сущности.",
+    );
     const calls = vi.mocked(deleteWorldContentInstance).mock.calls;
     expect(calls).toHaveLength(2);
     expect(calls[0]![1]).toMatchObject({ revision: 4 });
@@ -862,7 +923,9 @@ describe("WorldContentInstancesPanel", () => {
   });
 
   it("reports external 404 as unavailable rather than claiming its own deletion", async () => {
-    const selected = row("instance-external-delete", { displayNameOverride: "Сундук" });
+    const selected = row("instance-external-delete", {
+      displayNameOverride: "Сундук",
+    });
     vi.mocked(fetchWorldContentInstances)
       .mockResolvedValueOnce([selected])
       .mockResolvedValueOnce([]);
@@ -871,40 +934,78 @@ describe("WorldContentInstancesPanel", () => {
     );
     renderComponent(<WorldContentInstancesPanel canonical={canonical} />);
     await screen.findByRole("button", { name: /Сундук/ });
-    await userEvent.click(screen.getByRole("button", { name: "Удалить экземпляр…" }));
-    await userEvent.click(screen.getByRole("button", { name: "Удалить экземпляр" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить экземпляр…" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить экземпляр" }),
+    );
     await screen.findByText(/не подтверждает, что его удалил данный запрос/);
-    expect(screen.getByText("В этой кампании пока нет экземпляров этой сущности.")).toBeTruthy();
+    expect(
+      screen.getByText("В этой кампании пока нет экземпляров этой сущности."),
+    ).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("does not show an old ambiguous delete prompt when reconciliation rejects after switching canonicals", async () => {
-    const selected = row("instance-old-canonical", { displayNameOverride: "Старый объект" });
+    const selected = row("instance-old-canonical", {
+      displayNameOverride: "Старый объект",
+    });
     let rejectReconciliation!: (error: Error) => void;
     vi.mocked(fetchWorldContentInstances)
       .mockResolvedValueOnce([selected])
       .mockImplementationOnce(
-        () => new Promise((_resolve, reject) => { rejectReconciliation = reject; }),
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectReconciliation = reject;
+          }),
       )
       .mockResolvedValueOnce([]);
     vi.mocked(deleteWorldContentInstance).mockRejectedValueOnce(
       new Error("transport outcome unknown"),
     );
-    const view = renderComponent(<WorldContentInstancesPanel canonical={canonical} />);
+    const view = renderComponent(
+      <WorldContentInstancesPanel canonical={canonical} />,
+    );
     await screen.findByRole("button", { name: /Старый объект/ });
-    await userEvent.click(screen.getByRole("button", { name: "Удалить экземпляр…" }));
-    await userEvent.click(screen.getByRole("button", { name: "Удалить экземпляр" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить экземпляр…" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Удалить экземпляр" }),
+    );
     await waitFor(() => expect(rejectReconciliation).toBeTypeOf("function"));
 
-    const nextCanonical = { id: "canon-2", name: "Новый канон", type: "LOCATION" };
+    const nextCanonical = {
+      id: "canon-2",
+      name: "Новый канон",
+      type: "LOCATION",
+    };
     view.rerender(<WorldContentInstancesPanel canonical={nextCanonical} />);
-    await screen.findByText("В этой кампании пока нет экземпляров этой сущности.");
+    await screen.findByText(
+      "В этой кампании пока нет экземпляров этой сущности.",
+    );
     rejectReconciliation(new Error("reconciliation unavailable"));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(screen.queryByRole("dialog", { name: "Удаление экземпляра" })).toBeNull();
+    expect(
+      screen.queryByRole("dialog", { name: "Удаление экземпляра" }),
+    ).toBeNull();
     expect(screen.queryByText(/Ответ на удаление не подтверждён/)).toBeNull();
     expect(screen.queryByText(/Старый объект/)).toBeNull();
     expect(screen.getByText(/Новый канон/)).toBeInTheDocument();
+    vi.mocked(fetchWorldContentInstances)
+      .mockResolvedValueOnce([selected])
+      .mockResolvedValueOnce([]);
+    vi.mocked(deleteWorldContentInstance).mockResolvedValueOnce(null);
+    view.rerender(<WorldContentInstancesPanel canonical={canonical} />);
+    await screen.findByRole("dialog", { name: "Удаление экземпляра" });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Повторить то же удаление" }),
+    );
+    await screen.findByText(/Экземпляр удалён из этой кампании/);
+    expect(vi.mocked(deleteWorldContentInstance).mock.calls[1]).toEqual(
+      vi.mocked(deleteWorldContentInstance).mock.calls[0],
+    );
   });
 });

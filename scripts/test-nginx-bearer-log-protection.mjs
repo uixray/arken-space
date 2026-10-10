@@ -1,3 +1,4 @@
+import console from "node:console";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 

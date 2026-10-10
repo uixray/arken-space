@@ -2,7 +2,6 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import {
   accountActionTokens,
-  accountMailOutbox,
   accountSessions,
   sessions,
   users,
@@ -48,8 +47,6 @@ type AccountUser = typeof users.$inferSelect;
 
 const VERIFY = "VERIFY_EMAIL";
 const RESET = "RESET_PASSWORD";
-const VERIFY_TTL_MS = 24 * 60 * 60_000;
-const RESET_TTL_MS = 30 * 60_000;
 const RATE_WINDOW_MS = 15 * 60_000;
 const IP_LIMIT = 30;
 const IDENTIFIER_LIMIT = 8;

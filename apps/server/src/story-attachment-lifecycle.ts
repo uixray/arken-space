@@ -159,7 +159,7 @@ export function registerStoryAttachmentLifecycleRoutes(
         deleted: boolean;
         cleanupPending?: boolean;
         contentId: string;
-      } | null = null;
+      };
       if (prior) {
         const payload = prior.payload as {
           commandHash?: unknown;

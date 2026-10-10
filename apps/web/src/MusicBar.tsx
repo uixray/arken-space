@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AssetDto, AudioStateDto, AudioTrackDto, AudioTrackCommand, AudioPurpose, CommandAck, Role } from "@arken/contracts";
 import { Checkbox } from "./design-system/Checkbox";
 import { Loader } from "./design-system/Loader";
@@ -210,7 +210,7 @@ export function MusicBar({
     ? seekDraft.positionSeconds
     : activeProgress?.positionSeconds ?? activeTrack?.positionSeconds ?? 0;
   const trackSourcesRef = useRef(new Map<string, string | null>());
-  trackSourcesRef.current = new Map(mixerTracks.map((track) => [track.id, track.assetId]));
+  useLayoutEffect(() => { trackSourcesRef.current = new Map(mixerTracks.map((track) => [track.id, track.assetId])); }, [mixerTracks]);
   const trackSourceKey = mixerTracks.map((track) => `${track.id}:${track.assetId ?? "none"}`).join("|");
   const previousTrackSourceKey = useRef(trackSourceKey);
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AssetDto, AudioPurpose, Role, SoundpadPackDto } from "@arken/contracts";
 import type { GameSocket } from "./realtime.js";
@@ -34,9 +34,7 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
 export function SoundpadWorkspace({ campaignId, membershipId, role, assets, socket, onUpload, onRefreshSnapshot, launcherTarget }: Props) {
   const [data, setData] = useState<SoundpadResponse>({ packs: [], playerPlaybackEnabled: true });
   const [error, setError] = useState("");
-  const busRef = useRef<SoundEffectsPlayback | null>(null);
-  if (!busRef.current) busRef.current = new SoundEffectsPlayback(undefined, 4, () => setError("Не удалось воспроизвести звуковой эффект."));
-  const bus = busRef.current;
+  const [bus] = useState(() => new SoundEffectsPlayback(undefined, 4, () => setError("Не удалось воспроизвести звуковой эффект.")));
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const launcherRef = useRef<HTMLButtonElement>(null);
@@ -75,7 +73,7 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
     }).filter((pack) => pack.show);
   }, [data.packs, assetsById, searchTerm, onlyFavorites, favorites, role]);
   const latestRef = useRef({ packs: data.packs, assetsById, unlocked, volume, muted });
-  latestRef.current = { packs: data.packs, assetsById, unlocked, volume, muted };
+  useLayoutEffect(() => { latestRef.current = { packs: data.packs, assetsById, unlocked, volume, muted }; }, [data.packs, assetsById, unlocked, volume, muted]);
   const loadInFlight = useRef<Promise<SoundpadResponse | null> | null>(null);
   const loadAgain = useRef(false);
   const playbackSession = useRef(0);

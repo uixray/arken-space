@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CharacterDto } from "@arken/contracts";
 import { ApiError, formatApiError } from "./api";
 import {
@@ -25,7 +25,7 @@ const schoolKey = (school: Pick<
 
 export function CharacterSpellBranches({ character, isGm }: Props) {
   const activeCharacterId = useRef(character.id);
-  activeCharacterId.current = character.id;
+  useLayoutEffect(() => { activeCharacterId.current = character.id; }, [character.id]);
   const [branches, setBranches] = useState<CharacterSpellBranch[]>([]);
   const [assignableSchools, setAssignableSchools] = useState<
     AssignableSpellSchool[]

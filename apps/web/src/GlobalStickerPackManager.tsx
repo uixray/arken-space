@@ -84,6 +84,8 @@ export function GlobalStickerPackManager() {
   const createIntent = useRef<{ actionId: string; name: string } | null>(
     storedCreateIntent,
   );
+  const [createIntentSnapshot, setCreateIntentSnapshot] =
+    useState(storedCreateIntent);
   const uploadIntent = useRef<{
     packId: string;
     actionId: string;
@@ -170,13 +172,14 @@ export function GlobalStickerPackManager() {
 
   const create = () => {
     const retryName =
-      uncertain === "create" ? createIntent.current?.name : name;
+      uncertain === "create" ? createIntentSnapshot?.name : name;
     if (!retryName?.trim()) return;
     const intent = createIntent.current ?? {
       actionId: crypto.randomUUID(),
       name: retryName.trim(),
     };
     createIntent.current = intent;
+    setCreateIntentSnapshot(intent);
     writeStoredIntent(CREATE_INTENT_KEY, intent);
     void run(
       async () => {
@@ -191,6 +194,7 @@ export function GlobalStickerPackManager() {
           },
         );
         createIntent.current = null;
+        setCreateIntentSnapshot(null);
         clearStoredIntent(CREATE_INTENT_KEY);
         setUncertain(null);
         setName("");
@@ -382,7 +386,7 @@ export function GlobalStickerPackManager() {
           <input
             value={
               uncertain === "create"
-                ? (createIntent.current?.name ?? name)
+                ? (createIntentSnapshot?.name ?? name)
                 : name
             }
             maxLength={120}
@@ -395,7 +399,7 @@ export function GlobalStickerPackManager() {
             busy ||
             !(
               uncertain === "create"
-                ? (createIntent.current?.name ?? name)
+                ? (createIntentSnapshot?.name ?? name)
                 : name
             ).trim()
           }

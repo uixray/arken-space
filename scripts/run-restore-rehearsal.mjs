@@ -86,7 +86,7 @@ const restorePassword =
   process.env.RESTORE_POSTGRES_PASSWORD ?? randomBytes(24).toString("hex");
 const postgresReadinessPolicy = resolvePostgresReadinessPolicy(process.env);
 let workingDirectory = null;
-let snapshotRoot = null;
+let snapshotRoot;
 let expectedMediaSource = null;
 let serviceComposeOverride = null;
 let serviceSnapshot = null;

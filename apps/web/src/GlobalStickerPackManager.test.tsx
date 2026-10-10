@@ -143,6 +143,7 @@ it("retries an uncertain creation with the same idempotency key", async () => {
   expect(JSON.parse(String(createCalls[0]![1]?.body)).actionId).toBe(
     JSON.parse(String(createCalls[1]![1]?.body)).actionId,
   );
+  expect(JSON.parse(String(createCalls[1]![1]?.body)).name).toBe("Пак");
 });
 
 it("restores an uncertain create intent after reload without creating a new action", async () => {

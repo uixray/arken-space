@@ -134,11 +134,11 @@ describe("global sticker catalog routes", () => {
     const ambiguousPack = (await app.inject({ method: "POST", url: "/api/gm/global-sticker-packs", headers: { "x-test-auth": "gmA" }, payload: { actionId: crypto.randomUUID(), name: "Ambiguous commit" } })).json();
     const ambiguousAction = crypto.randomUUID();
     const ambiguousFixture = multipartFile("source.png", "image/png", source);
-    const mutableDb = db as unknown as { transaction: (work: (...args: any[]) => Promise<unknown>) => Promise<unknown> };
+    const mutableDb = db as unknown as { transaction: typeof db.transaction };
     const hadOwnTransaction = Object.prototype.hasOwnProperty.call(db, "transaction");
     const originalDescriptor = Object.getOwnPropertyDescriptor(db, "transaction");
     const realTransaction = mutableDb.transaction.bind(db);
-    Object.defineProperty(db, "transaction", { configurable: true, writable: true, value: async (work: (...args: any[]) => Promise<unknown>) => { await realTransaction(work); throw new Error("AMBIGUOUS_COMMIT_TEST"); } });
+    Object.defineProperty(db, "transaction", { configurable: true, writable: true, value: async (work: Parameters<typeof db.transaction>[0]) => { await realTransaction(work); throw new Error("AMBIGUOUS_COMMIT_TEST"); } });
     let ambiguousResponse;
     try {
       ambiguousResponse = await app.inject({ method: "POST", url: uploadUrl(ambiguousPack.id, ambiguousAction), headers: { "x-test-auth": "gmA", "content-type": `multipart/form-data; boundary=${ambiguousFixture.boundary}` }, payload: ambiguousFixture.body });
@@ -183,12 +183,12 @@ describe("global sticker catalog routes", () => {
     let releaseTransaction!: () => void;
     const transactionEntered = new Promise<void>((resolve) => { signalEntered = resolve; });
     const transactionGate = new Promise<void>((resolve) => { releaseTransaction = resolve; });
-    const mutableDb = db as unknown as { transaction: (work: (...args: any[]) => Promise<unknown>) => Promise<unknown> };
+    const mutableDb = db as unknown as { transaction: typeof db.transaction };
     const hadOwnTransaction = Object.prototype.hasOwnProperty.call(db, "transaction");
     const originalDescriptor = Object.getOwnPropertyDescriptor(db, "transaction");
     const realTransaction = mutableDb.transaction.bind(db);
     let interceptNext = true;
-    Object.defineProperty(db, "transaction", { configurable: true, writable: true, value: async (work: (...args: any[]) => Promise<unknown>) => {
+    Object.defineProperty(db, "transaction", { configurable: true, writable: true, value: async (work: Parameters<typeof db.transaction>[0]) => {
       if (interceptNext) { interceptNext = false; signalEntered(); await transactionGate; }
       return realTransaction(work);
     } });

@@ -301,7 +301,7 @@ describe("Activity initiative visibility and lifecycle", () => {
       fireEvent.blur(input);
       await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
 
-      let next = initial;
+      let next: typeof initial;
       if (changedScope === "campaign") {
         next = {
           ...initial,

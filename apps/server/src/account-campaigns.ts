@@ -168,7 +168,7 @@ async function replaceSelectedGameSession(
 }
 
 export function registerAccountCampaignRoutes(
-  app: FastifyInstance<any, any, any, any>,
+  app: FastifyInstance,
   db: Database,
   io: RealtimeSessions,
   options: AccountCampaignOptions,
@@ -213,8 +213,7 @@ export function registerAccountCampaignRoutes(
       if (!(await replaceSelectedGameSession(db, io, request, reply, owned.id, account.id, options))) return;
       return reply.code(200).send({ campaignId: owned.campaignId, membershipId: owned.id, name: owned.campaignName, role: "GM" });
     }
-    const now = new Date();
-    let created: { campaignId: string; membershipId: string; name: string; replay?: boolean } | null = null;
+    let created: { campaignId: string; membershipId: string; name: string; replay?: boolean };
     try {
       created = await db.transaction(async (tx) => {
         // Serialize per-account creation so the configured ceiling is not

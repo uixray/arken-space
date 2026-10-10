@@ -7,11 +7,12 @@ import { hashToken, randomToken } from "./security.js";
 
 type Purpose = "VERIFY_EMAIL" | "RESET_PASSWORD";
 type Db = ReturnType<typeof import("@arken/db").createDatabase>["db"];
+type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
 const ttl = (purpose: Purpose) => purpose === "VERIFY_EMAIL" ? 86_400_000 : 1_800_000;
 const subject = (purpose: Purpose) => purpose === "VERIFY_EMAIL" ? "Verify your Arken account" : "Reset your Arken password";
 
 /** Called inside the caller's user-serialized transaction. Returns only the test/request-local bearer. */
-export async function enqueueAccountAction(tx: any, args: { keyring: MailKeyring; publicUrl: string; email: string; userId: string; purpose: Purpose; now?: Date }) {
+export async function enqueueAccountAction(tx: Transaction, args: { keyring: MailKeyring; publicUrl: string; email: string; userId: string; purpose: Purpose; now?: Date }) {
   const now = args.now ?? new Date();
   const token = randomToken(32), tokenId = randomUUID(), messageId = randomUUID();
   const expiresAt = new Date(now.getTime() + ttl(args.purpose));
@@ -30,7 +31,7 @@ export async function enqueueAccountAction(tx: any, args: { keyring: MailKeyring
   return token;
 }
 
-export async function cancelActionMessages(tx: any, actionIds: string[], category: "TOKEN_USED" | "SUPERSEDED") {
+export async function cancelActionMessages(tx: Transaction, actionIds: string[], category: "TOKEN_USED" | "SUPERSEDED") {
   if (!actionIds.length) return;
   await tx.update(accountMailOutbox).set({ status: "CANCELLED", payloadNonce: null, payloadCiphertext: null, payloadAuthTag: null, leaseOwner: null, leaseToken: null, leaseExpiresAt: null, lastErrorCategory: category }).where(and(inArray(accountMailOutbox.actionTokenId, actionIds), or(eq(accountMailOutbox.status, "PENDING"), eq(accountMailOutbox.status, "LEASED"))));
 }

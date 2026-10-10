@@ -9,6 +9,16 @@ const png = (key: "forest" | "mountains" | "clouds") =>
     resolve(process.cwd(), `apps/server/assets/terrain-stamps/${key}.png`),
   );
 const sceneId = "uix347-scene";
+type MockCommandBody = Record<string, unknown>;
+type MockCommand = { path: string; body: MockCommandBody };
+function targetIds(body: MockCommandBody): string[] {
+  const targets = body.targets;
+  if (!Array.isArray(targets) || !targets.every((target: unknown) =>
+    !!target && typeof target === "object" && "targetId" in target &&
+    typeof target.targetId === "string",
+  )) throw new Error("Canvas command targets must include targetId strings");
+  return targets.map((target: { targetId: string }) => target.targetId);
+}
 const makeStamp = (
   id: string,
   layer: "PUBLIC" | "GM" = "PUBLIC",
@@ -28,6 +38,21 @@ const makeStamp = (
   rotation: 0,
   layer,
 });
+function canonicalStamp(
+  body: MockCommandBody,
+  id: string,
+  authorMembershipId: string,
+): DrawingDto {
+  const { sceneId, assetKey, packId, size, rotation, layer, x, y } = body;
+  if (
+    typeof sceneId !== "string" ||
+    (assetKey !== "forest" && assetKey !== "mountains" && assetKey !== "clouds") ||
+    packId !== "builtin-terrain-v1" || typeof size !== "number" ||
+    typeof rotation !== "number" || (layer !== "GM" && layer !== "PUBLIC") ||
+    typeof x !== "number" || typeof y !== "number"
+  ) throw new Error("Create-stamp command has an invalid payload");
+  return { ...makeStamp(id, layer), sceneId, authorMembershipId, assetKey, packId, size, rotation, x, y };
+}
 function snapshotFor(role: "GM" | "PLAYER", count = 0): GameSnapshot {
   const snapshot = buildGameSnapshot(role, {
     scenes: [
@@ -62,7 +87,7 @@ async function installMocks(
   snapshot: GameSnapshot,
   options: { holdStampAck?: boolean } = {},
 ) {
-  const commands: Array<{ path: string; body: any }> = [];
+  const commands: MockCommand[] = [];
   const assetRequests: string[] = [];
   const historyEntries: Array<Record<string, unknown>> = [];
   let releaseStampAck: (() => void) | null = null;
@@ -111,7 +136,7 @@ async function installMocks(
     if (path === "/api/canvas/history")
       return route.fulfill({ json: historyEntries });
     if (request.method() === "POST" && path === "/api/drawings") {
-      const body = request.postDataJSON();
+      const body = request.postDataJSON() as MockCommandBody;
       commands.push({ path, body });
       await stampAckGate;
       historyEntries.unshift({
@@ -133,7 +158,7 @@ async function installMocks(
       });
     }
     if (path.startsWith("/api/drawings/") && request.method() !== "GET") {
-      const body = request.postDataJSON();
+      const body = request.postDataJSON() as MockCommandBody;
       commands.push({ path: `${request.method()} ${path}`, body });
       const id = path.split("/").at(-1)!;
       const original =
@@ -153,16 +178,21 @@ async function installMocks(
       return route.fulfill({ status: 204, body: "" });
     }
     if (path === "/api/canvas/bulk" && request.method() === "POST") {
-      const body = request.postDataJSON();
+      const body = request.postDataJSON() as MockCommandBody;
       commands.push({ path, body });
       return route.fulfill({
         json: {
           revisions: {
             tokens: {},
             drawings: Object.fromEntries(
-              (body.targets ?? [])
-                .filter((target: any) => target.targetType === "DRAWING")
-                .map((target: any) => [target.targetId, target.revision + 1]),
+              (Array.isArray(body.targets) ? body.targets : [])
+                .filter((target: unknown): target is { targetType: string; targetId: string; revision: number } =>
+                  !!target && typeof target === "object" &&
+                  "targetType" in target && typeof target.targetType === "string" &&
+                  "targetId" in target && typeof target.targetId === "string" &&
+                  "revision" in target && typeof target.revision === "number")
+                .filter((target) => target.targetType === "DRAWING")
+                .map((target) => [target.targetId, target.revision + 1]),
             ),
           },
         },
@@ -172,11 +202,11 @@ async function installMocks(
       (path === "/api/canvas/undo" || path === "/api/canvas/redo") &&
       request.method() === "POST"
     ) {
-      commands.push({ path, body: request.postDataJSON() });
+      commands.push({ path, body: request.postDataJSON() as MockCommandBody });
       return route.fulfill({ json: { ok: true } });
     }
     if (request.method() === "PATCH" && path.startsWith("/api/drawings/")) {
-      const body = request.postDataJSON();
+      const body = request.postDataJSON() as MockCommandBody;
       commands.push({ path, body });
       const original = snapshot.drawings?.find((item) =>
         path.endsWith(item.id),
@@ -311,12 +341,7 @@ test("UIX-347 canonical socket snapshot during pending create acknowledgement do
     )
     .toBe(1);
   const body = commands[0]!.body;
-  const canonical = {
-    ...body,
-    id: "created-1",
-    authorMembershipId: snapshot.me.id,
-    revision: 1,
-  };
+  const canonical = canonicalStamp(body, "created-1", snapshot.me.id);
   const updated = {
     ...snapshot,
     snapshotVersion: snapshot.snapshotVersion + 1,
@@ -354,12 +379,7 @@ test("UIX-347 late create acknowledgement cannot resurrect a canonical deletion"
     )
     .toBe(1);
   const body = commands[0]!.body;
-  const canonical = {
-    ...body,
-    id: "created-1",
-    authorMembershipId: snapshot.me.id,
-    revision: 1,
-  };
+  const canonical = canonicalStamp(body, "created-1", snapshot.me.id);
   sendSnapshot({
     ...snapshot,
     snapshotVersion: snapshot.snapshotVersion + 1,
@@ -527,9 +547,7 @@ test("UIX-347 marquee selects stamps and mixed selection uses shared move/delete
       entry.path === "/api/canvas/bulk" && entry.body.operation === "MOVE",
   )!;
   expect(
-    move.body.targets
-      .map((target: { targetId: string }) => target.targetId)
-      .sort(),
+    targetIds(move.body).sort(),
   ).toEqual(["stamp-left", "stamp-right"]);
   await page.getByRole("button", { name: "Удалить выбранное" }).click();
   await expect(
@@ -550,9 +568,7 @@ test("UIX-347 marquee selects stamps and mixed selection uses shared move/delete
       entry.path === "/api/canvas/bulk" && entry.body.operation === "DELETE",
   )!;
   expect(
-    remove.body.targets
-      .map((target: { targetId: string }) => target.targetId)
-      .sort(),
+    targetIds(remove.body).sort(),
   ).toEqual(["stamp-left", "stamp-right"]);
 });
 

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type {
   CreateWorldContentInstance,
   DeleteWorldContentInstance,
@@ -124,25 +131,42 @@ export function WorldContentInstancesPanel({
   const [conflictLatest, setConflictLatest] =
     useState<WorldContentInstanceDto | null>(null);
   const [deletePrompt, setDeletePrompt] = useState<DeleteIntent | null>(null);
-  const [pendingDelete, setPendingDelete] =
-    useState<DeleteIntent | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<DeleteIntent | null>(null);
   const createActionRef = useRef<CreateWorldContentInstance | null>(null);
   const updateActionRef = useRef<{
     id: string;
     payload: UpdateWorldContentInstance;
   } | null>(null);
+  const [createRetryAvailable, setCreateRetryAvailable] = useState(false);
+  const [updateRetryAvailable, setUpdateRetryAvailable] = useState(false);
+  const scopeEpochRef = useRef(0);
   const knownIdsAtCreateRef = useRef<Set<string>>(new Set());
   const canonicalIdRef = useRef(canonical.id);
-  canonicalIdRef.current = canonical.id;
+  useLayoutEffect(() => {
+    canonicalIdRef.current = canonical.id;
+    scopeEpochRef.current += 1;
+    createActionRef.current = null;
+    setCreateRetryAvailable(false);
+    updateActionRef.current = null;
+    setUpdateRetryAvailable(false);
+    return () => {
+      scopeEpochRef.current += 1;
+    };
+  }, [canonical.id]);
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
   const pendingDeletesByCanonicalRef = useRef(new Map<string, DeleteIntent>());
   const skipSelectionResetRef = useRef(false);
 
   const load = useCallback(async () => {
+    const scopeEpoch = scopeEpochRef.current;
+    const isCurrentScope = () =>
+      canonicalIdRef.current === canonical.id &&
+      scopeEpochRef.current === scopeEpoch;
     setLoading(true);
     setError("");
     try {
       const rows = await fetchWorldContentInstances(canonical.id);
+      if (!isCurrentScope()) return null;
       setInstances(rows);
       setSelectedId((current) =>
         current && rows.some((row) => row.id === current)
@@ -151,10 +175,11 @@ export function WorldContentInstancesPanel({
       );
       return rows;
     } catch (reason) {
+      if (!isCurrentScope()) return null;
       setError(formatApiError(reason, "Не удалось загрузить экземпляры."));
       return null;
     } finally {
-      setLoading(false);
+      if (isCurrentScope()) setLoading(false);
     }
   }, [canonical.id]);
 
@@ -267,8 +292,8 @@ export function WorldContentInstancesPanel({
     draft.condition.trim() !== "" &&
     draft.condition.trim().length > 200;
   const retryPending =
-    (mode === "create" && createActionRef.current !== null) ||
-    (mode === "edit" && updateActionRef.current !== null) ||
+    (mode === "create" && createRetryAvailable) ||
+    (mode === "edit" && updateRetryAvailable) ||
     pendingDelete !== null;
 
   const selectInstance = (instance: WorldContentInstanceDto) => {
@@ -284,6 +309,7 @@ export function WorldContentInstancesPanel({
   const startCreate = () => {
     knownIdsAtCreateRef.current = new Set(instances.map((row) => row.id));
     createActionRef.current = null;
+    setCreateRetryAvailable(false);
     setSelectedId(null);
     setBase(null);
     setDraft(emptyDraft());
@@ -295,7 +321,9 @@ export function WorldContentInstancesPanel({
 
   const cancelDraft = () => {
     createActionRef.current = null;
+    setCreateRetryAvailable(false);
     updateActionRef.current = null;
+    setUpdateRetryAvailable(false);
     setMode("view");
     setConflictLatest(null);
     setError("");
@@ -305,6 +333,10 @@ export function WorldContentInstancesPanel({
 
   const handleCreate = async () => {
     if (quantityInvalid || conditionInvalid) return;
+    const scopeEpoch = scopeEpochRef.current;
+    const isCurrentScope = () =>
+      canonicalIdRef.current === canonical.id &&
+      scopeEpochRef.current === scopeEpoch;
     setSaving(true);
     setError("");
     setNotice("");
@@ -319,10 +351,13 @@ export function WorldContentInstancesPanel({
       currentLocationId: draft.currentLocationId || null,
       ...(isItem ? draftValues(draft, true) : {}),
     });
+    setCreateRetryAvailable(true);
     try {
       const result = await createWorldContentInstance(request);
+      if (!isCurrentScope()) return;
       if ("duplicate" in result) {
         const rows = await load();
+        if (!isCurrentScope()) return;
         const createdCandidates = rows?.filter(
           (row) =>
             !knownIdsAtCreateRef.current.has(row.id) &&
@@ -337,6 +372,7 @@ export function WorldContentInstancesPanel({
             row.currentLocationId === (request.currentLocationId ?? null),
         );
         createActionRef.current = null;
+        setCreateRetryAvailable(false);
         setMode("view");
         if (createdCandidates?.length === 1) {
           selectInstance(createdCandidates[0]!);
@@ -351,6 +387,7 @@ export function WorldContentInstancesPanel({
         return;
       }
       createActionRef.current = null;
+      setCreateRetryAvailable(false);
       setInstances((current) => [result, ...current]);
       setSelectedId(result.id);
       setBase(result);
@@ -358,9 +395,10 @@ export function WorldContentInstancesPanel({
       setMode("view");
       setNotice("Экземпляр создан в текущей кампании.");
     } catch (reason) {
+      if (!isCurrentScope()) return;
       setError(formatApiError(reason, "Не удалось создать экземпляр."));
     } finally {
-      setSaving(false);
+      if (isCurrentScope()) setSaving(false);
     }
   };
 
@@ -368,6 +406,10 @@ export function WorldContentInstancesPanel({
     if (quantityInvalid || conditionInvalid) return;
     if (!base || revision === undefined || Object.keys(dirty).length === 0)
       return;
+    const scopeEpoch = scopeEpochRef.current;
+    const isCurrentScope = () =>
+      canonicalIdRef.current === canonical.id &&
+      scopeEpochRef.current === scopeEpoch;
     setSaving(true);
     setError("");
     setNotice("");
@@ -376,17 +418,21 @@ export function WorldContentInstancesPanel({
       payload: { actionId: actionId(), revision, ...dirty },
     };
     updateActionRef.current = pending;
+    setUpdateRetryAvailable(true);
     try {
       const result = await updateWorldContentInstance(
         pending.id,
         pending.payload,
       );
+      if (!isCurrentScope()) return;
       if ("duplicate" in result) {
         const latest = await fetchWorldContentInstance(base.id);
+        if (!isCurrentScope()) return;
         setInstances((current) =>
           current.map((row) => (row.id === latest.id ? latest : row)),
         );
         updateActionRef.current = null;
+        setUpdateRetryAvailable(false);
         setConflictLatest(latest);
         setNotice(
           "Повтор запроса уже применён. Черновик сохранён; сравните его с актуальной версией.",
@@ -394,6 +440,7 @@ export function WorldContentInstancesPanel({
         return;
       }
       updateActionRef.current = null;
+      setUpdateRetryAvailable(false);
       setInstances((current) =>
         current.map((row) => (row.id === result.id ? result : row)),
       );
@@ -402,10 +449,13 @@ export function WorldContentInstancesPanel({
       setConflictLatest(null);
       setNotice("Изменения сохранены.");
     } catch (reason) {
+      if (!isCurrentScope()) return;
       if (reason instanceof ApiError && reason.status === 409) {
         updateActionRef.current = null;
+        setUpdateRetryAvailable(false);
         try {
           const latest = await fetchWorldContentInstance(pending.id);
+          if (!isCurrentScope()) return;
           setInstances((current) =>
             current.map((row) => (row.id === latest.id ? latest : row)),
           );
@@ -414,6 +464,7 @@ export function WorldContentInstancesPanel({
             "Запись изменилась после загрузки. Ваш черновик сохранён; проверьте актуальную версию перед повторной записью.",
           );
         } catch (refreshError) {
+          if (!isCurrentScope()) return;
           setError(
             `${formatApiError(reason, "Версия изменилась.")} Актуальную версию загрузить не удалось; черновик не сброшен. ${formatApiError(refreshError)}`,
           );
@@ -422,7 +473,7 @@ export function WorldContentInstancesPanel({
         setError(formatApiError(reason, "Не удалось сохранить изменения."));
       }
     } finally {
-      setSaving(false);
+      if (isCurrentScope()) setSaving(false);
     }
   };
 
@@ -452,7 +503,10 @@ export function WorldContentInstancesPanel({
     setError("");
     setNotice("");
     try {
-      const result = await deleteWorldContentInstance(intent.instanceId, request);
+      const result = await deleteWorldContentInstance(
+        intent.instanceId,
+        request,
+      );
       if (canonicalIdRef.current !== intent.canonicalId) {
         pendingDeletesByCanonicalRef.current.delete(intent.canonicalId);
         return;
@@ -971,8 +1025,8 @@ export function WorldContentInstancesPanel({
               <p>Каноническая сущность и другие экземпляры не изменятся.</p>
               {deletePrompt.dirtyEdit && (
                 <p role="alert">
-                  Несохранённые изменения этого экземпляра будут отброшены только
-                  после подтверждения удаления.
+                  Несохранённые изменения этого экземпляра будут отброшены
+                  только после подтверждения удаления.
                 </p>
               )}
             </>

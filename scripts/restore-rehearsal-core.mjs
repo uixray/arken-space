@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { URL } from "node:url";
 import {
   createReadStream,
   lstatSync,

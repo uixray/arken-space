@@ -210,7 +210,6 @@ describe("StickerPackManager", () => {
     const newSnapshot = gmSnapshot();
     newSnapshot.campaign.id = "00000000-0000-4000-8000-000000000511";
     newSnapshot.me.id = "00000000-0000-4000-8000-000000000512";
-    const user = userEvent.setup();
     const view = renderComponent(<StickerPackManager snapshot={oldSnapshot} />);
     view.rerender(<StickerPackManager snapshot={newSnapshot} />);
     expect(

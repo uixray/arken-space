@@ -105,7 +105,7 @@ export interface CampaignActions {
         | "player-requests"
         | "world-encyclopedia"
         | "spell-schools"
-  | "world-codex"
+        | "world-codex"
         | null,
     ) => void;
   };
@@ -141,13 +141,221 @@ export const CAMPAIGN_ACTION_DOMAIN_KEYS = [
 export function useCampaignActionsValue(
   actions: CampaignActions,
 ): CampaignActions {
-  const commandDependencies = CAMPAIGN_ACTION_DOMAIN_KEYS.flatMap((domain) =>
-    Object.values(actions[domain]),
+  return useMemo(
+    () => ({
+      scene: {
+        onViewScene: actions.scene.onViewScene,
+        onSaveScene: actions.scene.onSaveScene,
+        onCreateScene: actions.scene.onCreateScene,
+        onActivateScene: actions.scene.onActivateScene,
+        onAssignMap: actions.scene.onAssignMap,
+        onRenameScene: actions.scene.onRenameScene,
+      },
+      worldMap: {
+        onCreateWorldMap: actions.worldMap.onCreateWorldMap,
+        onSetWorldMapDraftBackground:
+          actions.worldMap.onSetWorldMapDraftBackground,
+        onApproveWorldMapBackground:
+          actions.worldMap.onApproveWorldMapBackground,
+        onPublishWorldMap: actions.worldMap.onPublishWorldMap,
+        onArchiveWorldMap: actions.worldMap.onArchiveWorldMap,
+        onArchiveCharacter: actions.worldMap.onArchiveCharacter,
+        onRestoreCharacter: actions.worldMap.onRestoreCharacter,
+        onLoadArchivedCharacters: actions.worldMap.onLoadArchivedCharacters,
+        onCreateWorldMapLocation: actions.worldMap.onCreateWorldMapLocation,
+        onUpdateWorldMapLocation: actions.worldMap.onUpdateWorldMapLocation,
+        onLinkWorldMapLocationScene:
+          actions.worldMap.onLinkWorldMapLocationScene,
+        onUnlinkWorldMapLocationScene:
+          actions.worldMap.onUnlinkWorldMapLocationScene,
+        onSetWorldMapPartyPosition: actions.worldMap.onSetWorldMapPartyPosition,
+        onClearWorldMapPartyPosition:
+          actions.worldMap.onClearWorldMapPartyPosition,
+      },
+      token: {
+        onPlaceTokenDefinition: actions.token.onPlaceTokenDefinition,
+        onDeleteTokenDefinition: actions.token.onDeleteTokenDefinition,
+        onPatchTokenDefinition: actions.token.onPatchTokenDefinition,
+        onCreateTokenDefinition: actions.token.onCreateTokenDefinition,
+        onCreateAndPlaceTokenDefinition:
+          actions.token.onCreateAndPlaceTokenDefinition,
+        onReplaceTokenControllers: actions.token.onReplaceTokenControllers,
+        onCreateToken: actions.token.onCreateToken,
+      },
+      chat: {
+        onChat: actions.chat.onChat,
+        onSticker: actions.chat.onSticker,
+        onCreateDirectThread: actions.chat.onCreateDirectThread,
+        onDirectChat: actions.chat.onDirectChat,
+        onUploadChatAttachment: actions.chat.onUploadChatAttachment,
+        onActiveChatThreadChange: actions.chat.onActiveChatThreadChange,
+        onMarkChatRead: actions.chat.onMarkChatRead,
+      },
+      access: {
+        onCreateInvite: actions.access.onCreateInvite,
+        onListPlayerAccess: actions.access.onListPlayerAccess,
+        onRotatePlayerAccess: actions.access.onRotatePlayerAccess,
+        onRevokePlayerAccess: actions.access.onRevokePlayerAccess,
+        onRenameMembership: actions.access.onRenameMembership,
+      },
+      catalog: {
+        onCreateCatalogEntry: actions.catalog.onCreateCatalogEntry,
+        onUpdateCatalogEntry: actions.catalog.onUpdateCatalogEntry,
+        onDeleteCatalogEntry: actions.catalog.onDeleteCatalogEntry,
+        onAssignCatalogEntry: actions.catalog.onAssignCatalogEntry,
+        onUpdateCharacterEntry: actions.catalog.onUpdateCharacterEntry,
+        onDeleteCharacterEntry: actions.catalog.onDeleteCharacterEntry,
+        onRollEntry: actions.catalog.onRollEntry,
+        onRechargeEntry: actions.catalog.onRechargeEntry,
+      },
+      story: {
+        onLoadMoreStoryPosts: actions.story.onLoadMoreStoryPosts,
+        onCreateStoryDraft: actions.story.onCreateStoryDraft,
+        onUpdateStoryPost: actions.story.onUpdateStoryPost,
+        onPublishStoryPost: actions.story.onPublishStoryPost,
+        onArchiveStoryPost: actions.story.onArchiveStoryPost,
+      },
+      playerRequest: {
+        onOpenPlayerRequestCreate:
+          actions.playerRequest.onOpenPlayerRequestCreate,
+        onCreatePlayerRequest: actions.playerRequest.onCreatePlayerRequest,
+        onUpdatePlayerRequest: actions.playerRequest.onUpdatePlayerRequest,
+        onPlayerRequestAction: actions.playerRequest.onPlayerRequestAction,
+      },
+      asset: {
+        replaceAsset: actions.asset.replaceAsset,
+        refreshAssets: actions.asset.refreshAssets,
+        uploadAsset: actions.asset.uploadAsset,
+        getAssetUsage: actions.asset.getAssetUsage,
+        deleteAsset: actions.asset.deleteAsset,
+        generateTokenImage: actions.asset.generateTokenImage,
+      },
+      statLayout: {
+        onUpdateStatLayout: actions.statLayout.onUpdateStatLayout,
+      },
+      chatHistory: {
+        onLoadThreadHistory: actions.chatHistory.onLoadThreadHistory,
+      },
+      character: {
+        replaceCharacterControllers:
+          actions.character.replaceCharacterControllers,
+        patchCharacter: actions.character.patchCharacter,
+        updateCharacterCounters: actions.character.updateCharacterCounters,
+        onCreateCharacter: actions.character.onCreateCharacter,
+      },
+      initiative: {
+        onUpdateInitiative: actions.initiative.onUpdateInitiative,
+        onSetOwnInitiative: actions.initiative.onSetOwnInitiative,
+        onRollInitiative: actions.initiative.onRollInitiative,
+        onSetBattleZone: actions.initiative.onSetBattleZone,
+        onRecruitFromBattleZone: actions.initiative.onRecruitFromBattleZone,
+      },
+      dice: {
+        onRoll: actions.dice.onRoll,
+      },
+      campaign: {
+        onCampaignClock: actions.campaign.onCampaignClock,
+      },
+      player: {
+        onPreviewPlayer: actions.player.onPreviewPlayer,
+      },
+      sidebar: {
+        onRequestedChatMessageHandled:
+          actions.sidebar.onRequestedChatMessageHandled,
+        onChatVisibilityChange: actions.sidebar.onChatVisibilityChange,
+        onCollapsedChange: actions.sidebar.onCollapsedChange,
+        onResizeHandleDown: actions.sidebar.onResizeHandleDown,
+        onResizeHandleMove: actions.sidebar.onResizeHandleMove,
+        onResizeHandleUp: actions.sidebar.onResizeHandleUp,
+        onWorkspaceChange: actions.sidebar.onWorkspaceChange,
+      },
+    }),
+    [
+      actions.scene.onViewScene,
+      actions.scene.onSaveScene,
+      actions.scene.onCreateScene,
+      actions.scene.onActivateScene,
+      actions.scene.onAssignMap,
+      actions.scene.onRenameScene,
+      actions.worldMap.onCreateWorldMap,
+      actions.worldMap.onSetWorldMapDraftBackground,
+      actions.worldMap.onApproveWorldMapBackground,
+      actions.worldMap.onPublishWorldMap,
+      actions.worldMap.onArchiveWorldMap,
+      actions.worldMap.onArchiveCharacter,
+      actions.worldMap.onRestoreCharacter,
+      actions.worldMap.onLoadArchivedCharacters,
+      actions.worldMap.onCreateWorldMapLocation,
+      actions.worldMap.onUpdateWorldMapLocation,
+      actions.worldMap.onLinkWorldMapLocationScene,
+      actions.worldMap.onUnlinkWorldMapLocationScene,
+      actions.worldMap.onSetWorldMapPartyPosition,
+      actions.worldMap.onClearWorldMapPartyPosition,
+      actions.token.onPlaceTokenDefinition,
+      actions.token.onDeleteTokenDefinition,
+      actions.token.onPatchTokenDefinition,
+      actions.token.onCreateTokenDefinition,
+      actions.token.onCreateAndPlaceTokenDefinition,
+      actions.token.onReplaceTokenControllers,
+      actions.token.onCreateToken,
+      actions.chat.onChat,
+      actions.chat.onSticker,
+      actions.chat.onCreateDirectThread,
+      actions.chat.onDirectChat,
+      actions.chat.onUploadChatAttachment,
+      actions.chat.onActiveChatThreadChange,
+      actions.chat.onMarkChatRead,
+      actions.access.onCreateInvite,
+      actions.access.onListPlayerAccess,
+      actions.access.onRotatePlayerAccess,
+      actions.access.onRevokePlayerAccess,
+      actions.access.onRenameMembership,
+      actions.catalog.onCreateCatalogEntry,
+      actions.catalog.onUpdateCatalogEntry,
+      actions.catalog.onDeleteCatalogEntry,
+      actions.catalog.onAssignCatalogEntry,
+      actions.catalog.onUpdateCharacterEntry,
+      actions.catalog.onDeleteCharacterEntry,
+      actions.catalog.onRollEntry,
+      actions.catalog.onRechargeEntry,
+      actions.story.onLoadMoreStoryPosts,
+      actions.story.onCreateStoryDraft,
+      actions.story.onUpdateStoryPost,
+      actions.story.onPublishStoryPost,
+      actions.story.onArchiveStoryPost,
+      actions.playerRequest.onOpenPlayerRequestCreate,
+      actions.playerRequest.onCreatePlayerRequest,
+      actions.playerRequest.onUpdatePlayerRequest,
+      actions.playerRequest.onPlayerRequestAction,
+      actions.asset.replaceAsset,
+      actions.asset.refreshAssets,
+      actions.asset.uploadAsset,
+      actions.asset.getAssetUsage,
+      actions.asset.deleteAsset,
+      actions.asset.generateTokenImage,
+      actions.statLayout.onUpdateStatLayout,
+      actions.chatHistory.onLoadThreadHistory,
+      actions.character.replaceCharacterControllers,
+      actions.character.patchCharacter,
+      actions.character.updateCharacterCounters,
+      actions.character.onCreateCharacter,
+      actions.initiative.onUpdateInitiative,
+      actions.initiative.onSetOwnInitiative,
+      actions.initiative.onRollInitiative,
+      actions.initiative.onSetBattleZone,
+      actions.initiative.onRecruitFromBattleZone,
+      actions.dice.onRoll,
+      actions.campaign.onCampaignClock,
+      actions.player.onPreviewPlayer,
+      actions.sidebar.onRequestedChatMessageHandled,
+      actions.sidebar.onChatVisibilityChange,
+      actions.sidebar.onCollapsedChange,
+      actions.sidebar.onResizeHandleDown,
+      actions.sidebar.onResizeHandleMove,
+      actions.sidebar.onResizeHandleUp,
+      actions.sidebar.onWorkspaceChange,
+    ],
   );
-  // Keep this list in the declared group order to make its size/order explicit.
-  // The identity behavior is covered across parent state changes in the test.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(() => actions, commandDependencies);
 }
 
 export function useCampaignActions(): CampaignActions {

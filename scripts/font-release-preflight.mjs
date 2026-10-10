@@ -1,3 +1,5 @@
+import process from "node:process";
+import console from "node:console";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";

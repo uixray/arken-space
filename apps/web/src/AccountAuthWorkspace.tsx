@@ -55,6 +55,9 @@ export function AccountAuthWorkspace({ onAuthenticated, capabilities }: { onAuth
   const [campaignName, setCampaignName] = useState("");
   const [inviteLabel, setInviteLabel] = useState("");
   const [inviteUrl, setInviteUrl] = useState("");
+  const [pendingCreateSnapshot, setPendingCreateSnapshot] = useState<{ name: string; key: string } | null>(null);
+  const [inviteAttemptsSnapshot, setInviteAttemptsSnapshot] = useState<Set<string>>(() => new Set());
+  const [claimPendingSnapshot, setClaimPendingSnapshot] = useState(false);
   const [inviteTokenInput, setInviteTokenInput] = useState("");
   const pendingCreate = useRef<{ name: string; key: string } | null>(null);
   const claimPending = useRef(false);
@@ -78,7 +81,7 @@ export function AccountAuthWorkspace({ onAuthenticated, capabilities }: { onAuth
   };
   const claimInvite = async (active: AccountSession, suppliedToken = token) => {
     if (claimPending.current) return;
-    claimPending.current = true; setBusy(true); setError("");
+    claimPending.current = true; setClaimPendingSnapshot(true); setBusy(true); setError("");
     try {
       const claimToken = readInviteToken(suppliedToken);
       if (!claimToken) throw new LocalValidationError("Вставьте действительную ссылку-приглашение или откройте её из сообщения.");
@@ -89,7 +92,7 @@ export function AccountAuthWorkspace({ onAuthenticated, capabilities }: { onAuth
     } catch (reason) {
       setError(friendlyError(reason));
     } finally {
-      claimPending.current = false; setBusy(false);
+      claimPending.current = false; setClaimPendingSnapshot(false); setBusy(false);
     }
   };
   const acceptJoinInvite = async () => {
@@ -175,10 +178,13 @@ export function AccountAuthWorkspace({ onAuthenticated, capabilities }: { onAuth
     if (!session || busy) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      if (!pendingCreate.current) pendingCreate.current = { name: campaignName.trim(), key: crypto.randomUUID() };
+      if (!pendingCreate.current) {
+        pendingCreate.current = { name: campaignName.trim(), key: crypto.randomUUID() };
+        setPendingCreateSnapshot(pendingCreate.current);
+      }
       const pending = pendingCreate.current;
       const result = await createAccountCampaign(pending.name, pending.key, session.csrfToken);
-      pendingCreate.current = null; setCampaignName("");
+      pendingCreate.current = null; setPendingCreateSnapshot(null); setCampaignName("");
       setCampaigns((current) => [
         ...current.filter((campaign) => campaign.id !== result.campaignId),
         { id: result.campaignId, name: result.name, role: "GM", membershipId: result.membershipId, selected: true },
@@ -186,7 +192,7 @@ export function AccountAuthWorkspace({ onAuthenticated, capabilities }: { onAuth
       setNotice(`Кампания «${result.name}» создана.`);
       void refreshCampaigns().catch((reason: unknown) => setError(friendlyError(reason)));
     } catch (reason) {
-      if (reason instanceof ApiError && reason.status >= 400 && reason.status < 500) pendingCreate.current = null;
+      if (reason instanceof ApiError && reason.status >= 400 && reason.status < 500) { pendingCreate.current = null; setPendingCreateSnapshot(null); }
       setError(friendlyError(reason));
     }
     finally { setBusy(false); }
@@ -206,13 +212,15 @@ export function AccountAuthWorkspace({ onAuthenticated, capabilities }: { onAuth
     }
     setBusy(true); setError(""); setInviteUrl("");
     inviteAttempts.current.add(campaignId);
+    setInviteAttemptsSnapshot(new Set(inviteAttempts.current));
     try {
       const invite = await createAccountCampaignInvite(campaignId, inviteLabel || "Игрок", session.csrfToken);
       setInviteLabel("");
       setInviteUrl(`${window.location.origin}/account/join#token=${encodeURIComponent(invite.token)}`);
       inviteAttempts.current.delete(campaignId);
+      setInviteAttemptsSnapshot(new Set(inviteAttempts.current));
     } catch (reason) {
-      if (reason instanceof ApiError && reason.status >= 400 && reason.status < 500) inviteAttempts.current.delete(campaignId);
+      if (reason instanceof ApiError && reason.status >= 400 && reason.status < 500) { inviteAttempts.current.delete(campaignId); setInviteAttemptsSnapshot(new Set(inviteAttempts.current)); }
       setError(`${friendlyError(reason)} ${reason instanceof ApiError && reason.status < 500 ? "Запрос отклонён; после исправления можно попробовать снова." : "Результат запроса неизвестен. Автоматический повтор отключён, чтобы не создавать дубликат."}`);
     }
     finally { setBusy(false); }
@@ -242,9 +250,9 @@ export function AccountAuthWorkspace({ onAuthenticated, capabilities }: { onAuth
       <ul>{campaigns.map((campaign) => <li key={campaign.id}>
         <strong>{campaign.name}</strong><span>{campaign.role === "GM" ? "Мастер" : "Игрок"}</span>
         <Button type="button" disabled={busy} onClick={() => void selectCampaign(campaign.id)}>{campaign.selected ? "Открыть кампанию" : "Выбрать"}</Button>
-        {campaign.role === "GM" && <form onSubmit={(event) => { event.preventDefault(); void makeInvite(campaign.id); }}><label>Приглашение игроку<FormInput value={inviteLabel} onChange={(event) => setInviteLabel(event.target.value)} maxLength={80} placeholder="Имя или метка игрока" /></label><Button type="submit" disabled={busy || inviteAttempts.current.has(campaign.id)}>Создать ссылку-приглашение</Button></form>}
+        {campaign.role === "GM" && <form onSubmit={(event) => { event.preventDefault(); void makeInvite(campaign.id); }}><label>Приглашение игроку<FormInput value={inviteLabel} onChange={(event) => setInviteLabel(event.target.value)} maxLength={80} placeholder="Имя или метка игрока" /></label><Button type="submit" disabled={busy || inviteAttemptsSnapshot.has(campaign.id)}>Создать ссылку-приглашение</Button></form>}
       </li>)}</ul>
-      {capabilities.campaignCreationEnabled && <form onSubmit={(event) => { event.preventDefault(); void createCampaign(); }} aria-label="Создать кампанию"><label>Новая кампания<FormInput value={pendingCreate.current?.name ?? campaignName} onChange={(event) => setCampaignName(event.target.value)} disabled={Boolean(pendingCreate.current)} required maxLength={80} /></label><Button type="submit" disabled={busy || !campaignName.trim() && !pendingCreate.current}>{pendingCreate.current ? "Повторить создание" : "Создать кампанию"}</Button></form>}
+      {capabilities.campaignCreationEnabled && <form onSubmit={(event) => { event.preventDefault(); void createCampaign(); }} aria-label="Создать кампанию"><label>Новая кампания<FormInput value={pendingCreateSnapshot?.name ?? campaignName} onChange={(event) => setCampaignName(event.target.value)} disabled={Boolean(pendingCreateSnapshot)} required maxLength={80} /></label><Button type="submit" disabled={busy || !campaignName.trim() && !pendingCreateSnapshot}>{pendingCreateSnapshot ? "Повторить создание" : "Создать кампанию"}</Button></form>}
       {!capabilities.campaignCreationEnabled && <p className="account-auth-note">Создание кампаний сейчас недоступно.</p>}
       {inviteUrl && <p role="status" className="account-invite-link">Ссылка для игрока (действует до 72 часов): <a href={inviteUrl}>{inviteUrl}</a></p>}
       <form onSubmit={(event) => { event.preventDefault(); void claimInvite(session); }} aria-label="Принять приглашение"><label>Ссылка-приглашение<FormInput value={inviteTokenInput} onChange={(event) => setInviteTokenInput(event.target.value)} placeholder="Вставьте код или ссылку приглашения" /></label><Button type="submit" disabled={busy || !inviteTokenInput.trim()}>Присоединиться к кампании</Button></form>
@@ -265,7 +273,7 @@ export function AccountAuthWorkspace({ onAuthenticated, capabilities }: { onAuth
       {!session && <><label>Email<FormInput type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label>Пароль<FormInput type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label></>}
       {!token && <label>Код приглашения<FormInput value={inviteTokenInput} onChange={(event) => setInviteTokenInput(event.target.value)} required /></label>}
       {error && <p role="alert" className="account-auth-error">{error}</p>}{notice && <p role="status">{notice}</p>}
-      <Button type="button" disabled={busy || claimPending.current || (!token && !inviteTokenInput.trim())} onClick={() => void acceptJoinInvite()}>Принять приглашение</Button>
+      <Button type="button" disabled={busy || claimPendingSnapshot || (!token && !inviteTokenInput.trim())} onClick={() => void acceptJoinInvite()}>Принять приглашение</Button>
       <a href="/">Вернуться ко входу</a>
     </section></main>;
   }

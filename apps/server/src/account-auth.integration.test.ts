@@ -278,7 +278,8 @@ describe("account authentication HTTP lifecycle", () => {
     expect((await post("/api/account/register", { email: expiredEmail, password })).statusCode).toBe(202);
     const [queued] = await db.select().from(accountMailOutbox);
     const decoded = decryptMailEnvelope(mailKeyring, { messageId: queued!.id, actionTokenId: queued!.actionTokenId, purpose: "VERIFY_EMAIL", formatVersion: 1, keyId: queued!.keyId }, { keyId: queued!.keyId, nonce: queued!.payloadNonce!, ciphertext: queued!.payloadCiphertext!, authTag: queued!.payloadAuthTag! });
-    const verify = /#token=([A-Za-z0-9_-]+)/.exec(decoded.text)?.[1]!;
+    const verify = /#token=([A-Za-z0-9_-]+)/.exec(decoded.text)?.[1];
+    if (!verify) throw new Error("Expected verification token in queued mail");
     await db.update(accountActionTokens).set({ expiresAt: new Date(Date.now() - 1) })
       .where(eq(accountActionTokens.tokenHash, hashToken(verify)));
     expect((await post("/api/account/verification/confirm", { token: verify })).statusCode).toBe(400);
