@@ -20,6 +20,16 @@ import {
 import { env } from "./env.js";
 import { hashToken } from "./security.js";
 import { registerSpellPackRoutes } from "./spell-pack-routes.js";
+import {
+  classifyProbeDiagnostic,
+  deriveMigrationIdentity,
+  isSafeApiErrorCode,
+  ProbeAssertionError,
+  ProbePreflightError,
+  requiredMembershipColumns,
+  requiredRoleLabels,
+  validateMigrationPreflight,
+} from "../../../packages/db/src/multiplayer-migration-preflight.mjs";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString)
@@ -65,7 +75,16 @@ function graph(
 }
 
 function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) throw new Error(message);
+  if (!condition) throw new ProbeAssertionError(message);
+}
+
+function safeApiErrorCode(response: { json: () => unknown }): string {
+  try {
+    const error = (response.json() as { error?: unknown }).error;
+    return isSafeApiErrorCode(error) ? error : "UNRECOGNIZED";
+  } catch {
+    return "UNRECOGNIZED";
+  }
 }
 
 async function expectRejected(
@@ -77,17 +96,65 @@ async function expectRejected(
   } catch (error) {
     return error;
   }
-  throw new Error(message);
+  throw new ProbeAssertionError(message);
+}
+
+function safeProbeDiagnostic(error: unknown): string {
+  return classifyProbeDiagnostic(error);
 }
 
 const { client, db } = createDatabase(connectionString);
 
+async function verifyMigrationAndFixtureSchema(): Promise<void> {
+  let expected: ReturnType<typeof deriveMigrationIdentity>;
+  try {
+    expected = JSON.parse(
+      process.env.E2E_EXPECTED_MIGRATION_IDENTITY ?? "null",
+    ) as ReturnType<typeof deriveMigrationIdentity>;
+  } catch {
+    throw new ProbePreflightError("EXPECTED_IDENTITY_REQUIRED");
+  }
+  if (
+    !expected ||
+    !Number.isInteger(expected.count) ||
+    typeof expected.journalSha256 !== "string" ||
+    typeof expected.manifestSha256 !== "string" ||
+    !Array.isArray(expected.migrationHashes)
+  )
+    throw new ProbePreflightError("EXPECTED_IDENTITY_REQUIRED");
+
+  const migrationDirectory = new URL(
+    "../../../packages/db/drizzle/",
+    import.meta.url,
+  );
+  const source = deriveMigrationIdentity(migrationDirectory);
+
+  const ledger = await client.unsafe<{ hash: string }[]>(
+    'select hash from "drizzle"."__drizzle_migrations" order by id asc',
+  );
+  const membershipColumns = await client.unsafe<{ column_name: string }[]>(
+    "select column_name from information_schema.columns where table_schema = 'public' and table_name = 'memberships' order by column_name",
+  );
+  const roleLabels = await client.unsafe<{ enumlabel: string }[]>(
+    "select e.enumlabel from pg_type t join pg_enum e on e.enumtypid = t.oid where t.typname = 'role' order by e.enumsortorder",
+  );
+  validateMigrationPreflight(expected, {
+    source,
+    ledgerHashes: ledger.map((row) => row.hash),
+    membershipColumns: membershipColumns.map((row) => row.column_name),
+    roleLabels: roleLabels.map((row) => row.enumlabel),
+  });
+  console.log(
+    `[spell-pack-preflight] passed migrations=${source.count} membershipColumns=${requiredMembershipColumns.length} roleLabels=${requiredRoleLabels.length}`,
+  );
+}
+
 try {
+  await verifyMigrationAndFixtureSchema();
   await db.insert(campaigns).values([
     { id: campaignId, name: "UIX-579 PostgreSQL probe" },
     { id: foreignCampaignId, name: "UIX-579 foreign probe" },
   ]);
-
   await createSpellPack(db, {
     campaignId,
     graph: graph(1),
@@ -267,7 +334,6 @@ try {
       expiresAt: new Date(Date.now() + 600_000),
     },
   ]);
-
   apiApp = Fastify();
   await apiApp.register(cookie);
   registerSpellPackRoutes(apiApp, db);
@@ -289,6 +355,10 @@ try {
     headers: authHeaders(apiGmSecret),
     payload: apiCreatePayload,
   });
+  if (apiCreated.statusCode !== 201)
+    throw new Error(
+      `SPELL_PROBE_API_CREATE:${apiCreated.statusCode}:${safeApiErrorCode(apiCreated)}`,
+    );
   assert(apiCreated.statusCode === 201, "PostgreSQL API create failed");
   const apiReplay = await apiApp.inject({
     method: "POST",
@@ -426,11 +496,28 @@ try {
   }
 
   console.log("[spell-pack-probe] storage and API passed");
+} catch (error) {
+  console.error(safeProbeDiagnostic(error));
+  throw new Error("SPELL_PROBE_DIAGNOSTIC_FAILURE");
 } finally {
-  if (apiApp) await apiApp.close();
-  await db.delete(campaigns).where(eq(campaigns.id, campaignId));
-  await db.delete(campaigns).where(eq(campaigns.id, foreignCampaignId));
-  await db.delete(campaigns).where(eq(campaigns.id, apiCampaignId));
-  await db.delete(campaigns).where(eq(campaigns.id, apiForeignCampaignId));
-  await client.end();
+  const cleanup = async (operation: () => Promise<unknown>) => {
+    try {
+      await operation();
+    } catch (error) {
+      console.error(safeProbeDiagnostic(error));
+      throw new Error("SPELL_PROBE_CLEANUP_FAILED");
+    }
+  };
+  if (apiApp) await cleanup(() => apiApp!.close());
+  await cleanup(() => db.delete(campaigns).where(eq(campaigns.id, campaignId)));
+  await cleanup(() =>
+    db.delete(campaigns).where(eq(campaigns.id, foreignCampaignId)),
+  );
+  await cleanup(() =>
+    db.delete(campaigns).where(eq(campaigns.id, apiCampaignId)),
+  );
+  await cleanup(() =>
+    db.delete(campaigns).where(eq(campaigns.id, apiForeignCampaignId)),
+  );
+  await cleanup(() => client.end());
 }

@@ -76,6 +76,53 @@ describe("порядок в run-multiplayer-e2e", () => {
     expect(spellPackProbeSource).toContain("PostgreSQL API CAS race");
   });
 
+  it("сверяет миграционную идентичность и схему до fixture-проб", async () => {
+    const journal = await readFile(
+      new URL("../packages/db/drizzle/meta/_journal.json", import.meta.url),
+      "utf8",
+    );
+    const journalEntries = JSON.parse(journal).entries;
+    const probe = await readFile(
+      new URL(
+        "../apps/server/src/spell-pack-storage.pg-probe.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const guard = await readFile(
+      new URL(
+        "../packages/db/src/multiplayer-migration-preflight.mjs",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const identity = script.indexOf("deriveMigrationIdentity(");
+    const probeRun = script.indexOf("const spellPackProbe = run(");
+    const probeFinished = script.indexOf(
+      "report.spellPackProbeExitCode",
+      probeRun,
+    );
+    const schemaGate = probe.indexOf("await verifyMigrationAndFixtureSchema()");
+    const fixtureSeed = probe.indexOf("await db.insert(campaigns).values([");
+
+    expect(journalEntries.length).toBeGreaterThan(0);
+    expect(identity).toBeGreaterThan(-1);
+    expect(script).toContain('new URL("../packages/db/drizzle/"');
+    expect(script).toContain("E2E_EXPECTED_MIGRATION_IDENTITY");
+    expect(script).toContain(
+      "../packages/db/src/multiplayer-migration-preflight.mjs",
+    );
+    expect(probe).toContain(
+      'select hash from "drizzle"."__drizzle_migrations"',
+    );
+    expect(guard).toContain('new ProbePreflightError("LEDGER_MISMATCH")');
+    expect(probe).toContain("table_name = 'memberships'");
+    expect(schemaGate).toBeGreaterThan(-1);
+    expect(fixtureSeed).toBeGreaterThan(schemaGate);
+    expect(identity).toBeGreaterThan(probeRun);
+    expect(identity).toBeLessThan(probeFinished);
+  });
+
   it("запускает PostgreSQL-пробу назначений до браузерного сценария", async () => {
     const source = await readFile(
       new URL(

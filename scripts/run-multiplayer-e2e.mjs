@@ -3,6 +3,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, statfsSync, writeFileSync } from "node:fs";
 import process from "node:process";
+import { deriveMigrationIdentity } from "../packages/db/src/multiplayer-migration-preflight.mjs";
 
 const gibibyte = 1024 ** 3;
 const expectedOrigin = "http://edge";
@@ -431,13 +432,24 @@ try {
       ...compose,
       "exec",
       "--no-TTY",
+      "--env",
+      "E2E_EXPECTED_MIGRATION_IDENTITY",
       "server",
       "pnpm",
       "exec",
       "tsx",
       "apps/server/src/spell-pack-storage.pg-probe.ts",
     ],
-    { env: environment },
+    {
+      env: {
+        ...environment,
+        E2E_EXPECTED_MIGRATION_IDENTITY: JSON.stringify(
+          deriveMigrationIdentity(
+            new URL("../packages/db/drizzle/", import.meta.url),
+          ),
+        ),
+      },
+    },
   );
   report.spellPackProbeExitCode = spellPackProbe;
   if (spellPackProbe !== 0)
