@@ -29,7 +29,7 @@ function createHarness() {
 function expectedPayload(index: number) {
   return {
     actionId: `action-${index}`,
-    body: `Запись журнала ${index} — достаточно длинная, чтобы занять высоту и переполнить ленту событий.`,
+    body: `Запись журнала ${index} — ${"достаточно длинная, чтобы занять высоту и переполнить ленту событий. ".repeat(4)}`,
     stream: "TABLE",
   };
 }
