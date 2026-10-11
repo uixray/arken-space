@@ -133,7 +133,13 @@ test.afterAll(async () => {
   await database?.close();
   Object.assign(env, previousEnv);
 });
-test.afterEach(async () => {
+test.afterEach(async ({ page }) => {
+  // Drain route.fetch/body/fulfill before Playwright disposes their context.
+  // Closing while a bootstrap request is pending makes a successful test flaky.
+  await page.unrouteAll({ behavior: "wait" });
+  for (const playerPage of playerContext?.pages() ?? []) {
+    await playerPage.unrouteAll({ behavior: "wait" });
+  }
   await playerContext?.close();
   playerContext = null;
 });

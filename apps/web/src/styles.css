@@ -6405,6 +6405,9 @@ body:has(.landing-shell) {
 }
 .initiative-panel__summary {
   display: flex;
+  min-width: 24px;
+  min-height: 24px;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);

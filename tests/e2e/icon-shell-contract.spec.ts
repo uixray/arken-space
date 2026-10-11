@@ -13,10 +13,12 @@ for (const themeId of ["system", ...PLAYER_THEMES.map(({ id }) => id)])
       test(`UIX-645 shell SVG contract ${role} ${width}${themeId === "system" ? "" : ` theme:${themeId}`}`, async ({
         page,
       }, testInfo) => {
-        // The GM surface has many more icons to probe in normal, hover,
-        // disabled and keyboard states. Firefox can exceed Playwright's
-        // generic 30s limit at either width on a loaded runner.
-        if (role === "GM") test.setTimeout(60_000);
+        // This exhaustive functional audit checks every icon in normal,
+        // hover, disabled and keyboard states, then captures the whole page.
+        // PLAYER also has 23 controls: Firefox can exhaust the generic 30s
+        // budget after the checks on a loaded machine. This is a harness
+        // budget, not a product performance threshold; all assertions remain.
+        test.setTimeout(60_000);
         await page.setViewportSize({ width, height: 850 });
         const errors: string[] = [];
         const writes: string[] = [];

@@ -198,4 +198,47 @@ describe("Select Component", () => {
     expect(ref.current).toBeInstanceOf(HTMLButtonElement);
     expect(ref.current?.getAttribute("role")).toBe("combobox");
   });
+
+  it("does not steal option focus on the initial resize observation", async () => {
+    let notify = () => {};
+    class DeferredResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        notify = () => callback([], this as unknown as ResizeObserver);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", DeferredResizeObserver);
+    try {
+      const user = userEvent.setup();
+      render(
+        <Select
+          aria-label="Delayed measurement"
+          defaultValue="second"
+          options={[
+            { value: "first", label: "First" },
+            { value: "second", label: "Second" },
+          ]}
+        />,
+      );
+      const trigger = screen.getByRole("combobox", {
+        name: "Delayed measurement",
+      });
+      await user.click(trigger);
+      await user.keyboard("{Home}");
+      const first = screen.getByRole("option", { name: "First" });
+      expect(first).toHaveFocus();
+      notify();
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => resolve()),
+      );
+      expect(first).toHaveFocus();
+      await user.keyboard("{Enter}");
+      expect(trigger).toHaveTextContent("First");
+    } finally {
+      cleanup();
+      vi.unstubAllGlobals();
+    }
+  });
 });

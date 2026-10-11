@@ -279,13 +279,14 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
         });
       };
       measure(false);
-      let firstObservation = true;
       const observer =
         typeof ResizeObserver === "undefined"
           ? undefined
           : new ResizeObserver(() => {
-              schedule(firstObservation);
-              firstObservation = false;
+              // The initial notification is measurement, not a user resize.
+              // It can arrive after Home has focused an option; never steal
+              // that focus. Actual viewport resize still restores the trigger.
+              schedule(false);
             });
       observer?.observe(control);
       const onWindowResize = () => schedule(true);
