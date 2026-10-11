@@ -1,8 +1,40 @@
 import { randomUUID } from "node:crypto";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import type { GameSnapshot, PlayerRequestDto } from "@arken/contracts";
 import { expect, test } from "./campaign-fixture";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+
+const filterLabels: Record<string, string> = {
+  OPEN: "Открытые",
+  CLOSED: "Закрытые",
+  NOW: "Сейчас",
+  BEFORE_BREAK: "До перерыва",
+  NEXT_SESSION: "К следующей сессии",
+  PUBLIC: "Всем участникам",
+  GM_ONLY: "Автору и всем мастерам",
+};
+async function chooseFilter(
+  page: Page,
+  dialog: Locator,
+  label: string,
+  value: string,
+) {
+  const text =
+    value === "ALL"
+      ? (
+          {
+            Состояние: "Все состояния",
+            Срок: "Любой срок",
+            Аудитория: "Любая аудитория",
+          } as Record<string, string>
+        )[label]
+      : filterLabels[value];
+  const control = dialog.getByLabel(label, { exact: true });
+  await control.click();
+  await page.getByRole("option", { name: text, exact: true }).click();
+  await expect(control).toContainText(text);
+  await expect(control).toBeFocused();
+}
 
 async function bootstrap(page: Page): Promise<GameSnapshot> {
   const response = await page.request.get("/api/bootstrap");
@@ -63,7 +95,7 @@ async function createRequest(
   return response.json() as Promise<PlayerRequestDto>;
 }
 
-test("UIX644_PLAYER_REQUEST_NATIVE_DRAFT: player selects keep keyboard focus and draft through compact resize", async ({
+test("UIX644_PLAYER_REQUEST_NATIVE_DRAFT: player Gravity selects keep keyboard focus and draft through compact resize", async ({
   page,
   gmToken,
 }) => {
@@ -81,38 +113,49 @@ test("UIX644_PLAYER_REQUEST_NATIVE_DRAFT: player selects keep keyboard focus and
   const horizon = dialog.getByLabel("Когда", { exact: true });
   await horizon.focus();
   await expect(horizon).toBeFocused();
-  await expect(horizon).toHaveValue("NOW");
-  await horizon.press("ArrowDown");
-  await expect(horizon).toHaveValue("BEFORE_BREAK");
+  await expect(horizon).toContainText("Сейчас");
+  await horizon.press("Space");
+  await expect(page.getByRole("listbox")).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(horizon).toContainText("До перерыва");
   await expect(horizon).toBeFocused();
 
   const audience = dialog.getByLabel("Кто увидит", { exact: true });
   await audience.focus();
   await expect(audience).toBeFocused();
-  await expect(audience).toHaveValue("PUBLIC");
-  await audience.press("End");
-  await expect(audience).toHaveValue("GM_ONLY");
+  await expect(audience).toContainText("Всем участникам");
+  await audience.press("Space");
+  await expect(page.getByRole("listbox")).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(audience).toContainText("Автору и всем мастерам");
   await expect(audience).toBeFocused();
 
   const character = dialog.getByLabel("Персонаж (необязательно)", {
     exact: true,
   });
   const characterName = playerSnapshot.characters[0]!.name;
-  await expect(
-    character.locator(`option[value="${playerSnapshot.characters[0]!.id}"]`),
-  ).toHaveText(characterName);
   await character.focus();
-  await expect(character).toHaveValue("");
-  await character.press("ArrowDown");
-  await expect(character).toHaveValue(playerSnapshot.characters[0]!.id);
+  await expect(character).toContainText("Без персонажа");
+  await character.press("Space");
+  await expect(
+    page.getByRole("option", { name: characterName, exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(character).toContainText(characterName);
   await expect(character).toBeFocused();
 
-  // Native select menus belong to the OS, so the contract is the control's
-  // value and focus, not a synthetic DOM popup.
+  // Gravity controls expose an owned listbox. Selection returns focus and
+  // must survive viewport changes together with the unsaved request draft.
   await page.setViewportSize({ width: 360, height: 640 });
-  await expect(horizon).toHaveValue("BEFORE_BREAK");
-  await expect(audience).toHaveValue("GM_ONLY");
-  await expect(character).toHaveValue(playerSnapshot.characters[0]!.id);
+  await expect(horizon).toContainText("До перерыва");
+  await expect(audience).toContainText("Автору и всем мастерам");
+  await expect(character).toContainText(characterName);
   await expect(dialog.getByLabel("Название", { exact: true })).toHaveValue(
     "Нужен проводник",
   );
@@ -129,21 +172,21 @@ test("UIX644_PLAYER_REQUEST_NATIVE_DRAFT: player selects keep keyboard focus and
   await expect(card).toContainText("Автору и всем мастерам");
   await expect(card).toContainText(characterName);
 
-  await dialog.getByLabel("Состояние").selectOption("CLOSED");
+  await chooseFilter(page, dialog, "Состояние", "CLOSED");
   await expect(card).toBeHidden();
-  await dialog.getByLabel("Состояние").selectOption("ALL");
+  await chooseFilter(page, dialog, "Состояние", "ALL");
   await expect(card).toBeVisible();
-  await dialog.getByLabel("Срок").selectOption("NOW");
+  await chooseFilter(page, dialog, "Срок", "NOW");
   await expect(card).toBeHidden();
-  await dialog.getByLabel("Срок").selectOption("BEFORE_BREAK");
+  await chooseFilter(page, dialog, "Срок", "BEFORE_BREAK");
   await expect(card).toBeVisible();
-  await dialog.getByLabel("Аудитория").selectOption("PUBLIC");
+  await chooseFilter(page, dialog, "Аудитория", "PUBLIC");
   await expect(card).toBeHidden();
-  await dialog.getByLabel("Аудитория").selectOption("GM_ONLY");
+  await chooseFilter(page, dialog, "Аудитория", "GM_ONLY");
   await expect(card).toBeVisible();
 });
 
-test("UIX644_PLAYER_REQUEST_GM_FILTERS: GM native filters combine state horizon and audience", async ({
+test("UIX644_PLAYER_REQUEST_GM_FILTERS: GM Gravity filters combine state horizon and audience", async ({
   page,
   gmToken,
 }) => {
@@ -189,14 +232,14 @@ test("UIX644_PLAYER_REQUEST_GM_FILTERS: GM native filters combine state horizon 
   await expect(openCard).toBeVisible();
   await expect(closedCard).toBeHidden();
 
-  await dialog.getByLabel("Состояние").selectOption("CLOSED");
+  await chooseFilter(page, dialog, "Состояние", "CLOSED");
   await expect(openCard).toBeHidden();
   await expect(closedCard).toBeVisible();
-  await dialog.getByLabel("Срок").selectOption("NEXT_SESSION");
-  await dialog.getByLabel("Аудитория").selectOption("GM_ONLY");
+  await chooseFilter(page, dialog, "Срок", "NEXT_SESSION");
+  await chooseFilter(page, dialog, "Аудитория", "GM_ONLY");
   await expect(closedCard).toBeVisible();
 
-  await dialog.getByLabel("Аудитория").selectOption("PUBLIC");
+  await chooseFilter(page, dialog, "Аудитория", "PUBLIC");
   await expect(closedCard).toBeHidden();
   await expect(dialog).toContainText("Заявок по выбранным фильтрам нет.");
 
@@ -204,9 +247,11 @@ test("UIX644_PLAYER_REQUEST_GM_FILTERS: GM native filters combine state horizon 
   await expect(dialog).toBeHidden();
   await openWorkspaceSection(page, "Открытые заявки");
   const reopened = page.getByRole("dialog", { name: "Открытые заявки" });
-  await expect(reopened.getByLabel("Состояние")).toHaveValue("OPEN");
-  await expect(reopened.getByLabel("Срок")).toHaveValue("ALL");
-  await expect(reopened.getByLabel("Аудитория")).toHaveValue("ALL");
+  await expect(reopened.getByLabel("Состояние")).toContainText("Открытые");
+  await expect(reopened.getByLabel("Срок")).toContainText("Любой срок");
+  await expect(reopened.getByLabel("Аудитория")).toContainText(
+    "Любая аудитория",
+  );
   await expect(
     reopened.locator(".player-request-card", {
       hasText: "Открытая публичная заявка",
