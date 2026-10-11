@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type {
   AssetDto,
   GameSnapshot,
@@ -504,6 +505,7 @@ for (const width of [1280, 390]) {
     const capture = (phase: string, target: Locator, screenshot = true) =>
       captureCopy(page, testInfo, mock.evidence, phase, target, screenshot);
     try {
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await expect(page.locator("vite-error-overlay")).toHaveCount(0);
       await openWorkspaceSection(page, "Карты мира");
@@ -586,6 +588,7 @@ for (const width of [1280, 390]) {
           kind: "LANDMARK",
           summary: "",
           gmNotes: "",
+          canonicalLocationId: null,
           visibility: "GM_ONLY",
           x: 0.5,
           y: 0.5,
@@ -617,6 +620,7 @@ for (const width of [1280, 390]) {
     const capture = (phase: string, target: Locator, screenshot = true) =>
       captureCopy(page, testInfo, mock.evidence, phase, target, screenshot);
     try {
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await expect(page.locator("vite-error-overlay")).toHaveCount(0);
       await openWorkspaceSection(page, "Редактор мира");
@@ -842,6 +846,7 @@ for (const width of [1280, 360]) {
   test(`world dropdown registry lifecycle ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });
     const mock = await installCopyApi(page, true);
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openWorkspaceSection(page, "Редактор мира");
     const editor = page.getByRole("dialog", {

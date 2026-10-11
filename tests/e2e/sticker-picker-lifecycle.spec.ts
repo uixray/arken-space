@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -78,6 +79,7 @@ for (const role of ["GM", "PLAYER"] as const) {
     }) => {
       await page.setViewportSize({ width, height: 844 });
       const reads = await install(page, role);
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await expect.poll(() => reads.story).toBeGreaterThan(0);
       if (width === 390) await page.locator("#compact-nav-journal").click();

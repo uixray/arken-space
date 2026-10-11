@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 import type { GameSnapshot } from "@arken/contracts";
@@ -110,6 +111,7 @@ test("scene editor stays above the workspace and restores its interaction", asyn
   page,
 }) => {
   await mockBootstrap(page, snapshot);
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   await openWorkspaceSection(page, "Сцены");
@@ -156,6 +158,7 @@ test("scene editor stays above the workspace and restores its interaction", asyn
 test("long token names remain inside a palette card", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 840 });
   await mockBootstrap(page, tokenSnapshot);
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   await openWorkspaceSection(page, "Токены");
@@ -181,6 +184,7 @@ test("a desktop workspace window drags by its labelled header handle and resets 
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockBootstrap(page, snapshot);
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   await openWorkspaceSection(page, "Токены");
@@ -241,6 +245,7 @@ test("grid settings reset their draft and close outside the popover", async ({
   page,
 }) => {
   await mockBootstrap(page, snapshot);
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   const settings = page.locator("details.grid-settings");
@@ -297,6 +302,7 @@ test("grid settings save canonical values across reopen and bootstrap reload", a
     });
   });
 
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const settings = page.locator("details.grid-settings");
   const fields = settings.locator('input[type="number"]');
@@ -330,6 +336,7 @@ test("grid settings keep a rejected draft open for correction or retry", async (
       body: JSON.stringify({ error: "SCENE_CONFLICT" }),
     }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   const settings = page.locator("details.grid-settings");
@@ -350,12 +357,13 @@ test("UIX-621 desktop overflow navigation has clickable visible menu items", asy
   // UIX-624: below 1024 the compact Sections dialog replaces this desktop menu.
   await page.setViewportSize({ width: 1024, height: 800 });
   await mockBootstrap(page, snapshot);
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await page.getByLabel("Ещё разделы").click();
   // Characters is a root workspace, not a floating window. Exercise a named
   // overflow item with a stable dialog contract instead of whichever is first.
   const item = page.locator(
-    '.workspace-nav__menu button[data-workspace="scenes"]',
+    '.workspace-nav__menu button[data-workspace="media"]',
   );
   await expect(item).toBeVisible();
   await expect
@@ -373,7 +381,7 @@ test("UIX-621 desktop overflow navigation has clickable visible menu items", asy
     .toBe(true);
   await item.click();
   await expect(
-    page.getByRole("dialog", { name: "Сцены", exact: true }),
+    page.getByRole("dialog", { name: "Файлы", exact: true }),
   ).toBeVisible();
 });
 
@@ -381,6 +389,7 @@ test("UIX-621 select portal receives pointer above token workspace", async ({
   page,
 }, testInfo) => {
   await mockBootstrap(page, tokenSnapshot);
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Токены");
   const workspace = page.getByRole("dialog", { name: "Токены" });
@@ -508,6 +517,7 @@ test("UIX-621 raw Gravity select receives pointer above feedback modal", async (
   page,
 }) => {
   await mockBootstrap(page, snapshot);
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await page.getByLabel("Меню сеанса").click();
   await page.getByRole("button", { name: "Сообщить", exact: true }).click();
@@ -565,6 +575,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         '0{"sid":"feedback-menu","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
       );
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const session = page.getByLabel("Меню сеанса", { exact: true });
     await session.click();
@@ -704,6 +715,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         '0{"sid":"cursor-menu","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
       );
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const trigger = page.locator('button[data-tool="CURSOR_PRESENCE"]');
     const panel = page.locator(".cursor-presence-menu");
@@ -873,6 +885,7 @@ for (const width of [1280, 360]) {
         '0{"sid":"toolbar-settings","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
       );
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const grid = page.locator(".grid-settings"),
       g = grid.locator("summary"),
@@ -988,6 +1001,7 @@ test("UIX-644 pending grid save preserves newer outside focus", async ({
       '0{"sid":"grid-pending","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
     );
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const settings = page.locator(".grid-settings");
   await settings.locator("summary").click();
