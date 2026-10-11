@@ -1,5 +1,6 @@
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Locator } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
 import { starterStatLayout } from "@arken/system";
@@ -287,9 +288,9 @@ test("concept shell keeps the map primary and exposes core tools", async ({
   await expect(
     page.getByRole("article", { name: "Лист персонажа Картограф" }),
   ).toBeVisible();
-  await page.getByRole("tab", { name: "Способности" }).click();
+  await page.getByRole("tab", { name: "Показатели", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Наблюдение", exact: true }),
+    page.getByRole("button", { name: "Наблюдение 2d6 + mind", exact: true }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Закрыть персонажей" }).click();
@@ -322,6 +323,9 @@ test("UIX-516 GM sees protected regen fields before and after reload", async ({
 
   const expectProtectedControls = async () => {
     await openWorkspaceSection(page, "Персонажи");
+    await page
+      .getByRole("tab", { name: "Инвентарь и ресурсы", exact: true })
+      .click();
     // Regeneration is now a protected field beside each resource, not a
     // rollable/deletable stat row. The value and lack of a delete menu are the
     // behavior to preserve across reload.
@@ -335,6 +339,9 @@ test("UIX-516 GM sees protected regen fields before and after reload", async ({
     await expect(
       workspace.locator(".stat-field__roll-name").filter({ hasText: /^Реген/ }),
     ).toHaveCount(0);
+    await workspace
+      .getByRole("tab", { name: "Показатели", exact: true })
+      .click();
     const strength = page
       .locator(".stat-field")
       .filter({
@@ -584,7 +591,8 @@ test("UIX-386 GM toolbar keeps icons and encounter states accessible", async ({
   await expect(
     activeToolbar.locator(' [data-tool="ENCOUNTER_END"]'),
   ).toHaveCount(0);
-  await expect(page.locator(".initiative-panel")).toHaveCount(0);
+  // GM keeps the established initiative controls, not removed encounter tools.
+  await expect(page.locator(".initiative-panel")).toHaveCount(1);
 });
 
 test("UIX-462 shortcuts dialog exposes role-safe map commands", async ({
@@ -722,7 +730,12 @@ test("GM opens token and file workflows without leaving the canvas", async ({
     "Другие изображения",
     "Музыка и звуки",
   ]) {
-    await expect(filesDialog.getByText(section, { exact: true })).toBeVisible();
+    await expect(
+      filesDialog
+        .locator(".upload-section")
+        .filter({ has: page.getByLabel(section, { exact: true }) })
+        .getByText(section, { exact: true }),
+    ).toBeVisible();
   }
   await expect(page.locator("canvas").first()).toBeVisible();
 });
@@ -824,7 +837,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         ["TOKEN", "Изображение токена", "ranger-token.webp"],
         ["PORTRAIT", "Портрет персонажа", "Elena.webp"],
         ["IMAGE", "Изображение", "Замок.webp"],
-        ["AUDIO", "Аудиофайл", "Moonlight.ogg"],
+        ["AUDIO", "Фоновая музыка", "Moonlight.ogg"],
       ] as const;
       const fixture = structuredClone(snapshot);
       fixture.assets = examples.map(([kind, , name], index) => ({
@@ -1072,11 +1085,15 @@ for (const role of ["GM", "PLAYER"] as const) {
       ).toBeDisabled();
       expect(unexpectedWrites).toEqual([]);
       // Audio intake must reach a local AUDIO draft without an image decoder.
-      // These bytes test client selection only; server media validation is separate.
+      // Real synthetic metadata is required before upload becomes enabled.
+      // Server media validation is separate; no upload is performed here.
       const audioInput = files.getByLabel("Музыка и звуки", { exact: true });
       const audioSection = files.locator(".upload-section").filter({
         has: page.getByLabel("Музыка и звуки", { exact: true }),
       });
+      await audioSection
+        .getByLabel("Назначение аудиофайла", { exact: true })
+        .selectOption("MUSIC");
       for (const [name, mimeType] of [
         ["selected-audio.mp3", "audio/mpeg"],
         ["selected-audio.ogg", "application/ogg"],
@@ -1084,7 +1101,12 @@ for (const role of ["GM", "PLAYER"] as const) {
         await audioInput.setInputFiles({
           name,
           mimeType,
-          buffer: Buffer.from("client intake candidate only", "utf8"),
+          buffer: readFileSync(
+            new URL(
+              `./fixtures/intake-silence.${name.endsWith(".mp3") ? "mp3" : "ogg"}`,
+              import.meta.url,
+            ),
+          ),
         });
         await expect(audioInput).toHaveValue("");
         await expect(
@@ -1115,10 +1137,20 @@ for (const role of ["GM", "PLAYER"] as const) {
         files.getByRole("button", { name: "Загрузить", exact: true }),
       ).toHaveCount(5);
       for (const name of ["Карты", "Другие изображения", "Музыка и звуки"]) {
-        await expect(files.getByText(name, { exact: true })).toHaveCount(1);
+        await expect(
+          files
+            .locator(".upload-section")
+            .filter({ has: page.getByLabel(name, { exact: true }) })
+            .getByText(name, { exact: true }),
+        ).toHaveCount(1);
       }
       for (const name of ["Изображения токенов", "Портреты персонажей"]) {
-        await expect(files.getByText(name, { exact: true })).toBeVisible();
+        await expect(
+          files
+            .locator(".upload-section")
+            .filter({ has: page.getByLabel(name, { exact: true }) })
+            .getByText(name, { exact: true }),
+        ).toBeVisible();
       }
       await expect(
         files.getByRole("button", {
@@ -1529,6 +1561,20 @@ test("scene refresh races do not revoke local music consent", async ({
     revision: 2,
     updatedAt: new Date().toISOString(),
   };
+  musicSnapshot.audioTracks = [
+    {
+      id: "9476b502-02f8-4cd6-9c55-3816d70d44dd",
+      assetId: audioAssetId,
+      mixVolume: 1,
+      playing: true,
+      positionSeconds: 15,
+      loop: true,
+      startedAt: musicSnapshot.audio.startedAt,
+      slotOrder: 0,
+      revision: 2,
+      updatedAt: musicSnapshot.audio.updatedAt,
+    },
+  ];
 
   await page.addInitScript(() => {
     localStorage.setItem("arken.audio.enabled", "true");
@@ -1599,7 +1645,16 @@ test("scene refresh races do not revoke local music consent", async ({
       }),
     )
     .toBe(true);
-  const playCountBeforeVolumeChange = initialPlayVolumes.length;
+  // Capture the settled control's current baseline, not the earlier startup
+  // sample taken before header/portal initialization finished.
+  const playCountBeforeVolumeChange = await page.evaluate(
+    () =>
+      (
+        window as typeof window & {
+          __arkenMusicProbe: { playVolumes: number[] };
+        }
+      ).__arkenMusicProbe.playVolumes.length,
+  );
   await volumeSlider.fill("0.05");
   await expect
     .poll(() =>
@@ -1945,20 +2000,21 @@ test("activity quick rolls reserve space above the scrollable event history", as
   await filterSummary.click();
 
   const historyAction = historyControl.getByRole("button", {
-    name: "Показать меньше",
+    name: "Показать больше",
   });
   await expect(historyAction).toBeVisible();
   await expect(historyAction).toHaveAttribute(
     "aria-controls",
     "activity-message-list",
   );
-  await historyAction.click();
-  await expect(
-    historyControl.getByRole("button", { name: "Показать больше" }),
-  ).toBeVisible();
   await expect(
     historyControl.locator(".activity-log-truncated-note"),
-  ).toHaveText(/Показаны последние 8 из \d+\./);
+  ).toHaveText(/Показаны последние 6 из \d+\./);
+  await historyAction.click();
+  await expect(
+    historyControl.locator(".activity-log-truncated-note"),
+  ).toHaveText(/Показаны последние 16 из \d+\./);
+  await expect(historyAction).toBeVisible();
 
   const workbench = page.locator(".workbench");
   const sidebar = page.locator(".sidebar");
@@ -2158,9 +2214,16 @@ test("GM shell keeps essential controls accessible across desktop widths", async
     await page.goto("/");
 
     await expect(viewedScenePicker(page)).toBeVisible();
+    await page
+      .getByRole("button", { name: "Список сцен", exact: true })
+      .click();
     await expect(
       page.getByRole("button", { name: "Создать сцену" }),
     ).toBeVisible();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Закрыть окно", exact: true })
+      .click();
     for (const tool of [
       "Перемещение",
       "Открыть туман",
@@ -2609,6 +2672,17 @@ for (const viewport of [
     await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator("#chat-panel-activity")).toBeVisible();
+    // Older events are now progressively loaded, not rendered all at once.
+    for (
+      let batch = 0;
+      batch < 20 && !(await page.getByText(/^Длинное сообщение/).isVisible());
+      batch++
+    ) {
+      await page
+        .getByRole("button", { name: "Показать больше", exact: true })
+        .click();
+    }
+    await expect(page.getByText(/^Длинное сообщение/)).toBeVisible();
     await expect(page.locator(".activity-roll-controls")).toBeVisible();
     await expect(page.locator(".chat-compose")).toBeVisible();
     const dimensions = await page
@@ -2717,6 +2791,7 @@ test("GM assigns and revokes additional character sheet access", async ({
     "\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0438",
   );
   const access = page.locator(".character-controller-access");
+  await page.getByRole("tab", { name: "Личность", exact: true }).click();
   await expect(access).toBeVisible();
   const owner = access.getByLabel("Owner");
   await expect(owner).toBeChecked();
@@ -2782,10 +2857,10 @@ test("player opens the character workspace while chat remains visible", async ({
   await expect(page.locator(".character-workspace")).toBeVisible();
   await expect(page.locator(".character-controller-access")).toHaveCount(0);
   await expect(page.locator(".chat-compose")).toBeVisible();
-  await page.getByRole("tab", { name: "Способности" }).click();
+  await page.getByRole("tab", { name: "Показатели", exact: true }).click();
   await expect(
     page.getByRole("button", {
-      name: "\u041d\u0430\u0431\u043b\u044e\u0434\u0435\u043d\u0438\u0435",
+      name: "Наблюдение 2d6 + mind",
       exact: true,
     }),
   ).toBeVisible();
@@ -2952,6 +3027,7 @@ test("wallet batches rapid mutations and ignores unchanged blur", async ({
   playerSnapshot.members = [playerSnapshot.me];
   const submittedGold: number[] = [];
   const submittedSp: number[] = [];
+  const submittedSilver: number[] = [];
   const submittedRevisions: number[] = [];
   let rejectNextCounter = false;
   let releaseFirstResponse!: () => void;
@@ -2974,6 +3050,7 @@ test("wallet batches rapid mutations and ignores unchanged blur", async ({
     };
     submittedGold.push(payload.wallet.gold);
     submittedSp.push(payload.wallet.sp);
+    submittedSilver.push(payload.wallet.silver);
     submittedRevisions.push(payload.revision);
     if (rejectNextCounter) {
       rejectNextCounter = false;
@@ -3009,8 +3086,11 @@ test("wallet batches rapid mutations and ignores unchanged blur", async ({
   await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
+  await page
+    .getByRole("tab", { name: "Инвентарь и ресурсы", exact: true })
+    .click();
   const goldRow = page
-    .locator(".character-workspace .inline-fields")
+    .locator(".character-workspace .character-wallet__coin")
     .filter({ hasText: /^Золото/ });
   const input = goldRow.locator('input[type="number"]');
 
@@ -3076,18 +3156,19 @@ test("wallet batches rapid mutations and ignores unchanged blur", async ({
   await page.clock.runFor(WALLET_ADJUST_DELAY_MS);
   expect(submittedGold).toEqual([3, 5, 0, 1, 9]);
 
-  const spRow = page
-    .locator(".character-workspace .inline-fields")
-    .filter({ hasText: /^Очки прокачки/ });
-  const spRequestsBefore = submittedSp.length;
+  // The current wallet exposes coins only; retain legacy SP normalization in every payload.
+  const silverRow = page
+    .locator(".character-workspace .character-wallet__coin")
+    .filter({ hasText: /^Серебро/ });
+  const silverRequestsBefore = submittedSilver.length;
   for (let index = 0; index < 25; index += 1)
-    await spRow.locator("button").last().click();
+    await silverRow.locator("button").last().click();
   await page.clock.runFor(WALLET_ADJUST_DELAY_MS - 1);
-  expect(submittedSp.slice(spRequestsBefore)).toEqual([]);
+  expect(submittedSilver.slice(silverRequestsBefore)).toEqual([]);
   await page.clock.runFor(1);
-  await expect.poll(() => submittedSp.at(-1)).toBe(25);
-  expect(submittedSp.slice(spRequestsBefore)).toEqual([25]);
-  await expect(spRow.locator('input[type="number"]')).toHaveValue("25");
+  await expect.poll(() => submittedSilver.at(-1)).toBe(25);
+  expect(submittedSilver.slice(silverRequestsBefore)).toEqual([25]);
+  await expect(silverRow.locator('input[type="number"]')).toHaveValue("25");
 
   // A final server refusal restores the latest canonical wallet instead of
   // leaving the optimistic click visible as if it had been accepted.
@@ -3103,6 +3184,7 @@ test("wallet batches rapid mutations and ignores unchanged blur", async ({
       .getByText(/Не удалось сохранить кошелёк/),
   ).toBeVisible();
   await expect(page.getByText("Интерфейс временно остановлен")).toHaveCount(0);
+  expect(submittedSp).toEqual(submittedSp.map(() => 0));
   expect(renderErrors.filter((error) => error.name === "TypeError")).toEqual(
     [],
   );
@@ -3468,14 +3550,21 @@ test("UIX-621 activity actions follow snapshot character B and keep failures at 
     await expect(
       quickRolls.locator(".activity-quick-rolls").first(),
     ).toHaveAttribute("aria-busy", "true");
-    await expect(quickRolls.getByRole("status")).toHaveText(
-      "Бросаем… Бета · Ловкость",
-    );
+    // The owner-reviewed UI removed the duplicate textual pending label;
+    // the initiating group and disabled controls still expose busy state.
+    await expect(
+      quickRolls.getByText("Бросаем… Бета · Ловкость", { exact: true }),
+    ).toHaveCount(0);
+    await quickRoll.evaluate((button) => (button as HTMLButtonElement).click());
+    expect(diceRequests).toHaveLength(1);
   } finally {
     // Never leave the intercepted request held if a preceding assertion fails.
     releaseRollResponse();
   }
   await expect(quickRoll).toBeEnabled();
+  await expect(
+    quickRolls.locator(".activity-quick-rolls").first(),
+  ).toHaveAttribute("aria-busy", "false");
   await expect(quickRolls.getByRole("status")).toHaveCount(0);
   await expect(quickRolls.getByRole("alert")).toHaveText(
     "Бета · Ловкость: Проверка отклонена сервером",
@@ -3607,6 +3696,9 @@ test("structured resources persist and short rest uses the authoritative counter
   const physical = page.getByRole("spinbutton", {
     name: "Выносливость: текущее",
   });
+  await page
+    .getByRole("tab", { name: "Инвентарь и ресурсы", exact: true })
+    .click();
   await physical.fill("3");
   await page.locator(".character-workspace__header h2").click();
   await expect.poll(() => payloads.length).toBe(1);
@@ -3615,10 +3707,17 @@ test("structured resources persist and short rest uses the authoritative counter
   await page.getByPlaceholder("Новый ресурс").fill("stamina");
   await page.getByRole("button", { name: "Добавить", exact: true }).click();
   await expect.poll(() => payloads.length).toBe(2);
+  expect(payloads[1]?.resources?.stamina).toMatchObject({
+    current: 0,
+    maximum: 0,
+  });
   await expect(
     page
       .locator(".character-resource-editor .resource-card")
-      .filter({ hasText: "stamina" }),
+      .getByRole("textbox", { name: "Название", exact: true }),
+  ).toHaveValue("stamina");
+  await expect(
+    page.getByRole("group", { name: "Создание нового ресурса", exact: true }),
   ).toBeVisible();
 
   await page
@@ -3672,7 +3771,20 @@ test("resource conflict replaces the structured draft with canonical bootstrap d
   const resourceCard = page
     .locator(".character-resource-editor .resource-card")
     .filter({ hasText: "mana" });
-  const currentInput = resourceCard.getByLabel("Текущее");
+  const resourceEditor = page.getByRole("group", {
+    name: "Создание нового ресурса",
+    exact: true,
+  });
+  const currentInput = resourceEditor.getByLabel("Текущее", { exact: true });
+  await page
+    .getByRole("tab", { name: "Инвентарь и ресурсы", exact: true })
+    .click();
+  await resourceCard
+    .getByRole("button", { name: "Настроить", exact: true })
+    .click();
+  await expect(
+    resourceEditor.getByRole("textbox", { name: "Название", exact: true }),
+  ).toHaveValue("mana");
   await currentInput.fill("5");
   await page.locator(".character-workspace__header h2").click();
 
@@ -3731,8 +3843,11 @@ test("wallet refreshes and safely reapplies a delta after a stale revision", asy
   await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
+  await page
+    .getByRole("tab", { name: "Инвентарь и ресурсы", exact: true })
+    .click();
   const goldRow = page
-    .locator(".character-workspace .inline-fields")
+    .locator(".character-workspace .character-wallet__coin")
     .filter({ hasText: /^Золото/ });
   await goldRow.locator("button").last().click();
 
@@ -3749,6 +3864,9 @@ test("wallet refreshes and safely reapplies a delta after a stale revision", asy
 test("player fog clips partial foreign tokens while controlled tokens remain visible", async ({
   page,
 }) => {
+  // Pixel equality measures clipping/pan state, not animated fog phase.
+  // Animated motion and performance are covered by uix314-fog-animation.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   const playerSnapshot = structuredClone(snapshot);
   const playerId = "f53f4618-2ebc-4cf8-bce7-870097305a6b";
   playerSnapshot.me = {
@@ -3841,7 +3959,10 @@ test("player fog clips partial foreign tokens while controlled tokens remain vis
 
   await page
     .getByRole("toolbar", { name: "Инструменты карты" })
-    .getByRole("button", { name: "Объекты карты" })
+    .getByRole("button", {
+      name: "Список объектов и токенов карты",
+      exact: true,
+    })
     .click();
   const objectList = page.getByRole("region", { name: "Объекты карты" });
   await expect(
@@ -4016,14 +4137,60 @@ test("player fog shortcut is permission-gated", async ({ page }) => {
   ).toHaveAttribute("aria-pressed", "true");
 });
 
-test("map object list preserves Escape priority and Delete cancellation", async ({
+test("map object list preserves Escape priority and authoritative Delete undo", async ({
   page,
 }) => {
+  const state = structuredClone(snapshot);
+  const deletedToken = state.tokens[0]!;
+  const deleteCommands: Array<{ actionId: string; revision: number }> = [];
+  const undoCommands: Record<string, unknown>[] = [];
+  let history: Array<Record<string, unknown>> = [];
+  await page.route(`**/api/tokens/${deletedToken.id}`, async (route) => {
+    expect(route.request().method()).toBe("DELETE");
+    const body = route.request().postDataJSON();
+    expect(body.revision).toBe(deletedToken.revision);
+    expect(body.actionId).toMatch(/^[0-9a-f-]{36}$/);
+    deleteCommands.push(body);
+    state.tokens = state.tokens.filter((entry) => entry.id !== deletedToken.id);
+    history = [
+      {
+        sequence: 21,
+        type: "TOKEN_DELETE",
+        targetType: "TOKEN",
+        targetId: deletedToken.id,
+        status: "APPLIED",
+        nextDirection: "undo",
+      },
+    ];
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "{}",
+    });
+  });
+  await page.route("**/api/canvas/history**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(history),
+    }),
+  );
+  await page.route("**/api/canvas/undo", async (route) => {
+    expect(route.request().method()).toBe("POST");
+    undoCommands.push(route.request().postDataJSON());
+    state.tokens = [deletedToken];
+    history = [{ ...history[0], status: "UNDONE", nextDirection: "redo" }];
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ sequence: 21, status: "UNDONE" }),
+    });
+  });
   await page.route("**/api/bootstrap", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(snapshot),
+      body: JSON.stringify(state),
     }),
   );
   await page.route("**/api/player-access", (route) =>
@@ -4056,7 +4223,7 @@ test("map object list preserves Escape priority and Delete cancellation", async 
   await page.keyboard.press("Escape");
   await expect(objects).toBeHidden();
   const objectListTrigger = page.getByRole("button", {
-    name: "\u041e\u0431\u044a\u0435\u043a\u0442\u044b \u043a\u0430\u0440\u0442\u044b",
+    name: "Список объектов и токенов карты",
   });
   await objectListTrigger.click();
   await expect(objects).toBeVisible();
@@ -4074,15 +4241,20 @@ test("map object list preserves Escape priority and Delete cancellation", async 
 
   await map.focus();
   await page.keyboard.press("Delete");
-  const confirm = page.getByRole("dialog", {
-    name: "\u0423\u0431\u0440\u0430\u0442\u044c \u0442\u043e\u043a\u0435\u043d \u0441 \u043a\u0430\u0440\u0442\u044b?",
-  });
-  await expect(confirm).toBeVisible();
-  await confirm
-    .getByRole("button", { name: "\u041e\u0442\u043c\u0435\u043d\u0430" })
-    .click();
-  await expect(confirm).toBeHidden();
-
+  // Owner-reviewed single-object deletion is immediate and journal-backed;
+  // bulk deletion keeps confirmation. Undo must restore the canonical token.
+  await expect.poll(() => deleteCommands.length).toBe(1);
+  await expect.poll(() => state.tokens.length).toBe(0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // This HTTP-only fixture has no server socket broadcast; reload canonical state.
+  await page.reload();
+  await expect(map).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Отменить:/ })).toBeEnabled();
+  await page.keyboard.press("Control+z");
+  await expect.poll(() => undoCommands.length).toBe(1);
+  await expect.poll(() => state.tokens.length).toBe(1);
+  await page.reload();
+  await expect(map).toBeVisible();
   await map.focus();
   await page.keyboard.press("o");
   await expect(
@@ -4090,7 +4262,7 @@ test("map object list preserves Escape priority and Delete cancellation", async 
       name: "\u041a\u0430\u0440\u0442\u043e\u0433\u0440\u0430\u0444",
       exact: true,
     }),
-  ).toHaveAttribute("aria-pressed", "true");
+  ).toHaveAttribute("aria-pressed", "false");
   await expect(
     objects.getByRole("button", {
       name: "\u041a\u0430\u0440\u0442\u043e\u0433\u0440\u0430\u0444",
@@ -4896,7 +5068,10 @@ test("UIX-268 reload render and tombstone are safe at narrow viewport", async ({
     "src",
     "/api/stickers/" + stickerId + "/content",
   );
-  await expect(page.getByText("Reloaded wave")).toBeVisible();
+  // Sticker-only presentation intentionally has no duplicate caption.
+  // Preserve its accessible description and protected source after reload.
+  await expect(rendered).toBeVisible();
+  await expect(rendered).toHaveAttribute("alt", "Cartographer waves hello");
   await expect(page.locator(".chat-sticker-tombstone")).toHaveCount(1);
   await expect(page.locator(".chat-sticker-tombstone img")).toHaveCount(0);
   await expect(page.locator('img[src*="must-not-leak"]')).toHaveCount(0);
@@ -4914,6 +5089,9 @@ test("UIX-268 reload render and tombstone are safe at narrow viewport", async ({
 test("GM can move tokens, pan the map, choose drawing color, and cannot republish the active scene", async ({
   page,
 }) => {
+  // Pixel equality measures clipping/pan state, not animated fog phase.
+  // Animated motion and performance are covered by uix314-fog-animation.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   let publishRequests = 0;
   let socketConnected = false;
   let movedToken: { tokenId: string; x: number; y: number } | null = null;
@@ -5173,7 +5351,10 @@ test("map shortcuts and object panel stay reachable without covering canvas UI",
 
     const viewport = page.locator(".map-viewport");
     const toolbar = page.locator(".map-toolbar");
-    const objects = toolbar.getByRole("button", { name: "Объекты карты" });
+    const objects = toolbar.getByRole("button", {
+      name: "Список объектов и токенов карты",
+      exact: true,
+    });
     await expect(viewport).toBeVisible();
     await expect(toolbar).toBeVisible();
     await expect(objects).toBeVisible();

@@ -116,7 +116,10 @@ test("UIX644_PLAYER_REQUEST_NATIVE_DRAFT: player Gravity selects keep keyboard f
   await expect(horizon).toContainText("Сейчас");
   await horizon.press("Space");
   await expect(page.getByRole("listbox")).toBeVisible();
-  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Home");
+  await expect(
+    page.getByRole("option", { name: "Сейчас", exact: true }),
+  ).toBeFocused();
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
   await expect(horizon).toContainText("До перерыва");
@@ -128,8 +131,14 @@ test("UIX644_PLAYER_REQUEST_NATIVE_DRAFT: player Gravity selects keep keyboard f
   await expect(audience).toContainText("Всем участникам");
   await audience.press("Space");
   await expect(page.getByRole("listbox")).toBeVisible();
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Home");
+  await expect(
+    page.getByRole("option", { name: "Всем участникам", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(
+    page.getByRole("option", { name: "Автору и всем мастерам", exact: true }),
+  ).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(audience).toContainText("Автору и всем мастерам");
   await expect(audience).toBeFocused();
@@ -144,8 +153,14 @@ test("UIX644_PLAYER_REQUEST_NATIVE_DRAFT: player Gravity selects keep keyboard f
   await expect(
     page.getByRole("option", { name: characterName, exact: true }),
   ).toBeVisible();
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Home");
+  await expect(
+    page.getByRole("option", { name: "Без персонажа", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(
+    page.getByRole("option", { name: characterName, exact: true }),
+  ).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(character).toContainText(characterName);
   await expect(character).toBeFocused();

@@ -150,11 +150,13 @@ for (const role of ["GM", "PLAYER"] as const)
         await expect(confirmation).toBeHidden();
         await expect(remove).toBeFocused();
       } else {
+        // This PLAYER owns the character. The existing personal stat-layout
+        // policy permits these controls; it does not grant shared-layout access.
         await expect(
           card.getByRole("button", {
             name: /Переименовать|Переместить|Удалить|Добавить строку/,
           }),
-        ).toHaveCount(0);
+        ).toHaveCount(8);
       }
       await info.attach("stat-controls", {
         body: JSON.stringify({

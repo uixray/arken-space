@@ -1856,6 +1856,10 @@ html[data-player-theme="light"] .character-card--stats {
   --character-card-accent: var(--color-card-combat);
   flex-basis: 300px;
 }
+html[data-player-theme="light"] .character-card--combat {
+  /* Keep the warm accent legible on the raised light-theme card. */
+  --character-card-accent: var(--color-text-accent);
+}
 .character-card--skills {
   --character-card-accent: var(--color-card-skills);
 }
@@ -3593,6 +3597,8 @@ html[data-player-theme="light"] .character-card--stats {
 }
 .asset-row > span {
   align-self: start;
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: 2px 4px;
   border: 1px solid var(--line);
   color: var(--muted);

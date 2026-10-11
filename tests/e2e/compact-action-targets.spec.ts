@@ -92,6 +92,11 @@ for (const role of ["GM", "PLAYER"] as const)
               className: node.className,
               width: box.width,
               height: box.height,
+              x: box.x,
+              y: box.y,
+              blocker: document
+                .elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)
+                ?.outerHTML.slice(0, 200),
               hit: node.contains(
                 document.elementFromPoint(
                   box.x + box.width / 2,
@@ -168,6 +173,11 @@ for (const role of ["GM", "PLAYER"] as const)
               className: node.className,
               width: box.width,
               height: box.height,
+              x: box.x,
+              y: box.y,
+              blocker: document
+                .elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)
+                ?.outerHTML.slice(0, 200),
               hit: node.contains(
                 document.elementFromPoint(
                   box.x + box.width / 2,

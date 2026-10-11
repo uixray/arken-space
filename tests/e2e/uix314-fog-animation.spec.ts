@@ -454,6 +454,10 @@ test("UIX-314 bounded 180-operation scene records frame cost and cache rebuild a
 }) => {
   test.setTimeout(75_000);
   await page.addInitScript(() => {
+    // Measure the animated branch, independently of the CI host CPU count.
+    // Static low-resource/reduced-motion policy remains separately covered.
+    Object.defineProperty(navigator, "hardwareConcurrency", { value: 8 });
+    Object.defineProperty(navigator, "deviceMemory", { value: 8 });
     const state = {
       frames: 0,
       callbackDurations: [] as number[],

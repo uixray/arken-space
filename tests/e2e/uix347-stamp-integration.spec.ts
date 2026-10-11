@@ -512,7 +512,12 @@ test("UIX-347 GM selects, moves, copies and deletes a stamp through shared canva
   await page.goto("/");
   const map = page.locator(".map-viewport");
   await expect(map).toHaveAttribute("data-terrain-stamp-count", "2");
-  await page.getByRole("button", { name: "Объекты карты" }).click();
+  await page
+    .getByRole("button", {
+      name: "Список объектов и токенов карты",
+      exact: true,
+    })
+    .click();
   const list = page.getByRole("region", { name: "Объекты карты", exact: true });
   await list.getByRole("button", { name: "Рисунок 1", exact: true }).click();
   await expect(

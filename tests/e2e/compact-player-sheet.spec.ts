@@ -139,8 +139,8 @@ test("UIX-624 PLAYER sheet targets and pending backstory survive journal and rot
     await summary.press("Tab");
     await expect(story).toBeFocused();
     const storyFrame = story.locator("xpath=../..");
-    await expect(storyFrame).toHaveCSS("outline-style", "solid");
-    await expect(storyFrame).toHaveCSS("outline-width", "2px");
+    await expect(storyFrame).toHaveCSS("border-top-style", "solid");
+    await expect(storyFrame).toHaveCSS("border-top-width", "2px");
     const draft =
       "Арина ищет пропавших путников. Этот текст ещё ожидает сохранения.";
     await story.fill(draft);

@@ -1,6 +1,6 @@
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { CharacterDto, GameSnapshot, StatLayout } from "@arken/contracts";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
@@ -238,7 +238,8 @@ test("UIX-682 PLAYER owner layout CRUD/order survives reload; compact sheet is a
     "1",
   );
 
-  // C03: skills and abilities are distinct, vertically stacked sections.
+  // C03 owner delta (11.10): wide cards put both sections on a row below
+  // characteristics; narrow cards stack them. Do not restore the old layout.
   const skills = sheet.getByRole("heading", { name: "Навыки", exact: true });
   const abilities = sheet.getByRole("heading", {
     name: "Способности и заклинания",
@@ -246,8 +247,19 @@ test("UIX-682 PLAYER owner layout CRUD/order survives reload; compact sheet is a
   });
   await expect(skills).toBeVisible();
   await expect(abilities).toBeVisible();
-  expect((await abilities.boundingBox())!.y).toBeGreaterThan(
-    (await skills.boundingBox())!.y,
+  const skillsCard = sheet.locator(".character-card--skills");
+  const abilitiesCard = sheet.locator(".character-card--abilities");
+  const wideSkills = (await skillsCard.boundingBox())!;
+  const wideAbilities = (await abilitiesCard.boundingBox())!;
+  expect(wideAbilities.y).toBeCloseTo(wideSkills.y, 0);
+  expect(wideAbilities.x).toBeGreaterThanOrEqual(
+    wideSkills.x + wideSkills.width,
+  );
+  const characteristics = (await sheet
+    .locator(".character-card--stats")
+    .boundingBox())!;
+  expect(wideSkills.y).toBeGreaterThanOrEqual(
+    characteristics.y + characteristics.height,
   );
 
   // C11: resource card remains a full-width, styled control on its accessible tab.
@@ -271,6 +283,12 @@ test("UIX-682 PLAYER owner layout CRUD/order survives reload; compact sheet is a
 
   // C01: owner can create, reorder, rename, and delete a character-local row.
   const statsCard = sheet.locator(".character-card--stats");
+  const openRowMenu = async (row: Locator) => {
+    const menu = row.locator(".stat-field__menu");
+    if ((await menu.getAttribute("open")) === null)
+      await menu.locator("summary").click();
+    await expect(menu).toHaveAttribute("open", "");
+  };
   await statsCard.getByRole("button", { name: "Добавить строку" }).click();
   let dialog = page.getByRole("dialog", {
     name: "Новая строка — Характеристики",
@@ -291,7 +309,7 @@ test("UIX-682 PLAYER owner layout CRUD/order survives reload; compact sheet is a
   const newRow = statsCard
     .locator(".stat-field")
     .filter({ hasText: "Смекалка" });
-  await newRow.locator(".stat-field__menu summary").click();
+  await openRowMenu(newRow);
   await newRow
     .getByRole("button", { name: "Переместить «Смекалка» выше" })
     .click();
@@ -300,7 +318,7 @@ test("UIX-682 PLAYER owner layout CRUD/order survives reload; compact sheet is a
     "Смекалка",
   );
 
-  await newRow.locator(".stat-field__menu summary").click();
+  await openRowMenu(newRow);
   await newRow
     .getByRole("button", { name: "Переименовать «Смекалка»" })
     .click();
@@ -311,13 +329,13 @@ test("UIX-682 PLAYER owner layout CRUD/order survives reload; compact sheet is a
   await dialog.getByRole("button", { name: "Сохранить" }).click();
   await expect.poll(() => writes.length).toBe(3);
   await expect(
-    statsCard.getByRole("button", { name: "Смекалка героя" }),
+    statsCard.getByRole("button", { name: "Смекалка героя", exact: true }),
   ).toBeVisible();
 
   const renamedRow = statsCard
     .locator(".stat-field")
     .filter({ hasText: "Смекалка героя" });
-  await renamedRow.locator(".stat-field__menu summary").click();
+  await openRowMenu(renamedRow);
   await renamedRow
     .getByRole("button", { name: "Удалить «Смекалка героя»" })
     .click();
@@ -325,12 +343,17 @@ test("UIX-682 PLAYER owner layout CRUD/order survives reload; compact sheet is a
   await dialog.getByRole("button", { name: "Удалить" }).click();
   await expect.poll(() => writes.length).toBe(4);
   await expect(
-    statsCard.getByRole("button", { name: "Смекалка героя" }),
+    statsCard.getByRole("button", { name: "Смекалка героя", exact: true }),
   ).toHaveCount(0);
 
   await page.screenshot({ path: info.outputPath("uix682-player-desktop.png") });
   await page.setViewportSize({ width: 360, height: 640 });
   await expect(page.locator("html")).toHaveJSProperty("scrollWidth", 360);
+  const narrowSkills = (await skillsCard.boundingBox())!;
+  const narrowAbilities = (await abilitiesCard.boundingBox())!;
+  expect(narrowAbilities.y).toBeGreaterThanOrEqual(
+    narrowSkills.y + narrowSkills.height,
+  );
   await page.screenshot({ path: info.outputPath("uix682-player-narrow.png") });
 
   const savedLayout = structuredClone(snapshot.characters[0]!.statLayout);

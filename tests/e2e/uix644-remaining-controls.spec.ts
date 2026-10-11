@@ -207,6 +207,9 @@ test("UIX-644 PlayerRequests custom selectors retain keyboard focus and state at
     await expect(filter).toContainText(initial);
     await filter.click();
     await page.keyboard.press("Home");
+    await expect(
+      page.getByRole("option", { name: initial, exact: true }),
+    ).toBeFocused();
     const option = page.getByRole("option", { name: next, exact: true });
     await expect(option).toBeVisible();
     if (next === "Все состояния") {

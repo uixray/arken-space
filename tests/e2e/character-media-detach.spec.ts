@@ -232,6 +232,17 @@ async function installMockedApp(
       body: JSON.stringify([media]),
     });
   });
+  await page.route(
+    `**/api/characters/${ids.character}/spell-branches`,
+    (route) => {
+      expect(route.request().method()).toBe("GET");
+      return route.fulfill({ json: [] });
+    },
+  );
+  await page.route("**/api/spell-assignable-schools", (route) => {
+    expect(route.request().method()).toBe("GET");
+    return route.fulfill({ json: [] });
+  });
   await page.route(`**/api/assets/${ids.asset}/content`, (route) => {
     expect(route.request().method()).toBe("GET");
     return route.fulfill({
@@ -272,6 +283,7 @@ test("an owner confirms before detaching character media from the gallery", asyn
 
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
+  await page.getByRole("tab", { name: "Личность", exact: true }).click();
 
   const gallery = page.locator(".character-media-gallery");
   const openDetachDialog = gallery.getByRole("button", {
@@ -338,6 +350,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await openWorkspaceSection(page, "Персонажи");
+      await page.getByRole("tab", { name: "Личность", exact: true }).click();
       const gallery = page.locator(".character-media-gallery");
       const attach = gallery.locator(".character-media-gallery__attach");
       async function exercise(
@@ -453,6 +466,7 @@ test("gallery dropdown closes before the PLAYER sheet on consecutive Escape", as
   await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
+  await page.getByRole("tab", { name: "Личность", exact: true }).click();
   const gallery = page.locator(".character-media-gallery");
   const trigger = gallery
     .locator(".character-media-gallery__attach")

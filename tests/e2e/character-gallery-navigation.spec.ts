@@ -96,6 +96,7 @@ for (const role of ["GM", "PLAYER"] as const)
       await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await openWorkspaceSection(page, "Персонажи");
+      await page.getByRole("tab", { name: "Личность", exact: true }).click();
       const trigger = page.getByRole("button", {
         name: "Открыть в полном размере: Изображение 1",
         exact: true,

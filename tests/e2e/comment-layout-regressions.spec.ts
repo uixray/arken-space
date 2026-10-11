@@ -60,7 +60,12 @@ for (const role of ["GM", "PLAYER"] as const)
       expect((await scroll.boundingBox())?.height ?? 0).toBeGreaterThan(
         width < 800 ? 300 : 400,
       );
-      await expect(sidebar.getByRole("textbox")).toBeVisible();
+      await expect(
+        sidebar.getByRole("textbox", {
+          name: "Сообщение или бросок",
+          exact: true,
+        }),
+      ).toBeVisible();
 
       const journalBar = sidebar.locator(".activity-log-toolbar");
       await expect(journalBar).toHaveCSS("border-top-width", "0px");
