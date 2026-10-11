@@ -322,9 +322,24 @@ try {
     },
   ]);
   await seedProbeSessions(db, [
-    { membershipId: apiGmMembershipId, campaignId: apiCampaignId, role: "GM", token: apiGmSecret },
-    { membershipId: apiPlayerMembershipId, campaignId: apiCampaignId, role: "PLAYER", token: apiPlayerSecret },
-    { membershipId: apiForeignGmMembershipId, campaignId: apiForeignCampaignId, role: "GM", token: apiForeignGmSecret },
+    {
+      membershipId: apiGmMembershipId,
+      campaignId: apiCampaignId,
+      role: "GM",
+      token: apiGmSecret,
+    },
+    {
+      membershipId: apiPlayerMembershipId,
+      campaignId: apiCampaignId,
+      role: "PLAYER",
+      token: apiPlayerSecret,
+    },
+    {
+      membershipId: apiForeignGmMembershipId,
+      campaignId: apiForeignCampaignId,
+      role: "GM",
+      token: apiForeignGmSecret,
+    },
   ]);
   apiApp = Fastify();
   await apiApp.register(cookie);

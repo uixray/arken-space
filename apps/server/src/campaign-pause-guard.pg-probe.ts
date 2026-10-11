@@ -2,12 +2,7 @@ import { randomUUID } from "node:crypto";
 import cookie from "@fastify/cookie";
 import Fastify, { type FastifyInstance } from "fastify";
 import { eq, sql } from "drizzle-orm";
-import {
-  campaigns,
-  createDatabase,
-  memberships,
-  scenes,
-} from "@arken/db";
+import { campaigns, createDatabase, memberships, scenes } from "@arken/db";
 import {
   CampaignCanvasGuardError,
   runCampaignCanvasMutation,

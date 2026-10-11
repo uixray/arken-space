@@ -290,11 +290,36 @@ try {
     },
   ]);
   await seedProbeSessions(db, [
-    { membershipId: ids.membership.gm, campaignId: ids.campaign, role: "GM", token: secrets.gm },
-    { membershipId: ids.membership.owner, campaignId: ids.campaign, role: "PLAYER", token: secrets.owner },
-    { membershipId: ids.membership.controller, campaignId: ids.campaign, role: "PLAYER", token: secrets.controller },
-    { membershipId: ids.membership.other, campaignId: ids.campaign, role: "PLAYER", token: secrets.other },
-    { membershipId: ids.membership.foreignGm, campaignId: ids.foreignCampaign, role: "GM", token: secrets.foreignGm },
+    {
+      membershipId: ids.membership.gm,
+      campaignId: ids.campaign,
+      role: "GM",
+      token: secrets.gm,
+    },
+    {
+      membershipId: ids.membership.owner,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      token: secrets.owner,
+    },
+    {
+      membershipId: ids.membership.controller,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      token: secrets.controller,
+    },
+    {
+      membershipId: ids.membership.other,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      token: secrets.other,
+    },
+    {
+      membershipId: ids.membership.foreignGm,
+      campaignId: ids.foreignCampaign,
+      role: "GM",
+      token: secrets.foreignGm,
+    },
   ]);
   await db.insert(characters).values([
     {

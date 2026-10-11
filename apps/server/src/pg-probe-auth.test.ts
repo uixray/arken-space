@@ -63,13 +63,11 @@ it("issues valid GM/PLAYER sources while still rejecting an unbound session", as
     role: "PLAYER",
   });
   const legacy = crypto.randomUUID();
-  await db
-    .insert(sessions)
-    .values({
-      membershipId: gm.membershipId,
-      tokenHash: hashToken(legacy),
-      expiresAt: new Date(Date.now() + 60_000),
-    });
+  await db.insert(sessions).values({
+    membershipId: gm.membershipId,
+    tokenHash: hashToken(legacy),
+    expiresAt: new Date(Date.now() + 60_000),
+  });
   expect(await authFromSessionToken(db as never, legacy)).toBeNull();
   await db
     .update(gmAccessCredentials)
