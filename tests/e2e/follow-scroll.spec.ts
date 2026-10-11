@@ -28,7 +28,9 @@ const LIST = "#activity-message-list";
 
 async function signInAsGm(page: Page, token: string) {
   await page.goto(`/gm/${token}`);
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page
+    .getByRole("button", { name: /^(Войти(?: в игру)?|Продолжить в игру)$/ })
+    .click();
   await expect(page).toHaveURL("/");
 }
 
@@ -334,7 +336,11 @@ for (const role of ["GM", "PLAYER"] as const) {
           const invite = (await response.json()) as { url: string };
           await page.goto(new URL(invite.url).pathname);
           await page.getByLabel("Имя").fill("Игрок UIX-475");
-          await page.getByRole("button", { name: "Войти" }).click();
+          await page
+            .getByRole("button", {
+              name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+            })
+            .click();
           await expect(page).toHaveURL("/");
         } else {
           await page.reload();

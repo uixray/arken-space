@@ -35,7 +35,9 @@ test("разделы не переполняют строку ни при как
   gmToken,
 }) => {
   await page.goto(`/gm/${gmToken}`);
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page
+    .getByRole("button", { name: /^(Войти(?: в игру)?|Продолжить в игру)$/ })
+    .click();
   await expect(page).toHaveURL("/");
   await expect(page.locator(".workspace-nav")).toBeVisible();
 
@@ -70,7 +72,9 @@ test("игроку не показываются мастерские разде
   // смотрит в нужное место. Отсутствие у игрока закреплено юнит-тестом
   // `workspaceNavItems` — там же, где принято само решение.
   await page.goto(`/gm/${gmToken}`);
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page
+    .getByRole("button", { name: /^(Войти(?: в игру)?|Продолжить в игру)$/ })
+    .click();
   await expect(page).toHaveURL("/");
   await expect(page.locator(".workspace-nav")).toBeVisible();
 

@@ -23,7 +23,9 @@ import { assertModalFocusCycle } from "./modal-focus";
  */
 async function signInAsGm(page: Page, token: string) {
   await page.goto(`/gm/${token}`, { waitUntil: "domcontentloaded" });
-  const button = page.getByRole("button", { name: "Войти" });
+  const button = page.getByRole("button", {
+    name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+  });
   const diagnostics = await captureAuthClickDiagnostics(button);
   try {
     await button.click();

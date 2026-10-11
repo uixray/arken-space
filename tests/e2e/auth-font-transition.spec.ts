@@ -49,7 +49,9 @@ for (const transition of [false, true]) {
           authPosts += 1;
         }
       };
-      const button = page.getByRole("button", { name: "Войти" });
+      const button = page.getByRole("button", {
+        name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+      });
       let diagnostics:
         Awaited<ReturnType<typeof captureAuthClickDiagnostics>> | undefined;
       const geometry: unknown[] = [];
@@ -78,7 +80,7 @@ for (const transition of [false, true]) {
         await expect(button).toBeVisible();
         await page.addStyleTag({
           content: `@font-face { font-family: "ArkenAuthRace"; src: url("${FONT_URL}") format("truetype"); }
-            .auth-panel button { font-family: "ArkenAuthRace", sans-serif !important; }`,
+            .auth-panel button, .account-auth-card button { font-family: "ArkenAuthRace", sans-serif !important; }`,
         });
         await expect.poll(() => heldFonts).toBeGreaterThan(0);
         expect(await page.evaluate(() => document.fonts.status)).toBe(

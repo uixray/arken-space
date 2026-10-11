@@ -24,7 +24,9 @@ import { SIDEBAR_WIDTH_MIN } from "../../apps/web/src/sidebar-width-preference";
 
 async function signInAsGm(page: Page, token: string) {
   await page.goto(`/gm/${token}`);
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page
+    .getByRole("button", { name: /^(Войти(?: в игру)?|Продолжить в игру)$/ })
+    .click();
   await expect(page).toHaveURL("/");
 }
 

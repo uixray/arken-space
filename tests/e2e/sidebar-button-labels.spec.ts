@@ -17,7 +17,9 @@ test("каждая кнопка боковой панели называет с�
   gmToken,
 }) => {
   await page.goto(`/gm/${gmToken}`);
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page
+    .getByRole("button", { name: /^(Войти(?: в игру)?|Продолжить в игру)$/ })
+    .click();
   await expect(page).toHaveURL("/");
   await expect(page.locator("aside.sidebar")).toBeVisible();
 

@@ -12,7 +12,12 @@ async function bootstrap(page: Page): Promise<GameSnapshot> {
 
 async function signInAsGm(page: Page, token: string) {
   await page.goto(`/gm/${token}`);
-  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+      exact: true,
+    })
+    .click();
   await expect(page).toHaveURL("/");
   await expect(page.locator("canvas").first()).toBeVisible();
 }
@@ -33,8 +38,13 @@ async function signInAsPlayer(page: Page, gmToken: string) {
   const invite = (await inviteResponse.json()) as { url: string };
   await expect(await page.request.post("/api/auth/logout")).toBeOK();
   await page.goto(new URL(invite.url).pathname);
-  await page.getByLabel("Имя", { exact: true }).fill("Игрок заявок");
-  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
+  await page.getByLabel(/^Имя(?: в кампании)?$/).fill("Игрок заявок");
+  await page
+    .getByRole("button", {
+      name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+      exact: true,
+    })
+    .click();
   await expect(page).toHaveURL("/");
   await expect(page.locator("canvas").first()).toBeVisible();
   const playerSnapshot = await bootstrap(page);

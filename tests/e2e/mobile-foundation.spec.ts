@@ -260,12 +260,18 @@ for (const role of ["GM", "PLAYER"] as const) {
         await test.step("Персональная ссылка и настоящая роль", async () => {
           await page.goto(`/gm/${gmToken}`);
           await targetGeometry(
-            page.getByRole("button", { name: "Войти в игру", exact: true }),
+            page.getByRole("button", {
+              name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+              exact: true,
+            }),
             "gm-entry",
           );
           await recordLayout("gm-entry", true);
           await page
-            .getByRole("button", { name: "Войти в игру", exact: true })
+            .getByRole("button", {
+              name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+              exact: true,
+            })
             .click();
           await expect(page).toHaveURL("/");
           if (role === "PLAYER") {
@@ -283,13 +289,13 @@ for (const role of ["GM", "PLAYER"] as const) {
             const invitation = (await response.json()) as { url: string };
             await expect(await page.request.post("/api/auth/logout")).toBeOK();
             await page.goto(new URL(invitation.url).pathname);
-            const name = page.getByLabel("Имя", { exact: true });
+            const name = page.getByLabel(/^Имя(?: в кампании)?$/);
             await targetGeometry(name, "player-entry-name");
             await name.fill(playerName);
             await expect(name).toBeFocused();
             await page.keyboard.press("Tab");
             const enter = page.getByRole("button", {
-              name: "Войти в игру",
+              name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
               exact: true,
             });
             await expect(enter).toBeFocused();
@@ -719,7 +725,12 @@ test("desktop-first Characters survive compact map roundtrip without remount", a
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/gm/${gmToken}`);
-  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+      exact: true,
+    })
+    .click();
   await expect(page).toHaveURL("/");
   const character = (await bootstrap(page)).characters[0];
   expect(character).toBeTruthy();
@@ -769,7 +780,12 @@ test("compact player preview exposes only available surfaces and account exit", 
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/gm/${gmToken}`);
-  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+      exact: true,
+    })
+    .click();
   await expect(page).toHaveURL("/");
   const character = (await bootstrap(page)).characters[0];
   expect(character).toBeTruthy();

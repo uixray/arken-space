@@ -22,7 +22,9 @@ const SIDEBAR_WIDTHS = [280, 360, 600] as const;
 
 async function signInAsGm(page: Page, token: string) {
   await page.goto(`/gm/${token}`);
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page
+    .getByRole("button", { name: /^(Войти(?: в игру)?|Продолжить в игру)$/ })
+    .click();
   await expect(page).toHaveURL("/");
 }
 

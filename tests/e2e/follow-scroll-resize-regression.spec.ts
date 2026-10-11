@@ -320,7 +320,11 @@ for (const layout of [
     try {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto(`/gm/${gmToken}`);
-      await page.getByRole("button", { name: "Войти" }).click();
+      await page
+        .getByRole("button", {
+          name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+        })
+        .click();
       await expect(page).toHaveURL("/");
       const bootstrap = await page.request.get("/api/bootstrap");
       await expect(bootstrap).toBeOK();

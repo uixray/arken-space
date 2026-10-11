@@ -55,7 +55,9 @@ async function expectAccessible(page: Page, screen: string) {
 
 async function signInAsGm(page: Page, token: string) {
   await page.goto(`/gm/${token}`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page
+    .getByRole("button", { name: /^(Войти(?: в игру)?|Продолжить в игру)$/ })
+    .click();
   await expect(page).toHaveURL("/");
 }
 
