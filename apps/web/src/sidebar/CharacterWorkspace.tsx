@@ -1989,7 +1989,8 @@ export function CharacterPanel({
           onAssign={(catalogEntryId) =>
             catalogActions.onAssignCatalogEntry(character.id, catalogEntryId)
           }
-          onCreate={(input) => catalogActions.onCreateCatalogEntry(input)}
+          createAlreadyAssigned={snapshot.me.role === "PLAYER"}
+          onCreate={(input) => catalogActions.onCreateCatalogEntry(input, snapshot.me.role === "PLAYER" ? character.id : undefined)}
         />
       )}
 

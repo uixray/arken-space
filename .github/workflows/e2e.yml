@@ -62,6 +62,11 @@ jobs:
       WEB_ORIGIN: http://localhost:5173
       PUBLIC_URL: http://localhost:5173
       MEDIA_ROOT: ./media
+      ACCOUNT_AUTH_ENABLED: "true"
+      CAMPAIGN_LINK_ACCESS_ENABLED: "true"
+      LEGACY_DEV_AUTH_ENABLED: "false"
+      ACCOUNT_REGISTRATION_ENABLED: "false"
+      ACCOUNT_MAIL_RUNTIME_ENABLED: "false"
 
     steps:
       - uses: actions/checkout@v4
@@ -108,6 +113,7 @@ jobs:
           for i in $(seq 1 40); do
             if curl -sf http://127.0.0.1:4100/healthz > /dev/null; then
               echo "server ready"
+              curl -sf http://127.0.0.1:4100/api/account/capabilities | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const c=JSON.parse(s);if(!c.accountAuthEnabled||!c.campaignLinkAccessEnabled||c.legacyDevEnabled)process.exit(1);});'
               exit 0
             fi
             sleep 3

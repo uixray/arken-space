@@ -2084,9 +2084,6 @@ export function registerRoutes(
     const characterId = z
       .object({ id: z.string().uuid() })
       .parse(request.params).id;
-    const body = assignCatalogEntrySchema.parse(request.body);
-    if (await findAction(db, auth.campaignId, body.actionId))
-      return reply.code(200).send({ duplicate: true });
     const [character] = await db
       .select()
       .from(characters)
@@ -2101,6 +2098,34 @@ export function registerRoutes(
       return reply.code(404).send({ error: "ASSIGNMENT_SOURCE_NOT_FOUND" });
     if (!(await canAccessCharacter(db, auth, character)))
       return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
+    // Personal entries live on the character, never in the shared catalog.
+    const isAssignment = typeof request.body === "object" && request.body !== null && "catalogEntryId" in request.body;
+    if (!isAssignment) {
+      const parsed = catalogEntryCommandSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({
+        error: "INVALID_CATALOG_ENTRY",
+        message: "Проверьте заполнение полей навыка или способности.",
+        fieldErrors: parsed.error.issues.slice(0, 20).map((issue) => ({ path: issue.path.map(String).join("."), code: issue.code })),
+      });
+      const { actionId, ...input } = parsed.data;
+      const previous = await findAction(db, auth.campaignId, actionId);
+      if (previous) {
+        if (previous.type !== "character_catalog.created" || !previous.entityId) return reply.code(409).send({ error: "ACTION_CONFLICT" });
+        const [entry] = await db.select().from(characterCatalogEntries).where(and(eq(characterCatalogEntries.id, previous.entityId), eq(characterCatalogEntries.characterId, characterId))).limit(1);
+        if (!entry) return reply.code(409).send({ error: "ACTION_CONFLICT" });
+        return reply.code(200).send(entry);
+      }
+      const created = await db.transaction(async (tx) => {
+        const [entry] = await tx.insert(characterCatalogEntries).values({ characterId, sourceCatalogEntryId: null, ...input }).returning();
+        if (!entry) throw new Error("CHARACTER_CATALOG_CREATE_FAILED");
+        await tx.insert(gameEvents).values({ campaignId: auth.campaignId, actionId, membershipId: auth.membershipId, type: "character_catalog.created", entityType: "character_catalog_entry", entityId: entry.id, entityRevision: 0 });
+        return entry;
+      });
+      await broadcastSnapshots(io, db, auth.campaignId);
+      return reply.code(201).send(created);
+    }
+    const body = assignCatalogEntrySchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId)) return reply.code(200).send({ duplicate: true });
     const [source] = await db
       .select()
       .from(catalogEntries)

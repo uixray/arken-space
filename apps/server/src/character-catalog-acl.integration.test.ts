@@ -120,6 +120,80 @@ afterEach(async () => {
 });
 
 describe("Character catalog ACL and player ability management", () => {
+  it.each(["SKILL", "ABILITY"] as const)(
+    "creates a personal %s without changing the shared catalog and replays it",
+    async (kind) => {
+      const actionId = id();
+      const create = () =>
+        app.inject({
+          method: "POST",
+          url: `/api/characters/${ids.character}/catalog`,
+          headers: headers(secrets.owner),
+          payload: {
+            actionId,
+            kind,
+            name: "Личная запись",
+            description: "Только мой персонаж",
+            data: {},
+          },
+        });
+      const first = await create();
+      expect(first.statusCode, first.body).toBe(201);
+      expect(first.json()).toMatchObject({
+        characterId: ids.character,
+        kind,
+        sourceCatalogEntryId: null,
+      });
+      const replay = await create();
+      expect(replay.statusCode, replay.body).toBe(200);
+      expect(replay.json().id).toBe(first.json().id);
+      const entries = await db
+        .select()
+        .from(schema.characterCatalogEntries)
+        .where(eq(schema.characterCatalogEntries.characterId, ids.character));
+      expect(entries).toHaveLength(1);
+      expect(entries[0]?.name).toBe("Личная запись");
+      expect(await db.select().from(schema.catalogEntries)).toHaveLength(1);
+      const shared = await app.inject({
+        method: "POST",
+        url: "/api/catalog",
+        headers: headers(secrets.owner),
+        payload: { actionId: id(), kind, name: "Запрещено", data: {} },
+      });
+      expect(shared.statusCode).toBe(403);
+    },
+  );
+
+  it("rejects unrelated players, foreign campaigns and invalid personal entries", async () => {
+    const payload = {
+      actionId: id(),
+      kind: "SKILL",
+      name: "Личная запись",
+      data: {},
+    };
+    const request = (characterId: string, secret: string, body = payload) =>
+      app.inject({
+        method: "POST",
+        url: `/api/characters/${characterId}/catalog`,
+        headers: headers(secret),
+        payload: body,
+      });
+    expect((await request(ids.character, secrets.unrelated)).statusCode).toBe(
+      403,
+    );
+    expect(
+      (await request(ids.foreignCharacter, secrets.owner)).statusCode,
+    ).toBe(404);
+    expect(
+      (await request(ids.character, secrets.owner, { ...payload, name: "" }))
+        .statusCode,
+    ).toBe(400);
+    expect(await db.select().from(schema.characterCatalogEntries)).toHaveLength(
+      0,
+    );
+    expect(await db.select().from(schema.catalogEntries)).toHaveLength(1);
+  });
+
   it("executes a configured no-roll ability once and replays its receipt", async () => {
     const entryId = id();
     const actionId = id();

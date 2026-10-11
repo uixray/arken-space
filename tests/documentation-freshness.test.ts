@@ -209,7 +209,12 @@ describe("operational documentation keeps its safety boundaries", () => {
       scripts: Record<string, string>;
     };
     expect(packageJson.scripts.format).toContain("prettier --write");
-    expect(packageJson.scripts["format:check"]).toContain("prettier --check");
+    expect(packageJson.scripts["format:check"]).toBe(
+      "node scripts/check-format-baseline.mjs",
+    );
+    const checker = await read("scripts/check-format-baseline.mjs");
+    expect(checker).toContain("prettier.check");
+    expect(checker).toContain("--initialize-owner-approved-baseline");
 
     const testing = await read("docs/testing.md");
     expect(testing).toContain("`pnpm format:check` ничего не меняет");

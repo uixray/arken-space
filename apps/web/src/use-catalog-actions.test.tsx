@@ -8,6 +8,13 @@ vi.mock("./api", () => ({ api: vi.fn(), formatApiError: (reason: Error) => reaso
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 const input = { kind: "ABILITY" as const, name: "Искра", description: "Без броска", data: {} };
 const entry = { id: "entry", ...input, revision: 0 };
+it("creates a personal entry directly on the character without a shared catalog write", async () => {
+  vi.mocked(api).mockResolvedValue({ ...entry, sourceCatalogEntryId: null });
+  const f = fixture();
+  await f.result.current.onCreateCatalogEntry(input, "my-character");
+  expect(api).toHaveBeenCalledExactlyOnceWith("/api/characters/my-character/catalog", expect.objectContaining({ method: "POST" }));
+  expect(f.load).toHaveBeenCalledOnce();
+});
 function fixture(load = vi.fn().mockResolvedValue(undefined)) {
   const setError = vi.fn();
   const run = vi.fn();

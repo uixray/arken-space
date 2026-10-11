@@ -31,8 +31,10 @@ export function CatalogEntryPicker({
   onClose,
   onAssign,
   onCreate,
+  createAlreadyAssigned = false,
 }: {
   open: boolean;
+  createAlreadyAssigned?: boolean;
   kind: "SKILL" | "ABILITY";
   /** UIX-424: подписи характеристик из раскладки, для формы создания. */
   statLabels: Record<string, string>;
@@ -151,6 +153,11 @@ export function CatalogEntryPicker({
             // and lets the GM change it, and that choice is respected as-is
             // rather than silently overridden here.
             const created = await onCreate(input);
+            if (createAlreadyAssigned) {
+              reset();
+              onClose();
+              return;
+            }
             // The entry now exists in the catalog regardless of what
             // happens next, so drop back to SELECT mode (where it will show
             // up once the parent's catalog snapshot refreshes) instead of

@@ -19,7 +19,7 @@ export interface CatalogActions {
     name: string;
     description: string;
     data?: Record<string, unknown>;
-  }) => Promise<CatalogEntryDto>;
+  }, characterId?: string) => Promise<CatalogEntryDto>;
   onUpdateCatalogEntry: (
     id: string,
     patch: Partial<CatalogEntryDto>,
@@ -79,10 +79,10 @@ export function useCatalogActions(dependencies: {
       // Hand-rolled rather than routed through `run`, because the caller needs
       // the created entry back — UIX-391's in-sheet picker creates an entry and
       // immediately assigns it — and `run` resolves to nothing.
-      onCreateCatalogEntry: async (input) => {
+      onCreateCatalogEntry: async (input, characterId) => {
         try {
           setError("");
-          const entry = await api<CatalogEntryDto>("/api/catalog", {
+          const entry = await api<CatalogEntryDto>(characterId ? `/api/characters/${characterId}/catalog` : "/api/catalog", {
             method: "POST",
             body: withAction({ ...input, data: input.data ?? {} }),
           });
