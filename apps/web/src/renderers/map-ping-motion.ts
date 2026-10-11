@@ -30,7 +30,10 @@ export function mapPingElapsed(
   return Math.max(0, now - mapPingStartTime(createdAt, now));
 }
 
-export function mapPingIsActive(createdAt: string | number, now: number): boolean {
+export function mapPingIsActive(
+  createdAt: string | number,
+  now: number,
+): boolean {
   return mapPingElapsed(createdAt, now) < MAP_PING_LIFETIME_MS;
 }
 

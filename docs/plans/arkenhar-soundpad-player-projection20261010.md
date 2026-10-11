@@ -1,4 +1,5 @@
 # PLAYER Soundpad asset projection fix — 2026-10-10
+
 - Previous product revision e814f20; exact running web e814/server2a showed published shared sound in PLAYER soundpad but omitted eligible AUDIO from bootstrap; contentGET404 whileGM200.
 - Added campaign-scoped sound/pack/asset joined readset query in existing Promise.all and eligible published ALL_MEMBERS audio projection into PLAYER snapshot. Draft/GM-only/cross-campaign/nonAudio/invalidduration excluded. GM asset projection unchanged. No schema/frontend/authguard changes.
 - Files: apps/server/src/snapshot.ts, apps/server/src/snapshot-soundpad-assets.test.ts. Tests use pure production projection helper; actual loaded-query/runtime behavior requires next image gate.

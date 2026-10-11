@@ -1122,12 +1122,21 @@ describe("UIX-580 campaign isolation: spell-pack sub-router", () => {
       [packs.own, versions.foreign],
       [packs.foreign, versions.own],
     ]) {
-      await expectForeignNotFound(key, {
-        method: "GET", url: `/api/spell-packs/${packId}/versions/${versionId}`, headers: ownGmHeaders,
-      }, "SPELL_PACK_VERSION_NOT_FOUND");
+      await expectForeignNotFound(
+        key,
+        {
+          method: "GET",
+          url: `/api/spell-packs/${packId}/versions/${versionId}`,
+          headers: ownGmHeaders,
+        },
+        "SPELL_PACK_VERSION_NOT_FOUND",
+      );
     }
-    const own = await app.inject({ method: "GET",
-      url: `/api/spell-packs/${packs.own}/versions/${versions.own}`, headers: ownGmHeaders });
+    const own = await app.inject({
+      method: "GET",
+      url: `/api/spell-packs/${packs.own}/versions/${versions.own}`,
+      headers: ownGmHeaders,
+    });
     expect(own.statusCode).toBe(200);
     expect(own.json()).toMatchObject({ packId: packs.own, version: 1 });
   });

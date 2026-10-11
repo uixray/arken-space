@@ -69,7 +69,8 @@ function errorText(error: unknown) {
     QUOTA_EXCEEDED: "Недостаточно места в хранилище кампании.",
     MEDIA_QUOTA_EXCEEDED: "Недостаточно места в хранилище кампании.",
     PROCESSING_OUTPUT_LIMIT: "Фрагмент превышает допустимый лимит обработки.",
-    ANALYSIS_RESOURCE_LIMIT: "Источник слишком велик для анализа в текущих ограничениях.",
+    ANALYSIS_RESOURCE_LIMIT:
+      "Источник слишком велик для анализа в текущих ограничениях.",
     CODEC_UNAVAILABLE: "Формат аудио не поддерживается сервером обработки.",
     INVALID_COMMAND: "Не удалось запустить безопасную обработку аудио.",
     LOW_DISK_SPACE: "Обработка временно недоступна из-за места на сервере.",
@@ -334,7 +335,9 @@ export function SoundClipEditor({
       if (mountedRef.current) onClose();
     } catch {
       if (mountedRef.current)
-        setError("Эффект сохранён, но каталог не обновился. Повторите обновление.");
+        setError(
+          "Эффект сохранён, но каталог не обновился. Повторите обновление.",
+        );
     } finally {
       if (mountedRef.current) setBusy(false);
     }

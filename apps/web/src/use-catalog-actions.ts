@@ -14,12 +14,15 @@ import { api, formatApiError } from "./api";
  * Nothing reads render-scoped state, so no ref is needed.
  */
 export interface CatalogActions {
-  onCreateCatalogEntry: (input: {
-    kind: "SKILL" | "ABILITY";
-    name: string;
-    description: string;
-    data?: Record<string, unknown>;
-  }, characterId?: string) => Promise<CatalogEntryDto>;
+  onCreateCatalogEntry: (
+    input: {
+      kind: "SKILL" | "ABILITY";
+      name: string;
+      description: string;
+      data?: Record<string, unknown>;
+    },
+    characterId?: string,
+  ) => Promise<CatalogEntryDto>;
   onUpdateCatalogEntry: (
     id: string,
     patch: Partial<CatalogEntryDto>,
@@ -82,16 +85,23 @@ export function useCatalogActions(dependencies: {
       onCreateCatalogEntry: async (input, characterId) => {
         try {
           setError("");
-          const entry = await api<CatalogEntryDto>(characterId ? `/api/characters/${characterId}/catalog` : "/api/catalog", {
-            method: "POST",
-            body: withAction({ ...input, data: input.data ?? {} }),
-          });
+          const entry = await api<CatalogEntryDto>(
+            characterId
+              ? `/api/characters/${characterId}/catalog`
+              : "/api/catalog",
+            {
+              method: "POST",
+              body: withAction({ ...input, data: input.data ?? {} }),
+            },
+          );
           try {
             await load();
           } catch {
             // The POST has committed. Do not invite another create by rejecting
             // the save just because the follow-up snapshot refresh failed.
-            setError("Запись сохранена, но список не обновился. Обновите страницу; повторно создавать запись не нужно.");
+            setError(
+              "Запись сохранена, но список не обновился. Обновите страницу; повторно создавать запись не нужно.",
+            );
           }
           return entry;
         } catch (reason) {

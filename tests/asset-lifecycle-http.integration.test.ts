@@ -211,8 +211,16 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     env.MEDIA_QUOTA_BYTES = 20 + encoded.length;
     const upload = async () => {
       const form = multipartFile(source, "compressed.jpg", "image/jpeg");
-      return app.inject({ method: "POST", url: "/api/assets?kind=IMAGE", payload: form.body,
-        headers: { ...headers(secrets.gm), "x-action-id": crypto.randomUUID(), "content-type": form.contentType } });
+      return app.inject({
+        method: "POST",
+        url: "/api/assets?kind=IMAGE",
+        payload: form.body,
+        headers: {
+          ...headers(secrets.gm),
+          "x-action-id": crypto.randomUUID(),
+          "content-type": form.contentType,
+        },
+      });
     };
     const created = await upload();
     expect(created.statusCode, created.body).toBe(201);
@@ -222,20 +230,37 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     expect(denied.statusCode).toBe(400);
     expect(denied.json().error).toBe("MEDIA_QUOTA_EXCEEDED");
     expect(await fileInventory()).toEqual(inventory);
-    expect(await db.select().from(schema.campaignMediaReservations)).toHaveLength(0);
+    expect(
+      await db.select().from(schema.campaignMediaReservations),
+    ).toHaveLength(0);
   });
 
   it("credits the exact replacement at full quota and cleans a stale staged replacement", async () => {
     const { source, encoded } = await growingJpeg();
     await writeFile(join(mediaRoot, "unused.webp"), encoded);
-    await db.update(schema.assets).set({ sizeBytes: encoded.length }).where(eq(schema.assets.id, ids.unused));
+    await db
+      .update(schema.assets)
+      .set({ sizeBytes: encoded.length })
+      .where(eq(schema.assets.id, ids.unused));
     env.MEDIA_QUOTA_BYTES = 9 + encoded.length;
-    const content = await app.inject({ url: `/api/assets/${ids.unused}/content`, headers: headers(secrets.gm) });
+    const content = await app.inject({
+      url: `/api/assets/${ids.unused}/content`,
+      headers: headers(secrets.gm),
+    });
     const oldVersion = content.headers.etag as string;
     const replace = async (version: string) => {
       const form = multipartFile(source, "compressed.jpg", "image/jpeg");
-      return app.inject({ method: "PUT", url: `/api/assets/${ids.unused}/content`, payload: form.body,
-        headers: { ...headers(secrets.gm), "x-action-id": crypto.randomUUID(), "if-match": version, "content-type": form.contentType } });
+      return app.inject({
+        method: "PUT",
+        url: `/api/assets/${ids.unused}/content`,
+        payload: form.body,
+        headers: {
+          ...headers(secrets.gm),
+          "x-action-id": crypto.randomUUID(),
+          "if-match": version,
+          "content-type": form.contentType,
+        },
+      });
     };
     const replaced = await replace(oldVersion);
     expect(replaced.statusCode, replaced.body).toBe(200);
@@ -250,7 +275,9 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     expect(denied.statusCode).toBe(400);
     expect(denied.json().error).toBe("MEDIA_QUOTA_EXCEEDED");
     expect(await fileInventory()).toEqual(inventory);
-    expect(await db.select().from(schema.campaignMediaReservations)).toHaveLength(0);
+    expect(
+      await db.select().from(schema.campaignMediaReservations),
+    ).toHaveLength(0);
   });
 
   it("localizes resolved usage details without translating names or changing access and deletion policy", async () => {
@@ -269,7 +296,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
         uploadedByMembershipId: ids.gm,
         storageKey: `${asset.id}.media`,
         mimeType: asset.kind === "AUDIO" ? "audio/mpeg" : "image/webp",
-        audioPurpose: asset.kind === "AUDIO" ? "MUSIC" as const : null,
+        audioPurpose: asset.kind === "AUDIO" ? ("MUSIC" as const) : null,
         sizeBytes: 10,
       })),
     );
@@ -745,7 +772,6 @@ describe("UIX-293 asset lifecycle HTTP", () => {
       ],
     });
 
-
     const before = await app.inject({
       method: "GET",
       url: `/api/assets/${ids.unused}/content`,
@@ -771,9 +797,16 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     expect(after!.resources).toMatchObject({
       mana: { imageAssetId: ids.unused },
     });
-    const deleted = await app.inject({ method: "DELETE", url: `/api/assets/${ids.unused}`, headers: headers(secrets.gm) });
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/assets/${ids.unused}`,
+      headers: headers(secrets.gm),
+    });
     expect(deleted.statusCode).toBe(200);
-    const [detached] = await db.select({ resources: schema.characters.resources }).from(schema.characters).where(eq(schema.characters.id, character!.id));
+    const [detached] = await db
+      .select({ resources: schema.characters.resources })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, character!.id));
     expect(detached!.resources).toEqual({ mana: { current: 3, maximum: 5 } });
   });
 
@@ -784,9 +817,14 @@ describe("UIX-293 asset lifecycle HTTP", () => {
       headers: headers(secrets.gm),
     });
     expect(blocked.statusCode, blocked.body).toBe(200);
-    const [scene] = await db.select().from(schema.scenes).where(eq(schema.scenes.id, ids.scene));
+    const [scene] = await db
+      .select()
+      .from(schema.scenes)
+      .where(eq(schema.scenes.id, ids.scene));
     expect(scene!.mapAssetId).toBeNull();
-    await expect(readFile(join(mediaRoot, "used.webp"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(join(mediaRoot, "used.webp"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     const deleted = await app.inject({
       method: "DELETE",
       url: `/api/assets/${ids.unused}`,

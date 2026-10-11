@@ -6,7 +6,9 @@ function setup(timeoutMs = 100) {
   const signals = new EventEmitter();
   const exit = vi.fn();
   const logger = { info: vi.fn(), error: vi.fn() };
-  const processLike = Object.assign(signals, { exit }) as unknown as NodeJS.Process & {
+  const processLike = Object.assign(signals, {
+    exit,
+  }) as unknown as NodeJS.Process & {
     exit: (code: number) => void;
   };
   const shutdown = installGracefulShutdown(
@@ -26,10 +28,15 @@ describe("installGracefulShutdown", () => {
     const exit = vi.fn();
     let resolveClose!: () => void;
     const close = vi.fn(
-      () => new Promise<void>((resolve) => { resolveClose = resolve; }),
+      () =>
+        new Promise<void>((resolve) => {
+          resolveClose = resolve;
+        }),
     );
     const logger = { info: vi.fn(), error: vi.fn() };
-    const proc = Object.assign(signals, { exit }) as unknown as NodeJS.Process & {
+    const proc = Object.assign(signals, {
+      exit,
+    }) as unknown as NodeJS.Process & {
       exit: (code: number) => void;
     };
     const installed = installGracefulShutdown(close, logger, proc, 100);
@@ -51,15 +58,21 @@ describe("installGracefulShutdown", () => {
 
   it("fails closed with exit 1 but does not log driver rejection details", async () => {
     const { signals, exit, logger, shutdown } = setup();
-    const close = vi.fn().mockRejectedValue(new Error("sensitive connection string"));
+    const close = vi
+      .fn()
+      .mockRejectedValue(new Error("sensitive connection string"));
     shutdown.dispose();
-    const proc = Object.assign(signals, { exit }) as unknown as NodeJS.Process & {
+    const proc = Object.assign(signals, {
+      exit,
+    }) as unknown as NodeJS.Process & {
       exit: (code: number) => void;
     };
     const installed = installGracefulShutdown(close, logger, proc, 100);
     signals.emit("SIGTERM");
     await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(1));
-    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("sensitive connection string");
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain(
+      "sensitive connection string",
+    );
     installed.dispose();
   });
 
@@ -68,10 +81,17 @@ describe("installGracefulShutdown", () => {
     const signals = new EventEmitter();
     const exit = vi.fn();
     const logger = { info: vi.fn(), error: vi.fn() };
-    const proc = Object.assign(signals, { exit }) as unknown as NodeJS.Process & {
+    const proc = Object.assign(signals, {
+      exit,
+    }) as unknown as NodeJS.Process & {
       exit: (code: number) => void;
     };
-    const installed = installGracefulShutdown(() => new Promise(() => {}), logger, proc, 25);
+    const installed = installGracefulShutdown(
+      () => new Promise(() => {}),
+      logger,
+      proc,
+      25,
+    );
     signals.emit("SIGTERM");
     await vi.advanceTimersByTimeAsync(25);
     expect(exit).toHaveBeenCalledWith(1);

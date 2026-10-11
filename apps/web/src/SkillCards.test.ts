@@ -83,7 +83,12 @@ describe("parseSkillCard", () => {
       skillCard: {
         version: 1,
         execution: "EXECUTED",
-        entry: { id: "ward", name: "Ward", kind: "ABILITY", description: "Protect allies." },
+        entry: {
+          id: "ward",
+          name: "Ward",
+          kind: "ABILITY",
+          description: "Protect allies.",
+        },
         action: null,
         formula: null,
         result: null,
@@ -91,7 +96,12 @@ describe("parseSkillCard", () => {
         activationCost: { type: "physical", amount: 2, before: 5, after: 3 },
       },
     });
-    expect(card).toMatchObject({ mode: "EXECUTE", action: null, result: null, activationCost: { before: 5, after: 3 } });
+    expect(card).toMatchObject({
+      mode: "EXECUTE",
+      action: null,
+      result: null,
+      activationCost: { before: 5, after: 3 },
+    });
     const html = renderCard(card!);
     expect(html).toContain("Активировано без броска");
     expect(html).toContain("5 → 3");

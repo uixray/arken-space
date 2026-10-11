@@ -54,7 +54,9 @@ describe("asset dependency registry", () => {
 
 it("extracts a wrapped PostgreSQL unique-conflict code safely", () => {
   expect(postgresErrorCode({ cause: { code: "23505" } })).toBe("23505");
-  expect(postgresErrorCode({ cause: { cause: { code: "23503" } } })).toBe("23503");
+  expect(postgresErrorCode({ cause: { cause: { code: "23503" } } })).toBe(
+    "23503",
+  );
   const cyclic: { cause?: unknown; code?: string } = {};
   cyclic.cause = cyclic;
   expect(postgresErrorCode(cyclic)).toBeUndefined();
@@ -114,10 +116,14 @@ describe("asset deletion orchestration", () => {
     const deleteMetadata = vi.fn();
     const removeBlob = vi.fn();
     await expect(
-      deleteUnusedAsset(asset.id, [{ ...usage("TOKEN_DEFINITION"), deletionPolicy: "BLOCK" }], {
-        deleteMetadata,
-        removeBlob,
-      }),
+      deleteUnusedAsset(
+        asset.id,
+        [{ ...usage("TOKEN_DEFINITION"), deletionPolicy: "BLOCK" }],
+        {
+          deleteMetadata,
+          removeBlob,
+        },
+      ),
     ).rejects.toThrow("ASSET_IN_USE");
     expect(deleteMetadata).not.toHaveBeenCalled();
     expect(removeBlob).not.toHaveBeenCalled();
@@ -200,9 +206,29 @@ it("changes rendered content URL only when blob version changes, retaining canon
 });
 
 it("binds upload action replay to audio purpose while retaining the legacy MUSIC default", () => {
-  expect(assetUploadActionMatches({ kind: "AUDIO" }, "AUDIO", "MUSIC")).toBe(true);
-  expect(assetUploadActionMatches({ kind: "AUDIO", audioPurpose: "SOUND_EFFECT" }, "AUDIO", "SOUND_EFFECT")).toBe(true);
-  expect(assetUploadActionMatches({ kind: "AUDIO", audioPurpose: "MUSIC" }, "AUDIO", "SOUND_EFFECT")).toBe(false);
+  expect(assetUploadActionMatches({ kind: "AUDIO" }, "AUDIO", "MUSIC")).toBe(
+    true,
+  );
+  expect(
+    assetUploadActionMatches(
+      { kind: "AUDIO", audioPurpose: "SOUND_EFFECT" },
+      "AUDIO",
+      "SOUND_EFFECT",
+    ),
+  ).toBe(true);
+  expect(
+    assetUploadActionMatches(
+      { kind: "AUDIO", audioPurpose: "MUSIC" },
+      "AUDIO",
+      "SOUND_EFFECT",
+    ),
+  ).toBe(false);
   expect(assetUploadActionMatches({ kind: "IMAGE" }, "IMAGE", null)).toBe(true);
-  expect(assetUploadActionMatches({ kind: "IMAGE", audioPurpose: "MUSIC" }, "IMAGE", null)).toBe(false);
+  expect(
+    assetUploadActionMatches(
+      { kind: "IMAGE", audioPurpose: "MUSIC" },
+      "IMAGE",
+      null,
+    ),
+  ).toBe(false);
 });

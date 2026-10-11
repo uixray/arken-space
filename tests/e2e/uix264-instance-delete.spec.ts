@@ -22,9 +22,14 @@ const canonical = {
 };
 
 for (const width of [390, 1280]) {
-  test(`UIX-264 confirmed campaign-instance delete preserves canon/sibling ${width}px (mock API)`, async ({ page }) => {
+  test(`UIX-264 confirmed campaign-instance delete preserves canon/sibling ${width}px (mock API)`, async ({
+    page,
+  }) => {
     const snapshot = gmSnapshot({ schemaVersion: 2 });
-    const instance = (id: string, displayNameOverride: string): WorldContentInstanceDto => ({
+    const instance = (
+      id: string,
+      displayNameOverride: string,
+    ): WorldContentInstanceDto => ({
       id,
       campaignId: snapshot.campaign.id,
       worldContentId: canonical.id,
@@ -50,22 +55,42 @@ for (const width of [390, 1280]) {
     await page.route("**/api/**", async (route) => {
       const request = route.request();
       const { pathname, searchParams } = new URL(request.url());
-      if (pathname === "/api/bootstrap") return route.fulfill({ json: snapshot });
+      if (pathname === "/api/bootstrap")
+        return route.fulfill({ json: snapshot });
       if (pathname === "/api/soundpad")
-        return route.fulfill({ json: { packs: [], playerPlaybackEnabled: true } });
-      if (pathname === "/api/client-logs") return route.fulfill({ json: { ok: true } });
+        return route.fulfill({
+          json: { packs: [], playerPlaybackEnabled: true },
+        });
+      if (pathname === "/api/client-logs")
+        return route.fulfill({ json: { ok: true } });
       if (pathname === "/api/world-content" && request.method() === "GET") {
         canonReads.push("GET canonical");
         return route.fulfill({ json: [canonical] });
       }
       if (pathname.endsWith("/relations") || pathname.endsWith("/media"))
         return route.fulfill({ json: [] });
-      if (pathname === "/api/world-content-instances" && request.method() === "GET")
-        return route.fulfill({ json: rows.filter((row) => row.worldContentId === searchParams.get("worldContentId")) });
-      if (pathname === `/api/world-content-instances/${target.id}` && request.method() === "DELETE") {
-        const body = request.postDataJSON() as { actionId: string; revision: number };
+      if (
+        pathname === "/api/world-content-instances" &&
+        request.method() === "GET"
+      )
+        return route.fulfill({
+          json: rows.filter(
+            (row) => row.worldContentId === searchParams.get("worldContentId"),
+          ),
+        });
+      if (
+        pathname === `/api/world-content-instances/${target.id}` &&
+        request.method() === "DELETE"
+      ) {
+        const body = request.postDataJSON() as {
+          actionId: string;
+          revision: number;
+        };
         deleteBodies.push(body);
-        expect(body).toMatchObject({ actionId: expect.any(String), revision: target.revision });
+        expect(body).toMatchObject({
+          actionId: expect.any(String),
+          revision: target.revision,
+        });
         rows = rows.filter((row) => row.id !== target.id);
         return route.fulfill({ status: 204, body: "" });
       }
@@ -78,14 +103,20 @@ for (const width of [390, 1280]) {
     await openWorkspaceSection(page, "Редактор мира");
     await page.getByRole("button", { name: "Порт" }).click();
     const panel = page.getByRole("region", { name: "Экземпляры в кампании" });
-    await expect(panel.getByRole("button", { name: /Пост охраны/ })).toBeVisible();
+    await expect(
+      panel.getByRole("button", { name: /Пост охраны/ }),
+    ).toBeVisible();
 
     const trigger = panel.getByRole("button", { name: "Удалить экземпляр…" });
     await trigger.press("Enter");
     const dialog = page.getByRole("dialog", { name: "Удаление экземпляра" });
     await expect(dialog).toContainText("«Пост охраны»");
-    await expect(dialog).toContainText("Каноническая сущность и другие экземпляры не изменятся.");
-    await expect(dialog.getByRole("button", { name: "Удалить экземпляр" })).toBeVisible();
+    await expect(dialog).toContainText(
+      "Каноническая сущность и другие экземпляры не изменятся.",
+    );
+    await expect(
+      dialog.getByRole("button", { name: "Удалить экземпляр" }),
+    ).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
     await expect(trigger).toBeFocused();
@@ -95,21 +126,37 @@ for (const width of [390, 1280]) {
     const confirm = dialog.getByRole("button", { name: "Удалить экземпляр" });
     await confirm.focus();
     await page.keyboard.press("Enter");
-    await expect(panel.getByRole("button", { name: /Соседний пост/ })).toBeVisible();
-    await expect(panel.getByText("Экземпляр удалён из этой кампании.")).toBeVisible();
-    await expect(panel.getByRole("button", { name: /Пост охраны/ })).toHaveCount(0);
+    await expect(
+      panel.getByRole("button", { name: /Соседний пост/ }),
+    ).toBeVisible();
+    await expect(
+      panel.getByText("Экземпляр удалён из этой кампании."),
+    ).toBeVisible();
+    await expect(
+      panel.getByRole("button", { name: /Пост охраны/ }),
+    ).toHaveCount(0);
     expect(deleteBodies).toHaveLength(1);
     expect(canonReads.length).toBeGreaterThan(0);
 
     await page.reload();
     await openWorkspaceSection(page, "Редактор мира");
     await page.getByRole("button", { name: "Порт" }).click();
-    const reloadedPanel = page.getByRole("region", { name: "Экземпляры в кампании" });
-    await expect(reloadedPanel.getByRole("button", { name: /Соседний пост/ })).toBeVisible();
-    await expect(reloadedPanel.getByRole("button", { name: /Пост охраны/ })).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Порт", exact: true })).toBeVisible();
+    const reloadedPanel = page.getByRole("region", {
+      name: "Экземпляры в кампании",
+    });
+    await expect(
+      reloadedPanel.getByRole("button", { name: /Соседний пост/ }),
+    ).toBeVisible();
+    await expect(
+      reloadedPanel.getByRole("button", { name: /Пост охраны/ }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "Порт", exact: true }),
+    ).toBeVisible();
     expect(rows.map((row) => row.id)).toEqual([sibling.id]);
     expect(rows[0]!.worldContentId).toBe(canonical.id);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(width);
   });
 }

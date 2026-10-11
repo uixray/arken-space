@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Circle, Group, Text } from "react-konva";
 import Konva from "konva";
 import { cursorColorForMembership } from "./cursor-color";
@@ -51,29 +58,34 @@ export function AnimatedMapPing({
   const coreRef = useRef<Konva.Circle>(null);
   const nameRef = useRef<Konva.Text>(null);
 
-  const applyGeometry = useCallback((elapsed: number) => {
-    const g = evaluateMapPing(elapsed, scale, reduced);
-    const rings = reduced ? [ringRefs.current[0]] : ringRefs.current;
-    rings.forEach((shape, index) => {
-      if (!shape) return;
-      const spec = g.rings[reduced ? 0 : index]!;
-      shape.radius(spec.radius);
-      shape.strokeWidth(spec.strokeWidth);
-      shape.opacity(spec.opacity);
-      shape.visible(spec.opacity > 0);
-    });
-    ringRefs.current.slice(reduced ? 1 : 3).forEach((shape) => shape?.visible(false));
-    haloRef.current?.radius(g.haloRadius);
-    haloRef.current?.opacity(g.haloOpacity);
-    coreRef.current?.radius(g.coreRadius);
-    coreRef.current?.strokeWidth(g.coreStrokeWidth);
-    coreRef.current?.opacity(g.coreOpacity);
-    nameRef.current?.x(g.nameX);
-    nameRef.current?.y(g.nameY);
-    nameRef.current?.fontSize(g.nameFontSize);
-    nameRef.current?.opacity(g.coreOpacity);
-    groupRef.current?.visible(mapPingIsActive(ping.createdAt, Date.now()));
-  }, [ping.createdAt, scale, reduced]);
+  const applyGeometry = useCallback(
+    (elapsed: number) => {
+      const g = evaluateMapPing(elapsed, scale, reduced);
+      const rings = reduced ? [ringRefs.current[0]] : ringRefs.current;
+      rings.forEach((shape, index) => {
+        if (!shape) return;
+        const spec = g.rings[reduced ? 0 : index]!;
+        shape.radius(spec.radius);
+        shape.strokeWidth(spec.strokeWidth);
+        shape.opacity(spec.opacity);
+        shape.visible(spec.opacity > 0);
+      });
+      ringRefs.current
+        .slice(reduced ? 1 : 3)
+        .forEach((shape) => shape?.visible(false));
+      haloRef.current?.radius(g.haloRadius);
+      haloRef.current?.opacity(g.haloOpacity);
+      coreRef.current?.radius(g.coreRadius);
+      coreRef.current?.strokeWidth(g.coreStrokeWidth);
+      coreRef.current?.opacity(g.coreOpacity);
+      nameRef.current?.x(g.nameX);
+      nameRef.current?.y(g.nameY);
+      nameRef.current?.fontSize(g.nameFontSize);
+      nameRef.current?.opacity(g.coreOpacity);
+      groupRef.current?.visible(mapPingIsActive(ping.createdAt, Date.now()));
+    },
+    [ping.createdAt, scale, reduced],
+  );
 
   // Konva visibility and geometry are imperative so a rerender after expiry
   // cannot briefly restore a ping from stale mount-time props.

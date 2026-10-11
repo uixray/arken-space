@@ -62,4 +62,5 @@ Root/backend owner: freeze and verify legacy link provenance/capability before e
 - No commit/stage/Linear mutation/deployment. Root owns integration and final acceptance.
 
 ## Root connected frontend integration gate
+
 2026-10-09 root workspace-root Vitest invocation of AuthGate/account-auth-client/AccountAuthWorkspace PASS3files30/30tests (6.30s), after legacy link followup. Agent actual full-route link browser2/2 proves HTTP cookie/role/bootstrap/game shell, mocked io explicitly excludes socket transport. Separate4liveSocket tests retained. Production build0mapfiles removes public sourcemap exposure; initial old-token URLpath logging remains a distinct edge gate.

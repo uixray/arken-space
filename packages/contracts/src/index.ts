@@ -794,7 +794,9 @@ export const updateCharacterStatLayoutSchema = z.object({
   revision: z.number().int().nonnegative(),
   layout: statLayoutSchema,
 });
-export type UpdateCharacterStatLayout = z.infer<typeof updateCharacterStatLayoutSchema>;
+export type UpdateCharacterStatLayout = z.infer<
+  typeof updateCharacterStatLayoutSchema
+>;
 
 /**
  * UIX-431 — порядок ходов в бою.

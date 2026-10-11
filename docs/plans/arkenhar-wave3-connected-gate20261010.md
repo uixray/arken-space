@@ -1,4 +1,5 @@
 # Wave3 connected gate — 2026-10-10
+
 Root resumed after all three workers terminated with account usage-limit errors. Product HEAD8ab0d63; activation/ping working bytes preserved, not committed or included in frozen2a candidate.
 Fresh root connected verification: 4 targeted Vitest suites19/19PASS; web and E2E TypeScript checks exit0; direct installed Vite production build exit0,4795modules, existing chunk advisory. Installed Chrome mocked API specs: activation390/1280 and PLAYER privacy plus normal/reduced8ping scenarios5/5PASS22.1s, retries0. Separate loopbackVite14317 stopped after run.
 Evidence is mocked browser, not actual-image network/device/human acceptance. Late requested activation length-message/mountedkeyboard/cap refinements require source/test review; no full262/508closure. Exactnewcandidate2a Docker images remain independent. ArchiveOCIchain/recovery56/actual-image gameplay/finalpackage/SMTPHTTPS remain open.

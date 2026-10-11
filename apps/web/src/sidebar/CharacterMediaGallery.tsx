@@ -311,7 +311,9 @@ export function CharacterMediaGallery({
     } catch {
       if (activeCharacterIdRef.current !== draft.item.characterId) return;
       setShareDraft({ ...draft, attemptedCaption: draft.caption });
-      setShareError("Не удалось опубликовать изображение. Проверьте доступ и повторите попытку.");
+      setShareError(
+        "Не удалось опубликовать изображение. Проверьте доступ и повторите попытку.",
+      );
     } finally {
       if (shareOperationRef.current === draft.actionId) {
         shareOperationRef.current = null;
@@ -372,11 +374,11 @@ export function CharacterMediaGallery({
                   {CHARACTER_MEDIA_CATEGORY_LABELS[item.category]}
                 </span>
                 {item.caption && <p>{item.caption}</p>}
-              {shareFeedback?.mediaId === item.id && (
-                <p className="muted" role="status">
-                  {shareFeedback.message}
-                </p>
-              )}
+                {shareFeedback?.mediaId === item.id && (
+                  <p className="muted" role="status">
+                    {shareFeedback.message}
+                  </p>
+                )}
               </div>
               <div className="character-media-gallery__actions">
                 <Button
@@ -543,7 +545,9 @@ export function CharacterMediaGallery({
               }}
             />
           </label>
-          <p className="muted">До 500 символов. Подпись галереи подставлена по умолчанию.</p>
+          <p className="muted">
+            До 500 символов. Подпись галереи подставлена по умолчанию.
+          </p>
         </ArkenDialog>
       )}
     </div>

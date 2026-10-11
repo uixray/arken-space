@@ -922,7 +922,8 @@ try {
       manifestSha256: serviceSnapshot.manifestSha256,
       manifestFormat: serviceSnapshot.manifest.format,
       sourceRevision: serviceSnapshot.sourceRevision,
-      sourceRevisionEvidence: "declared pin matched manifest and capture receipt",
+      sourceRevisionEvidence:
+        "declared pin matched manifest and capture receipt",
       fileCount: serviceSnapshot.files,
       runtimeSchemaVersion: serviceSnapshot.schemaVersion,
       capturedMigrationCount: migrationLedgerExpected.length,

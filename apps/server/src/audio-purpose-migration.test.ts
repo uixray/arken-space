@@ -47,7 +47,10 @@ describe("explicit audio purpose migration", () => {
     );
 
     const migration = await readFile(
-      new URL("../../../packages/db/drizzle/0056_explicit_audio_purpose.sql", import.meta.url),
+      new URL(
+        "../../../packages/db/drizzle/0056_explicit_audio_purpose.sql",
+        import.meta.url,
+      ),
       "utf8",
     );
     const applyPending = async () => {
@@ -56,19 +59,28 @@ describe("explicit audio purpose migration", () => {
         ["0056_explicit_audio_purpose.sql"],
       );
       if (applied.rows.length > 0) return;
-      await database!.exec(migration.replaceAll("--> statement-breakpoint", ""));
-      await database!.query("INSERT INTO applied_migrations (name) VALUES ($1)", ["0056_explicit_audio_purpose.sql"]);
+      await database!.exec(
+        migration.replaceAll("--> statement-breakpoint", ""),
+      );
+      await database!.query(
+        "INSERT INTO applied_migrations (name) VALUES ($1)",
+        ["0056_explicit_audio_purpose.sql"],
+      );
     };
 
     await applyPending();
-    const first = await database.query<{ id: string; audio_purpose: string | null }>(
-      "SELECT id, audio_purpose FROM assets ORDER BY id",
-    );
+    const first = await database.query<{
+      id: string;
+      audio_purpose: string | null;
+    }>("SELECT id, audio_purpose FROM assets ORDER BY id");
     await applyPending();
-    const second = await database.query<{ id: string; audio_purpose: string | null }>(
-      "SELECT id, audio_purpose FROM assets ORDER BY id",
-    );
-    expect(Object.fromEntries(first.rows.map((row) => [row.id, row.audio_purpose]))).toEqual({
+    const second = await database.query<{
+      id: string;
+      audio_purpose: string | null;
+    }>("SELECT id, audio_purpose FROM assets ORDER BY id");
+    expect(
+      Object.fromEntries(first.rows.map((row) => [row.id, row.audio_purpose])),
+    ).toEqual({
       [ids.unknown]: "MUSIC",
       [ids.sound]: "SOUND_EFFECT",
       [ids.track]: "MUSIC",
@@ -81,7 +93,9 @@ describe("explicit audio purpose migration", () => {
   it("applies the real 0056 migration to a schema-56 baseline through Drizzle's migrator and safely replays", async () => {
     database = new PGlite();
     const db = drizzle(database);
-    const migrationsFolder = await mkdtemp(join(tmpdir(), "arken-audio-purpose-migration-"));
+    const migrationsFolder = await mkdtemp(
+      join(tmpdir(), "arken-audio-purpose-migration-"),
+    );
     try {
       // Schema-56 baseline: tables that 0056 reads, plus representative pre-existing usages.
       await database.exec(`
@@ -104,27 +118,55 @@ describe("explicit audio purpose migration", () => {
          ($4, $6, 'AUDIO'), ($5, $6, 'IMAGE')`,
         [ids.unknown, ids.sound, ids.track, ids.both, ids.image, campaignId],
       );
-      await database.query("INSERT INTO campaign_sounds VALUES ($1, $2), ($1, $3)", [campaignId, ids.sound, ids.both]);
-      await database.query("INSERT INTO campaign_audio_tracks VALUES ($1, $2), ($1, $3)", [campaignId, ids.track, ids.both]);
+      await database.query(
+        "INSERT INTO campaign_sounds VALUES ($1, $2), ($1, $3)",
+        [campaignId, ids.sound, ids.both],
+      );
+      await database.query(
+        "INSERT INTO campaign_audio_tracks VALUES ($1, $2), ($1, $3)",
+        [campaignId, ids.track, ids.both],
+      );
 
       const sql = await readFile(
-        new URL("../../../packages/db/drizzle/0056_explicit_audio_purpose.sql", import.meta.url),
+        new URL(
+          "../../../packages/db/drizzle/0056_explicit_audio_purpose.sql",
+          import.meta.url,
+        ),
         "utf8",
       );
       const journal = {
         version: "7",
         dialect: "postgresql",
-        entries: [{ idx: 0, version: "7", when: 1791599496876, tag: "0056_explicit_audio_purpose", breakpoints: true }],
+        entries: [
+          {
+            idx: 0,
+            version: "7",
+            when: 1791599496876,
+            tag: "0056_explicit_audio_purpose",
+            breakpoints: true,
+          },
+        ],
       };
-      await writeFile(join(migrationsFolder, "0056_explicit_audio_purpose.sql"), sql);
+      await writeFile(
+        join(migrationsFolder, "0056_explicit_audio_purpose.sql"),
+        sql,
+      );
       await mkdir(join(migrationsFolder, "meta"));
-      await writeFile(join(migrationsFolder, "meta", "_journal.json"), JSON.stringify(journal));
+      await writeFile(
+        join(migrationsFolder, "meta", "_journal.json"),
+        JSON.stringify(journal),
+      );
 
       await migrate(db, { migrationsFolder });
-      const purposes = await database.query<{ id: string; audio_purpose: string | null }>(
-        "SELECT id, audio_purpose FROM assets ORDER BY id",
-      );
-      expect(Object.fromEntries(purposes.rows.map((row) => [row.id, row.audio_purpose]))).toEqual({
+      const purposes = await database.query<{
+        id: string;
+        audio_purpose: string | null;
+      }>("SELECT id, audio_purpose FROM assets ORDER BY id");
+      expect(
+        Object.fromEntries(
+          purposes.rows.map((row) => [row.id, row.audio_purpose]),
+        ),
+      ).toEqual({
         [ids.unknown]: "MUSIC",
         [ids.sound]: "SOUND_EFFECT",
         [ids.track]: "MUSIC",

@@ -58,6 +58,8 @@ describe("Orthographic2DRenderer persisted drawing interactions", () => {
     expect(rendererSource).toMatch(
       /mask\.cache\([\s\S]*?\n\s*\}, \[orderedFogReveals, worldDraft\.width, worldDraft\.height\]\);/,
     );
-    expect(rendererSource).toContain('<FogPatternOverlay width={worldDraft.width} height={worldDraft.height} />');
+    expect(rendererSource).toContain(
+      "<FogPatternOverlay width={worldDraft.width} height={worldDraft.height} />",
+    );
   });
 });

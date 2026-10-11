@@ -44,6 +44,7 @@ Frozen artifact SHA-256: corrected entry `37c438e8ae91e4874e6ee44d31e0ce2df7afe9
 Root review the source-composed R entry and helper, then separately GO or decline the R-only readability run. If approved, require listener ownership/stop evidence and immutable receipt. Gate 3 restore PASS is not application readability PASS. Full 173-object recovery, original 24+115 source-PNG acceptance, production rollback, user/browser/device acceptance, and authentication product implementation remain outside this gate.
 
 ## Root actual R readability — PASS (2026-10-09)
+
 Root reviewed correctedentry37C438.. +HTTP8920D4.. and independently4/4offlinePASS, then launched exactR30186/loopback14186 PID22776/session80685. Actual HTTP gate exit0; receiptSHA5084ADE20B9D07C8768B75CA23F4C4F8461C2D7D2C237CEDB6AA3EA49186160F. Health/auth200, catalog2/24+115/139uniqueIDs, all139fullpayloads10518668bytes matched storedmanifest hashes/header/Sharprawdecode/dimensions, anon401. Full58domainTables879rows/storage312refs/media139 exact before-after unchanged. One naturalRauthsession396→397 separately recorded, no PLAYERclaim/import/publish/seed/migration.
 StoppedONLY owned80685 viaCtrlC terminalwrapper1; HTTPexit0 preserved, elevated14186listener0. F/R/B0/media retained. PriorENOENTlaunch retained, correctedmissingdependency no productsource changes.
 Bounded actual failure→new-target exactB0restore→139appreadability mechanism PASS. NOT proof of production image rollback, originalPNGimportacceptance, complete173historicalmediarecovery, browser/native/human/auth/publication readiness.

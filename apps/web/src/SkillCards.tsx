@@ -27,7 +27,12 @@ export type SkillCard = {
   } | null;
   result: { total: number; breakdown: string } | null;
   uses: { before: number; after: number; max: number; recharge: string } | null;
-  activationCost: { type: "physical" | "magic"; amount: number; before: number; after: number } | null;
+  activationCost: {
+    type: "physical" | "magic";
+    amount: number;
+    before: number;
+    after: number;
+  } | null;
 };
 
 const record = (value: unknown): Record<string, unknown> | null =>
@@ -116,7 +121,8 @@ export function parseSkillCard(dice: unknown): SkillCard | null {
   const rawActivationCost = record(raw.activationCost);
   const activationCost =
     rawActivationCost &&
-    (rawActivationCost.type === "physical" || rawActivationCost.type === "magic") &&
+    (rawActivationCost.type === "physical" ||
+      rawActivationCost.type === "magic") &&
     finite(rawActivationCost.amount) !== null &&
     finite(rawActivationCost.before) !== null &&
     finite(rawActivationCost.after) !== null
@@ -232,9 +238,7 @@ export function CharacterActionCard({
   }
 
   return (
-    <article
-      className="character-action-card"
-    >
+    <article className="character-action-card">
       <div className="character-action-card__summary">
         <div>
           <span className="eyebrow">
@@ -269,13 +273,15 @@ export function CharacterActionCard({
           </button>
         </div>
       ))}
-      {actions.length === 0 && (
-        entry.kind === "ABILITY" ? (
+      {actions.length === 0 &&
+        (entry.kind === "ABILITY" ? (
           <div className="character-action-card__action">
             <span>
               <b>Активировать</b>
               <code>
-                {(entry.data.activation?.consumeUse ?? Boolean(uses)) ? "1 использование" : "Без броска"}
+                {(entry.data.activation?.consumeUse ?? Boolean(uses))
+                  ? "1 использование"
+                  : "Без броска"}
                 {entry.data.activation?.cost
                   ? ` · ${entry.data.activation.cost.amount} ${entry.data.activation.cost.type === "physical" ? "физической силы" : "магической силы"}`
                   : ""}
@@ -283,14 +289,20 @@ export function CharacterActionCard({
             </span>
             <button
               type="button"
-              disabled={disabled || pending !== null || ((entry.data.activation?.consumeUse ?? Boolean(uses)) && exhausted)}
+              disabled={
+                disabled ||
+                pending !== null ||
+                ((entry.data.activation?.consumeUse ?? Boolean(uses)) &&
+                  exhausted)
+              }
               onClick={() => void submit("EXECUTE")}
             >
               {pending === "EXECUTE" ? "Выполняем…" : "Активировать"}
             </button>
           </div>
-        ) : <p className="muted">Нет выполняемых действий.</p>
-      )}
+        ) : (
+          <p className="muted">Нет выполняемых действий.</p>
+        ))}
       <div className="character-action-card__controls">
         <button
           type="button"
@@ -336,7 +348,7 @@ export function SkillChatCard({
     value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
   const breakdownRepeatsFormula = Boolean(
     card.result?.breakdown &&
-      normalized(humanizeFormula(card.result.breakdown, statLabels)) ===
+    normalized(humanizeFormula(card.result.breakdown, statLabels)) ===
       normalized(visibleFormula),
   );
   return (
@@ -356,24 +368,24 @@ export function SkillChatCard({
       </div>
       {card.mode === "SHARE" ? (
         <p className="muted">Без броска и расходования ресурсов.</p>
-      ) : (
-        card.action ? (
-          <div className="skill-chat-card__result">
-            {card.result && (
-              <div className="roll-total-wrap">
-                {outcomeFrame}
-                <strong aria-label="Итог броска">{card.result.total}</strong>
-              </div>
+      ) : card.action ? (
+        <div className="skill-chat-card__result">
+          {card.result && (
+            <div className="roll-total-wrap">
+              {outcomeFrame}
+              <strong aria-label="Итог броска">{card.result.total}</strong>
+            </div>
+          )}
+          <span>
+            <b>{card.action.label}</b>
+            <code>{visibleFormula}</code>
+            {critical && (
+              <span className="roll-critical-label">{critical.label}</span>
             )}
-            <span>
-              <b>{card.action.label}</b>
-              <code>{visibleFormula}</code>
-              {critical && (
-                <span className="roll-critical-label">{critical.label}</span>
-              )}
-            </span>
-          </div>
-        ) : <p className="muted">Активировано без броска.</p>
+          </span>
+        </div>
+      ) : (
+        <p className="muted">Активировано без броска.</p>
       )}
       {card.uses && (
         <p className="skill-chat-card__uses">
@@ -383,7 +395,11 @@ export function SkillChatCard({
       )}
       {card.activationCost && (
         <p className="skill-chat-card__uses">
-          Стоимость: {card.activationCost.before} → {card.activationCost.after} · {card.activationCost.type === "physical" ? "физическая сила" : "магическая сила"}
+          Стоимость: {card.activationCost.before} → {card.activationCost.after}{" "}
+          ·{" "}
+          {card.activationCost.type === "physical"
+            ? "физическая сила"
+            : "магическая сила"}
         </p>
       )}
       <div className="skill-chat-card__details">
@@ -391,7 +407,9 @@ export function SkillChatCard({
         {card.action?.modifiers.length ? (
           <p>Модификаторы: {card.action.modifiers.join(", ")}</p>
         ) : null}
-        {card.result?.breakdown && !breakdownRepeatsFormula && <p>{card.result.breakdown}</p>}
+        {card.result?.breakdown && !breakdownRepeatsFormula && (
+          <p>{card.result.breakdown}</p>
+        )}
         {(card.entry.sourceRemoved || sourceRemoved) && (
           <p className="muted">
             Исходная запись удалена; показан сохранённый снимок.

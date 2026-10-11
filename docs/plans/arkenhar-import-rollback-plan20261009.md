@@ -21,6 +21,7 @@ Outcome is scoped rollback of this known incomplete139-file baseline, not recove
 Own one new ignored `.data/qa-prep/import-rollback-20261009-<unique>/` with receipts/helpers/new copied media and one sanitized checkpoint. You are not alone; preserve concurrent work. Root coordinates no-currentQA-write observation window if currentQA before/after fingerprints are requested. Credentials only programmatic authorized inputs, never stdout/env dump/DSN arguments, public docs, Git or Linear.
 
 Propose two new DB names, each absent before creation:
+
 - `arken_qa_importfail_20261009_<nonce>` — working fault target F.
 - `arken_qa_importback_20261009_<nonce>` — recovered baseline target R.
 
@@ -63,16 +64,16 @@ If initial failure case exposes an implementation defect, stop before product ed
 
 ## Result matrix and limitations
 
-| Gate | Required evidence | Initial state |
-| --- | --- | --- |
-| Isolation | exact F/R name/OID/media/loopback/process guards; protected originals unchanged | NOT RUN |
-| B0 backup | quiesced full-row/schema/sequence/media equality, dump/list0, exact hashes | NOT RUN |
-| Failure exercised | committed item1 before lost acknowledgement, actual rejected item2, immutable receipt | NOT RUN |
-| Idempotent recovery | stable action/IDs, conflict rejected, no duplicate rows/files | NOT RUN |
-| Actual rollback | B0 restored into R, full equality before sessions, test delta absent | NOT RUN |
-| App after rollback | actual139 payload/hash/decode and auth; domain/media unchanged | NOT RUN |
-| Complete historical recovery |173 missing objects still unresolved | NOT PASSED |
-| Production/image rollback | no preserved production images/restic/remote verification in this scope | NOT RUN |
+| Gate                         | Required evidence                                                                     | Initial state |
+| ---------------------------- | ------------------------------------------------------------------------------------- | ------------- |
+| Isolation                    | exact F/R name/OID/media/loopback/process guards; protected originals unchanged       | NOT RUN       |
+| B0 backup                    | quiesced full-row/schema/sequence/media equality, dump/list0, exact hashes            | NOT RUN       |
+| Failure exercised            | committed item1 before lost acknowledgement, actual rejected item2, immutable receipt | NOT RUN       |
+| Idempotent recovery          | stable action/IDs, conflict rejected, no duplicate rows/files                         | NOT RUN       |
+| Actual rollback              | B0 restored into R, full equality before sessions, test delta absent                  | NOT RUN       |
+| App after rollback           | actual139 payload/hash/decode and auth; domain/media unchanged                        | NOT RUN       |
+| Complete historical recovery | 173 missing objects still unresolved                                                  | NOT PASSED    |
+| Production/image rollback    | no preserved production images/restic/remote verification in this scope               | NOT RUN       |
 
 Dump stdout/stderr remain private; outward receipt only exit codes, safe counts/digests, timestamps, target pseudonyms and state classifications. All actions/session deltas recorded; no invented zero-write claim. Compare currentQA read-only control fingerprints only under coordinated no-write window; concurrent legitimate changes cannot be attributed to rehearsal without evidence. Protected26493 snapshot/DB must remain unchanged throughout; never authenticate against it during this pool.
 

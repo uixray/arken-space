@@ -5,6 +5,7 @@
 Target product SHA `4dca5a19d3b6b7ca17464825b893dfc276185462`. Plan only: no execution, source changes, secret/private-fixture reads, remote or owner-stand activation. The 15-test adapter/runtime receipt and separate 1/1 HTTP lifecycle receipt do not exercise the complete production index/registerRoutes process. This finite gate fills that gap, not the old 54/65-case release matrix.
 
 Required before dispatch:
+
 - Root accepts exact-SHA candidate build manifest: server immutable image ID, context/tree/lock identity and build receipt. Do not substitute moving tags/current worktree. Image must include Nodemailer and bundled index at this SHA.
 - Already cached PostgreSQL image ID and Node-capable fixture image ID (the candidate server itself can run fixture Node scripts with overridden command). All starts `--pull=never`/`pull_policy: never`; no installs, rebuilds, downloads or Corepack fetching during gate. Default candidate CMD is `pnpm db:migrate && exec node apps/server/dist/index.js`; if migration command cannot run offline, record a blocker rather than change dependencies or silently bypass the intended process.
 - One uniquely named Docker **internal** network, isolated new PG/media volumes, synthetic database/GM/mail/keyring material, disposable harness directory. No shared/owner DB, real env, credential store, shared backup or existing stand ports. Resources named in private execution ledger before creation; cleanup only exact owned resources after approved retention.

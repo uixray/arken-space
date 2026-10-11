@@ -48,9 +48,10 @@ export function TerrainStampControls({
       const panelRect = panel.getBoundingClientRect();
       const rightX = triggerRect.right + margin;
       const leftX = triggerRect.left - panelRect.width - margin;
-      const left = rightX + panelRect.width <= window.innerWidth - margin
-        ? rightX
-        : Math.max(margin, leftX);
+      const left =
+        rightX + panelRect.width <= window.innerWidth - margin
+          ? rightX
+          : Math.max(margin, leftX);
       const top = Math.min(
         Math.max(margin, triggerRect.top),
         Math.max(margin, window.innerHeight - panelRect.height - margin),
@@ -61,9 +62,10 @@ export function TerrainStampControls({
     position();
     window.addEventListener("resize", position);
     window.addEventListener("scroll", position, true);
-    const observer = typeof ResizeObserver === "undefined"
-      ? null
-      : new ResizeObserver(position);
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(position);
     if (panelRef.current) observer?.observe(panelRef.current);
     if (triggerRef.current) observer?.observe(triggerRef.current);
     return () => {
@@ -83,7 +85,11 @@ export function TerrainStampControls({
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      if (
+        panelRef.current?.contains(target) ||
+        triggerRef.current?.contains(target)
+      )
+        return;
       onDismissOutside();
     };
     document.addEventListener("keydown", onKeyDown, true);
@@ -109,7 +115,7 @@ export function TerrainStampControls({
     };
   }, []);
 
-  return createPortal((
+  return createPortal(
     <section
       ref={panelRef}
       id={id}
@@ -175,6 +181,7 @@ export function TerrainStampControls({
           <option value="GM">Только мастеру</option>
         </select>
       </label>
-    </section>
-  ), document.body);
+    </section>,
+    document.body,
+  );
 }

@@ -13,10 +13,17 @@ type MockCommandBody = Record<string, unknown>;
 type MockCommand = { path: string; body: MockCommandBody };
 function targetIds(body: MockCommandBody): string[] {
   const targets = body.targets;
-  if (!Array.isArray(targets) || !targets.every((target: unknown) =>
-    !!target && typeof target === "object" && "targetId" in target &&
-    typeof target.targetId === "string",
-  )) throw new Error("Canvas command targets must include targetId strings");
+  if (
+    !Array.isArray(targets) ||
+    !targets.every(
+      (target: unknown) =>
+        !!target &&
+        typeof target === "object" &&
+        "targetId" in target &&
+        typeof target.targetId === "string",
+    )
+  )
+    throw new Error("Canvas command targets must include targetId strings");
   return targets.map((target: { targetId: string }) => target.targetId);
 }
 const makeStamp = (
@@ -46,12 +53,28 @@ function canonicalStamp(
   const { sceneId, assetKey, packId, size, rotation, layer, x, y } = body;
   if (
     typeof sceneId !== "string" ||
-    (assetKey !== "forest" && assetKey !== "mountains" && assetKey !== "clouds") ||
-    packId !== "builtin-terrain-v1" || typeof size !== "number" ||
-    typeof rotation !== "number" || (layer !== "GM" && layer !== "PUBLIC") ||
-    typeof x !== "number" || typeof y !== "number"
-  ) throw new Error("Create-stamp command has an invalid payload");
-  return { ...makeStamp(id, layer), sceneId, authorMembershipId, assetKey, packId, size, rotation, x, y };
+    (assetKey !== "forest" &&
+      assetKey !== "mountains" &&
+      assetKey !== "clouds") ||
+    packId !== "builtin-terrain-v1" ||
+    typeof size !== "number" ||
+    typeof rotation !== "number" ||
+    (layer !== "GM" && layer !== "PUBLIC") ||
+    typeof x !== "number" ||
+    typeof y !== "number"
+  )
+    throw new Error("Create-stamp command has an invalid payload");
+  return {
+    ...makeStamp(id, layer),
+    sceneId,
+    authorMembershipId,
+    assetKey,
+    packId,
+    size,
+    rotation,
+    x,
+    y,
+  };
 }
 function snapshotFor(role: "GM" | "PLAYER", count = 0): GameSnapshot {
   const snapshot = buildGameSnapshot(role, {
@@ -186,11 +209,23 @@ async function installMocks(
             tokens: {},
             drawings: Object.fromEntries(
               (Array.isArray(body.targets) ? body.targets : [])
-                .filter((target: unknown): target is { targetType: string; targetId: string; revision: number } =>
-                  !!target && typeof target === "object" &&
-                  "targetType" in target && typeof target.targetType === "string" &&
-                  "targetId" in target && typeof target.targetId === "string" &&
-                  "revision" in target && typeof target.revision === "number")
+                .filter(
+                  (
+                    target: unknown,
+                  ): target is {
+                    targetType: string;
+                    targetId: string;
+                    revision: number;
+                  } =>
+                    !!target &&
+                    typeof target === "object" &&
+                    "targetType" in target &&
+                    typeof target.targetType === "string" &&
+                    "targetId" in target &&
+                    typeof target.targetId === "string" &&
+                    "revision" in target &&
+                    typeof target.revision === "number",
+                )
                 .filter((target) => target.targetType === "DRAWING")
                 .map((target) => [target.targetId, target.revision + 1]),
             ),
@@ -546,9 +581,7 @@ test("UIX-347 marquee selects stamps and mixed selection uses shared move/delete
     (entry) =>
       entry.path === "/api/canvas/bulk" && entry.body.operation === "MOVE",
   )!;
-  expect(
-    targetIds(move.body).sort(),
-  ).toEqual(["stamp-left", "stamp-right"]);
+  expect(targetIds(move.body).sort()).toEqual(["stamp-left", "stamp-right"]);
   await page.getByRole("button", { name: "Удалить выбранное" }).click();
   await expect(
     page.getByRole("dialog", { name: "Удалить выбранные объекты?" }),
@@ -567,9 +600,7 @@ test("UIX-347 marquee selects stamps and mixed selection uses shared move/delete
     (entry) =>
       entry.path === "/api/canvas/bulk" && entry.body.operation === "DELETE",
   )!;
-  expect(
-    targetIds(remove.body).sort(),
-  ).toEqual(["stamp-left", "stamp-right"]);
+  expect(targetIds(remove.body).sort()).toEqual(["stamp-left", "stamp-right"]);
 });
 
 for (const count of [100, 500]) {

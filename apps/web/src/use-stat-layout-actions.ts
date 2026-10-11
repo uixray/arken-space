@@ -27,7 +27,9 @@ export function useStatLayoutActions(dependencies: {
   load: () => Promise<void>;
 }): StatLayoutActions {
   const { load } = dependencies;
-  const retryRef = useRef<{ fingerprint: string; actionId: string } | null>(null);
+  const retryRef = useRef<{ fingerprint: string; actionId: string } | null>(
+    null,
+  );
   return useMemo<StatLayoutActions>(
     () => ({
       onUpdateStatLayout: async (layout, revision) => {
@@ -48,10 +50,13 @@ export function useStatLayoutActions(dependencies: {
             ? retryRef.current.actionId
             : crypto.randomUUID();
         retryRef.current = { fingerprint, actionId };
-        await api(`/api/characters/${encodeURIComponent(characterId)}/stat-layout`, {
-          method: "PATCH",
-          body: JSON.stringify({ actionId, revision, layout }),
-        });
+        await api(
+          `/api/characters/${encodeURIComponent(characterId)}/stat-layout`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ actionId, revision, layout }),
+          },
+        );
         await load();
         if (retryRef.current?.actionId === actionId) retryRef.current = null;
       },

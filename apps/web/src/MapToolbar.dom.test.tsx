@@ -124,7 +124,10 @@ describe("MapToolbar — панель инструментов карты (UIX-4
   it("keeps every toolbar control in the single full-height scroller", () => {
     const { container } = renderComponent(
       <MapToolbar
-        {...createDefaultProps({ pauseControl: <button>Pause</button>, onToggleObjectList: vi.fn() })}
+        {...createDefaultProps({
+          pauseControl: <button>Pause</button>,
+          onToggleObjectList: vi.fn(),
+        })}
       />,
     );
     const toolbar = container.querySelector(".map-toolbar")!;
@@ -133,10 +136,14 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     expect(scroller).toContainElement(
       screen.getByRole("button", { name: "Pause" }),
     );
-    expect(scroller).toContainElement(screen.getByRole("button", { name: "Pause" }));
+    expect(scroller).toContainElement(
+      screen.getByRole("button", { name: "Pause" }),
+    );
     expect(scroller.querySelector(".map-toolbar__pause")).toBeInTheDocument();
     expect(scroller.lastElementChild).toHaveAttribute("data-tool", "STAMP");
-    expect(scroller).toContainElement(screen.getByRole("button", { name: "Перемещение" }));
+    expect(scroller).toContainElement(
+      screen.getByRole("button", { name: "Перемещение" }),
+    );
     const objectList = screen.getByRole("button", {
       name: "Список объектов и токенов карты",
     });
@@ -269,8 +276,14 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     expect(scroller).not.toContainElement(popup);
     expect(popup.parentElement).toBe(document.body);
 
-    popup.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Штампы рельефа" })).not.toBeInTheDocument());
+    popup.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Штампы рельефа" }),
+      ).not.toBeInTheDocument(),
+    );
     await waitFor(() => expect(stamp).toHaveFocus());
     expect(props.onToolSelect).toHaveBeenLastCalledWith("PAN");
   });
@@ -281,10 +294,16 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     const { container } = renderComponent(<MapToolbar {...props} />);
     const stamp = screen.getByRole("button", { name: "Штамп рельефа" });
     await user.click(stamp);
-    expect(screen.getByRole("dialog", { name: "Штампы рельефа" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Штампы рельефа" }),
+    ).toBeInTheDocument();
     const outside = container.querySelector(".map-toolbar__collapse")!;
     await user.click(outside);
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Штампы рельефа" })).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Штампы рельефа" }),
+      ).not.toBeInTheDocument(),
+    );
     expect(props.onToolSelect).toHaveBeenLastCalledWith("STAMP");
   });
 

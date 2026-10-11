@@ -232,7 +232,8 @@ export function useCampaignActionsValue(
       },
       statLayout: {
         onUpdateStatLayout: actions.statLayout.onUpdateStatLayout,
-        onUpdateCharacterStatLayout: actions.statLayout.onUpdateCharacterStatLayout,
+        onUpdateCharacterStatLayout:
+          actions.statLayout.onUpdateCharacterStatLayout,
       },
       chatHistory: {
         onLoadThreadHistory: actions.chatHistory.onLoadThreadHistory,

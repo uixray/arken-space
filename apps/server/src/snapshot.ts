@@ -196,7 +196,9 @@ export interface CampaignReadSet {
   assignedRows: Awaited<ReturnType<typeof loadAssignedEntries>>;
   characterMediaRows: Awaited<ReturnType<typeof loadCharacterMedia>>;
   publishedWorldAssetRows: Awaited<ReturnType<typeof loadPublishedWorldAssets>>;
-  publishedSoundpadAssetRows: Awaited<ReturnType<typeof loadPublishedSoundpadAssets>>;
+  publishedSoundpadAssetRows: Awaited<
+    ReturnType<typeof loadPublishedSoundpadAssets>
+  >;
   assetRows: Awaited<ReturnType<typeof loadAssets>>;
   sequenceRows: Awaited<ReturnType<typeof loadSequence>>;
   /**
@@ -875,7 +877,10 @@ export async function buildSnapshot(
   for (const row of publishedWorldAssetRows)
     if (row.assetId) visibleAssetIds.add(row.assetId);
   if (auth.role !== "GM") {
-    for (const assetId of visibleSoundpadAssetIds(auth, publishedSoundpadAssetRows))
+    for (const assetId of visibleSoundpadAssetIds(
+      auth,
+      publishedSoundpadAssetRows,
+    ))
       visibleAssetIds.add(assetId);
   }
   const visibleAssets =
@@ -1097,7 +1102,8 @@ export async function buildSnapshot(
         kind: drawing.kind as "FREEHAND" | "STAMP",
         ...(drawing.kind === "STAMP"
           ? {
-              assetKey: drawing.stampAssetKey as "forest" | "mountains" | "clouds",
+              assetKey: drawing.stampAssetKey as
+                "forest" | "mountains" | "clouds",
               packId: drawing.stampPackId as "builtin-terrain-v1",
               size: drawing.stampSize!,
               rotation: drawing.stampRotation!,

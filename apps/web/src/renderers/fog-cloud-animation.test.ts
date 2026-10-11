@@ -36,10 +36,22 @@ describe("decorative fog cloud animation policy", () => {
 
   it("keeps a static texture for reduced motion and conservative low-power signals", () => {
     expect(shouldAnimateFog({ reducedMotion: true })).toBe(false);
-    expect(shouldAnimateFog({ reducedMotion: false, saveData: true })).toBe(false);
-    expect(shouldAnimateFog({ reducedMotion: false, deviceMemory: 4 })).toBe(false);
-    expect(shouldAnimateFog({ reducedMotion: false, hardwareConcurrency: 4 })).toBe(false);
-    expect(shouldAnimateFog({ reducedMotion: false, deviceMemory: 8, hardwareConcurrency: 8 })).toBe(true);
+    expect(shouldAnimateFog({ reducedMotion: false, saveData: true })).toBe(
+      false,
+    );
+    expect(shouldAnimateFog({ reducedMotion: false, deviceMemory: 4 })).toBe(
+      false,
+    );
+    expect(
+      shouldAnimateFog({ reducedMotion: false, hardwareConcurrency: 4 }),
+    ).toBe(false);
+    expect(
+      shouldAnimateFog({
+        reducedMotion: false,
+        deviceMemory: 8,
+        hardwareConcurrency: 8,
+      }),
+    ).toBe(true);
   });
 
   it("returns no decorative tile when Canvas2D is unavailable, leaving the renderer's solid fallback", () => {
@@ -54,9 +66,18 @@ describe("decorative fog cloud animation policy", () => {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     }));
-    Object.defineProperty(document, "hidden", { configurable: true, value: false });
-    Object.defineProperty(navigator, "hardwareConcurrency", { configurable: true, value: 8 });
-    Object.defineProperty(navigator, "deviceMemory", { configurable: true, value: 8 });
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+    Object.defineProperty(navigator, "hardwareConcurrency", {
+      configurable: true,
+      value: 8,
+    });
+    Object.defineProperty(navigator, "deviceMemory", {
+      configurable: true,
+      value: 8,
+    });
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
       canvasContext as unknown as CanvasRenderingContext2D,
     );
@@ -67,11 +88,17 @@ describe("decorative fog cloud animation policy", () => {
 
     vi.advanceTimersByTime(FOG_FRAME_INTERVAL_MS);
     expect(frame).toHaveBeenCalledTimes(1);
-    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
     document.dispatchEvent(new Event("visibilitychange"));
     vi.advanceTimersByTime(FOG_FRAME_INTERVAL_MS * 2);
     expect(frame).toHaveBeenCalledTimes(1);
-    Object.defineProperty(document, "hidden", { configurable: true, value: false });
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
     document.dispatchEvent(new Event("visibilitychange"));
     vi.advanceTimersByTime(FOG_FRAME_INTERVAL_MS);
     expect(frame).toHaveBeenCalledTimes(2);

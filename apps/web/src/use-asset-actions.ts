@@ -29,7 +29,11 @@ export interface AssetActions {
     intent: AssetReplacementIntent,
   ) => Promise<AssetReplacementResult>;
   refreshAssets: () => Promise<void>;
-  uploadAsset: (file: File, kind: AssetKind, options?: { audioPurpose?: AudioPurpose }) => Promise<AssetDto>;
+  uploadAsset: (
+    file: File,
+    kind: AssetKind,
+    options?: { audioPurpose?: AudioPurpose },
+  ) => Promise<AssetDto>;
   getAssetUsage: (assetId: string) => Promise<AssetUsageResponseDto>;
   deleteAsset: (assetId: string) => Promise<DeleteAssetResponseDto>;
   generateTokenImage: (
@@ -58,14 +62,18 @@ export function useAssetActions(dependencies: {
       uploadAsset: async (file, kind, options) => {
         const form = new FormData();
         form.append("file", file);
-        const purposeQuery = kind === "AUDIO" && options?.audioPurpose
-          ? `&audioPurpose=${options.audioPurpose}`
-          : "";
-        const asset = await api<AssetDto>(`/api/assets?kind=${kind}${purposeQuery}`, {
-          method: "POST",
-          headers: { "x-action-id": crypto.randomUUID() },
-          body: form,
-        });
+        const purposeQuery =
+          kind === "AUDIO" && options?.audioPurpose
+            ? `&audioPurpose=${options.audioPurpose}`
+            : "";
+        const asset = await api<AssetDto>(
+          `/api/assets?kind=${kind}${purposeQuery}`,
+          {
+            method: "POST",
+            headers: { "x-action-id": crypto.randomUUID() },
+            body: form,
+          },
+        );
         await load();
         // The upload response omits the content URL and returns createdAt as
         // a Date, while everything downstream expects the snapshot's shape.

@@ -11,6 +11,7 @@ Latest checkpoint: rollback Gate1 fresh pre-write B0 passed in a disposable clon
 ## What exists, and what it does not prove
 
 Source inspected, no credentials or private runtime evidence read:
+
 - `apps/server/src/auth.ts`: sessions resolve directly to campaign membership; AuthContext is membership/campaign/role/displayName, not a service account. HttpOnly strict cookie with production Secure, expiry and hashed opaque token already exist; preserve these properties rather than replace them with browser token storage.
 - `apps/server/src/routes.ts` near 995–1115: GM bearer login; reusable PLAYER grant or single-use invite claim; **temporary public-alias `/api/auth/player/:handle` shortcut**; logout deletes a session and disconnects its socket room. This alias route needs removal or an explicit fail-closed non-public development boundary before a public release. Hiding its UI is insufficient.
 - `packages/db/src/schema.ts`: campaign membership, invites, playerAccessGrants and membership-bound sessions. Existing character ownership and campaign IDs are domain identity; migration must preserve them. No account email/password lifecycle found in the inspected schema/route surface.
@@ -85,4 +86,5 @@ Stop a pool on ambiguous real-account ownership, unsafe legacy compatibility, ab
 - Source index: `docs/plans/arkenhar-goal-checkpoint20261009.md` (through actual Gate1 B0); `docs/plans/arkenhar-active-pools20261008.md` (owner authdecision); `docs/plans/arkenhar-release-evidence20261009.md`; `docs/brief.md`; `docs/architecture.md`; `apps/server/src/auth.ts`; `apps/server/src/routes.ts`; `apps/server/src/realtime.ts`; `packages/db/src/schema.ts`; `apps/web/src/App.tsx`; `apps/web/src/LandingGuide.tsx`; parent workspace `AGENTS.md`; `D:/AI/.workspace/registry.yaml`.
 
 ## Root live task-source reconciliation — 2026-10-09
+
 Linear UIX-657 refreshed directly: Backlog, no completion/start date, project arken-space, parent UIX-653. Its acceptance requires an unfamiliar user to understand the service, create a campaign and invite a player without author explanations. Scope also names GM onboarding to first scene, campaign/system/custom-mode settings and a clear self-hosted installation path; export/import is conditional, not silently mandatory. A0 must retain these first-run requirements alongside account lifecycle, not close UIX-657 merely from auth tests. Owner full-auth choice supersedes the issue's older alternative-access wording. No status/comment change at this read-only refresh; implementation remains HOLD.

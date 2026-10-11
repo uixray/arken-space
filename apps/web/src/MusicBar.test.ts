@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { createElement } from "react";
 import type { ReactNode } from "react";
-import type { AssetDto, AudioStateDto, AudioTrackDto, CommandAck } from "@arken/contracts";
+import type {
+  AssetDto,
+  AudioStateDto,
+  AudioTrackDto,
+  CommandAck,
+} from "@arken/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isAudioConsentError } from "./audio-playback";
 import { volumeSliderToGain } from "./audio-volume";
@@ -15,19 +20,38 @@ vi.mock("@gravity-ui/uikit", () => ({
   Checkbox: () => null,
   Loader: () => null,
 }));
-vi.mock("./ui/ArkenDialog", () => ({ ArkenDialog: ({ open, children }: { open: boolean; children: ReactNode }) => open ? createElement("div", { role: "dialog" }, children) : null }));
+vi.mock("./ui/ArkenDialog", () => ({
+  ArkenDialog: ({ open, children }: { open: boolean; children: ReactNode }) =>
+    open ? createElement("div", { role: "dialog" }, children) : null,
+}));
 vi.mock("./ui/notifications", () => ({ notify: vi.fn() }));
 
 const { MusicBar: ActualMusicBar } = await import("./MusicBar");
 type MusicBarProps = Parameters<typeof ActualMusicBar>[0];
-type LegacyTestProps = Omit<MusicBarProps, "audioTracks"> & { audioTracks?: AudioTrackDto[] };
+type LegacyTestProps = Omit<MusicBarProps, "audioTracks"> & {
+  audioTracks?: AudioTrackDto[];
+};
 function trackFromAudio(audio: AudioStateDto): AudioTrackDto {
-  return { id: "test-track", assetId: audio.assetId, mixVolume: 1, playing: audio.playing, positionSeconds: audio.positionSeconds, loop: audio.loop, startedAt: audio.startedAt, slotOrder: 0, revision: audio.revision, updatedAt: audio.updatedAt };
+  return {
+    id: "test-track",
+    assetId: audio.assetId,
+    mixVolume: 1,
+    playing: audio.playing,
+    positionSeconds: audio.positionSeconds,
+    loop: audio.loop,
+    startedAt: audio.startedAt,
+    slotOrder: 0,
+    revision: audio.revision,
+    updatedAt: audio.updatedAt,
+  };
 }
 // Test compatibility adapter: every test now gets an explicit canonical track
 // derived from its singular fixture; production never infers tracks from audio.
 function MusicBar(props: LegacyTestProps) {
-  return createElement(ActualMusicBar, { ...props, audioTracks: props.audioTracks ?? [trackFromAudio(props.audio)] });
+  return createElement(ActualMusicBar, {
+    ...props,
+    audioTracks: props.audioTracks ?? [trackFromAudio(props.audio)],
+  });
 }
 
 const audioAsset: AssetDto = {
@@ -163,55 +187,113 @@ describe("UIX-417 audio acknowledgement copy", () => {
 
 describe("personal music volume", () => {
   it("keeps effect-only audio out of the music picker and uploads explicit MUSIC", async () => {
-    const effects = { ...audioAsset, id: "effect-only", name: "Footsteps", audioPurpose: "SOUND_EFFECT" as const };
-    const both = { ...audioAsset, id: "both-audio", name: "Both", audioPurpose: "BOTH" as const };
-    const onUpload = vi.fn().mockResolvedValue({ ...audioAsset, id: "new-music" });
-    const view = renderComponent(createElement(MusicBar, {
-      audio: playingAudio, assets: [audioAsset, effects, both], role: "GM", socket: null, onUpload,
-    }));
+    const effects = {
+      ...audioAsset,
+      id: "effect-only",
+      name: "Footsteps",
+      audioPurpose: "SOUND_EFFECT" as const,
+    };
+    const both = {
+      ...audioAsset,
+      id: "both-audio",
+      name: "Both",
+      audioPurpose: "BOTH" as const,
+    };
+    const onUpload = vi
+      .fn()
+      .mockResolvedValue({ ...audioAsset, id: "new-music" });
+    const view = renderComponent(
+      createElement(MusicBar, {
+        audio: playingAudio,
+        assets: [audioAsset, effects, both],
+        role: "GM",
+        socket: null,
+        onUpload,
+      }),
+    );
     fireEvent.click(screen.getByLabelText("Плейлист"));
     const menu = view.container.querySelector(".music-overflow__menu")!;
     expect(menu.firstElementChild).toHaveClass("music-overflow__library");
-    expect(menu.firstElementChild?.querySelector(".lucide-list-music")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Quiet track" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Footsteps" })).not.toBeInTheDocument();
+    expect(
+      menu.firstElementChild?.querySelector(".lucide-list-music"),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Quiet track" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Footsteps" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Both" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Открыть библиотеку" }));
-    const file = new File(["synthetic music"], "music.mp3", { type: "audio/mpeg" });
-    fireEvent.change(screen.getByLabelText("Аудиофайл"), { target: { files: [file] } });
-    fireEvent.click(screen.getByRole("button", { name: "Загрузить и выбрать" }));
-    await vi.waitFor(() => expect(onUpload).toHaveBeenCalledWith(file, "AUDIO", { audioPurpose: "MUSIC" }));
+    const file = new File(["synthetic music"], "music.mp3", {
+      type: "audio/mpeg",
+    });
+    fireEvent.change(screen.getByLabelText("Аудиофайл"), {
+      target: { files: [file] },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Загрузить и выбрать" }),
+    );
+    await vi.waitFor(() =>
+      expect(onUpload).toHaveBeenCalledWith(file, "AUDIO", {
+        audioPurpose: "MUSIC",
+      }),
+    );
     view.unmount();
   });
 
   it("shows Pause from the canonical active-track state when the legacy audio projection is stale", () => {
     const canonicalTrack = { ...trackFromAudio(playingAudio), playing: true };
-    renderComponent(createElement(MusicBar, {
-      audio: { ...playingAudio, playing: false },
-      audioTracks: [canonicalTrack],
-      assets: [audioAsset],
-      role: "GM",
-      socket: null,
-      onUpload: vi.fn(),
-    }));
+    renderComponent(
+      createElement(MusicBar, {
+        audio: { ...playingAudio, playing: false },
+        audioTracks: [canonicalTrack],
+        assets: [audioAsset],
+        role: "GM",
+        socket: null,
+        onUpload: vi.fn(),
+      }),
+    );
     const toggle = screen.getByRole("button", { name: "Пауза" });
     expect(toggle.querySelector(".lucide-pause")).not.toBeNull();
   });
 
   it("plays two canonical tracks while player master remains local-only and gain does not restart them", () => {
-    const secondAsset = { ...audioAsset, id: "audio-second", name: "Second track" };
-    const tracks = [trackFromAudio(playingAudio), { ...trackFromAudio(playingAudio), id: "track-second", assetId: secondAsset.id, slotOrder: 1 }];
-    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    const secondAsset = {
+      ...audioAsset,
+      id: "audio-second",
+      name: "Second track",
+    };
+    const tracks = [
+      trackFromAudio(playingAudio),
+      {
+        ...trackFromAudio(playingAudio),
+        id: "track-second",
+        assetId: secondAsset.id,
+        slotOrder: 1,
+      },
+    ];
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue();
     vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
     const emit = vi.fn();
-    const view = renderComponent(createElement(MusicBar, {
-      audio: playingAudio, audioTracks: tracks, assets: [audioAsset, secondAsset],
-      role: "PLAYER", socket: { emit } as unknown as GameSocket, onUpload: vi.fn(),
-    }));
+    const view = renderComponent(
+      createElement(MusicBar, {
+        audio: playingAudio,
+        audioTracks: tracks,
+        assets: [audioAsset, secondAsset],
+        role: "PLAYER",
+        socket: { emit } as unknown as GameSocket,
+        onUpload: vi.fn(),
+      }),
+    );
     expect(view.container.querySelectorAll("audio")).toHaveLength(2);
     expect(play).toHaveBeenCalledTimes(2);
     fireEvent.click(screen.getByLabelText("Громкость"));
-    fireEvent.change(screen.getByRole("slider", { name: "Личная громкость" }), { target: { value: "0.25" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Личная громкость" }), {
+      target: { value: "0.25" },
+    });
     expect(play).toHaveBeenCalledTimes(2);
     expect(emit).not.toHaveBeenCalled();
   });
@@ -219,9 +301,20 @@ describe("personal music volume", () => {
   it("disposes an audio element when its authoritative track disappears", () => {
     const track = trackFromAudio(playingAudio);
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
-    const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
-    const load = vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
-    const props = { audio: playingAudio, audioTracks: [track], assets: [audioAsset], role: "PLAYER" as const, socket: null, onUpload: vi.fn() };
+    const pause = vi
+      .spyOn(HTMLMediaElement.prototype, "pause")
+      .mockImplementation(() => {});
+    const load = vi
+      .spyOn(HTMLMediaElement.prototype, "load")
+      .mockImplementation(() => {});
+    const props = {
+      audio: playingAudio,
+      audioTracks: [track],
+      assets: [audioAsset],
+      role: "PLAYER" as const,
+      socket: null,
+      onUpload: vi.fn(),
+    };
     const view = renderComponent(createElement(MusicBar, props));
     expect(view.container.querySelectorAll("audio")).toHaveLength(1);
     view.rerender(createElement(MusicBar, { ...props, audioTracks: [] }));
@@ -348,7 +441,9 @@ describe("personal music volume", () => {
         onUpload: vi.fn(),
       }),
     );
-    await vi.waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1),
+    );
     expect(document.querySelector(".music-enable-button")).toBeNull();
     expect(localStorage.getItem("arken.audio.enabled")).toBeNull();
   });

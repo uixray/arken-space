@@ -303,10 +303,10 @@ test("service-v1 candidate requires same declared 40-character source revision i
     ]) {
       await assert.rejects(
         () =>
-          resolveServiceSnapshot(
-            path.dirname(path.dirname(sample.root)),
-            { ...request, ...patch },
-          ),
+          resolveServiceSnapshot(path.dirname(path.dirname(sample.root)), {
+            ...request,
+            ...patch,
+          }),
         /source revision/,
       );
     }

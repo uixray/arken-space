@@ -332,7 +332,11 @@ describe("MediaPanel upload sections by role", () => {
           name: "Загрузить",
         }),
       );
-      expect(onUpload).toHaveBeenCalledWith(expect.any(File), "TOKEN", undefined);
+      expect(onUpload).toHaveBeenCalledWith(
+        expect.any(File),
+        "TOKEN",
+        undefined,
+      );
     },
   );
 
@@ -414,7 +418,9 @@ describe("MediaPanel upload sections by role", () => {
       ],
     });
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    renderComponent(<MediaPanel snapshot={gmSnapshot({ assets: [asset] })} {...actions} />);
+    renderComponent(
+      <MediaPanel snapshot={gmSnapshot({ assets: [asset] })} {...actions} />,
+    );
     await userEvent.click(screen.getByText("Проверить использование"));
     await userEvent.click(await screen.findByText("Удалить файл"));
     expect(window.confirm).toHaveBeenCalledWith(

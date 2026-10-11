@@ -29,8 +29,9 @@ describe("deleteWorldContentInstance", () => {
   it("returns the idempotent replay receipt", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ duplicate: true }), { status: 200 }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ duplicate: true }), { status: 200 }),
       ),
     );
     await expect(

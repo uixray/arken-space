@@ -8,7 +8,8 @@ describe("bounded streaming waveform", () => {
     const whole = createWaveformAccumulator(2, 64);
     whole.push(pcm);
     const split = createWaveformAccumulator(2, 64);
-    for (let offset = 0; offset < pcm.length; offset += 13) split.push(pcm.subarray(offset, offset + 13));
+    for (let offset = 0; offset < pcm.length; offset += 13)
+      split.push(pcm.subarray(offset, offset + 13));
     expect(split.finish()).toEqual(whole.finish());
     expect(split.finish().frames).toBe(1000);
     expect(Math.max(...split.finish().peaks)).toBe(0.75);
@@ -28,7 +29,9 @@ describe("bounded streaming waveform", () => {
   it("fails closed for empty/incomplete PCM and invalid channel/bin settings", () => {
     expect(() => createWaveformAccumulator(0, 64)).toThrow("INVALID_RANGE");
     expect(() => createWaveformAccumulator(2, 2049)).toThrow("INVALID_RANGE");
-    expect(() => createWaveformAccumulator(2, 64).finish()).toThrow("CODEC_FAILED");
+    expect(() => createWaveformAccumulator(2, 64).finish()).toThrow(
+      "CODEC_FAILED",
+    );
     const partial = createWaveformAccumulator(2, 64);
     partial.push(Buffer.alloc(9));
     expect(() => partial.finish()).toThrow("CODEC_FAILED");

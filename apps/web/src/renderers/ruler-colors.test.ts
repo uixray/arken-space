@@ -10,8 +10,14 @@ describe("UIX-509 safe ruler color fallback", () => {
   });
 
   it("keeps a local draft and realtime ruler aligned by membership ID, not display name", () => {
-    const localDraft = { membershipId: "stable-member-1", displayName: "Local label" };
-    const received = { membershipId: "stable-member-1", displayName: "Remote label" };
+    const localDraft = {
+      membershipId: "stable-member-1",
+      displayName: "Local label",
+    };
+    const received = {
+      membershipId: "stable-member-1",
+      displayName: "Remote label",
+    };
     expect(rulerColorForMembership(localDraft.membershipId)).toBe(
       rulerColorForMembership(received.membershipId),
     );

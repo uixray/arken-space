@@ -15,10 +15,10 @@ The archive was extracted to `roundtrip/`; all 119 relative paths and SHA-256 va
 
 Protected built-in asset hashes in the captured server assets:
 
-| Asset | SHA-256 |
-|---|---|
-| `terrain-stamps/clouds.png` | `33bfb93b976b037c210168f8a06dfae85cad66cb943a949c82b363d29e0a8c68` |
-| `terrain-stamps/forest.png` | `57c842857c679b9f35be627fadf0af66fad83c0b89dde16c8b54d05dfa51ef66` |
+| Asset                          | SHA-256                                                            |
+| ------------------------------ | ------------------------------------------------------------------ |
+| `terrain-stamps/clouds.png`    | `33bfb93b976b037c210168f8a06dfae85cad66cb943a949c82b363d29e0a8c68` |
+| `terrain-stamps/forest.png`    | `57c842857c679b9f35be627fadf0af66fad83c0b89dde16c8b54d05dfa51ef66` |
 | `terrain-stamps/mountains.png` | `11e99bfa773f7e1fd72e67b76d9dc79180ac9de93d7ddb935ca4e472e7080f6c` |
 
 ## Verification evidence

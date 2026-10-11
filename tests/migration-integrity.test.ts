@@ -85,7 +85,8 @@ describe("drizzle migration metadata integrity", () => {
     const entries = readJournal();
     entries.forEach((entry, index) => {
       expect(Number.isSafeInteger(entry.when)).toBe(true);
-      if (index > 0) expect(entry.when).toBeGreaterThan(entries[index - 1]!.when);
+      if (index > 0)
+        expect(entry.when).toBeGreaterThan(entries[index - 1]!.when);
     });
   });
   it("keeps a snapshot for the newest migration, so the generator diffs from the real baseline", () => {

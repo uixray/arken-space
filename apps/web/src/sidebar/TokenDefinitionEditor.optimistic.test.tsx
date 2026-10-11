@@ -178,7 +178,10 @@ const unusedCampaignActions: Omit<CampaignActions, "token"> = {
     refreshAssets: unusedAction,
     generateTokenImage: unusedAction,
   },
-  statLayout: { onUpdateStatLayout: unusedAction, onUpdateCharacterStatLayout: unusedAction },
+  statLayout: {
+    onUpdateStatLayout: unusedAction,
+    onUpdateCharacterStatLayout: unusedAction,
+  },
   chatHistory: { onLoadThreadHistory: unusedAction },
   character: {
     replaceCharacterControllers: unusedAction,

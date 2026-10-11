@@ -1,4 +1,5 @@
 # UIX-509 ruler color fallback pool — 2026-10-09
+
 Base b50fc9e; source helper delegates existing cursorColorForMembership by stablemembershipID, no displayName or invented palette mapping. Rulersegment/arrow/start/waypoint/label use samefallback; existingoutline, zoomwidths and event flow retained. Root inspected exactruler-onlydiff; fog untouched.
 Ownedfiles: renderers/ruler-colors.ts/test; Orthographic2DRenderer.tsx ruler-onlyhunks; tests/e2e/uix509-ruler-colors.spec.ts; thischeckpoint. Otheractive WorldContent/spellfiles excluded.
 Verification: unit4/4; actualChrome syntheticmockedlight/dark/busy scene passes colorpixelprobes[6,22,5,18,15] for line/waypoint/line/arrow/label matchinghsl162,85%,60%. SameIDeventecho whilelocaldraftactive;9normalpointerupdates and noneafterpointerup. Mocktransportnotlivecrossclientproof. ChosenIDpair differs; no globallyuniquehash guarantee. WebTS currentlyblockedbyactivecharacter-spell-client44 uniontypeerror; no fullconnectedPASSclaimed. Vite stopped; diffcheckclean.

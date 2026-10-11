@@ -805,9 +805,15 @@ export const audioClipCandidates = pgTable(
   "audio_clip_candidates",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
-    creatorMembershipId: uuid("creator_membership_id").notNull().references(() => memberships.id, { onDelete: "cascade" }),
-    sourceAssetId: uuid("source_asset_id").references(() => assets.id, { onDelete: "set null" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    creatorMembershipId: uuid("creator_membership_id")
+      .notNull()
+      .references(() => memberships.id, { onDelete: "cascade" }),
+    sourceAssetId: uuid("source_asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
     actionId: uuid("action_id").notNull(),
     saveActionId: uuid("save_action_id"),
     saveIntentHash: text("save_intent_hash"),
@@ -826,19 +832,38 @@ export const audioClipCandidates = pgTable(
     actualEndFrame: integer("actual_end_frame"),
     actualStartMs: doublePrecision("actual_start_ms"),
     actualEndMs: doublePrecision("actual_end_ms"),
-    savedAssetId: uuid("saved_asset_id").references(() => assets.id, { onDelete: "set null" }),
+    savedAssetId: uuid("saved_asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
     savedSoundId: uuid("saved_sound_id"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [
-    uniqueIndex("audio_clip_candidates_campaign_action_idx").on(table.campaignId, table.actionId),
-    uniqueIndex("audio_clip_candidates_campaign_save_action_idx").on(table.campaignId, table.saveActionId),
+    uniqueIndex("audio_clip_candidates_campaign_action_idx").on(
+      table.campaignId,
+      table.actionId,
+    ),
+    uniqueIndex("audio_clip_candidates_campaign_save_action_idx").on(
+      table.campaignId,
+      table.saveActionId,
+    ),
     index("audio_clip_candidates_expiry_idx").on(table.status, table.expiresAt),
     index("audio_clip_candidates_source_idx").on(table.sourceAssetId),
-    check("audio_clip_candidates_status_check", sql`${table.status} IN ('PROCESSING','READY','EXPIRED','CANCELLED','SAVED','FAILED')`),
-    check("audio_clip_candidates_range_check", sql`${table.startMs} >= 0 AND ${table.endMs} > ${table.startMs} AND ${table.endMs} - ${table.startMs} <= 10000`),
-    check("audio_clip_candidates_reservation_check", sql`${table.reservedBytes} >= 0 AND (${table.sizeBytes} IS NULL OR ${table.sizeBytes} >= 0)`),
+    check(
+      "audio_clip_candidates_status_check",
+      sql`${table.status} IN ('PROCESSING','READY','EXPIRED','CANCELLED','SAVED','FAILED')`,
+    ),
+    check(
+      "audio_clip_candidates_range_check",
+      sql`${table.startMs} >= 0 AND ${table.endMs} > ${table.startMs} AND ${table.endMs} - ${table.startMs} <= 10000`,
+    ),
+    check(
+      "audio_clip_candidates_reservation_check",
+      sql`${table.reservedBytes} >= 0 AND (${table.sizeBytes} IS NULL OR ${table.sizeBytes} >= 0)`,
+    ),
   ],
 );
 
@@ -846,22 +871,38 @@ export const audioClipCandidates = pgTable(
 export const audioClipProvenance = pgTable(
   "audio_clip_provenance",
   {
-    assetId: uuid("asset_id").primaryKey().references(() => assets.id, { onDelete: "cascade" }),
-    campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
-    sourceAssetId: uuid("source_asset_id").references(() => assets.id, { onDelete: "set null" }),
+    assetId: uuid("asset_id")
+      .primaryKey()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    sourceAssetId: uuid("source_asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
     sourceVersion: text("source_version").notNull(),
     startMs: integer("start_ms").notNull(),
     endMs: integer("end_ms").notNull(),
     actualStartFrame: integer("actual_start_frame").notNull(),
     actualEndFrame: integer("actual_end_frame").notNull(),
     sampleRate: integer("sample_rate").notNull(),
-    createdByMembershipId: uuid("created_by_membership_id").notNull().references(() => memberships.id),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdByMembershipId: uuid("created_by_membership_id")
+      .notNull()
+      .references(() => memberships.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [
-    uniqueIndex("audio_clip_provenance_asset_campaign_idx").on(table.assetId, table.campaignId),
+    uniqueIndex("audio_clip_provenance_asset_campaign_idx").on(
+      table.assetId,
+      table.campaignId,
+    ),
     index("audio_clip_provenance_source_idx").on(table.sourceAssetId),
-    check("audio_clip_provenance_range_check", sql`${table.startMs} >= 0 AND ${table.endMs} > ${table.startMs} AND ${table.endMs} - ${table.startMs} <= 10000 AND ${table.actualStartFrame} >= 0 AND ${table.actualEndFrame} > ${table.actualStartFrame} AND ${table.sampleRate} > 0`),
+    check(
+      "audio_clip_provenance_range_check",
+      sql`${table.startMs} >= 0 AND ${table.endMs} > ${table.startMs} AND ${table.endMs} - ${table.startMs} <= 10000 AND ${table.actualStartFrame} >= 0 AND ${table.actualEndFrame} > ${table.actualStartFrame} AND ${table.sampleRate} > 0`,
+    ),
   ],
 );
 
@@ -870,16 +911,26 @@ export const campaignMediaReservations = pgTable(
   "campaign_media_reservations",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
     requestKey: text("request_key").notNull(),
     reservedBytes: integer("reserved_bytes").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [
-    uniqueIndex("campaign_media_reservations_campaign_request_idx").on(table.campaignId, table.requestKey),
+    uniqueIndex("campaign_media_reservations_campaign_request_idx").on(
+      table.campaignId,
+      table.requestKey,
+    ),
     index("campaign_media_reservations_expiry_idx").on(table.expiresAt),
-    check("campaign_media_reservations_bytes_check", sql`${table.reservedBytes} > 0`),
+    check(
+      "campaign_media_reservations_bytes_check",
+      sql`${table.reservedBytes} > 0`,
+    ),
   ],
 );
 

@@ -31,7 +31,7 @@ function character(id: string, revision = 408, gold = 0): CharacterDto {
     lifecycle: "ACTIVE",
     archivedAt: null,
     archivedByMembershipId: null,
-  statLayout: [],
+    statLayout: [],
   };
 }
 

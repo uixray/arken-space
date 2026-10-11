@@ -117,7 +117,10 @@ function actions(
       refreshAssets: unexpectedAction,
       generateTokenImage: unexpectedAction,
     },
-    statLayout: { onUpdateStatLayout: unexpectedAction, onUpdateCharacterStatLayout: unexpectedAction },
+    statLayout: {
+      onUpdateStatLayout: unexpectedAction,
+      onUpdateCharacterStatLayout: unexpectedAction,
+    },
     chatHistory: { onLoadThreadHistory: unexpectedAction },
     character: {
       replaceCharacterControllers: unexpectedAction,

@@ -123,9 +123,18 @@ app.setErrorHandler((error, request, reply) => {
   const isValidationError =
     Boolean(problem.validation) || problem.name === "ZodError";
   const statusCode = isValidationError ? 400 : (problem.statusCode ?? 500);
-  const sensitiveAccountRoute = request.url.startsWith("/api/account/") || request.url.startsWith("/api/auth/");
+  const sensitiveAccountRoute =
+    request.url.startsWith("/api/account/") ||
+    request.url.startsWith("/api/auth/");
   const details = {
-    ...(sensitiveAccountRoute ? accountErrorLogDetails({ requestId: request.id, actionId: requestActionId(request.headers["x-action-id"]), statusCode, validation: isValidationError }) : { err: problem }),
+    ...(sensitiveAccountRoute
+      ? accountErrorLogDetails({
+          requestId: request.id,
+          actionId: requestActionId(request.headers["x-action-id"]),
+          statusCode,
+          validation: isValidationError,
+        })
+      : { err: problem }),
     requestId: request.id,
     actionId: requestActionId(request.headers["x-action-id"]),
     statusCode,
@@ -138,15 +147,17 @@ app.setErrorHandler((error, request, reply) => {
   if (isValidationError)
     return reply.code(400).send({
       error: "VALIDATION_ERROR",
-      message: sensitiveAccountRoute ? "Не удалось выполнить запрос" :
-        env.NODE_ENV === "production"
+      message: sensitiveAccountRoute
+        ? "Не удалось выполнить запрос"
+        : env.NODE_ENV === "production"
           ? "Некорректные данные запроса"
           : problem.message,
     });
   return reply.code(statusCode).send({
     error: "REQUEST_FAILED",
-    message: sensitiveAccountRoute ? "Не удалось выполнить запрос" :
-      env.NODE_ENV === "production"
+    message: sensitiveAccountRoute
+      ? "Не удалось выполнить запрос"
+      : env.NODE_ENV === "production"
         ? "Не удалось выполнить запрос"
         : problem.message,
   });

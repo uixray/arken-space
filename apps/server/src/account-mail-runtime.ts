@@ -70,14 +70,17 @@ function withAbort(adapter: MailAdapter, stopSignal: AbortSignal): MailAdapter {
           // Attach both handlers even if abort wins so a late adapter rejection
           // is observed and cannot become an unhandled rejection.
           if (!options?.messageId) throw new Error("MAIL_MESSAGE_ID_REQUIRED");
-          Promise.resolve(adapter.send(message, {
-            messageId: options.messageId,
-            signal: controller.signal,
-          })).then(resolve, reject);
+          Promise.resolve(
+            adapter.send(message, {
+              messageId: options.messageId,
+              signal: controller.signal,
+            }),
+          ).then(resolve, reject);
         });
       } finally {
         controller.signal.removeEventListener("abort", onAbort);
-        for (const signal of signals) signal.removeEventListener("abort", abort);
+        for (const signal of signals)
+          signal.removeEventListener("abort", abort);
       }
     },
   };
@@ -96,10 +99,19 @@ export function createAccountMailRuntime(options: AccountMailRuntimeOptions) {
   const drain = options.drain ?? drainAccountMailOutboxOnce;
   const logger = options.logger;
 
-  if (!Number.isInteger(pollIntervalMs) || pollIntervalMs < 100 || pollIntervalMs > 3_600_000
-    || !Number.isInteger(initialBackoffMs) || initialBackoffMs < 50 || initialBackoffMs > 60_000
-    || !Number.isInteger(maxBackoffMs) || maxBackoffMs < initialBackoffMs || maxBackoffMs > 3_600_000
-    || !workerId || workerId.length > 100) {
+  if (
+    !Number.isInteger(pollIntervalMs) ||
+    pollIntervalMs < 100 ||
+    pollIntervalMs > 3_600_000 ||
+    !Number.isInteger(initialBackoffMs) ||
+    initialBackoffMs < 50 ||
+    initialBackoffMs > 60_000 ||
+    !Number.isInteger(maxBackoffMs) ||
+    maxBackoffMs < initialBackoffMs ||
+    maxBackoffMs > 3_600_000 ||
+    !workerId ||
+    workerId.length > 100
+  ) {
     throw new Error("MAIL_RUNTIME_OPTIONS_INVALID");
   }
 
@@ -126,37 +138,54 @@ export function createAccountMailRuntime(options: AccountMailRuntimeOptions) {
     const controller = new AbortController();
     activeController = controller;
     const tickAdapter = withAbort(adapter, controller.signal);
-    const work = Promise.resolve().then(() => drain(options.db, {
-      keyring,
-      adapter: tickAdapter,
-      workerId,
-      batchSize: RUNTIME_BATCH_SIZE,
-      leaseMs: RUNTIME_LEASE_MS,
-      transportTimeoutMs: RUNTIME_TRANSPORT_TIMEOUT_MS,
-    }));
-    activeTick = work.then((result) => {
-      consecutiveFailures = 0;
-      logger?.info({
-        accepted: result.accepted,
-        retried: result.retried,
-        cancelled: result.cancelled,
-        blocked: result.blocked,
-      }, "account.mail.runtime.tick");
-    }).catch(() => {
-      consecutiveFailures = Math.min(consecutiveFailures + 1, 31);
-      const backoffMs = Math.min(maxBackoffMs, initialBackoffMs * (2 ** (consecutiveFailures - 1)));
-      // Never pass the error or its message: transport/DB errors can contain secrets.
-      logger?.error({ category: "DRAIN_FAILED", backoffMs }, "account.mail.runtime.failure");
-    }).finally(() => {
-      activeTick = null;
-      activeController = null;
-      if (started) {
-        const delay = consecutiveFailures
-          ? Math.min(maxBackoffMs, initialBackoffMs * (2 ** (consecutiveFailures - 1)))
-          : pollIntervalMs;
-        schedule(delay);
-      }
-    });
+    const work = Promise.resolve().then(() =>
+      drain(options.db, {
+        keyring,
+        adapter: tickAdapter,
+        workerId,
+        batchSize: RUNTIME_BATCH_SIZE,
+        leaseMs: RUNTIME_LEASE_MS,
+        transportTimeoutMs: RUNTIME_TRANSPORT_TIMEOUT_MS,
+      }),
+    );
+    activeTick = work
+      .then((result) => {
+        consecutiveFailures = 0;
+        logger?.info(
+          {
+            accepted: result.accepted,
+            retried: result.retried,
+            cancelled: result.cancelled,
+            blocked: result.blocked,
+          },
+          "account.mail.runtime.tick",
+        );
+      })
+      .catch(() => {
+        consecutiveFailures = Math.min(consecutiveFailures + 1, 31);
+        const backoffMs = Math.min(
+          maxBackoffMs,
+          initialBackoffMs * 2 ** (consecutiveFailures - 1),
+        );
+        // Never pass the error or its message: transport/DB errors can contain secrets.
+        logger?.error(
+          { category: "DRAIN_FAILED", backoffMs },
+          "account.mail.runtime.failure",
+        );
+      })
+      .finally(() => {
+        activeTick = null;
+        activeController = null;
+        if (started) {
+          const delay = consecutiveFailures
+            ? Math.min(
+                maxBackoffMs,
+                initialBackoffMs * 2 ** (consecutiveFailures - 1),
+              )
+            : pollIntervalMs;
+          schedule(delay);
+        }
+      });
     await activeTick;
   };
 

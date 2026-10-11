@@ -86,7 +86,9 @@ export function SpellSchoolsWorkspace({
   });
   const pendingSave = useRef<PendingSave | null>(null);
   const savedGraphFingerprint = useRef<string | null>(null);
-  const [savedFingerprintSnapshot, setSavedFingerprintSnapshot] = useState<string | null>(null);
+  const [savedFingerprintSnapshot, setSavedFingerprintSnapshot] = useState<
+    string | null
+  >(null);
   const graphIsDirty = Boolean(
     graph && !isNew && savedFingerprintSnapshot !== JSON.stringify(graph),
   );
@@ -288,13 +290,19 @@ export function SpellSchoolsWorkspace({
   };
 
   const save = async () => {
-    if (!graph || busy || (editorLocked && !retryPending) || hasRecoveryCopy) return;
+    if (!graph || busy || (editorLocked && !retryPending) || hasRecoveryCopy)
+      return;
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      const activationError = graph.nodes.map((node) => spellActivationDraftError(node.activation)).find(Boolean);
-      if (activationError) { setError(activationError); return; }
+      const activationError = graph.nodes
+        .map((node) => spellActivationDraftError(node.activation))
+        .find(Boolean);
+      if (activationError) {
+        setError(activationError);
+        return;
+      }
       const validation = await validateSpellPackDraft(graph);
       if (!validation.valid) {
         setError(validation.errors.map(issueText).join("\n"));
@@ -376,8 +384,13 @@ export function SpellSchoolsWorkspace({
     setError("");
     setNotice("");
     try {
-      const activationError = graph.nodes.map((node) => spellActivationDraftError(node.activation)).find(Boolean);
-      if (activationError) { setError(activationError); return; }
+      const activationError = graph.nodes
+        .map((node) => spellActivationDraftError(node.activation))
+        .find(Boolean);
+      if (activationError) {
+        setError(activationError);
+        return;
+      }
       const validation = await validateSpellPackDraft(graph);
       if (!validation.valid) {
         setError(validation.errors.map(issueText).join("\n"));
@@ -412,13 +425,12 @@ export function SpellSchoolsWorkspace({
       );
       return;
     }
-    const command =
-      pendingActivation ?? {
-        actionId: id(),
-        expectedVersion: graph.version,
-        versionId: id(),
-        lifecycle: "ACTIVE" as const,
-      };
+    const command = pendingActivation ?? {
+      actionId: id(),
+      expectedVersion: graph.version,
+      versionId: id(),
+      lifecycle: "ACTIVE" as const,
+    };
     setPendingActivation(command);
     setBusy(true);
     setError("");
@@ -601,8 +613,8 @@ export function SpellSchoolsWorkspace({
           <h2>Активировать выбранную версию?</h2>
           <p>
             Будет создана новая неизменяемая ACTIVE-версия набора. Её школы
-            станут доступны мастерам для отдельной выдачи персонажам; существующие
-            выдачи не изменятся и не создадутся автоматически.
+            станут доступны мастерам для отдельной выдачи персонажам;
+            существующие выдачи не изменятся и не создадутся автоматически.
           </p>
           {activationPrompt.warnings.length > 0 && (
             <div>
@@ -662,10 +674,7 @@ export function SpellSchoolsWorkspace({
           <button type="button" onClick={downloadDraftCopy}>
             Скачать копию конфликтного черновика
           </button>
-          <button
-            type="button"
-            onClick={() => setConflictedDraft(null)}
-          >
+          <button type="button" onClick={() => setConflictedDraft(null)}>
             Удалить сохранённую копию и разрешить закрытие
           </button>
         </div>
@@ -1303,20 +1312,22 @@ export function SpellSchoolsWorkspace({
                 {!isNew && graph.lifecycle !== "DRAFT" && (
                   <span>Можно редактировать только черновую версию.</span>
                 )}
-                {!isNew &&
-                  ["DRAFT", "REFERENCE"].includes(graph.lifecycle) && (
-                    <button
-                      type="button"
-                      onClick={() => void requestActivation()}
-                      disabled={busy || editorLocked || hasRecoveryCopy || graphIsDirty}
-                    >
-                      Подготовить явную активацию
-                    </button>
-                  )}
+                {!isNew && ["DRAFT", "REFERENCE"].includes(graph.lifecycle) && (
+                  <button
+                    type="button"
+                    onClick={() => void requestActivation()}
+                    disabled={
+                      busy || editorLocked || hasRecoveryCopy || graphIsDirty
+                    }
+                  >
+                    Подготовить явную активацию
+                  </button>
+                )}
               </div>
               {graphIsDirty && !isNew && graph.lifecycle === "DRAFT" && (
                 <p role="status">
-                  Сначала сохраните изменения новой версией, затем активируйте её.
+                  Сначала сохраните изменения новой версией, затем активируйте
+                  её.
                 </p>
               )}
             </>

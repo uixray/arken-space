@@ -34,12 +34,10 @@ const headers = (secret: string) => ({
 beforeAll(async () => {
   database = await createMigratedPglite();
   db = drizzle(database, { schema });
-  await db
-    .insert(schema.campaigns)
-    .values([
-      { id: ids.campaign, name: "Campaign" },
-      { id: ids.foreignCampaign, name: "Foreign Campaign" },
-    ]);
+  await db.insert(schema.campaigns).values([
+    { id: ids.campaign, name: "Campaign" },
+    { id: ids.foreignCampaign, name: "Foreign Campaign" },
+  ]);
   await db.insert(schema.memberships).values([
     { id: ids.gm, campaignId: ids.campaign, role: "GM", displayName: "GM" },
     {
@@ -272,7 +270,9 @@ describe("world content HTTP: list + get visibility", () => {
     });
     for (const key of ["gmOnlyText", "provenance", "lifecycle"])
       expect(playerGetPublished.json()).not.toHaveProperty(key);
-    expect(playerGetPublished.body).not.toContain("Foreign campaign secret text");
+    expect(playerGetPublished.body).not.toContain(
+      "Foreign campaign secret text",
+    );
     expect(playerGetPublished.body).not.toContain("private-provenance");
 
     const hiddenIds = [draft.id, archived.id];
@@ -283,9 +283,13 @@ describe("world content HTTP: list + get visibility", () => {
     });
     expect(listed.statusCode).toBe(200);
     const listedRows = listed.json();
-    expect(listedRows.map((row: { id: string }) => row.id)).toContain(published.id);
+    expect(listedRows.map((row: { id: string }) => row.id)).toContain(
+      published.id,
+    );
     for (const hiddenId of hiddenIds)
-      expect(listedRows.map((row: { id: string }) => row.id)).not.toContain(hiddenId);
+      expect(listedRows.map((row: { id: string }) => row.id)).not.toContain(
+        hiddenId,
+      );
     for (const key of ["gmOnlyText", "provenance", "lifecycle"])
       for (const row of listedRows) expect(row).not.toHaveProperty(key);
 

@@ -55,14 +55,20 @@ function syncStatMenuPlacement(menu: HTMLDetailsElement) {
     if (!/(auto|scroll|hidden|clip)/.test(overflowY)) continue;
     const rect = ancestor.getBoundingClientRect();
     top = Math.max(top, rect.top + ancestor.clientTop);
-    bottom = Math.min(bottom, rect.top + ancestor.clientTop + ancestor.clientHeight);
+    bottom = Math.min(
+      bottom,
+      rect.top + ancestor.clientTop + ancestor.clientHeight,
+    );
   }
 
   const summaryRect = summary.getBoundingClientRect();
   // Measure the un-clamped content so a previous short viewport cannot bias
   // the next resize/scroll placement decision.
   menu.style.removeProperty("--stat-field-menu-max-height");
-  const popupHeight = Math.max(popup.scrollHeight, popup.getBoundingClientRect().height);
+  const popupHeight = Math.max(
+    popup.scrollHeight,
+    popup.getBoundingClientRect().height,
+  );
   const gap = 8;
   const above = Math.max(0, summaryRect.top - top - gap);
   const below = Math.max(0, bottom - summaryRect.bottom - gap);
@@ -240,7 +246,9 @@ export function StatLayoutCard({
       const target = event.target;
       if (!(target instanceof Node)) return;
       const targetDialog =
-        target instanceof Element ? target.closest('[role="dialog"], dialog') : null;
+        target instanceof Element
+          ? target.closest('[role="dialog"], dialog')
+          : null;
       for (const menu of cardRef.current?.querySelectorAll<HTMLDetailsElement>(
         "details.stat-field__menu[open]",
       ) ?? []) {
@@ -248,13 +256,18 @@ export function StatLayoutCard({
         // DOM, but remain its child interaction. Other dialogs do not own it.
         if (editing || deleting) continue;
         const ownerDialog = menu.closest('[role="dialog"], dialog');
-        if (targetDialog && targetDialog === ownerDialog && menu.contains(target))
+        if (
+          targetDialog &&
+          targetDialog === ownerDialog &&
+          menu.contains(target)
+        )
           continue;
         if (!menu.contains(target)) menu.open = false;
       }
     };
     document.addEventListener("pointerdown", onPointerDown, true);
-    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+    return () =>
+      document.removeEventListener("pointerdown", onPointerDown, true);
   }, [deleting, editing]);
 
   useEffect(() => {
@@ -267,9 +280,7 @@ export function StatLayoutCard({
         syncStatMenuPlacement(menu);
     };
     const scheduleSync = () => {
-      if (
-        !cardRef.current?.querySelector("details.stat-field__menu[open]")
-      )
+      if (!cardRef.current?.querySelector("details.stat-field__menu[open]"))
         return;
       if (frame === null) frame = window.requestAnimationFrame(syncOpenMenus);
     };
@@ -476,7 +487,9 @@ export function StatLayoutCard({
                       title="Переименовать строку"
                     >
                       <AppIcon icon={RenameIcon} />
-                      <span className="stat-field__menu-label">Переименовать</span>
+                      <span className="stat-field__menu-label">
+                        Переименовать
+                      </span>
                     </Button>
                     <Button
                       view="flat"

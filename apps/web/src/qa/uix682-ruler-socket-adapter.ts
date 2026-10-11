@@ -13,7 +13,11 @@ type SyntheticSocket = GameSocket & { simulateTransportReconnect: () => void };
 const channelName = "uix682-ruler-hook-synthetic";
 const clientId = new URLSearchParams(location.search).get("client") ?? "alpha";
 const membershipId = clientId === "alpha" ? "member-alpha" : "member-beta";
-const handlers = (target: Map<string, Set<Handler>>, event: string, value?: unknown) => {
+const handlers = (
+  target: Map<string, Set<Handler>>,
+  event: string,
+  value?: unknown,
+) => {
   for (const listener of target.get(event) ?? []) listener(value);
 };
 
@@ -29,7 +33,9 @@ export function createGameSocket(): GameSocket {
   };
   const open = () => {
     channel = new BroadcastChannel(channelName);
-    channel.onmessage = ({ data }: MessageEvent<{ event: string; ruler: RulerPayload }>) => {
+    channel.onmessage = ({
+      data,
+    }: MessageEvent<{ event: string; ruler: RulerPayload }>) => {
       log("in:" + data.event, data.ruler);
       handlers(listeners, data.event, data.ruler);
     };
@@ -53,7 +59,10 @@ export function createGameSocket(): GameSocket {
       listeners.set(event, group);
       return this;
     },
-    emit(event: string, payload: { sceneId: string; points?: Array<{ x: number; y: number }> }) {
+    emit(
+      event: string,
+      payload: { sceneId: string; points?: Array<{ x: number; y: number }> },
+    ) {
       log("out:" + event, payload);
       if (event === "ruler:update" || event === "ruler:clear") {
         const points = payload.points ?? [];
@@ -62,7 +71,13 @@ export function createGameSocket(): GameSocket {
           membershipId,
           displayName: clientId,
           points,
-          distance: points.length > 1 ? Math.hypot(points.at(-1)!.x - points[0]!.x, points.at(-1)!.y - points[0]!.y) : 0,
+          distance:
+            points.length > 1
+              ? Math.hypot(
+                  points.at(-1)!.x - points[0]!.x,
+                  points.at(-1)!.y - points[0]!.y,
+                )
+              : 0,
         };
         channel.postMessage({
           event: event === "ruler:update" ? "ruler:updated" : "ruler:cleared",
@@ -90,5 +105,3 @@ export function createGameSocket(): GameSocket {
   open();
   return socket as unknown as SyntheticSocket;
 }
-
-

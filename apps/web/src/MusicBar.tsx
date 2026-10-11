@@ -1,5 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { AssetDto, AudioStateDto, AudioTrackDto, AudioTrackCommand, AudioPurpose, CommandAck, Role } from "@arken/contracts";
+import type {
+  AssetDto,
+  AudioStateDto,
+  AudioTrackDto,
+  AudioTrackCommand,
+  AudioPurpose,
+  CommandAck,
+  Role,
+} from "@arken/contracts";
 import { Checkbox } from "./design-system/Checkbox";
 import { Loader } from "./design-system/Loader";
 import { Button } from "./design-system/Button";
@@ -36,7 +44,10 @@ const audioCommandErrors: ReadonlyMap<string, string> = new Map([
     "Сейчас нельзя завершить воспроизведение трека.",
   ],
   ["AUDIO_UPDATE_FAILED", "Не удалось обновить музыку. Повторите команду."],
-  ["AUDIO_PURPOSE_NOT_MUSIC", "Этот файл предназначен для звуковых эффектов, а не для музыки."],
+  [
+    "AUDIO_PURPOSE_NOT_MUSIC",
+    "Этот файл предназначен для звуковых эффектов, а не для музыки.",
+  ],
   ["TRACK_LIMIT_REACHED", "Достигнут предел дорожек микшера."],
 ]);
 const formatTime = (value: number) => {
@@ -52,14 +63,29 @@ type PendingAudio = { file: File; url: string; duration: number | null };
 
 /** One stable media element per authoritative track. Local gain is deliberately
  * kept out of transport reconciliation, so a mixer fader cannot seek/restart. */
-function AudioTrackPlayback({ track, asset, enabled, masterVolume, retryToken, onBlocked, onProgress, onEnded, seekToSeconds }: {
+function AudioTrackPlayback({
+  track,
+  asset,
+  enabled,
+  masterVolume,
+  retryToken,
+  onBlocked,
+  onProgress,
+  onEnded,
+  seekToSeconds,
+}: {
   track: AudioTrackDto;
   asset: AssetDto | undefined;
   enabled: boolean;
   masterVolume: number;
   retryToken: number;
   onBlocked: (trackId: string | null) => void;
-  onProgress: (trackId: string, assetId: string | null, positionSeconds: number, durationSeconds: number) => void;
+  onProgress: (
+    trackId: string,
+    assetId: string | null,
+    positionSeconds: number,
+    durationSeconds: number,
+  ) => void;
   onEnded: (track: AudioTrackDto) => void;
   seekToSeconds: number | null;
 }) {
@@ -68,7 +94,8 @@ function AudioTrackPlayback({ track, asset, enabled, masterVolume, retryToken, o
   const lastPlaybackKey = useRef<string | null>(null);
   const lastRetryToken = useRef(0);
   useEffect(() => {
-    if (ref.current) ref.current.volume = volumeSliderToGain(masterVolume * track.mixVolume);
+    if (ref.current)
+      ref.current.volume = volumeSliderToGain(masterVolume * track.mixVolume);
   }, [masterVolume, track.mixVolume]);
   useEffect(() => {
     if (ref.current && seekToSeconds !== null && Number.isFinite(seekToSeconds))
@@ -77,82 +104,225 @@ function AudioTrackPlayback({ track, asset, enabled, masterVolume, retryToken, o
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const playbackKey = JSON.stringify([enabled, track.assetId, asset?.url, track.playing]);
+    const playbackKey = JSON.stringify([
+      enabled,
+      track.assetId,
+      asset?.url,
+      track.playing,
+    ]);
     const transportChanged = lastPlaybackKey.current !== playbackKey;
     lastPlaybackKey.current = playbackKey;
     const retryRequested = retryToken > lastRetryToken.current;
     if (retryRequested) lastRetryToken.current = retryToken;
     el.loop = track.loop;
-    if (!enabled || !track.playing || !asset) { el.pause(); return; }
-    const duration = el.duration > 0 ? el.duration : asset.durationSeconds ?? 0;
-    const elapsed = track.startedAt ? Math.max(0, (Date.now() - Date.parse(track.startedAt)) / 1000) : 0;
+    if (!enabled || !track.playing || !asset) {
+      el.pause();
+      return;
+    }
+    const duration =
+      el.duration > 0 ? el.duration : (asset.durationSeconds ?? 0);
+    const elapsed = track.startedAt
+      ? Math.max(0, (Date.now() - Date.parse(track.startedAt)) / 1000)
+      : 0;
     const raw = track.positionSeconds + elapsed;
     const expected = resolveTrackPosition(raw, duration, track.loop);
     if (Math.abs(el.currentTime - expected) > 0.75) el.currentTime = expected;
-    if ((!blocked.current || retryRequested) && ((transportChanged && track.playing) || retryRequested)) {
+    if (
+      (!blocked.current || retryRequested) &&
+      ((transportChanged && track.playing) || retryRequested)
+    ) {
       try {
-        void Promise.resolve(el.play()).then(() => onBlocked(null), (error: unknown) => {
-          if (isAudioConsentError(error)) { blocked.current = true; onBlocked(track.id); }
-        });
+        void Promise.resolve(el.play()).then(
+          () => onBlocked(null),
+          (error: unknown) => {
+            if (isAudioConsentError(error)) {
+              blocked.current = true;
+              onBlocked(track.id);
+            }
+          },
+        );
       } catch (error) {
-        if (isAudioConsentError(error)) { blocked.current = true; onBlocked(track.id); }
+        if (isAudioConsentError(error)) {
+          blocked.current = true;
+          onBlocked(track.id);
+        }
       }
     }
-  }, [track.id, track.playing, track.positionSeconds, track.startedAt, track.loop, asset?.id, asset?.url, enabled, retryToken, onBlocked]);
+  }, [
+    track.id,
+    track.playing,
+    track.positionSeconds,
+    track.startedAt,
+    track.loop,
+    asset?.id,
+    asset?.url,
+    enabled,
+    retryToken,
+    onBlocked,
+  ]);
   useEffect(() => {
     if (enabled) blocked.current = false;
   }, [enabled, retryToken]);
   useEffect(() => {
     if (!enabled || !track.playing || !asset) return;
     const retry = (event: Event) => {
-      if (event.target instanceof Element && event.target.closest(".music-volume-control")) return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest(".music-volume-control")
+      )
+        return;
       const el = ref.current;
       if (!el || !blocked.current) return;
       blocked.current = false;
-      void Promise.resolve(el.play()).then(() => onBlocked(null), (error: unknown) => { if (isAudioConsentError(error)) blocked.current = true; });
+      void Promise.resolve(el.play()).then(
+        () => onBlocked(null),
+        (error: unknown) => {
+          if (isAudioConsentError(error)) blocked.current = true;
+        },
+      );
     };
     document.addEventListener("pointerdown", retry, true);
     document.addEventListener("keydown", retry, true);
-    return () => { document.removeEventListener("pointerdown", retry, true); document.removeEventListener("keydown", retry, true); };
+    return () => {
+      document.removeEventListener("pointerdown", retry, true);
+      document.removeEventListener("keydown", retry, true);
+    };
   }, [enabled, track.id, track.playing, asset?.id, onBlocked]);
   useEffect(() => {
     const el = ref.current;
-    return () => { el?.pause(); if (el) { el.removeAttribute("src"); el.load(); } };
+    return () => {
+      el?.pause();
+      if (el) {
+        el.removeAttribute("src");
+        el.load();
+      }
+    };
   }, []);
   const reportProgress = (element: HTMLAudioElement) =>
-    onProgress(track.id, track.assetId, element.currentTime,
-      Number.isFinite(element.duration) && element.duration > 0 ? element.duration : asset?.durationSeconds ?? 0);
-  return <audio ref={ref} src={asset?.url} preload="auto" aria-label={asset?.name ?? "Аудиодорожка"}
-    onTimeUpdate={(event) => reportProgress(event.currentTarget)}
-    onLoadedMetadata={(event) => reportProgress(event.currentTarget)}
-    onDurationChange={(event) => reportProgress(event.currentTarget)}
-    onSeeked={(event) => reportProgress(event.currentTarget)}
-    onEnded={(event) => { reportProgress(event.currentTarget); if (!track.loop && track.playing) onEnded(track); }} />;
+    onProgress(
+      track.id,
+      track.assetId,
+      element.currentTime,
+      Number.isFinite(element.duration) && element.duration > 0
+        ? element.duration
+        : (asset?.durationSeconds ?? 0),
+    );
+  return (
+    <audio
+      ref={ref}
+      src={asset?.url}
+      preload="auto"
+      aria-label={asset?.name ?? "Аудиодорожка"}
+      onTimeUpdate={(event) => reportProgress(event.currentTarget)}
+      onLoadedMetadata={(event) => reportProgress(event.currentTarget)}
+      onDurationChange={(event) => reportProgress(event.currentTarget)}
+      onSeeked={(event) => reportProgress(event.currentTarget)}
+      onEnded={(event) => {
+        reportProgress(event.currentTarget);
+        if (!track.loop && track.playing) onEnded(track);
+      }}
+    />
+  );
 }
 
-function MixerTrackControls({ track, asset, livePositionSeconds, liveDurationSeconds, onCommand }: {
+function MixerTrackControls({
+  track,
+  asset,
+  livePositionSeconds,
+  liveDurationSeconds,
+  onCommand,
+}: {
   track: AudioTrackDto;
   asset: AssetDto | undefined;
   livePositionSeconds: number;
   liveDurationSeconds: number;
-  onCommand: (track: AudioTrackDto, command: { command: "PLAY" | "PAUSE" | "END" } | { command: "SEEK"; positionSeconds: number } | { command: "SET_LOOP"; loop: boolean } | { command: "SET_MIX_VOLUME"; mixVolume: number } | { command: "SELECT"; assetId: string | null } | { command: "REMOVE_TRACK" }) => void;
+  onCommand: (
+    track: AudioTrackDto,
+    command:
+      | { command: "PLAY" | "PAUSE" | "END" }
+      | { command: "SEEK"; positionSeconds: number }
+      | { command: "SET_LOOP"; loop: boolean }
+      | { command: "SET_MIX_VOLUME"; mixVolume: number }
+      | { command: "SELECT"; assetId: string | null }
+      | { command: "REMOVE_TRACK" },
+  ) => void;
 }) {
   const [mix, setMix] = useState(track.mixVolume);
   const [position, setPosition] = useState(livePositionSeconds);
   const seeking = useRef(false);
   useEffect(() => setMix(track.mixVolume), [track.mixVolume]);
-  useEffect(() => { if (!seeking.current) setPosition(livePositionSeconds); }, [livePositionSeconds]);
-  const commitMix = () => onCommand(track, { command: "SET_MIX_VOLUME", mixVolume: mix });
-  const commitPosition = (value = position) => { seeking.current = false; setPosition(value); onCommand(track, { command: "SEEK", positionSeconds: value }); };
-  const duration = (liveDurationSeconds > 0 ? liveDurationSeconds : asset?.durationSeconds) ?? Math.max(livePositionSeconds, 1);
-  return <div className="music-mixer-track" key={track.id}>
-    <strong>{asset?.name ?? "Без аудио"}</strong>
-    <Button disabled={!asset} onClick={() => onCommand(track, { command: track.playing ? "PAUSE" : "PLAY" })}>{track.playing ? "Пауза" : "Играть"}</Button>
-    <label>Позиция дорожки <input aria-label={`Позиция дорожки ${asset?.name ?? track.id}`} type="range" min="0" max={Math.max(1, duration)} step="1" value={Math.min(position, duration)} disabled={!asset} onPointerDown={() => { seeking.current = true; }} onChange={(event) => { seeking.current = true; setPosition(Number(event.target.value)); }} onPointerUp={(event) => commitPosition(Number(event.currentTarget.value))} onKeyUp={(event) => commitPosition(Number(event.currentTarget.value))} /></label>
-    <Checkbox checked={track.loop} onUpdate={(loop) => onCommand(track, { command: "SET_LOOP", loop })}>Повтор</Checkbox>
-    <label>Громкость дорожки <input aria-label={`Громкость дорожки ${asset?.name ?? track.id}`} type="range" min="0" max="1" step="0.05" value={mix} onChange={(event) => setMix(Number(event.target.value))} onPointerUp={commitMix} onKeyUp={commitMix} /></label>
-    <Button onClick={() => onCommand(track, { command: "REMOVE_TRACK" })}>Убрать</Button>
-  </div>;
+  useEffect(() => {
+    if (!seeking.current) setPosition(livePositionSeconds);
+  }, [livePositionSeconds]);
+  const commitMix = () =>
+    onCommand(track, { command: "SET_MIX_VOLUME", mixVolume: mix });
+  const commitPosition = (value = position) => {
+    seeking.current = false;
+    setPosition(value);
+    onCommand(track, { command: "SEEK", positionSeconds: value });
+  };
+  const duration =
+    (liveDurationSeconds > 0 ? liveDurationSeconds : asset?.durationSeconds) ??
+    Math.max(livePositionSeconds, 1);
+  return (
+    <div className="music-mixer-track" key={track.id}>
+      <strong>{asset?.name ?? "Без аудио"}</strong>
+      <Button
+        disabled={!asset}
+        onClick={() =>
+          onCommand(track, { command: track.playing ? "PAUSE" : "PLAY" })
+        }
+      >
+        {track.playing ? "Пауза" : "Играть"}
+      </Button>
+      <label>
+        Позиция дорожки{" "}
+        <input
+          aria-label={`Позиция дорожки ${asset?.name ?? track.id}`}
+          type="range"
+          min="0"
+          max={Math.max(1, duration)}
+          step="1"
+          value={Math.min(position, duration)}
+          disabled={!asset}
+          onPointerDown={() => {
+            seeking.current = true;
+          }}
+          onChange={(event) => {
+            seeking.current = true;
+            setPosition(Number(event.target.value));
+          }}
+          onPointerUp={(event) =>
+            commitPosition(Number(event.currentTarget.value))
+          }
+          onKeyUp={(event) => commitPosition(Number(event.currentTarget.value))}
+        />
+      </label>
+      <Checkbox
+        checked={track.loop}
+        onUpdate={(loop) => onCommand(track, { command: "SET_LOOP", loop })}
+      >
+        Повтор
+      </Checkbox>
+      <label>
+        Громкость дорожки{" "}
+        <input
+          aria-label={`Громкость дорожки ${asset?.name ?? track.id}`}
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value={mix}
+          onChange={(event) => setMix(Number(event.target.value))}
+          onPointerUp={commitMix}
+          onKeyUp={commitMix}
+        />
+      </label>
+      <Button onClick={() => onCommand(track, { command: "REMOVE_TRACK" })}>
+        Убрать
+      </Button>
+    </div>
+  );
 }
 
 export function MusicBar({
@@ -168,7 +338,11 @@ export function MusicBar({
   assets: AssetDto[];
   role: Role;
   socket: GameSocket | null;
-  onUpload: (file: File, kind: "AUDIO", options?: { audioPurpose?: AudioPurpose }) => Promise<AssetDto>;
+  onUpload: (
+    file: File,
+    kind: "AUDIO",
+    options?: { audioPurpose?: AudioPurpose },
+  ) => Promise<AssetDto>;
   controlsTarget?: HTMLElement | null;
 }) {
   // Both topbar popovers are absolutely positioned over the sidebar, so an
@@ -189,47 +363,98 @@ export function MusicBar({
     const saved = Number(stored);
     return Number.isFinite(saved) && saved >= 0 && saved <= 1 ? saved : 0.5;
   });
-  const [trackProgress, setTrackProgress] = useState<Record<string, { assetId: string | null; positionSeconds: number; durationSeconds: number }>>({});
-  const [seekDraft, setSeekDraft] = useState<{ trackId: string; positionSeconds: number } | null>(null);
+  const [trackProgress, setTrackProgress] = useState<
+    Record<
+      string,
+      {
+        assetId: string | null;
+        positionSeconds: number;
+        durationSeconds: number;
+      }
+    >
+  >({});
+  const [seekDraft, setSeekDraft] = useState<{
+    trackId: string;
+    positionSeconds: number;
+  } | null>(null);
   const seekingTrackId = useRef<string | null>(null);
   const [pending, setPending] = useState<PendingAudio | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const tracks = useMemo(
-    () => assets.filter((asset) => asset.kind === "AUDIO" && (asset.audioPurpose ?? "MUSIC") !== "SOUND_EFFECT"),
+    () =>
+      assets.filter(
+        (asset) =>
+          asset.kind === "AUDIO" &&
+          (asset.audioPurpose ?? "MUSIC") !== "SOUND_EFFECT",
+      ),
     [assets],
   );
-  const mixerTracks = audioTracks.slice().sort((a, b) => a.slotOrder - b.slotOrder).slice(0, 4);
+  const mixerTracks = audioTracks
+    .slice()
+    .sort((a, b) => a.slotOrder - b.slotOrder)
+    .slice(0, 4);
   const activeTrack = mixerTracks[0];
   const activeAsset = tracks.find((asset) => asset.id === activeTrack?.assetId);
-  const activeProgress = activeTrack && trackProgress[activeTrack.id]?.assetId === activeTrack.assetId
-    ? trackProgress[activeTrack.id]
-    : undefined;
-  const duration = activeProgress?.durationSeconds || activeAsset?.durationSeconds || 0;
-  const position = seekDraft !== null && seekDraft.trackId === activeTrack?.id
-    ? seekDraft.positionSeconds
-    : activeProgress?.positionSeconds ?? activeTrack?.positionSeconds ?? 0;
+  const activeProgress =
+    activeTrack &&
+    trackProgress[activeTrack.id]?.assetId === activeTrack.assetId
+      ? trackProgress[activeTrack.id]
+      : undefined;
+  const duration =
+    activeProgress?.durationSeconds || activeAsset?.durationSeconds || 0;
+  const position =
+    seekDraft !== null && seekDraft.trackId === activeTrack?.id
+      ? seekDraft.positionSeconds
+      : (activeProgress?.positionSeconds ?? activeTrack?.positionSeconds ?? 0);
   const trackSourcesRef = useRef(new Map<string, string | null>());
-  useLayoutEffect(() => { trackSourcesRef.current = new Map(mixerTracks.map((track) => [track.id, track.assetId])); }, [mixerTracks]);
-  const trackSourceKey = mixerTracks.map((track) => `${track.id}:${track.assetId ?? "none"}`).join("|");
+  useLayoutEffect(() => {
+    trackSourcesRef.current = new Map(
+      mixerTracks.map((track) => [track.id, track.assetId]),
+    );
+  }, [mixerTracks]);
+  const trackSourceKey = mixerTracks
+    .map((track) => `${track.id}:${track.assetId ?? "none"}`)
+    .join("|");
   const previousTrackSourceKey = useRef(trackSourceKey);
   useEffect(() => {
-    setTrackProgress((previous) => Object.fromEntries(
-      Object.entries(previous).filter(([trackId, progress]) => trackSourcesRef.current.get(trackId) === progress.assetId),
-    ));
+    setTrackProgress((previous) =>
+      Object.fromEntries(
+        Object.entries(previous).filter(
+          ([trackId, progress]) =>
+            trackSourcesRef.current.get(trackId) === progress.assetId,
+        ),
+      ),
+    );
     if (previousTrackSourceKey.current !== trackSourceKey) {
       previousTrackSourceKey.current = trackSourceKey;
       seekingTrackId.current = null;
       setSeekDraft(null);
     }
   }, [trackSourceKey]);
-  const reportProgress = (trackId: string, assetId: string | null, positionSeconds: number, durationSeconds: number) => {
-    if (trackSourcesRef.current.get(trackId) !== assetId || seekingTrackId.current === trackId) return;
-    setTrackProgress((previous) => ({ ...previous, [trackId]: {
-      assetId,
-      positionSeconds: Number.isFinite(positionSeconds) ? Math.max(0, positionSeconds) : 0,
-      durationSeconds: Number.isFinite(durationSeconds) ? Math.max(0, durationSeconds) : 0,
-    } }));
+  const reportProgress = (
+    trackId: string,
+    assetId: string | null,
+    positionSeconds: number,
+    durationSeconds: number,
+  ) => {
+    if (
+      trackSourcesRef.current.get(trackId) !== assetId ||
+      seekingTrackId.current === trackId
+    )
+      return;
+    setTrackProgress((previous) => ({
+      ...previous,
+      [trackId]: {
+        assetId,
+        positionSeconds: Number.isFinite(positionSeconds)
+          ? Math.max(0, positionSeconds)
+          : 0,
+        durationSeconds: Number.isFinite(durationSeconds)
+          ? Math.max(0, durationSeconds)
+          : 0,
+      },
+    }));
   };
 
   const pendingUrl = pending?.url;
@@ -252,19 +477,59 @@ export function MusicBar({
   useDismissibleDetails(volumeRef);
   useDismissibleDetails(overflowRef);
 
-  const sendTrackCommand = (track: AudioTrackDto, command: { command: "PLAY" | "PAUSE" | "END" } | { command: "SEEK"; positionSeconds: number } | { command: "SET_LOOP"; loop: boolean } | { command: "SELECT"; assetId: string | null } | { command: "SET_MIX_VOLUME"; mixVolume: number } | { command: "REMOVE_TRACK" }) =>
-    socket?.emit("audio:track:set", {
-      actionId: crypto.randomUUID(), revision: track.revision, trackId: track.id, ...command,
-    } as AudioTrackCommand, (result: CommandAck<AudioTrackDto>) => {
-      if (!result.ok) notify({ title: "Не удалось изменить дорожку", message: audioCommandErrors.get(result.reason ?? "") ?? "Сервер отклонил команду", tone: "danger" });
-    });
+  const sendTrackCommand = (
+    track: AudioTrackDto,
+    command:
+      | { command: "PLAY" | "PAUSE" | "END" }
+      | { command: "SEEK"; positionSeconds: number }
+      | { command: "SET_LOOP"; loop: boolean }
+      | { command: "SELECT"; assetId: string | null }
+      | { command: "SET_MIX_VOLUME"; mixVolume: number }
+      | { command: "REMOVE_TRACK" },
+  ) =>
+    socket?.emit(
+      "audio:track:set",
+      {
+        actionId: crypto.randomUUID(),
+        revision: track.revision,
+        trackId: track.id,
+        ...command,
+      } as AudioTrackCommand,
+      (result: CommandAck<AudioTrackDto>) => {
+        if (!result.ok)
+          notify({
+            title: "Не удалось изменить дорожку",
+            message:
+              audioCommandErrors.get(result.reason ?? "") ??
+              "Сервер отклонил команду",
+            tone: "danger",
+          });
+      },
+    );
 
-  const addTrack = (assetId: string) => socket?.emit("audio:track:set", {
-    actionId: crypto.randomUUID(), command: "ADD_TRACK", assetId,
-  }, (result: CommandAck<AudioTrackDto>) => { if (!result.ok) notify({ title: "Не удалось добавить дорожку", message: audioCommandErrors.get(result.reason ?? "") ?? "Сервер отклонил команду", tone: "danger" }); });
+  const addTrack = (assetId: string) =>
+    socket?.emit(
+      "audio:track:set",
+      {
+        actionId: crypto.randomUUID(),
+        command: "ADD_TRACK",
+        assetId,
+      },
+      (result: CommandAck<AudioTrackDto>) => {
+        if (!result.ok)
+          notify({
+            title: "Не удалось добавить дорожку",
+            message:
+              audioCommandErrors.get(result.reason ?? "") ??
+              "Сервер отклонил команду",
+            tone: "danger",
+          });
+      },
+    );
 
   const selectAsset = (assetId: string) => {
-    if (activeTrack) sendTrackCommand(activeTrack, { command: "SELECT", assetId });
+    if (activeTrack)
+      sendTrackCommand(activeTrack, { command: "SELECT", assetId });
     else addTrack(assetId);
   };
   const commitSeek = (positionSeconds: number) => {
@@ -284,8 +549,11 @@ export function MusicBar({
     setUploading(true);
     setUploadError(null);
     try {
-      const asset = await onUpload(pending.file, "AUDIO", { audioPurpose: "MUSIC" });
-      if (activeTrack) sendTrackCommand(activeTrack, { command: "SELECT", assetId: asset.id });
+      const asset = await onUpload(pending.file, "AUDIO", {
+        audioPurpose: "MUSIC",
+      });
+      if (activeTrack)
+        sendTrackCommand(activeTrack, { command: "SELECT", assetId: asset.id });
       else addTrack(asset.id);
       setPending(null);
       notify({ title: "Трек загружен", message: asset.name, tone: "success" });
@@ -297,7 +565,11 @@ export function MusicBar({
       setUploading(false);
     }
   };
-  const togglePlayback = () => activeTrack && sendTrackCommand(activeTrack, { command: activeTrack.playing ? "PAUSE" : "PLAY" });
+  const togglePlayback = () =>
+    activeTrack &&
+    sendTrackCommand(activeTrack, {
+      command: activeTrack.playing ? "PAUSE" : "PLAY",
+    });
 
   const controls = (
     <section className="music-topbar" aria-label="Музыка">
@@ -356,7 +628,9 @@ export function MusicBar({
               onClick={() => {
                 if (overflowRef.current) {
                   overflowRef.current.open = false;
-                  overflowRef.current.querySelector<HTMLElement>("summary")?.focus();
+                  overflowRef.current
+                    .querySelector<HTMLElement>("summary")
+                    ?.focus();
                 }
                 setLibraryOpen(true);
               }}
@@ -373,7 +647,9 @@ export function MusicBar({
                   key={track.id}
                   type="button"
                   className={
-                    track.id === activeTrack?.assetId ? "is-selected" : undefined
+                    track.id === activeTrack?.assetId
+                      ? "is-selected"
+                      : undefined
                   }
                   onClick={() => {
                     selectAsset(track.id);
@@ -401,7 +677,24 @@ export function MusicBar({
 
   return (
     <>
-      {mixerTracks.map((track) => <AudioTrackPlayback key={`${track.id}:${track.assetId ?? "none"}`} track={track} asset={tracks.find((item) => item.id === track.assetId)} enabled={enabled} masterVolume={volume} retryToken={playbackRetryToken} onBlocked={setBlockedTrackId} onProgress={reportProgress} onEnded={(endedTrack) => { if (role === "GM") sendTrackCommand(endedTrack, { command: "END" }); }} seekToSeconds={seekDraft?.trackId === track.id ? seekDraft.positionSeconds : null} />)}
+      {mixerTracks.map((track) => (
+        <AudioTrackPlayback
+          key={`${track.id}:${track.assetId ?? "none"}`}
+          track={track}
+          asset={tracks.find((item) => item.id === track.assetId)}
+          enabled={enabled}
+          masterVolume={volume}
+          retryToken={playbackRetryToken}
+          onBlocked={setBlockedTrackId}
+          onProgress={reportProgress}
+          onEnded={(endedTrack) => {
+            if (role === "GM") sendTrackCommand(endedTrack, { command: "END" });
+          }}
+          seekToSeconds={
+            seekDraft?.trackId === track.id ? seekDraft.positionSeconds : null
+          }
+        />
+      ))}
       {controlsTarget ? createPortal(controls, controlsTarget) : controls}
       {role === "GM" ? (
         <ArkenDialog
@@ -426,7 +719,13 @@ export function MusicBar({
                 <Checkbox
                   checked={activeTrack?.loop ?? false}
                   disabled={!activeTrack}
-                  onUpdate={(checked) => activeTrack && sendTrackCommand(activeTrack, { command: "SET_LOOP", loop: checked })}
+                  onUpdate={(checked) =>
+                    activeTrack &&
+                    sendTrackCommand(activeTrack, {
+                      command: "SET_LOOP",
+                      loop: checked,
+                    })
+                  }
                 >
                   Повторять
                 </Checkbox>
@@ -438,10 +737,7 @@ export function MusicBar({
                 max={Math.max(1, duration || position + 300)}
                 step="1"
                 disabled={!activeTrack?.assetId}
-                value={Math.min(
-                  position,
-                  duration || position + 300,
-                )}
+                value={Math.min(position, duration || position + 300)}
                 onChange={(event) => {
                   const positionSeconds = Number(event.target.value);
                   if (activeTrack) {
@@ -449,21 +745,61 @@ export function MusicBar({
                     setSeekDraft({ trackId: activeTrack.id, positionSeconds });
                   }
                 }}
-                onPointerDown={() => { if (activeTrack) seekingTrackId.current = activeTrack.id; }}
-                onPointerUp={(event) => commitSeek(Number(event.currentTarget.value))}
-                onKeyUp={(event) => commitSeek(Number(event.currentTarget.value))}
+                onPointerDown={() => {
+                  if (activeTrack) seekingTrackId.current = activeTrack.id;
+                }}
+                onPointerUp={(event) =>
+                  commitSeek(Number(event.currentTarget.value))
+                }
+                onKeyUp={(event) =>
+                  commitSeek(Number(event.currentTarget.value))
+                }
               />
             </section>
             <section>
               <h3>Микшер · до 4 дорожек</h3>
               <div className="music-mixer-list">
                 {mixerTracks.map((track) => {
-                  const asset = tracks.find((item) => item.id === track.assetId);
-                  const progress = trackProgress[track.id]?.assetId === track.assetId ? trackProgress[track.id] : undefined;
-                  return <MixerTrackControls key={track.id} track={track} asset={asset} livePositionSeconds={progress?.positionSeconds ?? track.positionSeconds} liveDurationSeconds={progress?.durationSeconds ?? 0} onCommand={sendTrackCommand} />;
+                  const asset = tracks.find(
+                    (item) => item.id === track.assetId,
+                  );
+                  const progress =
+                    trackProgress[track.id]?.assetId === track.assetId
+                      ? trackProgress[track.id]
+                      : undefined;
+                  return (
+                    <MixerTrackControls
+                      key={track.id}
+                      track={track}
+                      asset={asset}
+                      livePositionSeconds={
+                        progress?.positionSeconds ?? track.positionSeconds
+                      }
+                      liveDurationSeconds={progress?.durationSeconds ?? 0}
+                      onCommand={sendTrackCommand}
+                    />
+                  );
                 })}
               </div>
-              {mixerTracks.length < 4 && tracks.length > 0 ? <label>Добавить дорожку <select aria-label="Добавить дорожку" value="" onChange={(event) => { if (event.target.value) addTrack(event.target.value); }}><option value="">Выберите аудио</option>{tracks.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}</select></label> : null}
+              {mixerTracks.length < 4 && tracks.length > 0 ? (
+                <label>
+                  Добавить дорожку{" "}
+                  <select
+                    aria-label="Добавить дорожку"
+                    value=""
+                    onChange={(event) => {
+                      if (event.target.value) addTrack(event.target.value);
+                    }}
+                  >
+                    <option value="">Выберите аудио</option>
+                    {tracks.map((asset) => (
+                      <option key={asset.id} value={asset.id}>
+                        {asset.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
             </section>
             <section>
               <h3>Треки</h3>

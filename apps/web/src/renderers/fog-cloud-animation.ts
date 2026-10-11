@@ -18,10 +18,12 @@ export type FogMotionPolicyInput = {
 };
 
 export function shouldAnimateFog(input: FogMotionPolicyInput): boolean {
-  return !input.reducedMotion &&
+  return (
+    !input.reducedMotion &&
     !input.saveData &&
     !(input.deviceMemory !== undefined && input.deviceMemory <= 4) &&
-    !(input.hardwareConcurrency !== undefined && input.hardwareConcurrency <= 4);
+    !(input.hardwareConcurrency !== undefined && input.hardwareConcurrency <= 4)
+  );
 }
 
 function createCanvas(size: number): HTMLCanvasElement {
@@ -41,7 +43,10 @@ function paintCloudTile(context: CanvasRenderingContext2D, size: number) {
       const broad = Math.sin(u + Math.cos(v * 2) * 1.2) * 0.5 + 0.5;
       const rolling = Math.cos(v + Math.sin(u * 2) * 0.8) * 0.5 + 0.5;
       const wisps = Math.sin(u * 3 + v * 2) * Math.cos(v * 3 - u) * 0.5 + 0.5;
-      const cloud = Math.max(0, Math.min(1, broad * 0.5 + rolling * 0.35 + wisps * 0.15));
+      const cloud = Math.max(
+        0,
+        Math.min(1, broad * 0.5 + rolling * 0.35 + wisps * 0.15),
+      );
       const shade = Math.round(8 + cloud * 17);
       const offset = (y * size + x) * 4;
       image.data[offset] = shade;
@@ -70,9 +75,11 @@ export function createFogCloudAnimation(
   paintCloudTile(context, FOG_TILE_SIZE);
 
   const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const connection = (navigator as Navigator & {
-    connection?: { saveData?: boolean };
-  }).connection;
+  const connection = (
+    navigator as Navigator & {
+      connection?: { saveData?: boolean };
+    }
+  ).connection;
   const device = navigator as Navigator & {
     deviceMemory?: number;
     hardwareConcurrency?: number;

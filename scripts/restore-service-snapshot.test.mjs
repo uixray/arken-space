@@ -169,8 +169,13 @@ test("rejects duplicate, case-colliding, traversal, absolute, drive, UNC, and ba
     const fixture = makeSnapshot();
     try {
       const { manifest, root } = fixture.writeManifest();
-      if (collision === "duplicate") manifest.files.push({ ...manifest.files[0] });
-      else manifest.files.push({ ...manifest.files.at(-1), path: "Media/asset.bin" });
+      if (collision === "duplicate")
+        manifest.files.push({ ...manifest.files[0] });
+      else
+        manifest.files.push({
+          ...manifest.files.at(-1),
+          path: "Media/asset.bin",
+        });
       const manifestPath = path.join(root, "capture-manifest.json");
       writeFileSync(manifestPath, JSON.stringify(manifest));
       await assert.rejects(
@@ -190,7 +195,10 @@ test("rejects symlinked media files when the platform permits symlink creation",
     const { digest, root } = fixture.writeManifest();
     try {
       rmSync(path.join(root, "media", "asset.bin"));
-      symlinkSync(path.join(root, "database.dump"), path.join(root, "media", "asset.bin"));
+      symlinkSync(
+        path.join(root, "database.dump"),
+        path.join(root, "media", "asset.bin"),
+      );
     } catch {
       t.skip("symlink creation is unavailable in this environment");
       return;
@@ -212,7 +220,10 @@ test("rejects a Windows directory junction beneath media", async (t) => {
     const { digest, root } = fixture.writeManifest();
     const outside = path.join(fixture.temp, "outside-media-target");
     mkdirSync(outside, { recursive: true });
-    writeFileSync(path.join(outside, "not-listed.bin"), "synthetic-external-bytes");
+    writeFileSync(
+      path.join(outside, "not-listed.bin"),
+      "synthetic-external-bytes",
+    );
     const junction = path.join(root, "media", "external-target");
     try {
       symlinkSync(outside, junction, "junction");

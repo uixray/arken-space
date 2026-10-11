@@ -20,13 +20,31 @@ const character = {
   ownerMembershipId: memberId,
   controllerMembershipIds: [],
   portraitAssetId: null,
-  stats: { strength: 3, dexterity: 2, constitution: 4, intelligence: 1, wisdom: 2, charisma: 3, health: 12, armor: 2, initiative: 1, reaction: 1 },
+  stats: {
+    strength: 3,
+    dexterity: 2,
+    constitution: 4,
+    intelligence: 1,
+    wisdom: 2,
+    charisma: 3,
+    health: 12,
+    armor: 2,
+    initiative: 1,
+    reaction: 1,
+  },
   skills: [
     { key: "athletics", name: "Атлетика", rank: 2, formula: "strength" },
     { key: "awareness", name: "Внимательность", rank: 2, formula: "wisdom" },
     { key: "survival", name: "Выживание", rank: 1, formula: "constitution" },
   ],
-  spells: [{ key: "test-spell", name: "Искра", description: "Проверка реальной карточки способности.", formula: "intelligence" }],
+  spells: [
+    {
+      key: "test-spell",
+      name: "Искра",
+      description: "Проверка реальной карточки способности.",
+      formula: "intelligence",
+    },
+  ],
   notes: "",
   backstory: "",
   inventory: [],
@@ -43,7 +61,7 @@ const snapshot = playerSnapshot({ characters: [character] }) as GameSnapshot;
 // Fail-closed typed context: rendering may inspect any action group, but this
 // geometry-only harness must never contact an API or issue a campaign command.
 const noAction = new Proxy(() => undefined, {
-  get: (_target, property) => property === "then" ? undefined : noAction,
+  get: (_target, property) => (property === "then" ? undefined : noAction),
 }) as unknown as CampaignActions;
 
 function Harness() {
@@ -78,4 +96,3 @@ createRoot(document.getElementById("root")!).render(
     <Harness />
   </CampaignActionsContext.Provider>,
 );
-

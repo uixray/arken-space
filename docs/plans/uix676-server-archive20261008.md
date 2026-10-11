@@ -11,6 +11,7 @@
 - Explicitly not done: broad E2E, server startup, production, deployment, push, or Linear mutation.
 
 ## Final source acceptance / gate
+
 - Corrected replay projection independentlyrechecked againstactualschema (sequence PK,noid), allnewservice/routecolumn references checked. Noadditionalfinding.
 - Rootrepairedgate actualfullapplication registration HTTP/PGlite16/16 PASS; officialserverpackage tsc--noEmit exit0, session30469 finalexit0. Existingintegrationexpectationsunchanged.
 - Service transport/domain separation accepted; no migration/APIbehaviorchange/performanceclaim/browserproductioncheck. This boundedsource task criteria satisfied after explicitreview+runtimeintegration/typecheck.

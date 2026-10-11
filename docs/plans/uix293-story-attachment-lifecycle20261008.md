@@ -11,15 +11,13 @@
 - Not verified: no server start, browser QA, full E2E, Docker, SSH, production, or deployment. Concurrent sticker-pack worker files remain untouched.
 - Next: independent review and acceptance decision; runtime/browser acceptance remains open.
 
-
 ## Follow-up checkpoint — chat claim/delete race
+
 - Revision: `66300f5` (same working tree; uncommitted shared changes preserved).
 - Change: `apps/server/src/routes.ts` now locks candidate upload rows `FOR UPDATE` and conditionally transitions only matching campaign/owner/STAGED/unexpired uploads to CLAIMED before adding chat references. A delete that expires/removes first makes claim fail; a claim that commits first leaves a chat reference that blocks deletion.
 - Regression: `tests/story-attachment-lifecycle.test.ts` replaces the timing-sleep single-order scenario with paired real-route outcomes and positive response/state barriers: claim-first => chat 201, delete 409, ref and blob retained; delete-first => delete 200, chat 404, no ref/upload/blob. No timing sleeps or production hooks. This proves both committed serial orders; it is not a simultaneous stress test.
 - Verification: focused lifecycle test file passed 7/7 after paired-order revision. Official `pnpm --filter @arken/server typecheck` and `pnpm --filter @arken/web typecheck` invoked correct package scripts (`tsc --noEmit`) and exited 0; logs saved in `%TEMP%\uix293-story-race-server-typecheck.log` and `%TEMP%\uix293-story-race-web-typecheck.log`. Scoped Prettier and `git diff --check` passed. Sandbox EPERM attempt is separate; escalated focused runs succeeded.
 - Limits: no server, browser, full E2E, Docker, SSH, production, or deployment. Existing concurrent worker changes are untouched.
 - Next: independent review of the race fix; do not close the broader UIX-293/runtime gate based on this source/API slice.
-
-
 
 - Review follow-up: deterministic paired lock-order tests supersede the sleep-based scenario; ready for independent re-review.

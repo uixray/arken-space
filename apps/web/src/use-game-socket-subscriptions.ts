@@ -24,7 +24,11 @@ import {
   reconcileGameSnapshot,
 } from "./character-mutation";
 import { applyPlayerRequestChanged } from "./player-request-realtime";
-import { applyAudioTrackRemoved, applyAudioTrackState, type AudioTrackEventCursor } from "./audio-tracks-state";
+import {
+  applyAudioTrackRemoved,
+  applyAudioTrackState,
+  type AudioTrackEventCursor,
+} from "./audio-tracks-state";
 import {
   applyCursorMoved,
   type CursorPresence,
@@ -167,14 +171,23 @@ export function useGameSocketSubscriptions({
         for (const track of reconciled.audioTracks ?? []) {
           const seen = audioTrackCursor.get(track.id);
           if (!seen || seen.sequence <= reconciled.snapshotVersion)
-            audioTrackCursor.set(track.id, { sequence: reconciled.snapshotVersion, revision: track.revision });
+            audioTrackCursor.set(track.id, {
+              sequence: reconciled.snapshotVersion,
+              revision: track.revision,
+            });
         }
         // Retain tombstones when a canonical snapshot supersedes a locally
         // active row; otherwise a delayed pre-snapshot state event could revive it.
         if (current?.campaign.id === campaignId) {
-          const present = new Set((reconciled.audioTracks ?? []).map((track) => track.id));
+          const present = new Set(
+            (reconciled.audioTracks ?? []).map((track) => track.id),
+          );
           for (const previous of current.audioTracks ?? [])
-            if (!present.has(previous.id)) audioTrackCursor.set(previous.id, { sequence: reconciled.snapshotVersion, revision: Number.MAX_SAFE_INTEGER });
+            if (!present.has(previous.id))
+              audioTrackCursor.set(previous.id, {
+                sequence: reconciled.snapshotVersion,
+                revision: Number.MAX_SAFE_INTEGER,
+              });
         }
         return reconciled;
       });
@@ -349,18 +362,36 @@ export function useGameSocketSubscriptions({
       setSnapshot((current) => {
         if (!current || current.campaign.id !== campaignId) return current;
         if (event.sequence <= canonicalAudioFloor) return current;
-        const audioTracks = applyAudioTrackState(current.audioTracks ?? [], event.data as AudioTrackDto, event.sequence, audioTrackCursor);
+        const audioTracks = applyAudioTrackState(
+          current.audioTracks ?? [],
+          event.data as AudioTrackDto,
+          event.sequence,
+          audioTrackCursor,
+        );
         if (audioTracks === (current.audioTracks ?? [])) return current;
-        return { ...current, audioTracks, snapshotVersion: Math.max(current.snapshotVersion, event.sequence) };
+        return {
+          ...current,
+          audioTracks,
+          snapshotVersion: Math.max(current.snapshotVersion, event.sequence),
+        };
       }),
     );
     next.on("audio:track:removed", (event) =>
       setSnapshot((current) => {
         if (!current || current.campaign.id !== campaignId) return current;
         if (event.sequence <= canonicalAudioFloor) return current;
-        const audioTracks = applyAudioTrackRemoved(current.audioTracks ?? [], event.data.trackId, event.sequence, audioTrackCursor);
+        const audioTracks = applyAudioTrackRemoved(
+          current.audioTracks ?? [],
+          event.data.trackId,
+          event.sequence,
+          audioTrackCursor,
+        );
         if (audioTracks === (current.audioTracks ?? [])) return current;
-        return { ...current, audioTracks, snapshotVersion: Math.max(current.snapshotVersion, event.sequence) };
+        return {
+          ...current,
+          audioTracks,
+          snapshotVersion: Math.max(current.snapshotVersion, event.sequence),
+        };
       }),
     );
     next.on("presence:updated", setPresence);

@@ -15,14 +15,14 @@ Source review at HEAD `1644be807abbacad3e4c05a2cc54cb5fd5c9ef2b`; concurrent SMT
 
 ## Behavior to preserve at integration
 
-| State | Required behavior |
-|---|---|
-| Complete explicitly enabled runtime, valid key and configured transport, signup enabled | Capabilities registration true; any valid email/password request may queue without campaign invite. |
-| Runtime off, missing transport config or active encryption key | Registration capability false; direct signup fails closed, no new user/token/outbox writes. Preserve existing 403 when signup flag itself is off and 503 for delivery unavailable. |
-| Configured transport later unreachable | Queue transaction may already be accepted; bounded retry/expiry applies. Configuration-ready is not provider-health or inbox evidence. Never change accepted copy to “sent”. |
-| Verify link GET / email scanner | No consumption or login side effect; explicit confirmation POST required. |
-| Verified new account | Login works; zero campaign memberships/ownership and empty campaign list until separately authorized action. |
-| Existing GM/PLAYER campaign link | Existing provenance, role/revision/revocation/expiry validation remains; no automatic account binding, nickname/email alias authentication or ownership claim. |
+| State                                                                                   | Required behavior                                                                                                                                                                  |
+| --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Complete explicitly enabled runtime, valid key and configured transport, signup enabled | Capabilities registration true; any valid email/password request may queue without campaign invite.                                                                                |
+| Runtime off, missing transport config or active encryption key                          | Registration capability false; direct signup fails closed, no new user/token/outbox writes. Preserve existing 403 when signup flag itself is off and 503 for delivery unavailable. |
+| Configured transport later unreachable                                                  | Queue transaction may already be accepted; bounded retry/expiry applies. Configuration-ready is not provider-health or inbox evidence. Never change accepted copy to “sent”.       |
+| Verify link GET / email scanner                                                         | No consumption or login side effect; explicit confirmation POST required.                                                                                                          |
+| Verified new account                                                                    | Login works; zero campaign memberships/ownership and empty campaign list until separately authorized action.                                                                       |
+| Existing GM/PLAYER campaign link                                                        | Existing provenance, role/revision/revocation/expiry validation remains; no automatic account binding, nickname/email alias authentication or ownership claim.                     |
 
 No-store on account success/error responses and generic known/unknown outward replies remain. Public signup means eligible to request an account, not bypass password policy, origin validation or anti-abuse limits. A disabled mail transport must not prevent already verified users from logging in or invalidate existing campaign links.
 
@@ -31,6 +31,7 @@ No-store on account success/error responses and generic known/unknown outward re
 **Active music_mixer ownership (root expanded during planning):** dependency/lock update, SMTP adapter/config, shared bootstrap mail context, index/routes injection and focused SMTP/TLS/abort tests. This resolves the initially separate wiring ownership gap. No second worker may edit those files in parallel. After freeze, review actual bytes and assign only missing connected harness coverage.
 
 **Connected implementation prompt for current expanded Luna pool; follow-on worker owns only uncovered tests, not duplicate wiring:**
+
 > Implement production-code mail wiring, not production activation. You are not alone: preserve all concurrent edits. Own only `apps/server/src/index.ts`, narrow `routes.ts` injection signature/call sites, a small shared account-mail bootstrap/context module if necessary, one focused connected integration test file and your checkpoint. Root must release any shared env/config file first; use the SMTP worker's validated config/factory unchanged where possible. No auth/contracts/schema/crypto/outbox rewrite and no new dependency. Build adapter/keyring/runtime eligibility once and pass that same context to scheduler and account routes. Fail closed before accepting signup when disabled/incomplete; do not use a fake sink in production, auto-start at module import, create another scheduler or run network verify per registration. Preserve start-after-listen and stop/abort-before-DB-close lifecycle. Keep all activation defaults off, retain existing legacy campaign-link behavior and no automatic account/campaign binding. Do not enable campaign creation or invent account storage entitlement.
 >
 > Gate the new boundary with synthetic loopback SMTP/TLS through the real Nodemailer adapter, existing real scheduler and registered HTTP routes. No direct drain-as-substitute, manually calling the sink, DB token extraction, public test endpoint, real credentials/provider/network or deployment. Follow the connected sequence below, then one focused type/build/test gate. Use only approved installed dependencies; no broad regression reruns or old image acceptance transfer. Return changed files + frozen SHA/hashes, exact test receipts and limitations. Stop at local integration.
@@ -57,4 +58,3 @@ Receipts must separate queue committed, synthetic SMTP accepted, verified accoun
 ## Checkpoint
 
 Decision: signup policy is resolved as open-with-email-verification; implementation already has the required account admission contract. Remaining local source work is shared adapter/bootstrap wiring in the expanded active music_mixer pool plus a bounded connected SMTP signup gate. Changed only this plan. Verification: targeted source read, no tests/processes/network/dependency install. Blockers: adapter freeze for integration; owner campaign-creation entitlement and provider/environment activation remain separate. Next action: music_mixer finishes its expanded pool; review frozen bytes/receipts, then root assigns only missing harness tests. No second wiring worker, auth redesign or broad audit.
-

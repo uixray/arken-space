@@ -937,15 +937,15 @@
       )
     );
     max-height: calc(
-      min(var(--compact-viewport-height, 100dvh), 100dvh) - env(safe-area-inset-top, 0px) -
-        env(safe-area-inset-bottom, 0px) - 16px
+      min(var(--compact-viewport-height, 100dvh), 100dvh) -
+        env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px
     );
   }
 
   .g-modal .g-modal__content_has-scroll {
     max-height: calc(
-      min(var(--compact-viewport-height, 100dvh), 100dvh) - env(safe-area-inset-top, 0px) -
-        env(safe-area-inset-bottom, 0px) - 16px
+      min(var(--compact-viewport-height, 100dvh), 100dvh) -
+        env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px
     );
   }
 

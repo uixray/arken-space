@@ -33,7 +33,9 @@ export async function loadCharacterSchoolBranches(
   return fetchCharacterSpellBranches(characterId);
 }
 
-export async function loadAssignableSchools(): Promise<AssignableSpellSchool[]> {
+export async function loadAssignableSchools(): Promise<
+  AssignableSpellSchool[]
+> {
   return fetchAssignableSpellSchools();
 }
 
@@ -56,4 +58,3 @@ export async function reconcileSchoolAssignment(
       branch.schoolId === command.target.schoolId,
   );
 }
-

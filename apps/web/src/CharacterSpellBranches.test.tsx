@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CharacterDto } from "@arken/contracts";
 import { CharacterSpellBranches } from "./CharacterSpellBranches";
@@ -55,9 +61,15 @@ describe("CharacterSpellBranches", () => {
     const selector = screen.getByRole("combobox", {
       name: "Активная школа для выдачи",
     });
-    fireEvent.change(selector, { target: { value: `${school.packId}:${school.packVersionId}:${school.schoolId}` } });
+    fireEvent.change(selector, {
+      target: {
+        value: `${school.packId}:${school.packVersionId}:${school.schoolId}`,
+      },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Выдать школу" }));
-    await waitFor(() => expect(mocks.submitSchoolAssignment).toHaveBeenCalledWith("1", command));
+    await waitFor(() =>
+      expect(mocks.submitSchoolAssignment).toHaveBeenCalledWith("1", command),
+    );
     expect(mocks.createSchoolAssignmentEnvelope).toHaveBeenCalledWith(school);
   });
 
@@ -79,11 +91,15 @@ describe("CharacterSpellBranches", () => {
     render(<CharacterSpellBranches character={character("2")} isGm />);
     await screen.findByText(/пока не выданы школы/);
     fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: `${school.packId}:${school.packVersionId}:${school.schoolId}` },
+      target: {
+        value: `${school.packId}:${school.packVersionId}:${school.schoolId}`,
+      },
     });
     fireEvent.click(screen.getByRole("button", { name: "Выдать школу" }));
     await screen.findByRole("alert");
-    fireEvent.click(screen.getByRole("button", { name: "Повторить ту же выдачу" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Повторить ту же выдачу" }),
+    );
     await screen.findByText("Uncatalogued school");
     expect(mocks.submitSchoolAssignment.mock.calls).toEqual([
       ["2", command],
@@ -134,17 +150,16 @@ describe("CharacterSpellBranches", () => {
 
   it("does not load spell assignment data for archived sheets", () => {
     render(
-      <CharacterSpellBranches
-        character={character("6", "ARCHIVED")}
-        isGm
-      />,
+      <CharacterSpellBranches character={character("6", "ARCHIVED")} isGm />,
     );
     expect(screen.getByText(/Архивный лист/)).toBeTruthy();
     expect(mocks.loadCharacterSchoolBranches).not.toHaveBeenCalled();
   });
 
   it("renders initial load errors instead of remaining in loading state", async () => {
-    mocks.loadCharacterSchoolBranches.mockRejectedValueOnce(new Error("offline"));
+    mocks.loadCharacterSchoolBranches.mockRejectedValueOnce(
+      new Error("offline"),
+    );
     render(<CharacterSpellBranches character={character("7")} isGm={false} />);
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.queryByText("Загрузка веток…")).toBeNull();
@@ -156,7 +171,9 @@ describe("CharacterSpellBranches", () => {
       .mockResolvedValueOnce([]);
     render(<CharacterSpellBranches character={character("10")} isGm={false} />);
     await screen.findByRole("alert");
-    fireEvent.click(screen.getByRole("button", { name: "Повторить загрузку веток" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Повторить загрузку веток" }),
+    );
     expect(await screen.findByText(/пока не выданы школы/)).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(mocks.loadCharacterSchoolBranches).toHaveBeenCalledTimes(2);
@@ -168,30 +185,44 @@ describe("CharacterSpellBranches", () => {
       .mockRejectedValueOnce(new Error("still offline"));
     render(<CharacterSpellBranches character={character("11")} isGm={false} />);
     await screen.findByRole("alert");
-    fireEvent.click(screen.getByRole("button", { name: "Повторить загрузку веток" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Повторить загрузку веток" }),
+    );
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(mocks.loadCharacterSchoolBranches).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole("button", { name: "Повторить загрузку веток" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Повторить загрузку веток" }),
+    ).toBeTruthy();
   });
 
   it("does not apply a completed assignment refresh notice after switching characters", async () => {
     let finishRefresh!: (value: never[]) => void;
     mocks.loadCharacterSchoolBranches
       .mockResolvedValueOnce([])
-      .mockImplementationOnce(() => new Promise((resolve) => { finishRefresh = resolve; }))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishRefresh = resolve;
+          }),
+      )
       .mockResolvedValueOnce([]);
-    const view = render(<CharacterSpellBranches character={character("8")} isGm />);
+    const view = render(
+      <CharacterSpellBranches character={character("8")} isGm />,
+    );
     await screen.findByText(/пока не выданы школы/);
     fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: `${school.packId}:${school.packVersionId}:${school.schoolId}` },
+      target: {
+        value: `${school.packId}:${school.packVersionId}:${school.schoolId}`,
+      },
     });
     fireEvent.click(screen.getByRole("button", { name: "Выдать школу" }));
     await waitFor(() => expect(finishRefresh).toBeTypeOf("function"));
     view.rerender(<CharacterSpellBranches character={character("9")} isGm />);
     await screen.findByText(/пока не выданы школы/);
     finishRefresh([]);
-    await waitFor(() => expect(screen.queryByText("Школа выдана персонажу.")).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByText("Школа выдана персонажу.")).toBeNull(),
+    );
   });
 });
 // @vitest-environment jsdom
-

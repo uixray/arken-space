@@ -62,9 +62,8 @@ jobs:
 
       - run: pnpm lint
 
-      # UIX-686: владелец сохраняет намеренный текущий стиль. Проверяемый
-      # baseline допускает только неизменённые известные расхождения;
-      # новые/изменённые нарушения и смена политики форматирования падают.
+      # UIX-686: owner-approved one-time formatting; enforce normal Prettier.
+      # Historical raw migrations are excluded; deployment LF rules remain.
       - run: pnpm format:check
 
       - run: pnpm test

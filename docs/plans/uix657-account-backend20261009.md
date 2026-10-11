@@ -53,4 +53,5 @@ Focused tests, each run locally in Vitest:
 - Root to integrate/review and coordinate fresh runtime with Music/guide workers; do not commit from this subtask.
 
 ## Root connected integration gate
+
 2026-10-09: `pnpm --filter @arken/server typecheck` PASS, then one workspace-root Vitest invocation of the eight owned test files PASS8/8files33/33tests (59.43s). This is fresh evidence after P1 lock/expiry changes; earlier 29/29 remains historical. New guide-owned link socket test is not part of this33-test receipt. C actual HTTP account/campaign flow1/1 separately passed after session TTL fixture repair; full gameplay in persistent account stand independently proved login/select/bootstrap/browser only. Mail durability and full public acceptance remain open.

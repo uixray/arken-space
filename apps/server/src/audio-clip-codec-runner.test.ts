@@ -13,12 +13,27 @@ vi.mock("node:child_process", () => ({
 
 import { inspectAudioSource } from "./audio-clip-codec.js";
 
-type FakeScenario = "epipe-success" | "epipe-failure" | "other-stdin-error" | "stall-after-epipe" | "output-limit-after-epipe";
+type FakeScenario =
+  | "epipe-success"
+  | "epipe-failure"
+  | "other-stdin-error"
+  | "stall-after-epipe"
+  | "output-limit-after-epipe";
 
-const validProbe = Buffer.from(JSON.stringify({
-  streams: [{ codec_type: "audio", codec_name: "pcm_s16le", sample_rate: "44100", channels: 2, sample_fmt: "s16" }],
-  format: { format_name: "wav" },
-}));
+const validProbe = Buffer.from(
+  JSON.stringify({
+    streams: [
+      {
+        codec_type: "audio",
+        codec_name: "pcm_s16le",
+        sample_rate: "44100",
+        channels: 2,
+        sample_fmt: "s16",
+      },
+    ],
+    format: { format_name: "wav" },
+  }),
+);
 
 class FakeChild extends EventEmitter {
   readonly stdin = new PassThrough();
@@ -39,7 +54,11 @@ class FakeChild extends EventEmitter {
     if (this.closeScheduled) return;
     this.closeScheduled = true;
     this.stdout.once("end", () => this.emit("close", exitCode, null));
-    this.stdout.end(this.scenario === "output-limit-after-epipe" ? Buffer.alloc(256 * 1024 + 1) : validProbe);
+    this.stdout.end(
+      this.scenario === "output-limit-after-epipe"
+        ? Buffer.alloc(256 * 1024 + 1)
+        : validProbe,
+    );
     this.stderr.end();
   }
 
@@ -48,7 +67,11 @@ class FakeChild extends EventEmitter {
       code: this.scenario === "other-stdin-error" ? "EIO" : "EPIPE",
     });
     this.stdin.destroy(error);
-    if (this.scenario === "stall-after-epipe" || this.scenario === "other-stdin-error") return;
+    if (
+      this.scenario === "stall-after-epipe" ||
+      this.scenario === "other-stdin-error"
+    )
+      return;
     this.close(this.scenario === "epipe-failure" ? 1 : 0);
   }
 }
@@ -74,15 +97,25 @@ describe("codec child stdin error lifecycle", () => {
 
   it("accepts EPIPE only when the child closes successfully and probe output validates", async () => {
     currentScenario = "epipe-success";
-    const profile = await inspectAudioSource(Readable.from(source()), "audio/wav");
-    expect(profile).toEqual({ sampleRate: 44_100, channels: 2, durationMs: 0, frames: 0, sampleFormat: "s16" });
+    const profile = await inspectAudioSource(
+      Readable.from(source()),
+      "audio/wav",
+    );
+    expect(profile).toEqual({
+      sampleRate: 44_100,
+      channels: 2,
+      durationMs: 0,
+      frames: 0,
+      sampleFormat: "s16",
+    });
     expect(lastChild?.kill).not.toHaveBeenCalled();
   });
 
   it("rejects EPIPE when the child exits nonzero", async () => {
     currentScenario = "epipe-failure";
-    await expect(inspectAudioSource(Readable.from(source()), "audio/wav"))
-      .rejects.toThrow("CODEC_FAILED");
+    await expect(
+      inspectAudioSource(Readable.from(source()), "audio/wav"),
+    ).rejects.toThrow("CODEC_FAILED");
   });
 
   it("aborts non-EPIPE stdin errors", async () => {
@@ -104,8 +137,9 @@ describe("codec child stdin error lifecycle", () => {
 
   it("keeps the output limit active after EPIPE", async () => {
     currentScenario = "output-limit-after-epipe";
-    await expect(inspectAudioSource(Readable.from(source()), "audio/wav"))
-      .rejects.toThrow("PROCESSING_OUTPUT_LIMIT");
+    await expect(
+      inspectAudioSource(Readable.from(source()), "audio/wav"),
+    ).rejects.toThrow("PROCESSING_OUTPUT_LIMIT");
     expect(lastChild?.kill).toHaveBeenCalledOnce();
   });
 });

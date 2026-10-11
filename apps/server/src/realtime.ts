@@ -47,7 +47,11 @@ import { resolveTokenName } from "./token-name.js";
 import { cookieValue } from "./security.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
 import { normalizeTokenConditions } from "./token-conditions.js";
-import { createSoundpadRuntime, soundpadEventRoom, soundpadGenerationIsCurrent } from "./soundpad-runtime.js";
+import {
+  createSoundpadRuntime,
+  soundpadEventRoom,
+  soundpadGenerationIsCurrent,
+} from "./soundpad-runtime.js";
 import { effectiveAudioPosition, ensureAudioDuration } from "./audio-state.js";
 import {
   isCampaignCanvasGuardError,
@@ -878,58 +882,145 @@ export function registerRealtime(
         return ack?.({ ok: false, status: "FORBIDDEN", reason: "NOT_READY" });
       const parsed = soundpadTriggerSchema.safeParse(input);
       if (!parsed.success)
-        return ack?.({ ok: false, status: "INVALID", reason: "INVALID_COMMAND" });
+        return ack?.({
+          ok: false,
+          status: "INVALID",
+          reason: "INVALID_COMMAND",
+        });
       const capturedGeneration = soundpadRuntime.generation(auth.campaignId);
       try {
-        const [sound] = await db.select({
-          id: campaignSounds.id, assetId: campaignSounds.assetId, label: campaignSounds.label,
-          defaultGain: campaignSounds.defaultGain, audience: campaignSounds.audience,
-          packPublished: campaignSoundPacks.published, packAudience: campaignSoundPacks.audience,
-          durationSeconds: assets.durationSeconds, mimeType: assets.mimeType, kind: assets.kind,
-        }).from(campaignSounds)
-          .innerJoin(campaignSoundPacks, eq(campaignSoundPacks.id, campaignSounds.packId))
+        const [sound] = await db
+          .select({
+            id: campaignSounds.id,
+            assetId: campaignSounds.assetId,
+            label: campaignSounds.label,
+            defaultGain: campaignSounds.defaultGain,
+            audience: campaignSounds.audience,
+            packPublished: campaignSoundPacks.published,
+            packAudience: campaignSoundPacks.audience,
+            durationSeconds: assets.durationSeconds,
+            mimeType: assets.mimeType,
+            kind: assets.kind,
+          })
+          .from(campaignSounds)
+          .innerJoin(
+            campaignSoundPacks,
+            eq(campaignSoundPacks.id, campaignSounds.packId),
+          )
           .innerJoin(assets, eq(assets.id, campaignSounds.assetId))
-          .where(and(eq(campaignSounds.id, parsed.data.soundId), eq(campaignSounds.campaignId, auth.campaignId), eq(campaignSoundPacks.campaignId, auth.campaignId), eq(assets.campaignId, auth.campaignId)))
+          .where(
+            and(
+              eq(campaignSounds.id, parsed.data.soundId),
+              eq(campaignSounds.campaignId, auth.campaignId),
+              eq(campaignSoundPacks.campaignId, auth.campaignId),
+              eq(assets.campaignId, auth.campaignId),
+            ),
+          )
           .limit(1);
-        if (!sound || !sound.packPublished || sound.kind !== "AUDIO" || !sound.durationSeconds || sound.durationSeconds > 10) {
-          return ack?.({ ok: false, status: "FORBIDDEN", reason: "SOUND_UNAVAILABLE" });
+        if (
+          !sound ||
+          !sound.packPublished ||
+          sound.kind !== "AUDIO" ||
+          !sound.durationSeconds ||
+          sound.durationSeconds > 10
+        ) {
+          return ack?.({
+            ok: false,
+            status: "FORBIDDEN",
+            reason: "SOUND_UNAVAILABLE",
+          });
         }
-        if (auth.role !== "GM" && (sound.audience !== "ALL_MEMBERS" || sound.packAudience !== "ALL_MEMBERS"))
+        if (
+          auth.role !== "GM" &&
+          (sound.audience !== "ALL_MEMBERS" ||
+            sound.packAudience !== "ALL_MEMBERS")
+        )
           return ack?.({ ok: false, status: "FORBIDDEN", reason: "GM_ONLY" });
         if (auth.role !== "GM") {
-          const [policy] = await db.select({ enabled: campaignSoundpadSettings.playerPlaybackEnabled }).from(campaignSoundpadSettings)
-            .where(eq(campaignSoundpadSettings.campaignId, auth.campaignId)).limit(1);
-          if (policy && !policy.enabled) return ack?.({ ok: false, status: "FORBIDDEN", reason: "PLAYER_PLAYBACK_DISABLED" });
+          const [policy] = await db
+            .select({ enabled: campaignSoundpadSettings.playerPlaybackEnabled })
+            .from(campaignSoundpadSettings)
+            .where(eq(campaignSoundpadSettings.campaignId, auth.campaignId))
+            .limit(1);
+          if (policy && !policy.enabled)
+            return ack?.({
+              ok: false,
+              status: "FORBIDDEN",
+              reason: "PLAYER_PLAYBACK_DISABLED",
+            });
         }
-        if (!soundpadGenerationIsCurrent(soundpadRuntime.generation(auth.campaignId), capturedGeneration))
+        if (
+          !soundpadGenerationIsCurrent(
+            soundpadRuntime.generation(auth.campaignId),
+            capturedGeneration,
+          )
+        )
           return ack?.({ ok: false, status: "INVALID", reason: "STOPPED" });
-        const accepted = await soundpadRuntime.accept({ campaignId: auth.campaignId, membershipId: auth.membershipId, soundId: sound.id, actionId: parsed.data.actionId });
-        if (accepted.status !== "ACCEPTED") return ack?.({
-          ok: accepted.status === "DUPLICATE", status: accepted.status === "DUPLICATE" ? "DUPLICATE" : accepted.status === "CONFLICT" ? "CONFLICT" : "INVALID",
-          reason: accepted.status,
+        const accepted = await soundpadRuntime.accept({
+          campaignId: auth.campaignId,
+          membershipId: auth.membershipId,
+          soundId: sound.id,
+          actionId: parsed.data.actionId,
         });
+        if (accepted.status !== "ACCEPTED")
+          return ack?.({
+            ok: accepted.status === "DUPLICATE",
+            status:
+              accepted.status === "DUPLICATE"
+                ? "DUPLICATE"
+                : accepted.status === "CONFLICT"
+                  ? "CONFLICT"
+                  : "INVALID",
+            reason: accepted.status,
+          });
         const event = {
-          eventId: randomUUID(), soundId: sound.id, assetId: sound.assetId, label: sound.label,
-          defaultGain: sound.defaultGain, membershipId: auth.membershipId,
-          displayName: auth.displayName, serverTime: new Date().toISOString(),
+          eventId: randomUUID(),
+          soundId: sound.id,
+          assetId: sound.assetId,
+          label: sound.label,
+          defaultGain: sound.defaultGain,
+          membershipId: auth.membershipId,
+          displayName: auth.displayName,
+          serverTime: new Date().toISOString(),
         };
-        if (!soundpadGenerationIsCurrent(soundpadRuntime.generation(auth.campaignId), capturedGeneration))
+        if (
+          !soundpadGenerationIsCurrent(
+            soundpadRuntime.generation(auth.campaignId),
+            capturedGeneration,
+          )
+        )
           return ack?.({ ok: false, status: "INVALID", reason: "STOPPED" });
         if (!socket.connected) return;
-        const visibility = sound.audience === "GM_ONLY" || sound.packAudience === "GM_ONLY" ? "GM_ONLY" : "ALL_MEMBERS";
-        io.to(soundpadEventRoom(auth.campaignId, visibility)).volatile.emit("soundpad:triggered", event);
+        const visibility =
+          sound.audience === "GM_ONLY" || sound.packAudience === "GM_ONLY"
+            ? "GM_ONLY"
+            : "ALL_MEMBERS";
+        io.to(soundpadEventRoom(auth.campaignId, visibility)).volatile.emit(
+          "soundpad:triggered",
+          event,
+        );
         ack?.({ ok: true, status: "ACCEPTED", data: event });
       } catch (error) {
-        log.warn({ errorKind: error instanceof Error ? error.name : typeof error, campaignId: auth.campaignId }, "soundpad.trigger_failed");
+        log.warn(
+          {
+            errorKind: error instanceof Error ? error.name : typeof error,
+            campaignId: auth.campaignId,
+          },
+          "soundpad.trigger_failed",
+        );
         ack?.({ ok: false, status: "INVALID", reason: "SOUND_TRIGGER_FAILED" });
       }
     });
 
     socket.on("soundpad:stop", async (ack) => {
-      if (!(await connectionReady) || !socket.connected) return ack?.({ ok: false, status: "FORBIDDEN", reason: "NOT_READY" });
-      if (auth.role !== "GM") return ack?.({ ok: false, status: "FORBIDDEN", reason: "GM_REQUIRED" });
+      if (!(await connectionReady) || !socket.connected)
+        return ack?.({ ok: false, status: "FORBIDDEN", reason: "NOT_READY" });
+      if (auth.role !== "GM")
+        return ack?.({ ok: false, status: "FORBIDDEN", reason: "GM_REQUIRED" });
       const generation = soundpadRuntime.stop(auth.campaignId);
-      io.to(campaignRoom(auth.campaignId)).volatile.emit("soundpad:stopped", { generation });
+      io.to(campaignRoom(auth.campaignId)).volatile.emit("soundpad:stopped", {
+        generation,
+      });
       ack?.({ ok: true, status: "ACCEPTED", data: { generation } });
     });
 
@@ -995,10 +1086,15 @@ export function registerRealtime(
               : command.assetId;
         if (requestedAssetId) {
           const [asset] = await tx
-            .select({ campaignId: assets.campaignId, kind: assets.kind, audioPurpose: assets.audioPurpose })
+            .select({
+              campaignId: assets.campaignId,
+              kind: assets.kind,
+              audioPurpose: assets.audioPurpose,
+            })
             .from(assets)
             .where(eq(assets.id, requestedAssetId))
-            .for("update").limit(1);
+            .for("update")
+            .limit(1);
           if (
             !asset ||
             asset.campaignId !== auth.campaignId ||
@@ -1261,10 +1357,15 @@ export function registerRealtime(
         if (command.command === "ADD_TRACK") {
           if (command.assetId) {
             const [asset] = await tx
-              .select({ campaignId: assets.campaignId, kind: assets.kind, audioPurpose: assets.audioPurpose })
+              .select({
+                campaignId: assets.campaignId,
+                kind: assets.kind,
+                audioPurpose: assets.audioPurpose,
+              })
               .from(assets)
               .where(eq(assets.id, command.assetId))
-              .for("update").limit(1);
+              .for("update")
+              .limit(1);
             if (
               !asset ||
               asset.campaignId !== auth.campaignId ||
@@ -1366,10 +1467,15 @@ export function registerRealtime(
 
         if (command.command === "SELECT" && command.assetId) {
           const [asset] = await tx
-            .select({ campaignId: assets.campaignId, kind: assets.kind, audioPurpose: assets.audioPurpose })
+            .select({
+              campaignId: assets.campaignId,
+              kind: assets.kind,
+              audioPurpose: assets.audioPurpose,
+            })
             .from(assets)
             .where(eq(assets.id, command.assetId))
-            .for("update").limit(1);
+            .for("update")
+            .limit(1);
           if (
             !asset ||
             asset.campaignId !== auth.campaignId ||

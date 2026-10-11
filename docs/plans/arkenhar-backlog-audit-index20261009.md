@@ -3,6 +3,7 @@
 Live Linear inventory: 271 project issues; 76 nonterminal/nonduplicate tasks (55 Backlog, 13 In Progress, 8 In Review). One Duplicate excluded. This is the entire project, not the required prepublication feature list.
 
 Three exclusive reports cover exactly 76 unique IDs; machine comparison against paginated live inventory found zero missing, zero unexpected and zero duplicates:
+
 - arkenhar-backlog-qa-audit20261009.md: 7 IDs.
 - arkenhar-backlog-product-audit20261009.md: 34 IDs.
 - arkenhar-backlog-implemented-audit20261009.md: 35 IDs.

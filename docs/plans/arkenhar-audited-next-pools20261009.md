@@ -10,11 +10,11 @@ There are **two immediately specifiable delivery slices and one finite candidate
 
 ## Ordered recommendation
 
-| Order | Pool | Why now / true scope | Planning effort range |
-|---|---|---|---|
-| 1 | Finish frozen candidate evidence after current 347 gate | Missing current-revision evidence; avoids widening release scope while source changes. No new feature. | 1–3 focused work hours if gate passes; defects trigger a new scoped estimate, not unlimited retries. |
-| 2 | UIX-264 GM campaign-instance editor, existing-contract subset | Genuine missing user-facing workflow over existing routes; highest-value executable non-auth feature slice. Does not invent player discovery, inventory rules or canon lifecycle. | 6–12 focused work hours including connected tests/review; excludes broader 264 AC. |
-| 3 | UIX-652 safe screenshot integration and capability/role map | Genuine missing acceptance after delivered search/anchors; smaller additive work, lower product priority than gameplay. No authored FAQ or marketing copy. | 3–6 focused work hours; owner copy review and any later help-center decision excluded. |
+| Order | Pool                                                          | Why now / true scope                                                                                                                                                              | Planning effort range                                                                                |
+| ----- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 1     | Finish frozen candidate evidence after current 347 gate       | Missing current-revision evidence; avoids widening release scope while source changes. No new feature.                                                                            | 1–3 focused work hours if gate passes; defects trigger a new scoped estimate, not unlimited retries. |
+| 2     | UIX-264 GM campaign-instance editor, existing-contract subset | Genuine missing user-facing workflow over existing routes; highest-value executable non-auth feature slice. Does not invent player discovery, inventory rules or canon lifecycle. | 6–12 focused work hours including connected tests/review; excludes broader 264 AC.                   |
+| 3     | UIX-652 safe screenshot integration and capability/role map   | Genuine missing acceptance after delivered search/anchors; smaller additive work, lower product priority than gameplay. No authored FAQ or marketing copy.                        | 3–6 focused work hours; owner copy review and any later help-center decision excluded.               |
 
 These are rough planning ranges, not promises, deadlines, or permission to batch-execute. Use one connected implementation/verification pool at a time. Root owns integration and stage-gate updates; Luna owns the bounded files assigned below. If publication is chosen after pool 1, pools 2–3 remain post-publication development rather than silently becoming blockers. If development continues, pool 1's candidate evidence becomes historical after the next product commit and a fresh final candidate is required.
 
@@ -29,6 +29,7 @@ These are rough planning ranges, not promises, deadlines, or permission to batch
 **Ownership:** Luna owns a dedicated candidate receipt/manifest and test execution logs; root owns source freeze, test selection, defect decisions, final checkpoint and Linear. No product modifications unless root separately assigns a proved defect. Failure stops the gate with exact trace/repro; it does not expand test allowance automatically.
 
 **Prompt for Luna:**
+
 > Wait for root's exact frozen SHA and finite gate list. You are not alone; preserve all other edits and never stage the abandoned ping helper or `.tmp`. Own only the new candidate evidence receipt/manifests. Capture source identity before and after the connected commands; if identity changes, label the receipt non-candidate. Run the selected existing local tests/build once, retain failures and artifacts, and distinguish mocked UI from actual transport. Do not repair product code, run the retired P/S harness, access credentials/retained databases, change auth, or access remote/deployment tooling. Return exact SHA, commands/results, hashes, blockers and next action; do not declare publication or full issue acceptance.
 
 ## Pool 2 — UIX-264: GM instances without inventing rules
@@ -48,6 +49,7 @@ Live UIX-264 asks for canonical create/edit/version/archive/relations; aliases/t
 **Ownership:** Luna: new `WorldContentInstancesWorkspace.tsx` and local styles/helpers/tests, narrow integration in `WorldContentWorkspace.tsx`, dedicated browser spec and checkpoint. Root: any shared navigation/App integration and stage gate. Server/contracts/DB remain read-only; ask root for a separately scoped defect fix if needed. Start only after stamp source is frozen.
 
 **Prompt for Luna:**
+
 > Implement the bounded GM instance list/create/edit slice above using existing campaign-scoped routes/contracts. You are not alone; do not revert others' changes. Own only the new instance workspace/helpers/tests and narrow WorldContentWorkspace integration; coordinate any shared file with root. Preserve canon and owner copy. Expose only canonical reference, display-name override, state and GM notes; keep other stored fields unchanged. No discovered/player visibility, new ACL/auth, delete/archive, item economy, lore generation, new uploads or migrations. Test two independent instances, canon unchanged, reload, CAS conflicts with draft retention, retry and role/campaign isolation in one connected gate. Return exact changed files/revision, results, exclusions and remaining full-264 AC; do not close 264.
 
 ## Pool 3 — UIX-652: screenshots, not another guide rewrite
@@ -63,6 +65,7 @@ Live UIX-264 asks for canonical create/edit/version/archive/relations; aliases/t
 **Ownership:** Luna: screenshot fixtures/spec, dedicated public help image folder, narrow LandingGuide image placement/local styles and coverage manifest. No unrelated AuthGate/App/shared stylesheet changes. Root reviews privacy, source identity and placement; owner owns prose and final content approval.
 
 **Prompt for Luna:**
+
 > Continue only the missing screenshot/coverage slice of UIX-652 after current source freeze. You are not alone; preserve delivered guide text, anchors/search and others' files. Produce a role/capability map against current guide and actual screenshots from neutral synthetic fixtures with known authorized local assets, then integrate optimized images into existing relevant sections. No new FAQ/marketing/lore copy, creative generation, real campaign data or unapproved asset access. Use existing factual labels and minimal alt text. Own screenshot spec/assets/manifest and narrow LandingGuide placement only. Verify privacy, image payload, keyboard/compact layout and login access in one connected browser gate; report residual content decisions without claiming whole-652 closure.
 
 ## Screened alternatives and exact decision gates

@@ -7,7 +7,10 @@ import type {
 } from "@arken/contracts";
 import "@gravity-ui/uikit/styles/styles.css";
 import { ActivityInitiativePanel } from "../src/sidebar/ActivityInitiativePanel";
-import { gmSnapshot, playerSnapshot } from "../src/test-support/game-snapshot-fixtures";
+import {
+  gmSnapshot,
+  playerSnapshot,
+} from "../src/test-support/game-snapshot-fixtures";
 // Match production's `main.tsx` import order: feature/component CSS (including
 // Input.css) is loaded before the global token/foundation/styles layers.
 import "../src/design-system/tokens.generated.css";
@@ -131,7 +134,10 @@ function snapshotFor(scenario: string): GameSnapshot {
         initiative: [playerRow],
       },
       encounters: [
-        activeEncounter({ status: "ENDED", endedAt: "2026-10-11T11:00:00.000Z" }),
+        activeEncounter({
+          status: "ENDED",
+          endedAt: "2026-10-11T11:00:00.000Z",
+        }),
       ],
     });
   throw new Error(`Unknown synthetic scenario: ${scenario}`);
@@ -159,8 +165,13 @@ function InitiativeBrowserHarness() {
   return (
     <main style={{ maxWidth: 760, margin: "0 auto", padding: 16 }}>
       <h1>UIX-505 isolated initiative lifecycle browser gate</h1>
-      <p>Synthetic snapshots only — no API, login, campaign data or network reconnect.</p>
-      <button type="button" data-testid="focus-sentinel">Scene control focus sentinel</button>
+      <p>
+        Synthetic snapshots only — no API, login, campaign data or network
+        reconnect.
+      </p>
+      <button type="button" data-testid="focus-sentinel">
+        Scene control focus sentinel
+      </button>
       <output data-testid="snapshot-state">
         {snapshot.me.role}:{snapshot.encounters?.[0]?.status ?? "NO_ENCOUNTER"}:
         {snapshot.encounters?.[0]?.targetSceneId ?? "NO_TARGET"}
@@ -189,4 +200,6 @@ function InitiativeBrowserHarness() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<InitiativeBrowserHarness />);
+createRoot(document.getElementById("root")!).render(
+  <InitiativeBrowserHarness />,
+);

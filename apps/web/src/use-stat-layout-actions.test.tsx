@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
-import { useStatLayoutActions, type StatLayoutActions } from "./use-stat-layout-actions";
+import {
+  useStatLayoutActions,
+  type StatLayoutActions,
+} from "./use-stat-layout-actions";
 import { renderComponent, act } from "./test-support/render";
 import type { StatLayout } from "@arken/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,7 +11,13 @@ const mocks = vi.hoisted(() => ({ api: vi.fn() }));
 vi.mock("./api", () => ({ api: mocks.api }));
 
 let actions: StatLayoutActions | null = null;
-function Harness({ load, receive }: { load: () => Promise<void>; receive: (value: StatLayoutActions) => void }) {
+function Harness({
+  load,
+  receive,
+}: {
+  load: () => Promise<void>;
+  receive: (value: StatLayoutActions) => void;
+}) {
   receive(useStatLayoutActions({ load }));
   return null;
 }
@@ -26,7 +35,9 @@ describe("per-character stat layout command", () => {
     mocks.api
       .mockRejectedValueOnce(new Error("connection lost"))
       .mockResolvedValueOnce({ characterId: "character/a", revision: 8 });
-    renderComponent(<Harness load={load} receive={(value) => (actions = value)} />);
+    renderComponent(
+      <Harness load={load} receive={(value) => (actions = value)} />,
+    );
     const layout: StatLayout = [];
 
     await expect(

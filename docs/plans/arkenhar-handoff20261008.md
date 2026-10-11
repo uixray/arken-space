@@ -3,11 +3,13 @@
 Session explicitly stopped by owner; goal PAUSED, not complete. Root source chat 01a110c3-5a40-7852-82a4-210fb8dea4f5. Luna worker interrupted; no new product work after pause.
 
 ## Authoritative checkout
+
 D:\AI\personal\experiments\arken-space\.worktrees\uix-293-catalog-20261007
 Branch codex/uix-293-catalog-20261007; HEAD e5144849e0eea6735dd12195829e876aa0aab821 before handoff docs commit.
 Dirty product files GlobalStickerPackManager.tsx and its test; dirty pool checkpoint; unrelated .tmp untracked. Preserve these. Main checkout has unrelated README/STICKERS changes; do not work there or revert them.
 
 ## Owner decisions
+
 - Work through gpt-6-luna subagents; root integrates and updates Linear only at stage gates. Connected pools, not micro test loops.
 - Original goal UIX293/318/473/644/497/649 remains full-scope, no closure without exact evidence.
 - Weekend10–11Oct target public landing, registration and personal campaign for owner/friends/portfolio, not enterprise scale. Owner chose normal full authorization but explicitly deferred it until everything else prepared. DO NOT substitute secret-link MVP or implement auth now. UIX657 is corresponding first-run issue; landing exists, registration/MyCampaigns/public create API absent according to readonly audit.
@@ -18,6 +20,7 @@ Dirty product files GlobalStickerPackManager.tsx and its test; dirty pool checkp
 - Both sticker packs GLOBAL_PUBLIC across campaigns; any GM publishes own pack; foreign creators cannot edit; operator may manage creator-null orphan packs.
 
 ## First action: finish dirty summary Escape fix
+
 Observed actual desktop Chrome/Firefox bug: Escape on open GlobalStickerPackManager summary closed parent Files workspace. QA11941 interrupted after two desktop failures; compact not run. Preserve failure history.
 Dirty fix handles Escape ONLY on own open summary: consume/defaultPrevent, close details, focus summary. Closed summary next Escape bubbles to parent; native select/input not intercepted.
 Dirty regression now awaits findByLabelText for async pack and checks select/input passthrough. NOT TESTED; do not call green or commit source yet.
@@ -25,6 +28,7 @@ Root last review requested held-Escape repeat guard: after owned close, repeat m
 Ownership bounded GlobalStickerPackManager.tsx/test.tsx; after completion freeze, run connected manager+ArkenDialog tests and web typecheck, then four GM desktop/compact Chrome/Firefox browser cells. Native OS popup remains human pending. Never print private fixture contents.
 
 ## Completed evidence / remaining
+
 - UIX293 Done, asset and separate story attachment lifecycle verified previously; no production claim.
 - UIX318 InReview: secure operator inbox and local ACL/redaction/429/actions tested, remote trusted-host criterion pending.
 - UIX473 Backlog: nine-topic task-side map ready; real remote report IDs/statuses not read or changed. docs/plans/uix473-feedback-triage20261008.md; server access absent.
@@ -37,6 +41,7 @@ Ownership bounded GlobalStickerPackManager.tsx/test.tsx; after completion freeze
 - UIX398 InReview client domain decomposition; UIX420/662/676 Done. No whole-service performance claim.
 
 ## Local runtime and sensitive data handling
+
 Revalidate with elevated localhost shell: API /healthz on14182, Vite127.0.0.1:14183, checklist /acceptance. API PID23636 binds0.0.0.0; Vite listener29260. Sandbox probes can falsely show unavailable; CUA empty does not prevent existing local Playwright. Never restart from timeout alone.
 Existing Docker QA database only: arken-uix644-qa-db-20261008, ID b6c03562be284965026d2453c1fd7a1708f7ae26d049cfc6ab62f605d82dc4f3; volume arken-uix644-qa-data-20261008, loopback14181, arken_qa. No reset/reseed/delete.
 Backup .data/qa-prep/uix293-global-import-prep/backups/uix293-arken_qa-20261008T164747Z.pgcustom SHA578beb0d6024798010722ef8c6691287fb4407ea3eda826bed147773c8077295,311439bytes/503TOC readable, NO restore rehearsal. Official migration wrapper EXIT1 but exact0047 journal/FK/checks/tables fully committed and old data preserved. Do not rerun migration; anomaly remains open for production readiness.
@@ -45,12 +50,14 @@ A-side token extraction/persistence from old seed explicitly rejected by approva
 All .data/qa-prep artifacts local ignored, backup/persistence external unknown. Never stage private files or .tmp. Background helpers hidden. Existing Firefox1538 installed, no downloads needed.
 
 ## Build and release preparation
+
 Root web build50484 terminal EXIT0 at e514484 source3ed0f51,4761modules/1m59; largechunk warning. Artifact receipt .data/qa-prep/uix293-global-import-prep/web-build-diagnostic-receipt.json. Dirty Escape fix postdates it: NOT current candidate evidence, rebuild once after connected pool.
 Existing docs/production-release-checklist.md and deployment.md describe exactSHA/mainancestry/env/media/backuprestore gates, not proof they passed. Owner E2E exclusion stays explicit. No remote/deployment performed.
 
 ## Resume order
+
 1. Git/status/diff + this handoff; no old chat reread. Apply held-Escape review, connected tests/typecheck/browser, commit only verified pool and checkpoint.
 2. Reconcile exact remaining original issue criteria in live Linear; do not close497/649 without crosscampaign/human requirements.
 3. Prepare remaining local gameplay/landing/release candidate; full auth later by owner decision, selfservice registration not yet ready.
 4. Ask server start only for concrete release-preparation need; separate deploy permission. Pending permissions/manual acceptance remain explicit.
-Use git -c core.fsmonitor=false; official pnpm builds/tests often need require_escalated for temp/localhost. Do not transfer proof across source SHAs silently.
+   Use git -c core.fsmonitor=false; official pnpm builds/tests often need require_escalated for temp/localhost. Do not transfer proof across source SHAs silently.

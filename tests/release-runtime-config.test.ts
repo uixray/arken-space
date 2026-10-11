@@ -4,7 +4,10 @@ import { describe, expect, it } from "vitest";
 
 const root = process.cwd();
 const compose = readFileSync(path.join(root, "docker-compose.yml"), "utf8");
-const serverDockerfile = readFileSync(path.join(root, "Dockerfile.server"), "utf8");
+const serverDockerfile = readFileSync(
+  path.join(root, "Dockerfile.server"),
+  "utf8",
+);
 const webDockerfile = readFileSync(path.join(root, "Dockerfile.web"), "utf8");
 
 describe("release container configuration", () => {
@@ -39,10 +42,16 @@ describe("release container configuration", () => {
   });
 
   it("compiles and validates runtime env before migration with sanitized failure output", () => {
-    expect(serverDockerfile).toContain("tsup src/index.ts src/env.ts --format esm --clean --sourcemap");
-    const commandLine = serverDockerfile.split(/\r?\n/).find((line) => line.startsWith("CMD "));
+    expect(serverDockerfile).toContain(
+      "tsup src/index.ts src/env.ts --format esm --clean --sourcemap",
+    );
+    const commandLine = serverDockerfile
+      .split(/\r?\n/)
+      .find((line) => line.startsWith("CMD "));
     expect(commandLine).toBeDefined();
-    const [shell, flag, command] = JSON.parse(commandLine!.slice(4)) as string[];
+    const [shell, flag, command] = JSON.parse(
+      commandLine!.slice(4),
+    ) as string[];
     expect([shell, flag]).toEqual(["sh", "-c"]);
     const validate = command.indexOf("apps/server/dist/env.js");
     const migration = command.indexOf("pnpm db:migrate");
@@ -50,7 +59,9 @@ describe("release container configuration", () => {
     expect(validate).toBeGreaterThan(-1);
     expect(migration).toBeGreaterThan(validate);
     expect(server).toBeGreaterThan(migration);
-    expect(command).toContain("Invalid runtime configuration; aborting before migration.");
+    expect(command).toContain(
+      "Invalid runtime configuration; aborting before migration.",
+    );
     expect(command).not.toContain("console.error(error)");
     expect(command).not.toContain("|| true");
   });
@@ -58,8 +69,12 @@ describe("release container configuration", () => {
   it("copies and runs the exact private-font source/dist preflight after the web build", () => {
     const webBuild = webDockerfile.indexOf("pnpm --filter @arken/web build");
     const fontCheck = webDockerfile.indexOf("pnpm release:font:preflight");
-    expect(webDockerfile).toContain("COPY scripts/font-release-preflight.mjs scripts/font-release-preflight.mjs");
-    expect(existsSync(path.join(root, "scripts/font-release-preflight.mjs"))).toBe(true);
+    expect(webDockerfile).toContain(
+      "COPY scripts/font-release-preflight.mjs scripts/font-release-preflight.mjs",
+    );
+    expect(
+      existsSync(path.join(root, "scripts/font-release-preflight.mjs")),
+    ).toBe(true);
     expect(webBuild).toBeGreaterThan(-1);
     expect(fontCheck).toBeGreaterThan(webBuild);
   });
