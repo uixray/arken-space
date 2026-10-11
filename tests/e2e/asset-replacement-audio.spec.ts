@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { readFile } from "node:fs/promises";
 import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
@@ -87,6 +88,7 @@ for (const width of [1280, 360]) {
       );
     });
     await page.setViewportSize({ width, height: 850 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator(".app-shell")).toBeVisible();
     await openWorkspaceSection(page, "Файлы");
@@ -267,7 +269,16 @@ for (const role of ["GM", "PLAYER"] as const) {
       startedAt: null,
       revision: 2,
     };
+    current.audioTracks = [
+      {
+        ...current.audio,
+        id: "a3333333-3333-4333-8333-333333333333",
+        mixVolume: 1,
+        slotOrder: 0,
+      },
+    ];
     const originalAudio = structuredClone(current.audio);
+    const originalTracks = structuredClone(current.audioTracks);
     let publish: (() => void) | undefined;
     const requests: string[] = [],
       writes: string[] = [],
@@ -303,13 +314,15 @@ for (const role of ["GM", "PLAYER"] as const) {
           publish = () =>
             socket.send(`42${JSON.stringify(["game:snapshot", current])}`);
         }
-        if (text.includes('"audio:set"')) commands.push(text);
+        if (text.includes('"audio:set"') || text.includes('"audio:track:set"'))
+          commands.push(text);
       });
       socket.send(
         '0{"sid":"audio-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
       );
     });
     await page.setViewportSize({ width: 1280, height: 850 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator(".app-shell")).toBeVisible();
     await expect.poll(() => Boolean(publish)).toBe(true);
@@ -380,6 +393,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       ),
     ).toBe(true);
     expect(current.audio).toEqual(originalAudio);
+    expect(current.audioTracks).toEqual(originalTracks);
     expect(commands).toEqual([]);
     expect(writes).toEqual([]);
     expect(errors).toEqual([]);

@@ -93,6 +93,20 @@ function AudioTrackPlayback({
   const blocked = useRef(false);
   const lastPlaybackKey = useRef<string | null>(null);
   const lastRetryToken = useRef(0);
+  // Own source setup and teardown together: StrictMode replays effects without
+  // recreating the DOM node, so cleanup must have a matching source restore.
+  useEffect(() => {
+    const el = ref.current;
+    if (el && asset?.url) el.setAttribute("src", asset.url);
+    return () => {
+      el?.pause();
+      if (el) {
+        el.removeAttribute("src");
+        el.load();
+      }
+      lastPlaybackKey.current = null;
+    };
+  }, [asset?.url]);
   useEffect(() => {
     if (ref.current)
       ref.current.volume = volumeSliderToGain(masterVolume * track.mixVolume);
@@ -188,16 +202,7 @@ function AudioTrackPlayback({
       document.removeEventListener("keydown", retry, true);
     };
   }, [enabled, track.id, track.playing, asset?.id, onBlocked]);
-  useEffect(() => {
-    const el = ref.current;
-    return () => {
-      el?.pause();
-      if (el) {
-        el.removeAttribute("src");
-        el.load();
-      }
-    };
-  }, []);
+
   const reportProgress = (element: HTMLAudioElement) =>
     onProgress(
       track.id,

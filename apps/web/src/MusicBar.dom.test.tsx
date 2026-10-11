@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { createElement } from "react";
+import { createElement, StrictMode } from "react";
 import type { ReactNode } from "react";
 import type {
   AssetDto,
@@ -121,6 +121,29 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("MusicBar authoritative track controls", () => {
+  it("restores the media source after StrictMode effect replay and releases it on unmount", () => {
+    const view = renderComponent(
+      createElement(
+        StrictMode,
+        null,
+        createElement(MusicBar, {
+          audio: legacyAudio,
+          audioTracks: [track()],
+          assets: [first],
+          role: "GM",
+          socket: socketWithAck().socket,
+          onUpload: vi.fn(),
+        }),
+      ),
+    );
+    const player = view.container.querySelector<HTMLAudioElement>("audio")!;
+    expect(player.getAttribute("src")).toBe(first.url);
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    view.unmount();
+    expect(player.hasAttribute("src")).toBe(false);
+    expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled();
+    expect(HTMLMediaElement.prototype.load).toHaveBeenCalled();
+  });
   it("routes overflow and library selection through the same canonical track command", () => {
     const { emit, socket } = socketWithAck();
     renderMusic({ socket });
