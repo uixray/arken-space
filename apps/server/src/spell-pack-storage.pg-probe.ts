@@ -7,7 +7,6 @@ import {
   createDatabase,
   gameEvents,
   memberships,
-  sessions,
   spellPackVersions,
   spellPacks,
 } from "@arken/db";
@@ -18,7 +17,7 @@ import {
   SpellPackStorageError,
 } from "./spell-pack-storage.js";
 import { env } from "./env.js";
-import { hashToken } from "./security.js";
+import { seedProbeSessions } from "./pg-probe-auth.js";
 import { registerSpellPackRoutes } from "./spell-pack-routes.js";
 import {
   classifyProbeDiagnostic,
@@ -322,22 +321,10 @@ try {
       displayName: "API probe foreign GM",
     },
   ]);
-  await db.insert(sessions).values([
-    {
-      membershipId: apiGmMembershipId,
-      tokenHash: hashToken(apiGmSecret),
-      expiresAt: new Date(Date.now() + 600_000),
-    },
-    {
-      membershipId: apiPlayerMembershipId,
-      tokenHash: hashToken(apiPlayerSecret),
-      expiresAt: new Date(Date.now() + 600_000),
-    },
-    {
-      membershipId: apiForeignGmMembershipId,
-      tokenHash: hashToken(apiForeignGmSecret),
-      expiresAt: new Date(Date.now() + 600_000),
-    },
+  await seedProbeSessions(db, [
+    { membershipId: apiGmMembershipId, campaignId: apiCampaignId, role: "GM", token: apiGmSecret },
+    { membershipId: apiPlayerMembershipId, campaignId: apiCampaignId, role: "PLAYER", token: apiPlayerSecret },
+    { membershipId: apiForeignGmMembershipId, campaignId: apiForeignCampaignId, role: "GM", token: apiForeignGmSecret },
   ]);
   apiApp = Fastify();
   await apiApp.register(cookie);

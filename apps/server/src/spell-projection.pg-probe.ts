@@ -11,7 +11,6 @@ import {
   createDatabase,
   gameEvents,
   memberships,
-  sessions,
   spellPacks,
   spellPackVersions,
 } from "@arken/db";
@@ -20,7 +19,7 @@ import type {
   SpellReferenceImportSource,
 } from "@arken/contracts";
 import { env } from "./env.js";
-import { hashToken } from "./security.js";
+import { seedProbeSessions } from "./pg-probe-auth.js";
 import {
   buildSpellAssignmentSnapshot,
   type LoadedSpellGraph,
@@ -290,19 +289,13 @@ try {
       displayName: "Foreign projection GM",
     },
   ]);
-  await db.insert(sessions).values(
-    [
-      [ids.membership.gm, secrets.gm],
-      [ids.membership.owner, secrets.owner],
-      [ids.membership.controller, secrets.controller],
-      [ids.membership.other, secrets.other],
-      [ids.membership.foreignGm, secrets.foreignGm],
-    ].map(([membershipId, secret]) => ({
-      membershipId: membershipId!,
-      tokenHash: hashToken(secret!),
-      expiresAt: new Date(Date.now() + 600_000),
-    })),
-  );
+  await seedProbeSessions(db, [
+    { membershipId: ids.membership.gm, campaignId: ids.campaign, role: "GM", token: secrets.gm },
+    { membershipId: ids.membership.owner, campaignId: ids.campaign, role: "PLAYER", token: secrets.owner },
+    { membershipId: ids.membership.controller, campaignId: ids.campaign, role: "PLAYER", token: secrets.controller },
+    { membershipId: ids.membership.other, campaignId: ids.campaign, role: "PLAYER", token: secrets.other },
+    { membershipId: ids.membership.foreignGm, campaignId: ids.foreignCampaign, role: "GM", token: secrets.foreignGm },
+  ]);
   await db.insert(characters).values([
     {
       id: ids.character.own,
