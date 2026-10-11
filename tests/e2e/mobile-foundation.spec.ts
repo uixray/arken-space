@@ -803,6 +803,7 @@ test("compact player preview exposes only available surfaces and account exit", 
   // которая обходила бы auto console guard основной campaign-fixture.
   const player = await playwright.request.newContext({
     baseURL: new URL(page.url()).origin,
+    extraHTTPHeaders: { Origin: new URL(page.url()).origin },
   });
   try {
     await expect(

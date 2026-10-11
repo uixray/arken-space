@@ -52,7 +52,7 @@ test("account registration, verification, reset, login and logout in browser (mo
     return route.fulfill({ json: [] });
   });
 
-  await page.goto("/");
+  await page.goto("/account");
   await expect(
     page.getByRole("heading", { name: "Войти в аккаунт" }),
   ).toBeVisible();
@@ -64,7 +64,10 @@ test("account registration, verification, reset, login and logout in browser (mo
     .fill("secure phrase more than twelve");
   await page.getByRole("button", { name: "Зарегистрироваться" }).click();
   await expect(
-    page.getByText(/письмо для подтверждения уже отправлено/),
+    page.getByRole("status").filter({
+      hasText:
+        "Если адрес можно зарегистрировать, запрос на подтверждение принят. Проверьте почту позже.",
+    }),
   ).toBeVisible();
 
   await page.goto("/account/verify#token=synthetic-verification-token");
