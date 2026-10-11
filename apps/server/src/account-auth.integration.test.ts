@@ -12,6 +12,7 @@ import { registerAccountAuthRoutes } from "./account-auth-routes.js";
 import { drainAccountMailOutboxOnce } from "./account-mail-outbox.js";
 import { authFromSessionToken, sessionIsActive } from "./auth.js";
 import { hashToken } from "./security.js";
+import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
 
 const origin = "http://localhost:5173";
 const password = "correct horse battery staple";
@@ -23,10 +24,7 @@ let outbox: ReturnType<typeof createTestMailOutbox>;
 let mailKeyring: ReturnType<typeof createTestMailKeyring>;
 
 beforeEach(async () => {
-  database = new PGlite();
-  const migrations = new URL("../../../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrations)).filter((name) => name.endsWith(".sql")).sort())
-    await database.exec((await readFile(new URL(file, migrations), "utf8")).replaceAll("--> statement-breakpoint", ""));
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
   outbox = createTestMailOutbox();
   mailKeyring = createTestMailKeyring();

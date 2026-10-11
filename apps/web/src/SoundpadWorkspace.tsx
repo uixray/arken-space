@@ -5,6 +5,8 @@ import type { GameSocket } from "./realtime.js";
 import { SoundEffectsPlayback } from "./sound-effects-playback.js";
 import { SoundClipEditor } from "./SoundClipEditor.js";
 import { ArkenDialog } from "./ui/ArkenDialog";
+import { AppIcon } from "./ui/AppIcon";
+import { FavoriteIcon } from "./ui/icons";
 import "./SoundpadWorkspace.css";
 
 type Props = { campaignId: string; membershipId: string; role: Role; assets: AssetDto[]; socket: GameSocket | null; onUpload: (file: File, kind: "AUDIO", options?: { audioPurpose?: AudioPurpose }) => Promise<AssetDto>; onRefreshSnapshot?: () => Promise<void>; launcherTarget?: HTMLElement | null };
@@ -301,7 +303,7 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
           <button type="button" className="soundpad__sound" aria-label={`Запустить звук: ${sound.label}`} disabled={!data.playerPlaybackEnabled && role !== "GM"} onClick={() => trigger(sound.id)} title={sound.sourceNote ?? undefined}>
             <span aria-hidden="true">{sound.icon}</span><span>{sound.label}</span><small>{sound.category}</small>
           </button>
-          <button type="button" className="soundpad__favorite" aria-label={`${favorites.has(sound.id) ? "Убрать из" : "Добавить в"} избранное: ${sound.label}`} aria-pressed={favorites.has(sound.id)} onClick={() => toggleFavorite(sound.id)}>{favorites.has(sound.id) ? "★" : "☆"}</button>
+          <button type="button" className="soundpad__favorite" aria-label={`${favorites.has(sound.id) ? "Убрать из" : "Добавить в"} избранное: ${sound.label}`} aria-pressed={favorites.has(sound.id)} onClick={() => toggleFavorite(sound.id)}><AppIcon icon={FavoriteIcon} className={favorites.has(sound.id) ? "soundpad__favorite-icon--selected" : undefined} /></button>
         </div>;
       })}</div>}
     </section>)}

@@ -1,6 +1,6 @@
 import type { GameSocket } from "../realtime";
 
-type Handler = (value?: any) => void;
+type Handler = (value?: unknown) => void;
 type RulerPayload = {
   sceneId: string;
   membershipId: string;
@@ -53,7 +53,7 @@ export function createGameSocket(): GameSocket {
       listeners.set(event, group);
       return this;
     },
-    emit(event: string, payload: any) {
+    emit(event: string, payload: { sceneId: string; points?: Array<{ x: number; y: number }> }) {
       log("out:" + event, payload);
       if (event === "ruler:update" || event === "ruler:clear") {
         const points = payload.points ?? [];

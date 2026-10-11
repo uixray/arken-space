@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { SceneDto } from "@arken/contracts";
+import type { GameSnapshot, MapPing, SceneDto } from "@arken/contracts";
 import type { GameSocket } from "../realtime";
-import { useGameSocketSubscriptions } from "../use-game-socket-subscriptions";
+import { useGameSocketSubscriptions, type RulerItem, type PresenceItem } from "../use-game-socket-subscriptions";
 import { Orthographic2DRenderer } from "../renderers/Orthographic2DRenderer";
 
 declare global {
@@ -22,12 +22,12 @@ const scene: SceneDto = {
 function SyntheticRulerClient() {
   const client = new URLSearchParams(location.search).get("client") ?? "alpha";
   const membershipId = client === "alpha" ? "member-alpha" : "member-beta";
-  const [, setSnapshot] = useState<any>(null);
-  const [pings, setPings] = useState<any[]>([]);
-  const [rulers, setRulers] = useState<any[]>([]);
-  const [cursors, setCursors] = useState<any[]>([]);
-  const [, setRollToasts] = useState<any[]>([]);
-  const [, setPresence] = useState<any[]>([]);
+  const [, setSnapshot] = useState<GameSnapshot | null>(null);
+  const [pings, setPings] = useState<MapPing[]>([]);
+  const [rulers, setRulers] = useState<RulerItem[]>([]);
+  const [cursors, setCursors] = useState<import("../renderers/cursor-presence").CursorPresence[]>([]);
+  const [, setRollToasts] = useState<import("../toast-state").RollToast[]>([]);
+  const [, setPresence] = useState<PresenceItem[]>([]);
   const [error, setError] = useState("");
   const knownChatMessageIdsRef = useRef(new Set<string>());
   const activeChatThreadIdRef = useRef<string | null>(null);

@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { starterStatLayout } from "@arken/system";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
@@ -126,6 +127,7 @@ test("UIX-644 PlayerRequests custom selectors retain keyboard focus and state at
         controllerMembershipIds: [],
         portraitAssetId: null,
         stats: {},
+        statLayout: starterStatLayout,
         skills: [],
         spells: [],
         notes: "",

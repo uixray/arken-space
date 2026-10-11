@@ -542,7 +542,7 @@ export function MapToolbar({
             }
           }}
         >
-          <span aria-hidden="true">▧</span>
+          <AppIcon icon={MapObjectsIcon} />
           <span className="map-tool__label">Штамп</span>
         </ToolbarButton>
       )}

@@ -174,7 +174,7 @@ multi-campaign provisioning service.
 
 ### HTTP API по доменам
 
-Всего **162** HTTP-маршрута во всех server route-модулях: 85 остаются в
+Всего **206** HTTP-маршрута во всех server route-модулях: 85 остаются в
 `routes.ts`, остальные разделены по персонажам, столкновениям, паузе кампании,
 operator feedback, заявкам игроков, сюжетному каналу, картам, магии и
 содержимому мира.
@@ -377,7 +377,7 @@ sequenceDiagram
 
 ## Данные
 
-Drizzle schema содержит **56** прикладных таблиц.
+Drizzle schema содержит **71** прикладных таблиц.
 
 | Группа             | Таблицы                                                                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -395,6 +395,22 @@ Drizzle schema содержит **56** прикладных таблиц.
 | Media/audio        | `assets`, `campaign_audio_tracks`                                                                                                                       |
 | Аудит              | `game_events`, `action_journal`                                                                                                                         |
 | Обратная связь     | `feedback_reports`, `feedback_attachments`, `feedback_operator_audits`                                                                                  |
+
+| Новые доменные данные | `users` |
+| Новые доменные данные | `account_sessions` |
+| Новые доменные данные | `account_action_tokens` |
+| Новые доменные данные | `account_mail_outbox` |
+| Новые доменные данные | `account_campaign_creations` |
+| Новые доменные данные | `account_campaign_invites` |
+| Новые доменные данные | `audio_clip_candidates` |
+| Новые доменные данные | `audio_clip_provenance` |
+| Новые доменные данные | `campaign_media_reservations` |
+| Новые доменные данные | `global_sticker_packs` |
+| Новые доменные данные | `global_sticker_media` |
+| Новые доменные данные | `global_stickers` |
+| Новые доменные данные | `campaign_sound_packs` |
+| Новые доменные данные | `campaign_soundpad_settings` |
+| Новые доменные данные | `campaign_sounds` |
 
 Ключевые отношения:
 
@@ -434,7 +450,7 @@ Drizzle schema содержит **56** прикладных таблиц.
   удалении меняйте content version и не считайте browser cache persistence;
 - `game_events` и `action_journal` обеспечивают разные виды истории.
 
-Миграции `0000`–`0046` (47 SQL files) применяются при старте server-контейнера
+Миграции `0000`–`0059` (60 SQL files) применяются при старте server-контейнера
 до запуска Fastify. Изменение schema обязано сопровождаться migration, тестами, обновлением
 backup/restore manifests и проверкой role-filtered snapshot.
 
@@ -476,3 +492,10 @@ backup, rehearsal, typed confirmation и receipt.
 Перед изменениями рекомендуется прочитать
 [development-guide.md](./development-guide.md) и
 [skills-matrix.md](./skills-matrix.md).
+
+### Дополнительные текущие realtime-события
+
+- `soundpad:trigger`
+- `soundpad:stop`
+- `soundpad:triggered`
+- `soundpad:stopped`

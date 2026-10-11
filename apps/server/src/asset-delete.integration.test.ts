@@ -18,8 +18,8 @@ vi.mock("./storage.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./storage.js")>()),
   removeStoredUpload: removeStoredUploadMock,
 }));
-
 import { registerAssetLifecycleRoutes } from "./asset-usage.js";
+import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
 
 let database: PGlite;
 let app: FastifyInstance;
@@ -36,10 +36,7 @@ const mediaId = "20000000-0000-4000-8000-000000000009";
 const mapId = "20000000-0000-4000-8000-000000000010";
 
 beforeEach(async () => {
-  database = new PGlite();
-  const migrations = new URL("../../../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrations)).filter((name) => name.endsWith(".sql")).sort())
-    await database.exec((await readFile(new URL(file, migrations), "utf8")).replaceAll("--> statement-breakpoint", ""));
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
   await db.insert(schema.campaigns).values([
     { id: campaignId, name: "Delete test" },

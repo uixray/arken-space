@@ -138,7 +138,9 @@ describe("global sticker additive migration", () => {
       const campaignId = id(); const membershipId = id(); const threadId = id();
       const packId = id(); const mediaId = id(); const stickerId = id(); const messageId = id();
       await legacyDb.insert(schema.campaigns).values({ id: campaignId, name: "Legacy" });
-      await legacyDb.insert(schema.memberships).values({ id: membershipId, campaignId, role: "PLAYER", displayName: "Old player" });
+      // Seed the actual 0046 schema: the current Drizzle membership shape also
+      // includes account columns that were introduced by later migrations.
+      await legacy.query("INSERT INTO memberships (id,campaign_id,role,display_name) VALUES ($1,$2,'PLAYER','Old player')", [membershipId, campaignId]);
       await legacyDb.insert(schema.chatThreads).values({ id: threadId, campaignId, type: "STREAM", stream: "TABLE" }).onConflictDoNothing();
       const [legacyThread] = await legacyDb.select().from(schema.chatThreads).where(and(eq(schema.chatThreads.campaignId, campaignId), eq(schema.chatThreads.stream, "TABLE"))).limit(1);
       if (!legacyThread) throw new Error("LEGACY_TABLE_THREAD_MISSING");

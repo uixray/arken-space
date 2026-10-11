@@ -99,6 +99,11 @@ async function expectRejected(
   throw new ProbeAssertionError(message);
 }
 
+/** Preserve a diagnostic cause, but never attach raw PostgreSQL connection details. */
+function probeFailure(code: string, error: unknown): Error {
+  return new Error(code, { cause: new Error(safeProbeDiagnostic(error)) });
+}
+
 function safeProbeDiagnostic(error: unknown): string {
   return classifyProbeDiagnostic(error);
 }
@@ -498,14 +503,14 @@ try {
   console.log("[spell-pack-probe] storage and API passed");
 } catch (error) {
   console.error(safeProbeDiagnostic(error));
-  throw new Error("SPELL_PROBE_DIAGNOSTIC_FAILURE");
+  throw probeFailure("SPELL_PROBE_DIAGNOSTIC_FAILURE", error);
 } finally {
   const cleanup = async (operation: () => Promise<unknown>) => {
     try {
       await operation();
     } catch (error) {
       console.error(safeProbeDiagnostic(error));
-      throw new Error("SPELL_PROBE_CLEANUP_FAILED");
+      throw probeFailure("SPELL_PROBE_CLEANUP_FAILED", error);
     }
   };
   if (apiApp) await cleanup(() => apiApp!.close());

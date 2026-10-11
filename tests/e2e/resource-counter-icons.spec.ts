@@ -15,6 +15,7 @@ for (const role of ["GM", "PLAYER"] as const)
         controllerMembershipIds: [],
         portraitAssetId: null,
         stats: { enduranceRegen: 3, manaRegen: 2 },
+        statLayout: structuredClone(snapshot.campaign.statLayout),
         skills: [],
         spells: [],
         entries: [],

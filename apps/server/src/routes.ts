@@ -233,6 +233,8 @@ import {
   renderTokenAsset,
   storeGeneratedToken,
   storeUpload,
+  prepareUpload,
+  storePreparedUpload,
 } from "./storage.js";
 import {
   authenticatedFeedbackFieldsSchema,
@@ -9097,12 +9099,10 @@ export function registerRoutes(
     const reservationKey = `asset-upload:${actionId}`;
     let reserved = false;
     try {
-      await reserveCampaignMediaBytes(db, auth.campaignId, reservationKey, buffer.length);
+      const prepared = await prepareUpload(buffer, query.kind === "AUDIO" ? "audio" : "image");
+      await reserveCampaignMediaBytes(db, auth.campaignId, reservationKey, prepared.upload.sizeBytes);
       reserved = true;
-      const stored = await storeUpload(
-        buffer,
-        query.kind === "AUDIO" ? "audio" : "image",
-      );
+      const stored = await storePreparedUpload(prepared);
       const asset = await db
         .transaction(async (tx) => {
           await lockCampaignMediaQuota(tx, auth.campaignId);

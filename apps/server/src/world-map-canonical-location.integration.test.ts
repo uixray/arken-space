@@ -1,7 +1,6 @@
-import { readdir, readFile } from "node:fs/promises";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -10,6 +9,7 @@ import { env } from "./env.js";
 import { hashToken } from "./security.js";
 import { registerWorldMapRoutes } from "./world-map-routes.js";
 import { buildWorldMapsSnapshot } from "./world-maps.js";
+import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
 
 const id = () => crypto.randomUUID();
 const campaignId = id();
@@ -25,17 +25,7 @@ let app: ReturnType<typeof Fastify>;
 let db: ReturnType<typeof drizzle<typeof schema>>;
 
 beforeAll(async () => {
-  pg = new PGlite();
-  const migrations = new URL("../../../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrations))
-    .filter((name) => name.endsWith(".sql"))
-    .sort())
-    await pg.exec(
-      (await readFile(new URL(file, migrations), "utf8")).replaceAll(
-        "--> statement-breakpoint",
-        "",
-      ),
-    );
+  pg = await createMigratedPglite();
   db = drizzle(pg, { schema });
   await db
     .insert(schema.campaigns)

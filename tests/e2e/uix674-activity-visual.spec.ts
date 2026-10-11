@@ -19,6 +19,7 @@ function visualSnapshot(
     controllerMembershipIds: [],
     portraitAssetId: null,
     stats: { enduranceRegen: 3, manaRegen: 2 },
+    statLayout: structuredClone(snapshot.campaign.statLayout),
     skills: [],
     spells: [],
     notes: "",

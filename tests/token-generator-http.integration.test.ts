@@ -1,17 +1,10 @@
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -19,6 +12,7 @@ import * as schema from "../packages/db/src/schema.js";
 import { registerRoutes } from "../apps/server/src/routes.js";
 import { env } from "../apps/server/src/env.js";
 import { hashToken } from "../apps/server/src/security.js";
+import { createMigratedPglite } from "./helpers/pglite-template.js";
 
 let database: PGlite;
 let app: FastifyInstance;
@@ -66,20 +60,7 @@ beforeEach(async () => {
   await writeFile(join(mediaRoot, "foreign.webp"), image);
   await writeFile(join(mediaRoot, "token.webp"), image);
 
-  database = new PGlite();
-  for (const file of (
-    await readdir(new URL("../packages/db/drizzle/", import.meta.url))
-  )
-    .filter((name) => name.endsWith(".sql"))
-    .sort())
-    await database.exec(
-      (
-        await readFile(
-          new URL(`../packages/db/drizzle/${file}`, import.meta.url),
-          "utf8",
-        )
-      ).replaceAll("--> statement-breakpoint", ""),
-    );
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
   await db.insert(schema.campaigns).values([
     { id: ids.campaign, name: "A", activeSceneId: ids.scene },

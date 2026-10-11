@@ -1,10 +1,10 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { join } from "node:path";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -13,6 +13,7 @@ import { registerRoutes } from "../apps/server/src/routes.js";
 import { env } from "../apps/server/src/env.js";
 import { hashToken } from "../apps/server/src/security.js";
 import { mediaRoot } from "../apps/server/src/storage.js";
+import { createMigratedPglite } from "./helpers/pglite-template.js";
 
 const campaign = crypto.randomUUID();
 const foreignCampaign = crypto.randomUUID();
@@ -32,21 +33,7 @@ const auth = (secret: string) => ({
 });
 
 beforeEach(async () => {
-  pg = new PGlite();
-  for (const file of (
-    await readdir(new URL("../packages/db/drizzle/", import.meta.url))
-  )
-    .filter((name) => name.endsWith(".sql"))
-    .sort()) {
-    await pg.exec(
-      (
-        await readFile(
-          new URL(`../packages/db/drizzle/${file}`, import.meta.url),
-          "utf8",
-        )
-      ).replaceAll("--> statement-breakpoint", ""),
-    );
-  }
+  pg = await createMigratedPglite();
   const db = drizzle(pg, { schema });
   await db.insert(schema.campaigns).values([
     { id: campaign, name: "Lifecycle" },

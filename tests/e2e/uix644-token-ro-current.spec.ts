@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { starterStatLayout } from "@arken/system";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
@@ -33,6 +34,7 @@ async function install(page: Page) {
         controllerMembershipIds: [],
         portraitAssetId: null,
         stats: {},
+        statLayout: starterStatLayout,
         skills: [],
         spells: [],
         notes: "",
@@ -53,6 +55,7 @@ async function install(page: Page) {
         controllerMembershipIds: [],
         portraitAssetId: null,
         stats: {},
+        statLayout: starterStatLayout,
         skills: [],
         spells: [],
         notes: "",

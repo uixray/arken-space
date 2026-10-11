@@ -10,7 +10,7 @@ import "../src/mobile-foundation.css";
 import { CatalogEntryForm } from "../src/CatalogEntryForm";
 
 function CatalogEntryFormBrowserHarness() {
-  const attempts = useRef(0);
+  const attempts = useRef(0); const [attemptCount, setAttemptCount] = useState(0);
   const [status, setStatus] = useState("READY — isolated component; no API calls");
   const [payload, setPayload] = useState("none");
   const [legacyPayload, setLegacyPayload] = useState("none");
@@ -57,7 +57,7 @@ function CatalogEntryFormBrowserHarness() {
           resourceLabels={{ physical: "Сила тела", magic: "Сила магии" }}
           onCancel={() => setStatus("CANCEL_CALLBACK — synthetic only")}
           onSubmit={async (input) => {
-            attempts.current += 1;
+            attempts.current += 1; setAttemptCount(attempts.current);
             setPayload(JSON.stringify(input));
             if (attempts.current === 1) {
               setStatus("SYNTHETIC_REJECTION — intentionally no API request");
@@ -84,7 +84,7 @@ function CatalogEntryFormBrowserHarness() {
       >
         <p data-testid="callback-status" style={{ margin: "0 0 8px" }}>{status}</p>
         <output data-testid="callback-payload">{payload}</output>
-        <output data-testid="callback-attempts">{attempts.current}</output>
+        <output data-testid="callback-attempts">{attemptCount}</output>
       </aside>
     </main>
   );

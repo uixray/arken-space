@@ -60,3 +60,4 @@
   .soundpad__manager form { flex-wrap: wrap; }
   .soundpad__manager label { flex: 1 1 100%; }
 }
+.soundpad__favorite-icon--selected { fill: currentColor; }

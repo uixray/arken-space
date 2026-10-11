@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import type { Readable } from "node:stream";
 import { quantizeAudioClipRange } from "./audio-clip-lifecycle.js";
+import { createWaveformAccumulator } from "./waveform-accumulator.js";
 
 const MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
 const STDERR_LIMIT = 32 * 1024;
@@ -34,7 +35,7 @@ function binary(name: "ffmpeg" | "ffprobe") {
   return configured || name;
 }
 
-async function runCodec(args: string[], input: Readable, timeoutMs: number, outputLimit = MAX_OUTPUT_BYTES): Promise<Buffer> {
+async function runCodec(args: string[], input: Readable, timeoutMs: number, outputLimit = MAX_OUTPUT_BYTES, consumeOutput?: (chunk: Buffer) => void): Promise<Buffer> {
   try { await acquireCodecSlot(); }
   catch (error) { input.destroy(); throw error; }
   return new Promise((resolve, reject) => {
@@ -54,7 +55,7 @@ async function runCodec(args: string[], input: Readable, timeoutMs: number, outp
       releaseCodecSlot();
       input.unpipe(child.stdin);
       if (terminalError) { input.destroy(); reject(terminalError); return; }
-      resolve(Buffer.concat(chunks, outputBytes));
+      resolve(consumeOutput ? Buffer.alloc(0) : Buffer.concat(chunks, outputBytes));
     };
     const abort = (error: Error) => {
       terminalError ??= error;
@@ -66,7 +67,10 @@ async function runCodec(args: string[], input: Readable, timeoutMs: number, outp
     child.stdout.on("data", (chunk: Buffer) => {
       outputBytes += chunk.length;
       if (outputBytes > outputLimit) { abort(new Error("PROCESSING_OUTPUT_LIMIT")); return; }
-      chunks.push(chunk);
+      if (consumeOutput) {
+        try { consumeOutput(chunk); }
+        catch { abort(new Error("CODEC_FAILED")); }
+      } else chunks.push(chunk);
     });
     child.stderr.on("data", (chunk: Buffer) => {
       if (stderrBytes >= STDERR_LIMIT) return;
@@ -120,7 +124,7 @@ function probeArgs(): string[] {
 export async function inspectAudioSource(input: Readable, expectedMime?: "audio/mpeg" | "audio/ogg" | "audio/wav") {
   const probe = await runCodec(probeArgs(), input, ANALYSIS_TIMEOUT_MS, 256 * 1024);
   if (expectedMime) {
-    let formatNames = "";
+    let formatNames: string;
     try { formatNames = (JSON.parse(probe.toString("utf8")) as { format?: { format_name?: string } }).format?.format_name ?? ""; }
     catch { throw new Error("UNSUPPORTED_AUDIO"); }
     const accepted = expectedMime === "audio/mpeg" ? /(?:^|,)mp3(?:,|$)/ : expectedMime === "audio/ogg" ? /(?:^|,)ogg(?:,|$)/ : /(?:^|,)wav(?:,|$)/;
@@ -131,18 +135,12 @@ export async function inspectAudioSource(input: Readable, expectedMime?: "audio/
 
 export async function decodeWaveform(input: Readable, profile: AudioProfile, bins = 2048) {
   if (!Number.isInteger(bins) || bins < 1 || bins > 2048) throw new Error("INVALID_RANGE");
-  const raw = await runCodec(["ffmpeg", "-v", "error", "-protocol_whitelist", "pipe", "-i", "pipe:0", "-map", "0:a:0", "-vn", "-sn", "-dn", "-f", "f32le", "-acodec", "pcm_f32le", "pipe:1"], input, ANALYSIS_TIMEOUT_MS, 32 * 1024 * 1024);
-  const frameBytes = profile.channels * 4;
-  if (raw.length === 0 || raw.length % frameBytes !== 0) throw new Error("CODEC_FAILED");
-  const frames = raw.length / frameBytes;
-  const peaks = Array.from({ length: bins }, () => 0);
-  for (let frame = 0; frame < frames; frame++) {
-    const bin = Math.min(bins - 1, Math.floor(frame * bins / frames));
-    for (let channel = 0; channel < profile.channels; channel++) {
-      const sample = Math.abs(raw.readFloatLE((frame * profile.channels + channel) * 4));
-      if (Number.isFinite(sample) && sample > peaks[bin]!) peaks[bin] = Math.min(1, sample);
-    }
-  }
+  const accumulator = createWaveformAccumulator(profile.channels, bins);
+  // Retain the accepted 24h duration ceiling, timeout and codec concurrency
+  // bounds, but never buffer the complete multichannel decoded PCM.
+  await runCodec(["ffmpeg", "-v", "error", "-protocol_whitelist", "pipe", "-i", "pipe:0", "-map", "0:a:0", "-vn", "-sn", "-dn", "-f", "f32le", "-acodec", "pcm_f32le", "pipe:1"], input, ANALYSIS_TIMEOUT_MS,
+    profile.sampleRate * profile.channels * 4 * 86400, (chunk) => accumulator.push(chunk));
+  const { frames, peaks } = accumulator.finish();
   return { frames, durationMs: frames * 1000 / profile.sampleRate, peaks };
 }
 

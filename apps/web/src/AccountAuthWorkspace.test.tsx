@@ -249,7 +249,7 @@ describe("AccountAuthWorkspace", () => {  it("registers without creating a sessi
     });
     renderComponent(<AccountAuthWorkspace onAuthenticated={vi.fn()} capabilities={capabilities} />);
     await screen.findByRole("heading", { name: "Мои кампании" });
-    const inviteButton = screen.getByRole("button", { name: "Создать ссылку-приглашение" });
+    const inviteButton = await screen.findByRole("button", { name: "Создать ссылку-приглашение" });
     fireEvent.click(inviteButton);
     await screen.findByRole("alert");
     expect(inviteButton).toBeDisabled();

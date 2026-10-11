@@ -8,7 +8,7 @@ export type HttpRouteKey =
   | `PUT /${string}`;
 
 export type CampaignRoutePolicy =
-  "CAMPAIGN" | "WORLD_CONTENT_CANON" | "OPERATOR_FEEDBACK" | "PUBLIC_ROADMAP";
+  "CAMPAIGN" | "WORLD_CONTENT_CANON" | "OPERATOR_FEEDBACK" | "PUBLIC_ROADMAP" | "GLOBAL_STICKER_CATALOG";
 
 export type RoutePolicyEntry = Readonly<{
   key: HttpRouteKey;
@@ -62,6 +62,25 @@ export const PUBLIC_ROADMAP_ROUTE_KEYS = [
 ] as const satisfies readonly HttpRouteKey[];
 
 export const CAMPAIGN_ROUTE_KEYS = [
+  // Paired foreign/own controls in account-campaigns and character-stat-layout suites.
+  "GET /api/account/campaigns/:campaignId/invites",
+  "PATCH /api/characters/:characterId/stat-layout",
+  "GET /api/characters/:characterId/spell-branches",
+  "DELETE /api/story/attachments/:contentId",
+  "POST /api/invites/:id/revoke",
+  // Audio candidate ownership + foreign-campaign probes: audio-clip-postgres.integration.test.ts.
+  "DELETE /api/audio-clip-previews/:candidateId",
+  "GET /api/assets/:assetId/audio-analysis",
+  "GET /api/audio-clip-previews/:candidateId",
+  "GET /api/audio-clip-previews/:candidateId/content",
+  "POST /api/assets/:assetId/audio-clip-preview",
+  "POST /api/soundpad/packs/:packId/clips",
+  // Paired with the foreign-mutation + own-control matrix in soundpad-routes.test.ts.
+  "DELETE /api/soundpad/packs/:packId",
+  "DELETE /api/soundpad/sounds/:soundId",
+  "PATCH /api/soundpad/packs/:packId",
+  "PATCH /api/soundpad/sounds/:soundId",
+  "POST /api/soundpad/packs/:packId/sounds",
   "DELETE /api/catalog/:id",
   "DELETE /api/assets/:id",
   "DELETE /api/character-media/:id",
@@ -75,6 +94,8 @@ export const CAMPAIGN_ROUTE_KEYS = [
   "DELETE /api/world-maps/locations/:id/scenes/:sceneId",
   "GET /api/assets/:id/content",
   "GET /api/assets/:id/usage",
+  "GET /api/gm/sticker-packs/:id",
+  "GET /api/spell-packs/:id/versions/:versionId",
   "GET /api/characters/:characterId/media",
   "GET /api/characters/:characterId/spell-progression",
   "GET /api/chat/attachments/:contentId/content",
@@ -86,6 +107,7 @@ export const CAMPAIGN_ROUTE_KEYS = [
   "GET /api/story/media/:contentId",
   "GET /api/world-content-instances/:id",
   "PATCH /api/catalog/:id",
+  "PATCH /api/assets/:id/audio-purpose",
   "PATCH /api/character-media/:id",
   "PATCH /api/characters/:characterId/catalog/:id",
   "PATCH /api/characters/:id",
@@ -143,7 +165,21 @@ export const CAMPAIGN_ROUTE_KEYS = [
   "PUT /api/assets/:id/content",
 ] as const satisfies readonly HttpRouteKey[];
 
+/** Published media is shared across authenticated campaigns; management is
+ * creator-owned (or explicitly operator-authorized), never arbitrary GM access.
+ * Behavioral coverage: global-sticker-catalog.integration.test.ts.
+ */
+export const GLOBAL_STICKER_CATALOG_ROUTE_KEYS = [
+  "GET /api/global-stickers/:id/content",
+  "GET /api/gm/global-sticker-packs/:id",
+  "PATCH /api/gm/global-sticker-packs/:id",
+  "POST /api/gm/global-sticker-packs/:id/deprecate",
+  "POST /api/gm/global-sticker-packs/:id/publish",
+  "POST /api/gm/global-sticker-packs/:id/stickers",
+] as const satisfies readonly HttpRouteKey[];
+
 export const GLOBAL_ROUTE_EXCEPTIONS = {
+  GLOBAL_STICKER_CATALOG: GLOBAL_STICKER_CATALOG_ROUTE_KEYS,
   OPERATOR_FEEDBACK: OPERATOR_FEEDBACK_ROUTE_KEYS,
   PUBLIC_ROADMAP: PUBLIC_ROADMAP_ROUTE_KEYS,
   WORLD_CONTENT_CANON: WORLD_CONTENT_CANON_ROUTE_KEYS,
@@ -153,6 +189,7 @@ export const GLOBAL_ROUTE_EXCEPTIONS = {
 >;
 
 export const ROUTE_POLICY_REGISTRY: readonly RoutePolicyEntry[] = [
+  ...GLOBAL_STICKER_CATALOG_ROUTE_KEYS.map((key) => ({ key, policy: "GLOBAL_STICKER_CATALOG" as const })),
   ...CAMPAIGN_ROUTE_KEYS.map((key) => ({ key, policy: "CAMPAIGN" as const })),
   ...WORLD_CONTENT_CANON_ROUTE_KEYS.map((key) => ({
     key,
@@ -169,6 +206,7 @@ export const ROUTE_POLICY_REGISTRY: readonly RoutePolicyEntry[] = [
 ];
 
 const ROUTE_POLICIES = new Set<CampaignRoutePolicy>([
+  "GLOBAL_STICKER_CATALOG",
   "CAMPAIGN",
   "WORLD_CONTENT_CANON",
   "OPERATOR_FEEDBACK",

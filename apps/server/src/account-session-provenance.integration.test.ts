@@ -1,5 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -9,15 +8,13 @@ import { authFromSessionToken, createSession } from "./auth.js";
 import { env } from "./env.js";
 import { hashToken } from "./security.js";
 import { claimInviteOwnership } from "./routes.js";
+import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
 
 let database: PGlite;
 let db: ReturnType<typeof drizzle<typeof schema>>;
 
 beforeEach(async () => {
-  database = new PGlite();
-  const migrations = new URL("../../../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrations)).filter((name) => name.endsWith(".sql")).sort())
-    await database.exec((await readFile(new URL(file, migrations), "utf8")).replaceAll("--> statement-breakpoint", ""));
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
 });
 

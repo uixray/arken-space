@@ -399,6 +399,11 @@ describe("backup and restore safety", () => {
       name: projectName,
       services: {
         postgres: {
+          environment: {
+            POSTGRES_USER: "arken",
+            POSTGRES_DB: "arken",
+            POSTGRES_PASSWORD: "restore",
+          },
           volumes: [
             {
               type: "volume",
@@ -411,6 +416,7 @@ describe("backup and restore safety", () => {
           environment: {
             BUILD_REVISION: buildRevision,
             DATABASE_URL: "postgres://arken:restore@postgres:5432/arken",
+            MEDIA_ROOT: "/srv/arken-space/media",
           },
           volumes: [
             {
@@ -430,6 +436,21 @@ describe("backup and restore safety", () => {
         buildRevision,
       }),
     ).not.toThrow();
+    expect(() =>
+      assertIsolatedComposeConfig(
+        {
+          ...config,
+          services: {
+            ...config.services,
+            postgres: {
+              ...config.services.postgres,
+              environment: { ...config.services.postgres.environment, POSTGRES_DB: "foreign" },
+            },
+          },
+        },
+        { projectName, mediaSource, buildRevision },
+      ),
+    ).toThrow(/PostgreSQL identity/);
     const restoredProductionPath = path.join(
       root,
       "temporary-snapshot",

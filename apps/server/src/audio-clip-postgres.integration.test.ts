@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readdir, readFile, writeFile, mkdir, unlink, mkdtemp, rm } from "node:fs/promises";
 import { resolve, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import Fastify from "fastify";
+import Fastify, { type LightMyRequestResponse } from "fastify";
 import { createDatabase } from "@arken/db";
 import { assets, audioClipCandidates, audioClipProvenance, campaignMediaReservations, campaignSounds, campaignSoundPacks, campaigns, memberships } from "@arken/db";
 import { and, eq, sum } from "drizzle-orm";
@@ -15,6 +15,7 @@ import type { AuthContext } from "./auth.js";
 import { cleanupExpiredAudioClipCandidates, registerAudioClipRoutes } from "./audio-clip-routes.js";
 import { registerSoundpadRoutes } from "./soundpad-routes.js";
 import { lockCampaignMediaQuota, reserveCampaignMediaBytes, requireLiveCampaignMediaReservation } from "./media-quota-reservations.js";
+import { env } from "./env.js";
 
 const pgUrl = process.env.AUDIO_CLIP_PG_URL;
 const pgContainerId = process.env.AUDIO_CLIP_PG_CONTAINER_ID;
@@ -242,6 +243,51 @@ pgDescribe("audio clips — bounded PostgreSQL gate", () => {
       inspectSpy.mockRestore(); decodeSpy.mockRestore(); renderSpy.mockRestore();
     }
   }, 30_000);
+  it("preserves cancellation when the in-flight codec fails after DELETE", async () => {
+    const fixture = await insertCandidate();
+    await db.delete(audioClipCandidates).where(eq(audioClipCandidates.id, fixture.candidate.id));
+    await db.delete(campaignMediaReservations).where(eq(campaignMediaReservations.campaignId, campaignId));
+    const [source] = await db.select().from(assets).where(eq(assets.id, fixture.sourceId));
+    const entered = deferred();
+    const finishCodec = deferred();
+    const inspectSpy = vi.spyOn(audioCodec, "inspectAudioSource").mockImplementation(async (input) => {
+      input.destroy();
+      return { sampleRate: 44_100, channels: 1, frames: 0, durationMs: 0, sampleFormat: "s16" };
+    });
+    const decodeSpy = vi.spyOn(audioCodec, "decodeWaveform").mockImplementation(async (input) => {
+      input.destroy(); return { frames: 4410, durationMs: 100, peaks: [0] };
+    });
+    const renderSpy = vi.spyOn(audioCodec, "renderPcmClip").mockImplementation(async (input) => {
+      input.destroy(); entered.resolve(); await finishCodec.promise;
+      throw new Error("PROCESSING_OUTPUT_LIMIT");
+    });
+    const actionId = randomUUID();
+    const pending = app.inject({ method: "POST", url: `/api/assets/${fixture.sourceId}/audio-clip-preview`,
+      payload: { actionId, sourceVersion: assetContentVersion(source!.storageKey), startMs: 0, endMs: 50 },
+    }).then((response: LightMyRequestResponse) => response);
+    try {
+      await entered.promise;
+      const [processing] = await db.select().from(audioClipCandidates).where(eq(audioClipCandidates.actionId, actionId));
+      expect(processing?.status).toBe("PROCESSING");
+      const cancelled = await app.inject({ method: "DELETE", url: `/api/audio-clip-previews/${processing!.id}` });
+      expect(cancelled.statusCode).toBe(204);
+      finishCodec.resolve();
+      const response = await pending;
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: "CANDIDATE_EXPIRED" });
+      const [terminal] = await db.select().from(audioClipCandidates).where(eq(audioClipCandidates.id, processing!.id));
+      expect(terminal?.status).toBe("CANCELLED");
+      expect(terminal?.reservedBytes).toBe(0);
+      expect(terminal?.storageKey).toBeNull();
+      expect(await db.select().from(campaignMediaReservations).where(and(
+        eq(campaignMediaReservations.campaignId, campaignId), eq(campaignMediaReservations.requestKey, `audio-clip:${actionId}`),
+      ))).toHaveLength(0);
+    } finally {
+      finishCodec.resolve(); await pending;
+      inspectSpy.mockRestore(); decodeSpy.mockRestore(); renderSpy.mockRestore();
+    }
+  }, 30_000);
+
   it("serializes two quota reservations and never commits an expired lease", async () => {
     const quota = Number(process.env.MEDIA_QUOTA_BYTES);
     expect(Number.isInteger(quota) && quota > 2 && quota <= 1_048_576).toBe(true);
@@ -285,6 +331,23 @@ pgDescribe("audio clips — bounded PostgreSQL gate", () => {
     expect(reservation?.reservedBytes).toBe(100);
   }, 30_000);
 
+  it("serializes replacement credit against competing replacements and uploads", async () => {
+    const { sourceId } = await insertCandidate();
+    await db.delete(campaignMediaReservations).where(eq(campaignMediaReservations.campaignId, campaignId));
+    const [source] = await db.select().from(assets).where(eq(assets.id, sourceId));
+    await db.insert(assets).values({ campaignId, uploadedByMembershipId: gmId, kind: "IMAGE", name: "Quota filler",
+      storageKey: `quota-filler-${randomUUID()}`, mimeType: "image/webp", sizeBytes: env.MEDIA_QUOTA_BYTES - source!.sizeBytes });
+    const results = await Promise.allSettled(["a", "b"].map((key) => reserveCampaignMediaBytes(
+      db, campaignId, `replacement-credit:${key}`, source!.sizeBytes, { assetId: sourceId, storageKey: source!.storageKey },
+    )));
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    await expect(reserveCampaignMediaBytes(db, campaignId, "competing-upload", 1)).rejects.toThrow("MEDIA_QUOTA_EXCEEDED");
+    await expect(reserveCampaignMediaBytes(db, campaignId, "stale-credit", 1,
+      { assetId: sourceId, storageKey: "stale-source" })).rejects.toThrow("ASSET_VERSION_CONFLICT");
+    expect(await db.select().from(campaignMediaReservations).where(eq(campaignMediaReservations.campaignId, campaignId))).toHaveLength(1);
+  }, 30_000);
+
   it("hides preview and save replay from a different GM in the same campaign", async () => {
     const { candidate } = await insertCandidate();
     const preview = await app.inject({ url: `/api/audio-clip-previews/${candidate.id}`, headers: { "x-qa-membership": otherGmId } });
@@ -312,10 +375,23 @@ pgDescribe("audio clips — bounded PostgreSQL gate", () => {
   }, 30_000);
 
   it("does not disclose preview or save action replays across campaigns", async () => {
-    const { sourceId, candidate } = await insertCandidate();
+    const { sourceId, candidate, bytes } = await insertCandidate();
     const saveActionId = randomUUID();
     await db.update(audioClipCandidates).set({ saveActionId, saveIntentHash: "prior-save" }).where(eq(audioClipCandidates.id, candidate.id));
     const headers = { "x-qa-campaign": foreignCampaignId };
+    expect((await app.inject({ url: `/api/assets/${sourceId}/audio-analysis`, headers })).statusCode).toBe(404);
+    for (const [method, suffix] of [["GET", ""], ["GET", "/content"], ["DELETE", ""]] as const) {
+      const denied = await app.inject({ method, url: `/api/audio-clip-previews/${candidate.id}${suffix}`, headers });
+      expect(denied.statusCode).toBe(404);
+      expect(denied.json()).toEqual({ error: "CANDIDATE_NOT_FOUND" });
+    }
+    const [afterForeign] = await db.select().from(audioClipCandidates).where(eq(audioClipCandidates.id, candidate.id));
+    expect(afterForeign?.status).toBe("READY");
+    expect(afterForeign?.storageKey).toBe(candidate.storageKey);
+    expect((await app.inject({ url: `/api/audio-clip-previews/${candidate.id}` })).statusCode).toBe(200);
+    const ownContent = await app.inject({ url: `/api/audio-clip-previews/${candidate.id}/content` });
+    expect(ownContent.statusCode).toBe(200);
+    expect(ownContent.rawPayload).toEqual(bytes);
     const preview = await app.inject({ method: "POST", url: `/api/assets/${sourceId}/audio-clip-preview`, headers,
       payload: { actionId: candidate.actionId, sourceVersion: "sha256:qa", startMs: 0, endMs: 50 } });
     expect(preview.statusCode).toBe(404);

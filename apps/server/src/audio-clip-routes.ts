@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Server } from "socket.io";
-import { and, eq, gt, isNotNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNotNull, lt, or } from "drizzle-orm";
 import {
   assets, audioClipCandidates, audioClipProvenance, campaignMediaReservations, campaignSoundPacks, campaignSounds,
 } from "@arken/db";
@@ -184,7 +184,11 @@ export function registerAudioClipRoutes(
     } catch (error) {
       if (generatedStorageKey) await removeStoredUpload(generatedStorageKey).catch(() => undefined);
       if (inserted) {
-        await db.update(audioClipCandidates).set({ status: "FAILED", reservedBytes: 0 }).where(eq(audioClipCandidates.id, inserted.id));
+        // Cancellation/expiry owns terminal state and reservation cleanup. A
+        // late codec failure must not turn that state back into FAILED.
+        const [failed] = await db.update(audioClipCandidates).set({ status: "FAILED", reservedBytes: 0 })
+          .where(and(eq(audioClipCandidates.id, inserted.id), eq(audioClipCandidates.status, "PROCESSING"))).returning({ id: audioClipCandidates.id });
+        if (!failed) return reply.code(409).send({ error: "CANDIDATE_EXPIRED" });
         await releaseCampaignMediaBytes(db, auth.campaignId, `audio-clip:${parsed.data.actionId}`);
       }
       const code = error instanceof Error && error.message === "SOURCE_STALE" ? "SOURCE_STALE" : publicError(error);

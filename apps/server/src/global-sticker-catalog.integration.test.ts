@@ -3,7 +3,7 @@ import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 import sharp from "sharp";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -15,6 +15,7 @@ import { registerGlobalStickerRoutes } from "./global-sticker-catalog.js";
 import { mediaRoot } from "./storage.js";
 import { env } from "./env.js";
 import { createHash } from "node:crypto";
+import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
 
 let pg: PGlite;
 let app: ReturnType<typeof Fastify>;
@@ -30,10 +31,7 @@ const contexts: Record<string, AuthContext> = {
 };
 
 beforeEach(async () => {
-  pg = new PGlite();
-  const migrations = new URL("../../../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrations)).filter((name) => name.endsWith(".sql")).sort())
-    await pg.exec((await readFile(new URL(file, migrations), "utf8")).replaceAll("--> statement-breakpoint", ""));
+  pg = await createMigratedPglite();
   db = drizzle(pg, { schema });
   await db.insert(schema.campaigns).values([{ id: ids.campaignA, name: "A" }, { id: ids.campaignB, name: "B" }]);
   await db.insert(schema.memberships).values([
@@ -79,6 +77,22 @@ describe("global sticker catalog routes", () => {
     expect(createConflict.statusCode).toBe(409);
     const foreignEdit = await app.inject({ method: "PATCH", url: `/api/gm/global-sticker-packs/${pack.id}`, headers: { "x-test-auth": "gmB" }, payload: { revision: 0, name: "Hijack" } });
     expect(foreignEdit.statusCode).toBe(404);
+    for (const [method, suffix, payload] of [
+      ["GET", "", undefined],
+      ["POST", "/publish", { revision: 0 }],
+      ["POST", "/deprecate", { revision: 0 }],
+    ] as const) {
+      const denied = await app.inject({ method, url: `/api/gm/global-sticker-packs/${pack.id}${suffix}`,
+        headers: { "x-test-auth": "gmB" }, payload });
+      expect(denied.statusCode, `${method} ${suffix}`).toBe(404);
+      expect(denied.json()).toEqual({ error: "GLOBAL_STICKER_PACK_NOT_FOUND" });
+    }
+    const foreignUpload = await app.inject({ method: "POST",
+      url: `/api/gm/global-sticker-packs/${pack.id}/stickers?${new URLSearchParams({
+        actionId: crypto.randomUUID(), sourceSha256: "0".repeat(64), name: "Forbidden", altText: "Forbidden",
+      })}`, headers: { "x-test-auth": "gmB" } });
+    expect(foreignUpload.statusCode).toBe(404);
+    expect(foreignUpload.json()).toEqual({ error: "GLOBAL_STICKER_PACK_NOT_FOUND" });
     const playerCreate = await app.inject({ method: "POST", url: "/api/gm/global-sticker-packs", headers: { "x-test-auth": "playerB" }, payload: { actionId: crypto.randomUUID(), name: "No" } });
     expect(playerCreate.statusCode).toBe(403);
     const ownEdit = await app.inject({ method: "PATCH", url: `/api/gm/global-sticker-packs/${pack.id}`, headers: { "x-test-auth": "gmA" }, payload: { revision: 0, name: "Updated" } });

@@ -1,9 +1,8 @@
-import { readdir, readFile } from "node:fs/promises";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import { Server } from "socket.io";
 import { io as socketClient, type Socket } from "socket.io-client";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -13,6 +12,7 @@ import { createTestMailOutbox, createTestMailKeyring } from "./account-mail.js";
 import { registerAccountAuthRoutes } from "./account-auth-routes.js";
 import { registerRealtime } from "./realtime.js";
 import { hashToken } from "./security.js";
+import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
 
 const origin = "http://localhost:5173";
 let database: PGlite;
@@ -22,10 +22,7 @@ let realtime: Server;
 let sockets: Socket[];
 
 beforeEach(async () => {
-  database = new PGlite();
-  const migrations = new URL("../../../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrations)).filter((name) => name.endsWith(".sql")).sort())
-    await database.exec((await readFile(new URL(file, migrations), "utf8")).replaceAll("--> statement-breakpoint", ""));
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
   app = Fastify({ logger: false });
   await app.register(cookie);

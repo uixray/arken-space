@@ -22,6 +22,7 @@ async function install(
         archivedAt: null,
         archivedByMembershipId: null,
         stats: {},
+        statLayout: structuredClone(snapshot.campaign.statLayout),
         skills: [],
         spells: [],
         notes: "",

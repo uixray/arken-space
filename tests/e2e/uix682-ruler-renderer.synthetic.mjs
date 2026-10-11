@@ -4,7 +4,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { createHash } from "node:crypto";
+
 
 const root = resolve(import.meta.dirname, "../..");
 const artifacts = resolve(root, "test-results/uix682-ruler-renderer");
@@ -25,7 +25,7 @@ async function waitForVite(url) {
   const until = Date.now() + 15000;
   while (Date.now() < until) {
     if (vite.exitCode !== null) throw new Error("Isolated Vite exited, code " + vite.exitCode + "\n" + viteOutput);
-    try { if ((await fetch(url)).ok) return; } catch {}
+    try { if ((await fetch(url)).ok) return; } catch { /* Retry startup until the bounded deadline. */ }
     await delay(100);
   }
   throw new Error("Timed out waiting for isolated Vite");

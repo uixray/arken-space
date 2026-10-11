@@ -1,12 +1,12 @@
-import { readdir, readFile } from "node:fs/promises";
 import Fastify, { type FastifyInstance } from "fastify";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "@arken/db";
 import type { AuthContext } from "./auth.js";
 import { resolveAssetUsages } from "./asset-usage.js";
 import { registerSoundpadRoutes } from "./soundpad-routes.js";
+import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
 
 let database: PGlite;
 let app: FastifyInstance;
@@ -36,11 +36,7 @@ beforeEach(async () => {
   gm = { campaignId, membershipId: gmId, role: "GM", displayName: "GM" };
   player = { campaignId, membershipId: playerId, role: "PLAYER", displayName: "Player" };
   identity = null;
-  database = new PGlite();
-  const migrations = new URL("../../../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrations)).filter((name) => name.endsWith(".sql")).sort()) {
-    await database.exec((await readFile(new URL(file, migrations), "utf8")).replaceAll("--> statement-breakpoint", ""));
-  }
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
   await db.insert(schema.campaigns).values([
     { id: campaignId, name: "Soundpad test" },
@@ -70,6 +66,36 @@ afterEach(async () => {
 });
 
 describe("Soundpad routes", () => {
+  it("rejects every foreign pack/sound mutation and preserves foreign rows", async () => {
+    identity = "gm";
+    const foreignAsset = (await db.select().from(schema.assets)).find((asset) => asset.id === foreignAudioId)!;
+    const [foreignPack] = await db.insert(schema.campaignSoundPacks).values({ campaignId: foreignAsset.campaignId, name: "Foreign pack" }).returning();
+    const [foreignSound] = await db.insert(schema.campaignSounds).values({ campaignId: foreignAsset.campaignId,
+      packId: foreignPack!.id, assetId: foreignAudioId, label: "Foreign sound" }).returning();
+    for (const request of [
+      { method: "PATCH" as const, url: `/api/soundpad/packs/${foreignPack!.id}`, payload: { published: true }, error: "PACK_NOT_FOUND" },
+      { method: "DELETE" as const, url: `/api/soundpad/packs/${foreignPack!.id}`, error: "PACK_NOT_FOUND" },
+      { method: "POST" as const, url: `/api/soundpad/packs/${foreignPack!.id}/sounds`, payload: { assetId: audioId, label: "Hijack" }, error: "PACK_NOT_FOUND" },
+      { method: "PATCH" as const, url: `/api/soundpad/sounds/${foreignSound!.id}`, payload: { label: "Hijack" }, error: "SOUND_NOT_FOUND" },
+      { method: "DELETE" as const, url: `/api/soundpad/sounds/${foreignSound!.id}`, error: "SOUND_NOT_FOUND" },
+    ]) {
+      const response = await app.inject(request);
+      expect(response.statusCode, request.url).toBe(404);
+      expect(response.json()).toEqual({ error: request.error });
+    }
+    expect(await db.select().from(schema.campaignSoundPacks)).toEqual([foreignPack]);
+    expect(await db.select().from(schema.campaignSounds)).toEqual([foreignSound]);
+    const createdPack = await app.inject({ method: "POST", url: "/api/soundpad/packs", payload: { name: "Own control" } });
+    const ownPackId = createdPack.json().packId;
+    expect((await app.inject({ method: "PATCH", url: `/api/soundpad/packs/${ownPackId}`, payload: { published: true } })).statusCode).toBe(200);
+    const createdSound = await app.inject({ method: "POST", url: `/api/soundpad/packs/${ownPackId}/sounds`, payload: { assetId: audioId, label: "Own control" } });
+    expect(createdSound.statusCode).toBe(201);
+    const ownSoundId = createdSound.json().soundId;
+    expect((await app.inject({ method: "PATCH", url: `/api/soundpad/sounds/${ownSoundId}`, payload: { label: "Updated" } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "DELETE", url: `/api/soundpad/sounds/${ownSoundId}` })).statusCode).toBe(200);
+    expect((await app.inject({ method: "DELETE", url: `/api/soundpad/packs/${ownPackId}` })).statusCode).toBe(200);
+  });
+
   it("requires authentication and enforces GM, campaign, media type, and duration boundaries", async () => {
     const unauthenticated = await app.inject({ method: "POST", url: "/api/soundpad/packs", payload: { name: "Pack" } });
     expect(unauthenticated.statusCode).toBe(401);
@@ -94,7 +120,7 @@ describe("Soundpad routes", () => {
     expect((await app.inject({ method: "POST", url: `/api/soundpad/packs/${packId}/sounds`, payload: { ...body, assetId: longAudio.id } })).statusCode).toBe(400);
   });
 
-  it("filters unpublished and GM-only content for players and blocks deletion of referenced audio", async () => {
+  it("filters unpublished and GM-only content for players and reports authorized audio detachment", async () => {
     identity = "gm";
     const response = await app.inject({ method: "POST", url: "/api/soundpad/packs", payload: { name: "Private sounds" } });
     const packId = response.json().packId as string;
@@ -109,6 +135,6 @@ describe("Soundpad routes", () => {
     expect(visiblePack.json().packs).toHaveLength(1);
     expect(visiblePack.json().packs[0].sounds).toHaveLength(0);
     const usages = await resolveAssetUsages(db as never, campaignId, audioId);
-    expect(usages).toEqual([expect.objectContaining({ kind: "CAMPAIGN_SOUND", deletionPolicy: "BLOCK" })]);
+    expect(usages).toEqual([expect.objectContaining({ kind: "CAMPAIGN_SOUND", deletionPolicy: "DETACH" })]);
   });
 });

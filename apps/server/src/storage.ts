@@ -78,10 +78,11 @@ export async function assertStorageCapacity(
     throw new Error("LOW_DISK_SPACE");
 }
 
-export async function storeUpload(
+/** Validate/encode before quota reservation; this does not write a staged blob. */
+export async function prepareUpload(
   buffer: Buffer,
   family: "image" | "audio",
-): Promise<StoredUpload> {
+): Promise<{ bytes: Buffer; upload: StoredUpload }> {
   const detected = await fileTypeFromBuffer(buffer);
   if (!detected) throw new Error("UNSUPPORTED_FILE_TYPE");
   await mkdir(mediaRoot(), { recursive: true });
@@ -100,14 +101,16 @@ export async function storeUpload(
       throw new Error("IMAGE_DIMENSIONS_TOO_LARGE");
     const output = await pipeline.webp({ quality: 88, effort: 4 }).toBuffer();
     const storageKey = `${randomToken(18)}.webp`;
-    await writeFile(resolve(mediaRoot(), storageKey), output, { flag: "wx" });
     return {
-      storageKey,
-      mimeType: "image/webp",
-      sizeBytes: output.length,
-      width: metadata.width,
-      height: metadata.height,
-      durationSeconds: null,
+      bytes: output,
+      upload: {
+        storageKey,
+        mimeType: "image/webp",
+        sizeBytes: output.length,
+        width: metadata.width,
+        height: metadata.height,
+        durationSeconds: null,
+      },
     };
   }
 
@@ -120,15 +123,36 @@ export async function storeUpload(
   );
   const durationSeconds = validatedAudioDuration(metadata.format.duration);
   const storageKey = `${randomToken(18)}${audioFormat.extension}`;
-  await writeFile(resolve(mediaRoot(), storageKey), buffer, { flag: "wx" });
   return {
-    storageKey,
-    mimeType: audioFormat.mimeType,
-    sizeBytes: buffer.length,
-    width: null,
-    height: null,
-    durationSeconds,
+    bytes: buffer,
+    upload: {
+      storageKey,
+      mimeType: audioFormat.mimeType,
+      sizeBytes: buffer.length,
+      width: null,
+      height: null,
+      durationSeconds,
+    },
   };
+}
+
+export async function storePreparedUpload(
+  prepared: Awaited<ReturnType<typeof prepareUpload>>,
+): Promise<StoredUpload> {
+  await mkdir(mediaRoot(), { recursive: true });
+  await writeFile(
+    resolve(mediaRoot(), prepared.upload.storageKey),
+    prepared.bytes,
+    { flag: "wx" },
+  );
+  return prepared.upload;
+}
+
+export async function storeUpload(
+  buffer: Buffer,
+  family: "image" | "audio",
+): Promise<StoredUpload> {
+  return storePreparedUpload(await prepareUpload(buffer, family));
 }
 
 export interface TokenAssetTransform {
@@ -299,13 +323,24 @@ export async function storeGeneratedAudio(buffer: Buffer) {
     throw new Error("AUDIO_TOO_LARGE");
   const detected = await fileTypeFromBuffer(buffer);
   if (detected?.mime !== "audio/wav") throw new Error("UNSUPPORTED_AUDIO");
-  const metadata = await parseBuffer(buffer, { mimeType: detected.mime, size: buffer.length }, { duration: true, skipCovers: true });
+  const metadata = await parseBuffer(
+    buffer,
+    { mimeType: detected.mime, size: buffer.length },
+    { duration: true, skipCovers: true },
+  );
   const durationSeconds = validatedAudioDuration(metadata.format.duration);
   if (durationSeconds > 10) throw new Error("INVALID_AUDIO_DURATION");
   await mkdir(mediaRoot(), { recursive: true });
   const storageKey = `${randomToken(18)}.wav`;
   await writeFile(storedPath(storageKey), buffer, { flag: "wx" });
-  return { storageKey, mimeType: detected.mime, sizeBytes: buffer.length, width: null, height: null, durationSeconds };
+  return {
+    storageKey,
+    mimeType: detected.mime,
+    sizeBytes: buffer.length,
+    width: null,
+    height: null,
+    durationSeconds,
+  };
 }
 
 export async function openStoredFile(

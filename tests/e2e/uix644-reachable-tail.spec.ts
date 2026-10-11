@@ -42,6 +42,7 @@ function snapshot(): GameSnapshot {
       controllerMembershipIds: [],
       portraitAssetId: null,
       stats: { strength: 8, agility: 10 },
+      statLayout: structuredClone(value.campaign.statLayout),
       skills: [],
       spells: [],
       notes: "",

@@ -1,4 +1,4 @@
-import type { CharacterDto, GameSnapshot } from "@arken/contracts";
+import type { CharacterDto, GameSnapshot, StatLayout } from "@arken/contracts";
 import type { Route, WebSocketRoute } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -6,6 +6,13 @@ import { openWorkspaceSection } from "./workspace-nav-helper";
 
 // Actual App and CharacterWorkspace. HTTP and Socket.IO snapshots are synthetic;
 // this checks browser queue behavior, not persistence or authorization on a server.
+const characteristicsLayout: StatLayout = [
+  {
+    id: "characteristics",
+    label: "Характеристики",
+    rows: [{ key: "strength", label: "Сила", source: "STAT" }],
+  },
+];
 const character: CharacterDto = {
   id: "64500000-0000-4000-8000-000000000001",
   name: "Проверка очереди",
@@ -13,6 +20,7 @@ const character: CharacterDto = {
   controllerMembershipIds: [],
   portraitAssetId: null,
   stats: { strength: 1 },
+  statLayout: structuredClone(characteristicsLayout),
   skills: [],
   spells: [],
   entries: [],
@@ -32,13 +40,7 @@ test("canonical removal rejects queued character edit without phantom PATCH and 
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   let canonical: GameSnapshot = gmSnapshot({ characters: [character] });
-  canonical.campaign.statLayout = [
-    {
-      id: "characteristics",
-      label: "Характеристики",
-      rows: [{ key: "strength", label: "Сила", source: "STAT" }],
-    },
-  ];
+  canonical.campaign.statLayout = structuredClone(characteristicsLayout);
   const sockets = new Set<WebSocketRoute>();
   const patches: Record<string, unknown>[] = [];
   const unexpected: string[] = [];

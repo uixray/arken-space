@@ -1,5 +1,15 @@
 # UIX-644 — реестр меню, popup и picker
 
+## 2026-10-11 — восстановленный release candidate
+
+Static index: **64 groups / 121 occurrences**. Reviewed added sites:
+catalog execution options, character spell branches, landing guide, music,
+clip editor/soundpad, spell activation/schools, world content/location,
+renderer terrain stamps and media-purpose selectors. Existing catalog/media
+counts updated. This is source inventory only, not browser acceptance.
+Negative drift controls remain required; historical results below unchanged.
+
+
 ## 2026-10-03 — персональная тема больше не открывает popup
 
 `PlayerThemeSettings.tsx` теперь показывает варианты радиокнопками в потоке.

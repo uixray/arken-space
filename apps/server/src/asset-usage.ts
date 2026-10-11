@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
-import { and, eq, inArray, isNull, sql, sum } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { actionIdSchema, audioPurposeSchema } from "@arken/contracts";
 import type {
   AssetUsageDto,
@@ -29,9 +29,11 @@ import { requireAuth } from "./auth.js";
 import { env } from "./env.js";
 import { buildSnapshot } from "./snapshot.js";
 import {
-  assertStorageCapacity,
+
   removeStoredUpload,
   storeUpload,
+  prepareUpload,
+  storePreparedUpload,
 } from "./storage.js";
 import { publicUploadError } from "./telemetry.js";
 import { postgresErrorCode } from "./database-errors.js";
@@ -634,12 +636,10 @@ export function registerAssetLifecycleRoutes(
     const reservationKey = `asset-replace:${actionId}`;
     let reserved = false;
     try {
-      await reserveCampaignMediaBytes(db, auth.campaignId, reservationKey, buffer.length);
+      const prepared = await prepareUpload(buffer, current.kind === "AUDIO" ? "audio" : "image");
+      await reserveCampaignMediaBytes(db, auth.campaignId, reservationKey, prepared.upload.sizeBytes, { assetId: id, storageKey: current.storageKey });
       reserved = true;
-      stored = await storeUpload(
-        buffer,
-        current.kind === "AUDIO" ? "audio" : "image",
-      );
+      stored = await storePreparedUpload(prepared);
       const result = await db.transaction(async (tx) => {
         await lockCampaignMediaQuota(tx, auth.campaignId);
         await requireLiveCampaignMediaReservation(tx, auth.campaignId, reservationKey, stored!.sizeBytes);

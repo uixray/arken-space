@@ -1,7 +1,6 @@
-import { readdir, readFile } from "node:fs/promises";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { and, eq, gt } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -9,6 +8,7 @@ import * as schema from "@arken/db";
 import { accountCampaignCreations, accountCampaignInvites, accountSessions, campaignAudioTracks, campaigns, characters, memberships, scenes, sessions, users } from "@arken/db";
 import { registerAccountCampaignRoutes } from "./account-campaigns.js";
 import { hashToken } from "./security.js";
+import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
 
 const origin = "http://localhost:5173";
 let database: PGlite;
@@ -17,10 +17,7 @@ let app: ReturnType<typeof Fastify>;
 let io: { disconnected: string[]; in: (room: string) => { disconnectSockets: () => void } };
 
 beforeEach(async () => {
-  database = new PGlite();
-  const migrations = new URL("../../../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrations)).filter((name) => name.endsWith(".sql")).sort())
-    await database.exec((await readFile(new URL(file, migrations), "utf8")).replaceAll("--> statement-breakpoint", ""));
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
   app = Fastify();
   await app.register(cookie);
@@ -96,6 +93,15 @@ describe("account campaign workspace", () => {
     const conflict = await post("/api/account/campaigns", { name: "Different", idempotencyKey: firstKey }, a);
     expect(conflict.statusCode).toBe(409);
     expect((await post("/api/account/campaigns/select", { campaignId: first.campaignId }, b)).statusCode).toBe(404);
+    const invited = await post("/api/account/campaigns/invites", { campaignId: first.campaignId, label: "Private invite" }, a);
+    expect(invited.statusCode).toBe(201);
+    const ownInvites = await app.inject({ url: `/api/account/campaigns/${first.campaignId}/invites`, headers: { cookie: a.cookie } });
+    expect(ownInvites.statusCode).toBe(200);
+    expect(ownInvites.json().invites).toHaveLength(1);
+    expect(ownInvites.json().invites[0].id).toBe(invited.json().inviteId);
+    const foreignInvites = await app.inject({ url: `/api/account/campaigns/${first.campaignId}/invites`, headers: { cookie: b.cookie } });
+    expect(foreignInvites.statusCode).toBe(404);
+    expect(foreignInvites.json()).toEqual({ error: "CAMPAIGN_NOT_FOUND" });
     expect((await app.inject({ url: "/api/account/campaigns", headers: { cookie: a.cookie } })).json().campaigns).toHaveLength(1);
     expect((await app.inject({ url: "/api/account/campaigns", headers: { cookie: b.cookie } })).json().campaigns).toHaveLength(0);
   });

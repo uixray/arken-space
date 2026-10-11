@@ -362,7 +362,11 @@
       "status": "PASS",
       "revision": "e67bacc37a1ac4b77a2524388cc76a8ffacf5698",
       "artifact": "selection-closure-2026-09-18/ci-e67bacc-summary.json",
-      "workflowRuns": ["35412873275", "35412873288", "35412873306"],
+      "workflowRuns": [
+        "35412873275",
+        "35412873288",
+        "35412873306"
+      ],
       "scope": "Exact checks, four-shard Chrome/Firefox E2E and multiplayer SUCCESS. E2E1063 PASS/29 existing SKIP/0 FAIL/0 FLAKY; includes both real-server personal-theme persistence cases. Individual component pending/error/CAS coverage is also included in exact checks. Not full UIX-644 or production acceptance."
     },
     "uix644NativeSelectDom24": {
@@ -404,18 +408,40 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Session menu details element in topbar.",
-      "evidence": ["remainingMenus"],
+      "evidence": [
+        "remainingMenus"
+      ],
       "next": "No blanket current-SHA/full lifecycle claim: session desktop content actions and full combined matrix remain separate."
     },
     {
       "file": "apps/web/src/CatalogEntryForm.tsx",
       "kind": "tag:FormSelect",
-      "count": 7,
-      "status": "PASS",
-      "classification": "reachable",
-      "scope": "Seven conditional controls in edit/picker/setup callers; catalog tests12/58.",
-      "evidence": ["built"],
-      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+      "count": 8,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+    },
+    {
+      "file": "apps/web/src/CatalogEntryForm.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+    },
+    {
+      "file": "apps/web/src/CharacterSpellBranches.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
     },
     {
       "file": "apps/web/src/FeedbackReporter.tsx",
@@ -424,7 +450,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "One feedback category selector, GM/PLAYER, 1280→390→360 short→1280; keyboard/pointer/Escape/outside and visible close focus.",
-      "evidence": ["feedback"],
+      "evidence": [
+        "feedback"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
@@ -434,7 +462,9 @@
       "status": "BLOCKED",
       "classification": "reachable",
       "scope": "GM-only in-flow GlobalStickerPackManager disclosure mounted from MediaPanel. Partial current-source runtime evidence proves summary open/owned Escape close/focus/held repeat and next parent Escape in four browser cells, not whole lifecycle/placement acceptance.",
-      "evidence": ["globalManagerSummaryEscape"],
+      "evidence": [
+        "globalManagerSummaryEscape"
+      ],
       "next": "Reuse exact-source Escape slice; complete appropriate keyboard open, geometry/scroll/resize/zoom and actual pack selection. In-flow disclosure outside-click behavior must follow its contract, not a generic popup assumption. Whole bucket remains BLOCKED."
     },
     {
@@ -448,13 +478,25 @@
       "next": "With an authorized GM fixture containing packs, verify actual open/select/close, focus and placement in desktop/compact browsers; do not infer runtime PASS from static discovery."
     },
     {
+      "file": "apps/web/src/LandingGuide.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+    },
+    {
       "file": "apps/web/src/MapToolbar.tsx",
       "kind": "tag:details",
       "count": 2,
       "status": "PASS",
       "classification": "reachable",
       "scope": "Size mode selection/Done and overflow display toggles: keyboard/focus on1280 and360x480. No resize dragging/persistence claim.",
-      "evidence": ["toolbar"],
+      "evidence": [
+        "toolbar"
+      ],
       "next": "Reuse this scoped gate; retain full connected matrix, actual persistence/device and broader pending-session races as separate requirements."
     },
     {
@@ -464,8 +506,22 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Both details callers: volume lifecycle and GM overflow→empty library→visible return target. Track SELECT now also returns visible focus; conflict ACK notifications verified by four existing cases.",
-      "evidence": ["musicOwner", "musicCommand", "menuFollowup"],
+      "evidence": [
+        "musicOwner",
+        "musicCommand",
+        "menuFollowup"
+      ],
       "next": "Successful playback/synchronization and compact music entry remain separate; library/volume evidence at earlier exact revision unchanged by this track-handler-only patch."
+    },
+    {
+      "file": "apps/web/src/MusicBar.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
     },
     {
       "file": "apps/web/src/OperatorFeedbackFilters.tsx",
@@ -488,7 +544,11 @@
       "status": "BLOCKED",
       "classification": "reachable",
       "scope": "Six controls migrated from native select to FormSelect in UIX-674. Retained PLAYER owned-character caller has exact-source partial four-cell pointer/final keyboard selection and dismissal evidence; no whole six-control PASS. Prior native evidence does not prove new popup lifecycle.",
-      "evidence": ["requestsCurrent", "requestsBuilt", "ownedCharacterSelect20261009"],
+      "evidence": [
+        "requestsCurrent",
+        "requestsBuilt",
+        "ownedCharacterSelect20261009"
+      ],
       "next": "Run current-revision keyboard, dismissal, focus return and narrow viewport FormSelect lifecycle before marking PASS."
     },
     {
@@ -498,7 +558,10 @@
       "status": "BLOCKED",
       "classification": "reachable",
       "scope": "UIX-674 changed the inner scene list from listbox/options to menu/menuitemradio with a separate menuitem edit action. Earlier listbox evidence is historical and does not prove the new role contract.",
-      "evidence": ["scenePicker", "sceneSelection20261009"],
+      "evidence": [
+        "scenePicker",
+        "sceneSelection20261009"
+      ],
       "next": "Retain historical role evidence separately; actual current desktop pointer/keyboard scene selection is now scoped evidence. Complete focus-return/dismissal/edit action and Firefox compact's distinct manager restore before full acceptance."
     },
     {
@@ -508,8 +571,60 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Scene picker dropdown details element in topbar.",
-      "evidence": ["scenePicker"],
+      "evidence": [
+        "scenePicker"
+      ],
       "next": "Real multiplayer persistence and physical devices remain separate gates."
+    },
+    {
+      "file": "apps/web/src/SoundClipEditor.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+    },
+    {
+      "file": "apps/web/src/SoundpadWorkspace.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+    },
+    {
+      "file": "apps/web/src/SoundpadWorkspace.tsx",
+      "kind": "tag:select",
+      "count": 5,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+    },
+    {
+      "file": "apps/web/src/SpellNodeActivationEditor.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+    },
+    {
+      "file": "apps/web/src/SpellSchoolsWorkspace.tsx",
+      "kind": "tag:select",
+      "count": 7,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
     },
     {
       "file": "apps/web/src/StickerPackManager.tsx",
@@ -528,7 +643,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Activity caller Popup and its nested listbox, same eight tests: search focus, arrows, Escape/outside,36 stickers scroll,360x480resize, owner hide/reopen.",
-      "evidence": ["remainingMenus"],
+      "evidence": [
+        "remainingMenus"
+      ],
       "next": "Direct/other inactive callers not activated or accepted; actual send/server permissions/image aesthetics outside scope."
     },
     {
@@ -538,7 +655,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Activity caller Popup and its nested listbox, same eight tests: search focus, arrows, Escape/outside,36 stickers scroll,360x480resize, owner hide/reopen.",
-      "evidence": ["remainingMenus"],
+      "evidence": [
+        "remainingMenus"
+      ],
       "next": "Direct/other inactive callers not activated or accepted; actual send/server permissions/image aesthetics outside scope."
     },
     {
@@ -548,7 +667,10 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "One native source selector; desktop/narrow four cases. OS picker UI not inspected.",
-      "evidence": ["built", "exactMainCceMenuRegression"],
+      "evidence": [
+        "built",
+        "exactMainCceMenuRegression"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
@@ -558,7 +680,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Token tray details element.",
-      "evidence": ["tokenTray"],
+      "evidence": [
+        "tokenTray"
+      ],
       "next": "No blanket current-SHA/full lifecycle claim: session desktop content actions and full combined matrix remain separate."
     },
     {
@@ -568,8 +692,30 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "GM1024 More destination opening/closing and visible return focus, twice, Chrome/Firefox.",
-      "evidence": ["navigation"],
+      "evidence": [
+        "navigation"
+      ],
       "next": "Other destinations and responsive owner changes remain outside this scoped result."
+    },
+    {
+      "file": "apps/web/src/WorldContentInstancesPanel.tsx",
+      "kind": "tag:AssetPicker",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+    },
+    {
+      "file": "apps/web/src/WorldContentInstancesPanel.tsx",
+      "kind": "tag:FormSelect",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
     },
     {
       "file": "apps/web/src/WorldContentWorkspace.tsx",
@@ -578,7 +724,10 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Both inline callers: entity cover and gallery attachment, independent selected assets and exact request payloads.",
-      "evidence": ["worldImages", "menuFollowup"],
+      "evidence": [
+        "worldImages",
+        "menuFollowup"
+      ],
       "next": "Real persistence/authorization, request-failure recovery and physical-device checks remain outside this scoped acceptance."
     },
     {
@@ -588,7 +737,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Four filters/link/create controls in world dropdown tests; 4 combined editor/reader cases.",
-      "evidence": ["built"],
+      "evidence": [
+        "built"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
@@ -598,8 +749,20 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Reader filter in world dropdown tests; current navigation GM-only, no invented PLAYER route.",
-      "evidence": ["built"],
+      "evidence": [
+        "built"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/WorldMapCanonicalLocationPicker.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
     },
     {
       "file": "apps/web/src/WorldMapsWorkspace.tsx",
@@ -608,7 +771,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Seven native map/draft selectors; 8 world-map cases incl PLAYER navigation exclusion. Not OS popup visuals.",
-      "evidence": ["built"],
+      "evidence": [
+        "built"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
@@ -666,7 +831,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Cancel draft reset/no save, explicit save/reopen value/focus, rejected draft retained, outside delayed-save focus. Mocked backend; preview pixels and full in-flight session races not accepted.",
-      "evidence": ["toolbar"],
+      "evidence": [
+        "toolbar"
+      ],
       "next": "Reuse this scoped gate; retain full connected matrix, actual persistence/device and broader pending-session races as separate requirements."
     },
     {
@@ -676,8 +843,30 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Token menu live permissions/focus lifecycle; previous geometry/actions in inventory checkpoints. Not object-list/drawing-color controls.",
-      "evidence": ["token"],
+      "evidence": [
+        "token"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+    },
+    {
+      "file": "apps/web/src/renderers/TerrainStampControls.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
     },
     {
       "file": "apps/web/src/sidebar/CharacterMediaGallery.tsx",
@@ -686,7 +875,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Four attach/edit controls GM/PLAYER; ten gallery cases including sheet Escape.",
-      "evidence": ["built"],
+      "evidence": [
+        "built"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
@@ -696,7 +887,10 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Both actual character-sheet callers: portrait and additional resource image; GM and PLAYER owner on desktop/compact.",
-      "evidence": ["characterImages", "menuFollowup"],
+      "evidence": [
+        "characterImages",
+        "menuFollowup"
+      ],
       "next": "Non-owner/controller restrictions, live payload persistence and rejection/realtime recovery remain outside this scoped evidence."
     },
     {
@@ -706,7 +900,10 @@
       "status": "BLOCKED",
       "classification": "reachable",
       "scope": "Template modal PASS four current cases; second showCharacterPicker source occurrence inactive, not silently counted as runtime PASS.",
-      "evidence": ["built", "workspaceCurrent"],
+      "evidence": [
+        "built",
+        "workspaceCurrent"
+      ],
       "next": "Retain explicit inactive exclusion; no new UI route for coverage.",
       "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
       "applicability": {
@@ -717,7 +914,10 @@
             "count": 1,
             "applicability": "SUPPORTED_REACHABLE",
             "runtimeStatus": "PASS",
-            "evidence": ["built", "workspaceCurrent"]
+            "evidence": [
+              "built",
+              "workspaceCurrent"
+            ]
           },
           {
             "label": "showCharacterPicker FormSelect",
@@ -738,7 +938,9 @@
       "status": "PASS",
       "classification": "in-flow",
       "scope": "PLAYER compact backstory native Enter/Space/pointer close/reopen and pending draft retention; ordinary in-flow disclosure, not floating popup.",
-      "evidence": ["disclosureCurrent"],
+      "evidence": [
+        "disclosureCurrent"
+      ],
       "next": "GM/non-owner and full viewport matrix not claimed. Keep ordinary disclosure criteria separate from popup layering."
     },
     {
@@ -748,7 +950,9 @@
       "status": "BLOCKED",
       "classification": "reachable",
       "scope": "Activity list current8 cases passed. Second ChatPanel list excluded from current production navigation: allowed feeds only ACTIVITY/STORY, handled by ActivityPanel/StoryChannel. Source applicability audit records chain.",
-      "evidence": ["remainingMenus"],
+      "evidence": [
+        "remainingMenus"
+      ],
       "next": "Retain two static occurrences; revisit second only if feed policy changes. Do not activate dead route for coverage; full shared lifecycle gate still separate.",
       "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
       "applicability": {
@@ -759,7 +963,9 @@
             "count": 1,
             "applicability": "SUPPORTED_REACHABLE",
             "runtimeStatus": "PASS",
-            "evidence": ["remainingMenus"]
+            "evidence": [
+              "remainingMenus"
+            ]
           },
           {
             "label": "chat-slash-suggestions",
@@ -780,7 +986,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "GM selection changes available skill buttons, pointer hit/bounds, keyboard reset/Escape/focus; PLAYER selector absent, own skill only. Actual dice request target not tested.",
-      "evidence": ["activity"],
+      "evidence": [
+        "activity"
+      ],
       "next": "Reuse scoped8cases; full connected matrix, zoom/resize while open, other event types and live permissions remain separate requirements."
     },
     {
@@ -790,7 +998,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "All3 filter checkboxes keyboard off/pointer on, accessible hidden-summary, Escape/outside focus and unsent draft preserved. REFERENCE event disappearance/restoration verified; ROLLS/STORY timeline fixtures absent.",
-      "evidence": ["activity"],
+      "evidence": [
+        "activity"
+      ],
       "next": "Reuse scoped8cases; full connected matrix, zoom/resize while open, other event types and live permissions remain separate requirements."
     },
     {
@@ -846,12 +1056,12 @@
     {
       "file": "apps/web/src/sidebar/MediaPanel.tsx",
       "kind": "tag:select",
-      "count": 1,
+      "count": 4,
       "status": "BLOCKED",
-      "classification": "reachable",
-      "scope": "GM media catalog kind filter.",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify real pointer/keyboard open/select/close, Escape/focus and desktop/compact in Chrome/Firefox; no runtime PASS from inventory."
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
     },
     {
       "file": "apps/web/src/sidebar/QuickRollPanel.tsx",
@@ -870,7 +1080,9 @@
       "status": "PASS",
       "classification": "in-flow",
       "scope": "PLAYER desktop resources native Enter/Space/pointer toggles preserve pending value and do not create additional writes; ordinary in-flow disclosure.",
-      "evidence": ["disclosureCurrent"],
+      "evidence": [
+        "disclosureCurrent"
+      ],
       "next": "GM/non-owner and compact full matrix not claimed. Keep ordinary disclosure criteria separate from popup layering."
     },
     {
@@ -880,7 +1092,10 @@
       "status": "BLOCKED",
       "classification": "reachable",
       "scope": "Three live controls PASS four current cases; three legacy hidden occurrences explicitly excluded, never reactivate for tests.",
-      "evidence": ["built", "workspaceCurrent"],
+      "evidence": [
+        "built",
+        "workspaceCurrent"
+      ],
       "next": "Keep active/hidden split explicit at next combined gate.",
       "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
       "applicability": {
@@ -891,7 +1106,10 @@
             "count": 3,
             "applicability": "SUPPORTED_REACHABLE",
             "runtimeStatus": "PASS",
-            "evidence": ["built", "workspaceCurrent"]
+            "evidence": [
+              "built",
+              "workspaceCurrent"
+            ]
           },
           {
             "label": "catalogKind plus two legacy scene selects",
@@ -922,7 +1140,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Inline image picker in four actual token-modal cases. Shared owner error separately remains open.",
-      "evidence": ["built"],
+      "evidence": [
+        "built"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
@@ -947,7 +1167,11 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Named-dialog/keyboard-owner gate repaired by stable WorkspaceNav subscription; all8 cursor cases now PASS within connected16. Historical red evidence retained. PLAYER remains a direct toggle, not another popup.",
-      "evidence": ["cursor", "cursorOwnerNaming", "cursorStableObserver"],
+      "evidence": [
+        "cursor",
+        "cursorOwnerNaming",
+        "cursorStableObserver"
+      ],
       "next": "Retain scoped cursor/owner acceptance; original TokenPalette observer failure, full registry and physical-device acceptance remain separate."
     },
     {
@@ -982,7 +1206,11 @@
       "status": "FAIL",
       "classification": "shared-implementation",
       "scope": "Shared implementation, not another caller. Built tests and true zoom passed, unresolved original RO still prevents complete acceptance.",
-      "evidence": ["built", "ro", "exactMainCceMenuRegression"],
+      "evidence": [
+        "built",
+        "ro",
+        "exactMainCceMenuRegression"
+      ],
       "next": "Do not mark common implementation fixed from non-reproduction. Preserve failure evidence."
     },
     {
@@ -1042,7 +1270,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Scene editor map selector under workspace→modal, keyboard/pointer and draft ownership through compact short-height resize.",
-      "evidence": ["sceneEditorMap"],
+      "evidence": [
+        "sceneEditorMap"
+      ],
       "next": "Save/upload/rejection and actual scene persistence/publication remain separate; this does not clear the original shared Select RO defect."
     },
     {
@@ -1063,7 +1293,9 @@
       "status": "PASS",
       "scope": "Supplemental custom object-list lifecycle tested for token rows and local selection, both roles/viewport modes.",
       "next": "Mixed drawing/region rows, clone/delete action flows, live permission updates and real server behavior remain separate from this scoped menu protocol.",
-      "evidence": ["objectList"]
+      "evidence": [
+        "objectList"
+      ]
     },
     {
       "id": "drawing-color-panel",
@@ -1071,7 +1303,9 @@
       "status": "PASS",
       "scope": "DOM drawing palette settings/lifecycle including short-map containment. Native color input type/value only; OS chooser excluded.",
       "next": "Actual stroke payload/pixels, editing existing strokes, OS color chooser and physical touch sizing remain separate gates.",
-      "evidence": ["drawingPalette"]
+      "evidence": [
+        "drawingPalette"
+      ]
     },
     {
       "id": "compact-navigation",
@@ -1079,7 +1313,10 @@
       "status": "PASS",
       "scope": "GM Scenes and PLAYER Tokens390: destination owns focus then Escape returns to Map. New Sections resize gate verifies all visible destination hit targets, desktop closes sheet without revival on compact return, Journal remains clickable, reopen/Escape/focus; both roles and browsers.",
       "next": "Other destination workspace internals and physical devices remain separate. This does not resolve original Select RO or whole-registry acceptance.",
-      "evidence": ["navigation", "compactSectionsBreakpoint"]
+      "evidence": [
+        "navigation",
+        "compactSectionsBreakpoint"
+      ]
     }
   ],
   "applicabilityAudit": {
@@ -1102,6 +1339,30 @@
       "jsxOccurrences": 90
     },
     "note": "Current source index now has 50/92 including two BLOCKED GlobalStickerPackManager rows. Prior 48/90 is preserved as the historical denominator; reconciliation37/76 and additions39/78 remain revision-scoped history. No historical PASS transferred to current SHA."
-  }
+  },
+  "historicalInventoryRows": [
+    {
+      "file": "apps/web/src/CatalogEntryForm.tsx",
+      "kind": "tag:FormSelect",
+      "count": 7,
+      "status": "PASS",
+      "classification": "reachable",
+      "scope": "Seven conditional controls in edit/picker/setup callers; catalog tests12/58.",
+      "evidence": [
+        "built"
+      ],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+    },
+    {
+      "file": "apps/web/src/sidebar/MediaPanel.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable",
+      "scope": "GM media catalog kind filter.",
+      "evidence": [],
+      "next": "Verify real pointer/keyboard open/select/close, Escape/focus and desktop/compact in Chrome/Firefox; no runtime PASS from inventory."
+    }
+  ],
+  "currentInventoryNote": "2026-10-11 current static inventory reconciled; original evidence remains historical, new or changed buckets BLOCKED pending runtime evidence."
 }
-

@@ -70,6 +70,7 @@ const snapshot = {
       archivedAt: null,
       archivedByMembershipId: null,
       stats: {},
+      statLayout: [],
       skills: [],
       spells: [],
       notes: "",

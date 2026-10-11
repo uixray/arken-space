@@ -28,6 +28,17 @@ export default tseslint.config(
       ".kimi/**",
     ],
   },
+  {
+    // Node Playwright runners also contain browser-evaluated callbacks.
+    files: ["apps/web/qa/*.browser.mjs", "tests/e2e/uix682-ruler-renderer.synthetic.mjs"],
+    languageOptions: { globals: Object.fromEntries(
+      ["process", "console", "URL", "setTimeout", "fetch", "document", "window", "innerWidth", "getComputedStyle", "CustomEvent", "Event"].map(name => [name, "readonly"])
+    ) },
+  },
+  {
+    files: ["packages/db/src/multiplayer-migration-preflight.mjs"],
+    languageOptions: { globals: { URL: "readonly" } },
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

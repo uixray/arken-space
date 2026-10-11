@@ -63,7 +63,7 @@ try {
   await root.waitFor({ timeout: 10000 }).catch(async (error) => {
     throw new Error(`Actual CharacterPanel did not render. ${error.message}\nBody: ${(await page.locator("body").innerText()).slice(0, 1200)}\nErrors: ${pageErrors.join("; ")}`);
   });
-  const grid = page.locator(".character-sheet-stat-grid");
+
   const cardSelectors = {
     stats: ".character-card--stats",
     combat: ".character-card--combat",

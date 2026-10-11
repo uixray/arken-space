@@ -1,8 +1,7 @@
-import { readFile, readdir } from "node:fs/promises";
 import Fastify from "fastify";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import * as schema from "@arken/db";
 import { accountMailOutbox } from "@arken/db";
@@ -10,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestMailOutbox, createTestMailKeyring } from "./account-mail.js";
 import { createAccountMailRuntime } from "./account-mail-runtime.js";
 import { registerAccountAuthRoutes } from "./account-auth-routes.js";
+import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
 
 const origin = "http://localhost:5173";
 const password = "correct horse battery staple";
@@ -24,10 +24,7 @@ let keyring: ReturnType<typeof createTestMailKeyring>;
 let runtime: ReturnType<typeof createAccountMailRuntime> | null = null;
 
 beforeEach(async () => {
-  database = new PGlite();
-  const migrations = new URL("../../../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrations)).filter((name) => name.endsWith(".sql")).sort())
-    await database.exec((await readFile(new URL(file, migrations), "utf8")).replaceAll("--> statement-breakpoint", ""));
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
   mail = createTestMailOutbox();
   keyring = createTestMailKeyring();

@@ -1,6 +1,5 @@
 import { createServer, type Server as HttpServer } from "node:http";
-import { readdir, readFile } from "node:fs/promises";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import { Server } from "socket.io";
@@ -23,6 +22,7 @@ import {
 import { sessionIsActive as realSessionIsActive } from "../apps/server/src/auth.js";
 import { buildSnapshot as realBuildSnapshot } from "../apps/server/src/snapshot.js";
 import { hashToken } from "../apps/server/src/security.js";
+import { createMigratedPglite } from "./helpers/pglite-template.js";
 
 const ids = {
   campaign: "10000000-0000-4000-8000-000000000001",
@@ -85,18 +85,6 @@ let extraClients: Array<Socket<ServerToClientEvents, ClientToServerEvents>>;
 let sessionCheckOverride: typeof realSessionIsActive | undefined;
 let snapshotOverride: typeof realBuildSnapshot | undefined;
 let realtimeWarnings: Array<{ details: unknown; message?: string }>;
-
-async function migrate(database: PGlite) {
-  const migrationsUrl = new URL("../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrationsUrl))
-    .filter((name) => name.endsWith(".sql"))
-    .sort()) {
-    const sql = (
-      await readFile(new URL(file, migrationsUrl), "utf8")
-    ).replaceAll("--> statement-breakpoint", "");
-    await database.exec(sql);
-  }
-}
 
 function waitForConnection(socket: typeof client) {
   return new Promise<void>((resolve, reject) => {
@@ -363,8 +351,7 @@ beforeEach(async () => {
   sessionCheckOverride = undefined;
   snapshotOverride = undefined;
   realtimeWarnings = [];
-  database = new PGlite();
-  await migrate(database);
+  database = await createMigratedPglite();
   await database.exec(`
     insert into campaigns (id, name) values ('${ids.campaign}', 'Realtime');
     insert into memberships (id, campaign_id, role, display_name) values
@@ -1339,12 +1326,12 @@ describe("durable realtime token commands", () => {
       insert into memberships (id, campaign_id, role, display_name)
       values ('${ids.foreignGm}', '${ids.foreignCampaign}', 'GM', 'Foreign GM');
       insert into assets
-        (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes)
+        (id, campaign_id, uploaded_by_membership_id, kind, audio_purpose, name, storage_key, mime_type, size_bytes)
       values
-        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track', 'test/audio', 'audio/mpeg', 10),
-        ('${ids.tokenAsset}', '${ids.campaign}', '${ids.gm}', 'TOKEN', 'Token', 'test/token', 'image/png', 10),
-        ('${ids.mapAsset}', '${ids.campaign}', '${ids.gm}', 'MAP', 'Map', 'test/map', 'image/png', 10),
-        ('${ids.foreignAudioAsset}', '${ids.foreignCampaign}', '${ids.foreignGm}', 'AUDIO', 'Foreign', 'test/foreign-audio', 'audio/mpeg', 10);
+        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'MUSIC', 'Track', 'test/audio', 'audio/mpeg', 10),
+        ('${ids.tokenAsset}', '${ids.campaign}', '${ids.gm}', 'TOKEN', NULL, 'Token', 'test/token', 'image/png', 10),
+        ('${ids.mapAsset}', '${ids.campaign}', '${ids.gm}', 'MAP', NULL, 'Map', 'test/map', 'image/png', 10),
+        ('${ids.foreignAudioAsset}', '${ids.foreignCampaign}', '${ids.foreignGm}', 'AUDIO', 'MUSIC', 'Foreign', 'test/foreign-audio', 'audio/mpeg', 10);
     `);
 
     let broadcasts = 0;
@@ -1397,10 +1384,10 @@ describe("durable realtime token commands", () => {
   it("applies server-authoritative audio commands with CAS and idempotency", async () => {
     await database.exec(`
       insert into assets
-        (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes, duration_seconds)
+        (id, campaign_id, uploaded_by_membership_id, kind, audio_purpose, name, storage_key, mime_type, size_bytes, duration_seconds)
       values
-        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track', 'test/audio-command', 'audio/mpeg', 10, 60),
-        ('${ids.secondAudioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track 2', 'test/audio-command-2', 'audio/mpeg', 10, 60);
+        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'MUSIC', 'Track', 'test/audio-command', 'audio/mpeg', 10, 60),
+        ('${ids.secondAudioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'MUSIC', 'Track 2', 'test/audio-command-2', 'audio/mpeg', 10, 60);
     `);
 
     const selectActionId = crypto.randomUUID();
@@ -1535,10 +1522,10 @@ describe("durable realtime token commands", () => {
   it("keeps playback active when selecting another track", async () => {
     await database.exec(`
       insert into assets
-        (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes, duration_seconds)
+        (id, campaign_id, uploaded_by_membership_id, kind, audio_purpose, name, storage_key, mime_type, size_bytes, duration_seconds)
       values
-        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track', 'test/switch-1', 'audio/mpeg', 10, 60),
-        ('${ids.secondAudioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track 2', 'test/switch-2', 'audio/mpeg', 10, 60);
+        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'MUSIC', 'Track', 'test/switch-1', 'audio/mpeg', 10, 60),
+        ('${ids.secondAudioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'MUSIC', 'Track 2', 'test/switch-2', 'audio/mpeg', 10, 60);
     `);
     await audioCommand(gmClient, {
       actionId: crypto.randomUUID(),
@@ -1572,9 +1559,9 @@ describe("durable realtime token commands", () => {
   it("ignores client startedAt on the temporary legacy audio path", async () => {
     await database.exec(`
       insert into assets
-        (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes)
+        (id, campaign_id, uploaded_by_membership_id, kind, audio_purpose, name, storage_key, mime_type, size_bytes)
       values
-        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track', 'test/audio-legacy', 'audio/mpeg', 10);
+        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'MUSIC', 'Track', 'test/audio-legacy', 'audio/mpeg', 10);
     `);
     const before = Date.now();
     const result = await new Promise<CommandAck<AudioStateDto>>((resolve) => {
@@ -1603,9 +1590,9 @@ describe("durable realtime token commands", () => {
   it("materializes an expired non-loop deadline when a client reconnects", async () => {
     await database.exec(`
       insert into assets
-        (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes, duration_seconds)
+        (id, campaign_id, uploaded_by_membership_id, kind, audio_purpose, name, storage_key, mime_type, size_bytes, duration_seconds)
       values
-        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Short', 'test/audio-deadline', 'audio/mpeg', 10, 3);
+        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'MUSIC', 'Short', 'test/audio-deadline', 'audio/mpeg', 10, 3);
       insert into campaign_audio_tracks
         (campaign_id, asset_id, playing, position_seconds, loop, started_at, revision)
       values
@@ -1642,9 +1629,9 @@ describe("durable realtime token commands", () => {
   it("atomically applies the first command after a deadline and broadcasts it", async () => {
     await database.exec(`
       insert into assets
-        (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes, duration_seconds)
+        (id, campaign_id, uploaded_by_membership_id, kind, audio_purpose, name, storage_key, mime_type, size_bytes, duration_seconds)
       values
-        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Short', 'test/audio-command-deadline', 'audio/mpeg', 10, 3);
+        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'MUSIC', 'Short', 'test/audio-command-deadline', 'audio/mpeg', 10, 3);
       insert into campaign_audio_tracks
         (campaign_id, asset_id, playing, position_seconds, loop, started_at, revision)
       values
@@ -1780,10 +1767,10 @@ describe("durable realtime token commands", () => {
   it("UIX-382: gives each track an independent transport (play/pause/seek/loop don't leak across tracks)", async () => {
     await database.exec(`
       insert into assets
-        (id, campaign_id, uploaded_by_membership_id, kind, name, storage_key, mime_type, size_bytes, duration_seconds)
+        (id, campaign_id, uploaded_by_membership_id, kind, audio_purpose, name, storage_key, mime_type, size_bytes, duration_seconds)
       values
-        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track A', 'test/track-a', 'audio/mpeg', 10, 60),
-        ('${ids.secondAudioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'Track B', 'test/track-b', 'audio/mpeg', 10, 60);
+        ('${ids.audioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'MUSIC', 'Track A', 'test/track-a', 'audio/mpeg', 10, 60),
+        ('${ids.secondAudioAsset}', '${ids.campaign}', '${ids.gm}', 'AUDIO', 'MUSIC', 'Track B', 'test/track-b', 'audio/mpeg', 10, 60);
     `);
     const trackA = (
       await audioTrackCommand(gmClient, {

@@ -8,8 +8,8 @@ const mocks = vi.hoisted(() => ({ api: vi.fn() }));
 vi.mock("./api", () => ({ api: mocks.api }));
 
 let actions: StatLayoutActions | null = null;
-function Harness({ load }: { load: () => Promise<void> }) {
-  actions = useStatLayoutActions({ load });
+function Harness({ load, receive }: { load: () => Promise<void>; receive: (value: StatLayoutActions) => void }) {
+  receive(useStatLayoutActions({ load }));
   return null;
 }
 
@@ -26,7 +26,7 @@ describe("per-character stat layout command", () => {
     mocks.api
       .mockRejectedValueOnce(new Error("connection lost"))
       .mockResolvedValueOnce({ characterId: "character/a", revision: 8 });
-    renderComponent(<Harness load={load} />);
+    renderComponent(<Harness load={load} receive={(value) => (actions = value)} />);
     const layout: StatLayout = [];
 
     await expect(

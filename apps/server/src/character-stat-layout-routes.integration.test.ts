@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import { PGlite } from "@electric-sql/pglite";
@@ -11,6 +11,7 @@ import * as schema from "@arken/db";
 import { env } from "./env.js";
 import { hashToken } from "./security.js";
 import { registerRoutes } from "./routes.js";
+import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
 
 let database: PGlite;
 let app: FastifyInstance;
@@ -63,18 +64,7 @@ const withoutKey = (layout: ReturnType<typeof campaignLayout>, key: string) =>
   }));
 
 beforeEach(async () => {
-  database = new PGlite();
-  const migrations = new URL("../../../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrations))
-    .filter((name) => name.endsWith(".sql"))
-    .sort()) {
-    await database.exec(
-      (await readFile(new URL(file, migrations), "utf8")).replaceAll(
-        "--> statement-breakpoint",
-        "",
-      ),
-    );
-  }
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
   fakeSockets = [];
   snapshotEmissions = [];

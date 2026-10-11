@@ -1,3 +1,5 @@
+import { AppIcon } from "./ui/AppIcon";
+import { MoveSelectionIcon } from "./ui/icons";
 import { useEffect, useRef, useState } from "react";
 import type {
   SpellCost,
@@ -1255,7 +1257,7 @@ export function SpellSchoolsWorkspace({
                                             node.id === edge.sourceNodeId,
                                         )?.displayName ??
                                           "Неизвестный узел"}{" "}
-                                        →{" "}
+                                        <AppIcon icon={MoveSelectionIcon} />{" "}
                                         {graph.nodes.find(
                                           (node) =>
                                             node.id === edge.targetNodeId,

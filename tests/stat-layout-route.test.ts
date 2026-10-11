@@ -1,7 +1,6 @@
-import { readdir, readFile } from "node:fs/promises";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -14,6 +13,7 @@ import type {
   GameSnapshot,
   StatLayout,
 } from "../packages/contracts/src/index.js";
+import { createMigratedPglite } from "./helpers/pglite-template.js";
 
 /**
  * UIX-424, шаг 5 — маршрут правки раскладки.
@@ -51,17 +51,7 @@ const patch = (secret: string, body: Record<string, unknown>) =>
 
 beforeEach(async () => {
   broadcastAttempts = 0;
-  database = new PGlite();
-  const migrations = new URL("../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrations))
-    .filter((name) => name.endsWith(".sql"))
-    .sort())
-    await database.exec(
-      (await readFile(new URL(file, migrations), "utf8")).replaceAll(
-        "--> statement-breakpoint",
-        "",
-      ),
-    );
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
   await db
     .insert(schema.campaigns)

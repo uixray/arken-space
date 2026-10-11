@@ -1,6 +1,18 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
+// Tests must exercise this checkout's sources, not a possibly stale package dist.
+const workspaceSource = (pkg: string) =>
+  fileURLToPath(new URL(`./packages/${pkg}/src/index.ts`, import.meta.url));
+
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@arken/contracts": workspaceSource("contracts"),
+      "@arken/db": workspaceSource("db"),
+      "@arken/system": workspaceSource("system"),
+    },
+  },
   test: {
     environment: "node",
     // Real Gravity adapter DOM tests need Vite to handle uikit's CSS imports.
