@@ -25,12 +25,23 @@ export default defineConfig({
    * машины, а не правильности.
    */
   workers: 1,
-  webServer: {
-    command: `corepack pnpm --filter @arken/web dev --port ${e2ePort}`,
-    url: e2eBaseUrl,
-    reuseExistingServer: true,
-    timeout: 60_000,
-  },
+  webServer: [
+    {
+      command: `corepack pnpm --filter @arken/web dev --port ${e2ePort}`,
+      url: e2eBaseUrl,
+      reuseExistingServer: true,
+      timeout: 60_000,
+    },
+    // This standalone prototype is in testDir but is not the campaign app.
+    // Keep its regression in both browser gates against its own entry point.
+    {
+      command:
+        "node apps/web/node_modules/vite/bin/vite.js --config tools/terrain-stamp-prototype/vite.config.ts --host 127.0.0.1 --port 14244 --strictPort",
+      url: "http://127.0.0.1:14244",
+      reuseExistingServer: true,
+      timeout: 60_000,
+    },
+  ],
   use: {
     baseURL: e2eBaseUrl,
     trace: "retain-on-failure",

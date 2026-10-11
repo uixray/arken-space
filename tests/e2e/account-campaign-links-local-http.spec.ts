@@ -251,17 +251,23 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await connectLocalApi(page);
     await page.goto(`/gm/${gmLinkToken}`);
+    // Firefox serializes a 44px rectangle as 43.99998474121094. Permit
+    // only 1/1000 CSS px numerical error, not a smaller touch target.
     const gmButton = page.getByRole("button", { name: "Продолжить в игру" });
     await expect(gmButton).toBeVisible();
-    expect((await gmButton.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await gmButton.boundingBox())!.height).toBeGreaterThanOrEqual(
+      44 - 0.001,
+    );
     await page.goto(`/join/${playerGrantToken}`);
     const nameInput = page.getByLabel("Имя в кампании");
     await expect(nameInput).toBeVisible();
-    expect((await nameInput.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await nameInput.boundingBox())!.height).toBeGreaterThanOrEqual(
+      44 - 0.001,
+    );
     expect(
       (await page
         .getByRole("button", { name: "Продолжить в игру" })
         .boundingBox())!.height,
-    ).toBeGreaterThanOrEqual(44);
+    ).toBeGreaterThanOrEqual(44 - 0.001);
   });
 }
