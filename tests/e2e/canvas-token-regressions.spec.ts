@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { makePng } from "./helpers/generated-png";
 import { expectSelectedMenuIcon } from "./helpers/selected-menu-icon";
 import { type Page } from "@playwright/test";
@@ -19,7 +20,10 @@ const stackBetaId = "85f46186-2ebc-4cf8-bce7-870097305a6b";
 // The object-list trigger is a map-toolbar shortcut; the list it controls
 // remains inside the map viewport. Keep these two locator scopes distinct.
 const objectListTrigger = (page: Page) =>
-  page.getByRole("button", { name: "Объекты карты", exact: true });
+  page.getByRole("button", {
+    name: "Список объектов и токенов карты",
+    exact: true,
+  });
 
 const snapshot = {
   campaign: {
@@ -213,9 +217,10 @@ for (const role of ["GM", "PLAYER"] as const) {
         );
       });
       await page.setViewportSize({ width, height: 900 });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       const trigger = page.getByRole("button", {
-        name: "Объекты карты",
+        name: "Список объектов и токенов карты",
         exact: true,
       });
       await trigger.click();
@@ -363,6 +368,7 @@ for (const role of ["GM", "PLAYER"] as const) {
           json: { paused: body.paused, revision: current.campaign.revision },
         });
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       if (role === "GM")
         await page.getByRole("button", { name: "Начать перерыв" }).click();
@@ -466,6 +472,7 @@ test("UIX-471 GM changes condition sets through the token menu and keeps server 
     current.tokens[0].revision += 1;
     await route.fulfill({ json: current.tokens[0] });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const map = page.locator(".map-viewport");
   const openMenu = async () => {
@@ -595,6 +602,8 @@ test("cold token resize sends one canonical proportional PATCH without rebootstr
     });
   });
 
+  await mockAuthenticatedGameCapabilities(page);
+
   await page.goto("/");
   const coldBootstrapRequests = bootstrapRequests;
   await selectTokenAndResizeFromObservableHandle(page);
@@ -665,6 +674,8 @@ test("cold token resize conflict keeps socket authority and exposes only safe co
       }),
     });
   });
+
+  await mockAuthenticatedGameCapabilities(page);
 
   await page.goto("/");
   const coldBootstrapRequests = bootstrapRequests;
@@ -756,6 +767,8 @@ test("GM stack semantics follow authoritative movement and deletion", async ({
     });
   });
 
+  await mockAuthenticatedGameCapabilities(page);
+
   await page.goto("/");
   const map = page.locator(".map-viewport");
   await objectListTrigger(page).click();
@@ -803,15 +816,8 @@ test("GM stack semantics follow authoritative movement and deletion", async ({
       exact: true,
     })
     .click();
-  const dialog = page.getByRole("dialog", {
-    name: "\u0423\u0431\u0440\u0430\u0442\u044c \u0442\u043e\u043a\u0435\u043d \u0441 \u043a\u0430\u0440\u0442\u044b?",
-  });
-  await dialog
-    .getByRole("button", {
-      name: "\u0423\u0434\u0430\u043b\u0438\u0442\u044c",
-      exact: true,
-    })
-    .click();
+  // Single-token deletion is immediate and undoable (5dcf729a).
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect.poll(() => deleteRequests.length).toBe(1);
   expect(deleteRequests[0]).toMatchObject({
     method: "DELETE",
@@ -851,6 +857,7 @@ test("a loaded portrait stays available through authoritative keyboard movement"
       }),
     });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const map = page.locator(".map-viewport");
   await expect(map).toHaveAttribute(
@@ -909,6 +916,7 @@ test("Escape leaves DRAW for PAN and clears the selected map object", async ({
   await page.route("**/api/canvas/history**", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
@@ -919,7 +927,10 @@ test("Escape leaves DRAW for PAN and clears the selected map object", async ({
   );
 
   await page
-    .getByRole("button", { name: "Объекты карты", exact: true })
+    .getByRole("button", {
+      name: "Список объектов и токенов карты",
+      exact: true,
+    })
     .click();
   const selectedToken = page.getByRole("button", {
     name: "Selected token",
@@ -942,7 +953,10 @@ test("Escape leaves DRAW for PAN and clears the selected map object", async ({
   ).toHaveAttribute("aria-pressed", "true");
 
   await page
-    .getByRole("button", { name: "Объекты карты", exact: true })
+    .getByRole("button", {
+      name: "Список объектов и токенов карты",
+      exact: true,
+    })
     .click();
   await expect(
     page.getByRole("button", { name: "Selected token", exact: true }),
@@ -981,11 +995,15 @@ test("UIX-405 WASD moves only a selected token in PAN and ignores held repeats",
       },
     });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
   await page
-    .getByRole("button", { name: "Объекты карты", exact: true })
+    .getByRole("button", {
+      name: "Список объектов и токенов карты",
+      exact: true,
+    })
     .click();
   await page
     .getByRole("button", { name: "Selected token", exact: true })
@@ -1106,6 +1124,7 @@ test("Ctrl+Z and Ctrl+Shift+Z call authoritative undo and redo once", async ({
       body: JSON.stringify({ sequence: 21, status: "APPLIED" }),
     });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   const undo = page.getByRole("button", {
@@ -1250,6 +1269,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         // fake a successful PATCH with 204: the real route returns DrawingDto.
         return route.abort("failed");
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       const map = page.locator(".map-viewport");
       await map
@@ -1565,6 +1585,7 @@ test("UIX-507 GM shift-selects a mixed group, moves it and confirms deletion", a
       },
     });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const map = page.locator(".map-viewport");
   const zoomBaseline = await zoomBounds(page);
@@ -1936,6 +1957,7 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
       },
     });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const map = page.locator(".map-viewport");
   const trigger = objectListTrigger(page);
@@ -1960,9 +1982,8 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
     x: box.x + offsetX + x * scale,
     y: box.y + offsetY + y * scale,
   });
-  // The rectangle contains two own revealed drawings, a foreign drawing and
-  // an own drawing hidden by fog. Only the two actionable drawings may enter
-  // the destructive group operation.
+  // Fog clips strokes, not author permissions (5dcf729a). All three own
+  // drawings are actionable; the foreign drawing must stay excluded.
   const marqueeStart = screenPoint(460, 360);
   const marqueeEnd = screenPoint(800, 500);
   await page.keyboard.down("Shift");
@@ -1977,7 +1998,7 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
     name: "Удалить выбранные объекты?",
   });
   await expect(deleteDialog).toContainText(
-    "Выбрано объектов: 2. Токенов: 0. Рисунков: 2.",
+    "Выбрано объектов: 3. Токенов: 0. Рисунков: 3.",
   );
   await deleteDialog
     .getByRole("button", { name: "Отмена", exact: true })
@@ -1993,6 +2014,7 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
     targets: [
       { targetType: "DRAWING", targetId: ownDrawingId },
       { targetType: "DRAWING", targetId: secondOwnDrawingId },
+      { targetType: "DRAWING", targetId: hiddenOwnDrawingId },
     ],
   });
 
@@ -2052,6 +2074,7 @@ for (const width of [1280, 390]) {
     await page.route("**/api/canvas/history**", (route) =>
       route.fulfill({ json: [] }),
     );
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const map = page.locator(".map-viewport");
     const zoom = map.locator(".map-scale");
@@ -2157,6 +2180,7 @@ for (const width of [1280, 390]) {
           `${request.method()} ${new URL(request.url()).pathname}`,
         );
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const map = page.locator(".map-viewport");
     const zoom = map.getByRole("slider", { name: "Масштаб карты" });
@@ -2311,6 +2335,7 @@ test("UIX-621 rapid conditions render before delayed server confirmation and sta
     await route.fulfill({ json: current.tokens[0] });
     acknowledged += 1;
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const map = page.locator(".map-viewport");
   const trigger = objectListTrigger(page);
@@ -2387,6 +2412,7 @@ for (const tool of ["PAN", "DRAW"] as const) {
         '0{"sid":"ctrl-ping-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
       );
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const map = page.locator(".map-viewport");
     await objectListTrigger(page).click();
@@ -2452,6 +2478,7 @@ for (const shifted of [true, false]) {
         writes.push({ path, body: request.postDataJSON() });
         return route.fulfill({ json: {} });
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       const map = page.locator(".map-viewport");
       const control = page.locator(`.map-tool[data-tool="${tool}"]`);
@@ -2586,6 +2613,7 @@ for (const tool of ["FOG", "COVER", "FOG_BRUSH", "COVER_BRUSH"] as const) {
       });
       return route.fulfill({ json: {} });
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const map = page.locator(".map-viewport");
     const control = page.locator(`.map-tool[data-tool="${tool}"]`);
@@ -2708,6 +2736,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         '0{"sid":"shift-ruler-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
       );
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect.poll(() => connected).toBe(true);
     const map = page.locator(".map-viewport");
@@ -2826,6 +2855,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         json: { error: "UNEXPECTED_WRITE" },
       });
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const map = page.locator(".map-viewport");
     const tool = page.locator('.map-tool[data-tool="DRAW"]');
@@ -2919,6 +2949,7 @@ test("UIX-644 token menu remains reachable across viewport resize", async ({
       '0{"sid":"menu-resize","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
     );
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
   const trigger = objectListTrigger(page);
@@ -3075,6 +3106,7 @@ for (const width of [1280, 390]) {
         '0{"sid":"menu-keyboard","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
       );
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
     await objectListTrigger(page).click();
@@ -3242,6 +3274,7 @@ for (const width of [1280, 390]) {
         '0{"sid":"player-menu","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
       );
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
     const trigger = objectListTrigger(page);
@@ -3330,6 +3363,7 @@ for (const role of ["GM", "PLAYER"] as const) {
           '0{"sid":"menu-tab","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
         );
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       const map = page.getByRole("region", {
         name: "Интерактивная карта сцены",
@@ -3488,6 +3522,7 @@ for (const change of [
         '0{"sid":"bulk-lifecycle","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
       );
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect.poll(() => Boolean(publish)).toBe(true);
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
@@ -3648,6 +3683,7 @@ for (const width of [1280, 390]) {
         '0{"sid":"live-menu","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
       );
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect.poll(() => Boolean(publish)).toBe(true);
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
@@ -3759,6 +3795,7 @@ for (const width of [1280, 390]) {
           '0{"sid":"menu-access","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
         );
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await expect.poll(() => Boolean(publish)).toBe(true);
       const map = page.getByRole("region", {
@@ -3889,6 +3926,7 @@ for (const scenario of [
         '0{"sid":"wasd-role-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
       );
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const map = page.getByRole("region", { name: "Интерактивная карта сцены" });
     await objectListTrigger(page).click();
@@ -4045,6 +4083,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         '0{"sid":"images-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
       );
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(
       page.getByRole("region", { name: "Интерактивная карта сцены" }),
