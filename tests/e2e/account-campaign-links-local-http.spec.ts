@@ -20,20 +20,57 @@ let apiServer: ReturnType<typeof Fastify>;
 let apiOrigin = "";
 let playerContext: BrowserContext | null = null;
 let previousEnv: Record<string, unknown> = {};
+const localBridges = new WeakMap<
+  Page,
+  { pending: Set<Promise<void>>; errors: unknown[] }
+>();
 
-function connectLocalApi(page: Page) {
+function connectLocalApi(
+  page: Page,
+  beforeFulfill?: (path: string) => Promise<void>,
+) {
+  const bridge = { pending: new Set<Promise<void>>(), errors: [] as unknown[] };
+  localBridges.set(page, bridge);
   return page.route("**/api/**", async (route) => {
-    const requestUrl = route.request().url();
-    const path = new URL(requestUrl).pathname;
-    const response = await route.fetch({
-      url: `${apiOrigin}${path}${new URL(requestUrl).search}`,
-    });
-    const [headers, body] = await Promise.all([
-      response.headers(),
-      response.body(),
-    ]);
-    await route.fulfill({ status: response.status(), headers, body });
+    const operation = (async () => {
+      const requestUrl = route.request().url();
+      const path = new URL(requestUrl).pathname;
+      const response = await route.fetch({
+        url: `${apiOrigin}${path}${new URL(requestUrl).search}`,
+      });
+      const [headers, body] = await Promise.all([
+        response.headers(),
+        response.body(),
+      ]);
+      await beforeFulfill?.(path);
+      await route.fulfill({ status: response.status(), headers, body });
+    })();
+    bridge.pending.add(operation);
+    try {
+      await operation;
+    } catch (error) {
+      bridge.errors.push(error);
+      throw error;
+    } finally {
+      bridge.pending.delete(operation);
+    }
   });
+}
+
+async function drainLocalApi(page: Page) {
+  const bridge = localBridges.get(page);
+  if (bridge) {
+    // Stop the app's background request producers while the context and its
+    // route handlers are still alive. Removing interception first can auto-
+    // continue a late request before its asynchronous bridge fulfills it.
+    await page.goto("about:blank");
+    while (bridge.pending.size) await Promise.allSettled([...bridge.pending]);
+  }
+  await page.unrouteAll({ behavior: "wait" });
+  localBridges.delete(page);
+  if (bridge?.errors.length) {
+    throw new AggregateError(bridge.errors, "Local HTTP bridge failed");
+  }
 }
 
 test.beforeAll(async () => {
@@ -134,14 +171,15 @@ test.afterAll(async () => {
   Object.assign(env, previousEnv);
 });
 test.afterEach(async ({ page }) => {
-  // Drain route.fetch/body/fulfill before Playwright disposes their context.
-  // Closing while a bootstrap request is pending makes a successful test flaky.
-  await page.unrouteAll({ behavior: "wait" });
-  for (const playerPage of playerContext?.pages() ?? []) {
-    await playerPage.unrouteAll({ behavior: "wait" });
+  try {
+    await drainLocalApi(page);
+    for (const playerPage of playerContext?.pages() ?? []) {
+      await drainLocalApi(playerPage);
+    }
+  } finally {
+    await playerContext?.close();
+    playerContext = null;
   }
-  await playerContext?.close();
-  playerContext = null;
 });
 
 test("real local GM link creates role-specific game bootstrap in account mode", async ({
@@ -162,6 +200,44 @@ test("real local GM link creates role-specific game bootstrap in account mode", 
   const snapshot = await (await bootstrap).json();
   expect(snapshot.me.role).toBe("GM");
   await expect(page.locator(".app-shell")).toBeVisible();
+});
+
+test("local HTTP cleanup drains a delayed real response before removing interception", async ({
+  page,
+}) => {
+  let hold = false;
+  let reached = false;
+  let release!: () => void;
+  const responseReleased = new Promise<void>((resolve) => (release = resolve));
+  let cleanup: Promise<unknown> | undefined;
+  await connectLocalApi(page, async (path) => {
+    if (hold && path === "/api/bootstrap") {
+      reached = true;
+      await responseReleased;
+    }
+  });
+  try {
+    await page.goto(`/gm/${gmLinkToken}`);
+    await page.getByRole("button", { name: "Продолжить в игру" }).click();
+    await expect(page.locator(".app-shell")).toBeVisible();
+    hold = true;
+    await page.evaluate(() => {
+      void fetch("/api/bootstrap");
+    });
+    await expect.poll(() => reached).toBe(true);
+    let drained = false;
+    cleanup = drainLocalApi(page).then(() => (drained = true));
+    await expect(page).toHaveURL("about:blank");
+    expect(drained).toBe(false);
+    expect(localBridges.get(page)?.pending.size).toBeGreaterThan(0);
+    release();
+    await cleanup;
+    expect(drained).toBe(true);
+    expect(localBridges.has(page)).toBe(false);
+  } finally {
+    release();
+    await cleanup;
+  }
 });
 
 test("real local PLAYER grant link creates isolated role-specific game bootstrap", async ({
