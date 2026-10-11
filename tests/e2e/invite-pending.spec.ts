@@ -1,6 +1,18 @@
 import { expect, test } from "./react-console-guard";
 import type { Route } from "@playwright/test";
 import { playerSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+// This fixture explicitly exercises the development-only legacy form contract.
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/account/capabilities", (route) =>
+    route.fulfill({
+      json: {
+        accountAuthEnabled: false,
+        campaignLinkAccessEnabled: false,
+        legacyDevEnabled: true,
+      },
+    }),
+  );
+});
 
 for (const width of [1280, 360]) {
   test(`UIX-317 pending invitation preserves submitted identity ${width}`, async ({
@@ -16,7 +28,17 @@ for (const width of [1280, 360]) {
     page.on("pageerror", (error) => errors.push(error.message));
     await page.route("**/api/**", (route) => {
       const path = new URL(route.request().url()).pathname;
+      if (path === "/api/account/capabilities")
+        return route.fulfill({
+          json: {
+            accountAuthEnabled: false,
+            campaignLinkAccessEnabled: false,
+            legacyDevEnabled: true,
+          },
+        });
       if (!["GET", "HEAD"].includes(route.request().method())) {
+        if (path === "/api/client-logs")
+          return route.fulfill({ json: { ok: true } });
         if (path === "/api/chat/read")
           return route.fulfill({ json: { ok: true } });
         unexpected.push(`${route.request().method()} ${path}`);

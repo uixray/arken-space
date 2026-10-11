@@ -9,6 +9,7 @@ import * as schema from "@arken/db";
 import { env } from "../../apps/server/src/env.js";
 import { hashToken } from "../../apps/server/src/security.js";
 import { registerRoutes } from "../../apps/server/src/routes.js";
+import { openWorkspaceSection } from "./workspace-nav-helper";
 
 const webOrigin = "http://localhost:5173";
 test.use({ trace: "off" });
@@ -104,6 +105,11 @@ test.beforeAll(async () => {
     label: "Synthetic player grant",
     tokenHash: hashToken(playerGrantToken),
   });
+  await db.insert(schema.characters).values({
+    campaignId,
+    name: "Synthetic personal hero",
+    ownerMembershipId: playerMembershipId,
+  });
 
   apiServer = Fastify();
   await apiServer.register(cookie);
@@ -181,4 +187,57 @@ test("real local PLAYER grant link creates isolated role-specific game bootstrap
     snapshot.members.map((member: { role: string }) => member.role),
   ).toEqual(["PLAYER"]);
   await expect(playerPage.locator(".app-shell")).toBeVisible();
+});
+
+test("PLAYER creates personal skill and ability through the sheet, survives reload and leaves the shared catalog unchanged", async ({
+  browser,
+}) => {
+  playerContext = await browser.newContext();
+  const page = await playerContext.newPage();
+  await connectLocalApi(page);
+  await page.goto(`/join/${playerGrantToken}`);
+  await page.getByLabel("Имя в кампании").fill("Personal entry player");
+  await page.getByRole("button", { name: "Продолжить в игру" }).click();
+  await expect(page.locator(".app-shell")).toBeVisible();
+  const snapshot = () =>
+    page.evaluate(async () => (await fetch("/api/bootstrap")).json());
+  const before = await snapshot();
+  expect(before.characters).toHaveLength(1);
+  for (const kind of ["SKILL", "ABILITY"] as const) {
+    await openWorkspaceSection(page, "Персонажи");
+    await page
+      .getByRole("button", {
+        name:
+          kind === "SKILL" ? "+ Добавить навык…" : "+ Добавить способность…",
+      })
+      .click();
+    await page.getByRole("button", { name: "+ Создать новую запись" }).click();
+    const form = page.locator(".catalog-entry-form");
+    if (kind === "ABILITY") {
+      await form.getByRole("combobox").first().click();
+      await page
+        .getByRole("option", { name: "Способность / заклинание", exact: true })
+        .click();
+    }
+    await form
+      .getByLabel("Название", { exact: false })
+      .fill(`Personal ${kind}`);
+    await form.getByRole("button", { name: "Сохранить", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "+ Создать новую запись" }),
+    ).toHaveCount(0);
+    await page.reload();
+    await expect(page.locator(".app-shell")).toBeVisible();
+    const current = await snapshot();
+    expect(current.catalogEntries).toEqual(before.catalogEntries);
+    expect(current.characters[0].entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind,
+          name: `Personal ${kind}`,
+          sourceCatalogEntryId: null,
+        }),
+      ]),
+    );
+  }
 });

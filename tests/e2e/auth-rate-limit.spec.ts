@@ -1,4 +1,16 @@
 import { expect, test } from "./react-console-guard";
+// This fixture explicitly exercises the development-only legacy form contract.
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/account/capabilities", (route) =>
+    route.fulfill({
+      json: {
+        accountAuthEnabled: false,
+        campaignLinkAccessEnabled: false,
+        legacyDevEnabled: true,
+      },
+    }),
+  );
+});
 for (const width of [1280, 360]) {
   test(`UIX-417 invite rate-limit guidance preserves draft ${width}`, async ({
     page,
@@ -29,7 +41,9 @@ for (const width of [1280, 360]) {
       exact: true,
     });
     await enter.click();
-    const alert = page.getByRole("alert");
+    const alert = page
+      .getByRole("form", { name: "Вход в игру" })
+      .getByRole("alert");
     await expect(alert).toHaveText(
       "Слишком много запросов. Повторите попытку через 60 с.",
     );

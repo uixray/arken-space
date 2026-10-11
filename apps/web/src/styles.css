@@ -7300,6 +7300,12 @@ html[data-player-theme="classic-v1"] .asset-picker__tile:focus-visible {
 /* UIX-415: pre-login guide. Matches the landing page's existing card
    language (1px border, --surface fill, --muted body) rather than inventing a
    second visual system on the same page. */
+.landing-guide a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+}
 .guide-features {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
