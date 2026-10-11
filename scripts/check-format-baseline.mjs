@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import console from "node:console";
+import process from "node:process";
 import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
