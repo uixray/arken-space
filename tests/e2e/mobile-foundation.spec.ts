@@ -241,8 +241,14 @@ for (const role of ["GM", "PLAYER"] as const) {
         const box = await target.boundingBox();
         expect(box).not.toBeNull();
         geometry.push({ phase: label, target: box });
-        expect(box!.width, `${label}: width`).toBeGreaterThanOrEqual(44);
-        expect(box!.height, `${label}: height`).toBeGreaterThanOrEqual(44);
+        // Firefox reports a 44px CSS box a few floating-point units below 44.
+        // Keep the physical touch target minimum, tolerate only 0.001 CSS px.
+        expect(box!.width, `${label}: width`).toBeGreaterThanOrEqual(
+          44 - 0.001,
+        );
+        expect(box!.height, `${label}: height`).toBeGreaterThanOrEqual(
+          44 - 0.001,
+        );
         expect(box!.x, `${label}: left clipping`).toBeGreaterThanOrEqual(-1);
         expect(box!.y, `${label}: top clipping`).toBeGreaterThanOrEqual(-1);
         expect(
@@ -391,6 +397,7 @@ for (const role of ["GM", "PLAYER"] as const) {
           // сервер намеренно исключает. Только API cookie jar, без второй page.
           peer = await playwright.request.newContext({
             baseURL: new URL(page.url()).origin,
+            extraHTTPHeaders: { Origin: new URL(page.url()).origin },
           });
           if (role === "GM") {
             const invitationResponse = await page.request.post("/api/invites", {
@@ -573,6 +580,9 @@ for (const role of ["GM", "PLAYER"] as const) {
               .click();
           }
           await expect(sheet).toBeVisible();
+          await sheet
+            .getByRole("tab", { name: "Инвентарь и ресурсы", exact: true })
+            .click();
           await draftInput.fill(resourceDraft);
           await recordLayout("character");
           await sheet
@@ -746,6 +756,9 @@ test("desktop-first Characters survive compact map roundtrip without remount", a
       .first()
       .click();
   }
+  await sheet
+    .getByRole("tab", { name: "Инвентарь и ресурсы", exact: true })
+    .click();
   const draft = workspace.getByPlaceholder("Новый ресурс", { exact: true });
   await draft.fill("Desktop draft до compact");
   const identity = await draft.elementHandle();

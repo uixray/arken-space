@@ -321,7 +321,9 @@ for (const role of ["GM", "PLAYER"] as const) {
         const initial = (await bootstrap.json()) as GameSnapshot;
         const character = initial.characters[0];
         expect(character.resources.physicalPower.current).toBe(10);
-        await seedLog(gmPage, 40);
+        // Current journal typography fits more rows; retain the >400px scroll
+        // precondition by creating enough real history, not lowering the oracle.
+        await seedLog(gmPage, 60);
 
         if (role === "PLAYER") {
           const response = await gmPage.request.post("/api/invites", {
