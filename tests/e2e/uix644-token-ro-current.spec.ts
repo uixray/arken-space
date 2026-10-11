@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Page } from "@playwright/test";
 import { starterStatLayout } from "@arken/system";
 import { expect, test } from "./react-console-guard";
@@ -155,6 +156,7 @@ test("UIX-644 current TokenPalette character popup ResizeObserver transition", a
   const errors = await collectResizeErrors(page);
   await page.setViewportSize({ width: 1280, height: 900 });
   await install(page);
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect(page.locator(".map-viewport")).toBeVisible();
   await openWorkspaceSection(page, "Токены");

@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Locator } from "@playwright/test";
 import type { CharacterDto } from "@arken/contracts";
 import { expect, test } from "./react-console-guard";
@@ -100,6 +101,7 @@ for (const role of ["GM", "PLAYER"] as const)
         });
       });
       await page.setViewportSize({ width, height: 800 });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await openWorkspaceSection(page, "Персонажи");
       const sheet = page.getByRole("article", {

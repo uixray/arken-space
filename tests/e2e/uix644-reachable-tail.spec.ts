@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test, type Page } from "@playwright/test";
 import type { GameSnapshot } from "@arken/contracts";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -111,6 +112,7 @@ for (const width of [1280, 390]) {
       )
         writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openWorkspaceSection(page, "Сцены");
     const manager = page.getByRole("dialog", { name: "Сцены", exact: true });
@@ -140,6 +142,7 @@ for (const owner of ["character", "campaign"] as const) {
     }) => {
       await page.setViewportSize({ width, height: 844 });
       const { unexpected } = await install(page);
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       if (owner === "character") {
         await openWorkspaceSection(page, "Персонажи");

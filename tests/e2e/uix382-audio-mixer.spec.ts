@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import {
   gmSnapshot,
@@ -60,6 +61,7 @@ for (const width of [1280, 390]) {
       );
     });
     await page.setViewportSize({ width, height: 850 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator(".app-shell")).toBeVisible();
     if (width <= 600)
@@ -131,6 +133,7 @@ for (const width of [1280, 390]) {
       );
     });
     await page.setViewportSize({ width, height: 850 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator("audio")).toHaveCount(1);
     if (width <= 600)

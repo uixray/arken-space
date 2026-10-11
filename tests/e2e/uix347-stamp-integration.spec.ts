@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
@@ -284,6 +285,7 @@ test("UIX-347 GM palette places one authoritative stamp; cancel emits nothing", 
     page,
     snapshotFor("GM"),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect(page.locator(".map-viewport")).toBeVisible();
   await page.getByRole("button", { name: "Штамп рельефа" }).click();
@@ -364,6 +366,7 @@ test("UIX-347 canonical socket snapshot during pending create acknowledgement do
     snapshot,
     { holdStampAck: true },
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await page.getByRole("button", { name: "Штамп рельефа" }).click();
   const map = page.locator(".map-viewport");
@@ -402,6 +405,7 @@ test("UIX-347 late create acknowledgement cannot resurrect a canonical deletion"
     snapshot,
     { holdStampAck: true },
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await page.getByRole("button", { name: "Штамп рельефа" }).click();
   const map = page.locator(".map-viewport");
@@ -448,6 +452,7 @@ test("UIX-347 late create acknowledgement stays out of a newly selected scene", 
   const { commands, releaseStampAck } = await installMocks(page, snapshot, {
     holdStampAck: true,
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await page.getByRole("button", { name: "Штамп рельефа" }).click();
   const map = page.locator(".map-viewport");
@@ -480,6 +485,7 @@ test("UIX-347 PLAYER renders a public stamp but requests no GM catalog and canno
 }) => {
   const snapshot = snapshotFor("PLAYER", 1);
   const { commands, assetRequests } = await installMocks(page, snapshot);
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect(page.locator(".map-viewport")).toHaveAttribute(
     "data-terrain-stamp-count",
@@ -502,6 +508,7 @@ test("UIX-347 GM selects, moves, copies and deletes a stamp through shared canva
     { ...makeStamp("stamp-target-2"), x: 800, y: 520 },
   ];
   const { commands } = await installMocks(page, snapshot);
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const map = page.locator(".map-viewport");
   await expect(map).toHaveAttribute("data-terrain-stamp-count", "2");
@@ -551,6 +558,7 @@ test("UIX-347 marquee selects stamps and mixed selection uses shared move/delete
     { ...makeStamp("stamp-right"), x: 650, y: 400 },
   ];
   const { commands } = await installMocks(page, snapshot);
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const map = page.locator(".map-viewport");
   const box = await map.boundingBox();
@@ -613,6 +621,7 @@ for (const count of [100, 500]) {
       snapshotFor("GM", count),
     );
     const started = Date.now();
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator(".map-viewport")).toHaveAttribute(
       "data-terrain-stamp-count",

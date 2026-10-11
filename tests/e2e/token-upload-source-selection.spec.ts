@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type {
   AssetDto,
   GameSnapshot,
@@ -471,6 +472,7 @@ for (const width of [1280, 360]) {
       recoveredRequests += 1;
       return route.fulfill({ contentType: "image/png", body: aBytes });
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator(".app-shell")).toBeVisible();
     await openWorkspaceSection(page, "Токены");
@@ -546,6 +548,7 @@ test("UIX-611 real App selects uploaded portrait B once and saves only generated
   await page.setViewportSize({ width: 1280, height: 900 });
   const fixture = await installBoundary(page);
   try {
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.locator(".app-shell")).toBeVisible();
     await expect.poll(() => fixture.sockets.size).toBeGreaterThan(0);
@@ -876,6 +879,7 @@ test("UIX-589 palette replacement and controllers commit in one PATCH with stabl
 }) => {
   const fixture = await installBoundary(page, true);
   try {
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await openWorkspaceSection(page, "Токены");
     const card = page
@@ -979,6 +983,7 @@ for (const width of [1280, 390]) {
   }, info) => {
     await page.setViewportSize({ width, height: 850 });
     const fixture = await installBoundary(page);
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openWorkspaceSection(page, "Токены");
     await page

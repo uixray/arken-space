@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 
@@ -38,6 +39,7 @@ for (const role of ["GM", "PLAYER"] as const)
           '0{"sid":"comment-layout","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
         );
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
 
       const dice = page.locator(".map-dice-tray .dice-tray-panel__toolbar");

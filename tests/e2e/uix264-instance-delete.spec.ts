@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { WorldContentInstanceDto } from "@arken/contracts";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { expect, test } from "./react-console-guard";
@@ -98,6 +99,7 @@ for (const width of [390, 1280]) {
     });
 
     await page.setViewportSize({ width, height: 850 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator(".app-shell")).toBeVisible();
     await openWorkspaceSection(page, "Редактор мира");

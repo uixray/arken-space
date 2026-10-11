@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 
@@ -55,6 +56,7 @@ for (const width of [1280, 390]) {
     });
     await page.setViewportSize({ width, height: 800 });
     try {
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       const alert = page.getByRole("alert");
       await expect(alert).toContainText("Не удалось загрузить данные");

@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
@@ -217,6 +218,7 @@ for (const width of [390, 1280]) {
       return route.fulfill({ json: [] });
     });
     await page.setViewportSize({ width, height: 850 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator(".app-shell")).toBeVisible();
     await openWorkspaceSection(page, "Редактор мира");
@@ -396,6 +398,7 @@ test("UIX-264 PLAYER bootstrap does not preload campaign instances", async ({
     return route.fulfill({ json: [] });
   });
   await page.setViewportSize({ width: 390, height: 850 });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect(page.locator(".app-shell")).toBeVisible();
   await expect(

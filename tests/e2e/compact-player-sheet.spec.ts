@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { CharacterDto, StatLayout } from "@arken/contracts";
 import type { Route } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
@@ -75,6 +76,7 @@ test("UIX-624 PLAYER sheet targets and pending backstory survive journal and rot
     );
   });
   try {
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const sheetNav = page.getByRole("button", {
       name: "Персонаж",

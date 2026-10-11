@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Page } from "@playwright/test";
 import type { CharacterMediaDto, GameSnapshot } from "@arken/contracts";
 import { expect, test } from "./react-console-guard";
@@ -267,6 +268,8 @@ test("an owner confirms before detaching character media from the gallery", asyn
   const unexpectedApiRequests: string[] = [];
   await installMockedApp(page, detachRequests, unexpectedApiRequests);
 
+  await mockAuthenticatedGameCapabilities(page);
+
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
 
@@ -332,6 +335,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       const mutations: DetachRequest[] = [];
       const unexpected: string[] = [];
       await installMockedApp(page, mutations, unexpected, role);
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await openWorkspaceSection(page, "Персонажи");
       const gallery = page.locator(".character-media-gallery");
@@ -446,6 +450,7 @@ test("gallery dropdown closes before the PLAYER sheet on consecutive Escape", as
   const mutations: DetachRequest[] = [];
   const unexpected: string[] = [];
   await installMockedApp(page, mutations, unexpected);
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
   const gallery = page.locator(".character-media-gallery");

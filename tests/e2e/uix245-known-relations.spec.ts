@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
@@ -71,6 +72,7 @@ for (const width of [390, 1280]) {
     });
 
     await page.setViewportSize({ width, height: 850 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openWorkspaceSection(page, "Справочник мира");
     const subjectRow = page.locator(".world-encyclopedia-workspace__row", {

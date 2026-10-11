@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { rulerColorForMembership } from "../../apps/web/src/renderers/ruler-colors";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -93,6 +94,7 @@ test("UIX-509 deterministic ruler colors render on synthetic light, dark and bus
       '0{"sid":"uix509-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
     );
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const map = page.locator(".map-viewport");
   await expect(map).toBeVisible();

@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type {
   CharacterDto,
   SpellProgressionGraph,
@@ -202,6 +203,7 @@ for (const width of [390, 1280]) {
     });
 
     await page.setViewportSize({ width, height: 850 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openWorkspaceSection(page, "Школы заклинаний");
     await page.getByLabel("Название набора").fill("Кастомная школа");

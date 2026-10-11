@@ -44,6 +44,10 @@ for (const width of [1280, 360]) {
         unexpected.push(`${route.request().method()} ${path}`);
         return route.abort();
       }
+      if (path === "/api/soundpad")
+        return route.fulfill({
+          json: { packs: [], playerPlaybackEnabled: true },
+        });
       if (path === "/api/story/posts")
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       if (path === "/api/operator/feedback/capability")

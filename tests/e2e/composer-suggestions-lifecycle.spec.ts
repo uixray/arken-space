@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { GameSnapshot } from "@arken/contracts";
 import { starterStatLayout } from "@arken/system";
 import { expect, test } from "./react-console-guard";
@@ -250,6 +251,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         rolls.push(route.request().postDataJSON() as (typeof rolls)[number]);
         await route.fulfill({ status: 201, json: {} });
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       if (width === 390) await page.locator("#compact-nav-journal").click();
       const panel = page.locator("#chat-panel-activity");
@@ -392,6 +394,7 @@ for (const role of ["GM", "PLAYER"] as const) {
           '0{"sid":"activity-selectors","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
         );
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       if (width === 390) await page.locator("#compact-nav-journal").click();
       const panel = page.locator("#chat-panel-activity"),

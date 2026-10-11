@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Locator } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
@@ -271,6 +272,7 @@ test("concept shell keeps the map primary and exposes core tools", async ({
       body: "[]",
     }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   await expect(viewedScenePicker(page)).toContainText(
@@ -345,6 +347,8 @@ test("UIX-516 GM sees protected regen fields before and after reload", async ({
     ).toBeEnabled();
   };
 
+  await mockAuthenticatedGameCapabilities(page);
+
   await page.goto("/");
   await expectProtectedControls();
   await page.reload();
@@ -365,6 +369,7 @@ test("GM compact chrome keeps actions discoverable at release width", async ({
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
   await page.setViewportSize({ width: 1343, height: 945 });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   await expect(page.locator(".workspace-nav")).toBeVisible();
@@ -434,6 +439,7 @@ test("UIX-386 GM toolbar keeps icons and encounter states accessible", async ({
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
   await page.setViewportSize({ width: 1343, height: 945 });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   const toolbar = page.getByRole("toolbar", { name: "Инструменты карты" });
@@ -606,6 +612,8 @@ test("UIX-462 shortcuts dialog exposes role-safe map commands", async ({
   const shortcutRow = (dialog: Locator, action: string) =>
     dialog.locator(".guide-row").filter({ hasText: action });
 
+  await mockAuthenticatedGameCapabilities(page);
+
   await page.goto("/");
   const gmDialog = await openShortcuts();
   for (const [action, keys] of [
@@ -675,6 +683,7 @@ test("GM opens token and file workflows without leaving the canvas", async ({
       body: "[]",
     }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   await openWorkspaceSection(page, "Токены");
@@ -786,6 +795,8 @@ test("GM checks usage and deletes an unused media asset", async ({ page }) => {
       }),
     });
   });
+
+  await mockAuthenticatedGameCapabilities(page);
 
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await openWorkspaceSection(page, "Файлы");
@@ -919,6 +930,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         }
       });
       await page.setViewportSize(viewport);
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/", { waitUntil: "domcontentloaded" });
       const files = page.getByRole("dialog", { name: "Файлы", exact: true });
       if (role === "PLAYER") {
@@ -1212,6 +1224,7 @@ test("GM manages a bounded in-place character sheet deck", async ({ page }) => {
   await page.route("**/api/player-access", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   /**
    * UIX-561: узла дожидаются до снимка, а не после.
@@ -1392,6 +1405,7 @@ test("GM manages one campaign clock surface and confirms a reset", async ({
       body: JSON.stringify(currentSnapshot.campaign),
     });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   await openWorkspaceSection(page, "Персонажи");
@@ -1463,6 +1477,7 @@ test("GM controls music from the top bar and opens the library", async ({
   await page.route("**/api/player-access", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   const music = page.getByRole("region", { name: "Музыка" });
@@ -1542,6 +1557,8 @@ test("scene refresh races do not revoke local music consent", async ({
   await page.route("**/api/scenes/activate", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
   );
+
+  await mockAuthenticatedGameCapabilities(page);
 
   await page.goto("/");
   await expect
@@ -1668,6 +1685,7 @@ test("UIX-226 chat composer and canvas quick rolls submit explicit, server-safe 
       body: "{}",
     });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   const quickRolls = page.locator(".map-dice-tray");
@@ -1769,6 +1787,7 @@ test("UIX-422 compact layout keeps sidebar custom roll reachable at 390x844", as
   await page.route("**/api/player-access", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   const composer = page.locator(".chat-compose textarea");
@@ -1843,6 +1862,8 @@ test("UIX-274 activity reloads story posts and exposes empty states and slash ac
     });
   });
 
+  await mockAuthenticatedGameCapabilities(page);
+
   await page.goto("/");
   await expect(page.locator("#chat-panel-activity")).toBeVisible();
   await expect(page.locator(".activity-feed .chat-empty")).toBeVisible();
@@ -1891,6 +1912,8 @@ test("activity quick rolls reserve space above the scrollable event history", as
       body: JSON.stringify(fixture),
     }),
   );
+
+  await mockAuthenticatedGameCapabilities(page);
 
   await page.goto("/");
 
@@ -2038,6 +2061,8 @@ test("chat marks only unambiguous kept natural d20 criticals", async ({
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
 
+  await mockAuthenticatedGameCapabilities(page);
+
   await page.goto("/");
 
   const failure = page.locator(".roll-result--critical-failure");
@@ -2093,6 +2118,8 @@ test("chat survives malformed client dice and renders local date boundaries", as
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
 
+  await mockAuthenticatedGameCapabilities(page);
+
   await page.goto("/");
 
   await expect(page.locator(".chat-date-divider")).toHaveCount(2);
@@ -2127,6 +2154,7 @@ test("GM shell keeps essential controls accessible across desktop widths", async
     { width: 2560, height: 1440 },
   ]) {
     await page.setViewportSize(viewport);
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
 
     await expect(viewedScenePicker(page)).toBeVisible();
@@ -2241,6 +2269,7 @@ test("GM prepares a scene locally before publishing it to players", async ({
       body: "{}",
     });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   await openWorkspaceSection(page, "Сцены");
@@ -2311,6 +2340,7 @@ test("destructive token-definition action stays visually subordinate", async ({
   await page.route("**/api/player-access", (route) =>
     route.fulfill({ json: [] }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Токены");
 
@@ -2370,6 +2400,7 @@ for (const trayCase of [
         body: "[]",
       }),
     );
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
 
     const map = page.locator(".map-shell");
@@ -2492,6 +2523,7 @@ test("canvas tools stay selected and token placement targets the GM viewed scene
       body: "{}",
     });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   await selectViewedScene(page, "Секретная сцена");
@@ -2574,6 +2606,7 @@ for (const viewport of [
         body: JSON.stringify(longSnapshot),
       }),
     );
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator("#chat-panel-activity")).toBeVisible();
     await expect(page.locator(".activity-roll-controls")).toBeVisible();
@@ -2676,6 +2709,8 @@ test("GM assigns and revokes additional character sheet access", async ({
     });
   });
 
+  await mockAuthenticatedGameCapabilities(page);
+
   await page.goto("/");
   await openWorkspaceSection(
     page,
@@ -2740,6 +2775,7 @@ test("player opens the character workspace while chat remains visible", async ({
       body: JSON.stringify(playerSnapshot),
     }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect(page.locator(".chat-compose")).toBeVisible();
   await openWorkspaceSection(page, "Персонажи");
@@ -2782,6 +2818,7 @@ test("unassigned player character workspace exposes no sheets", async ({
       body: JSON.stringify(playerSnapshot),
     }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(
     page,
@@ -2843,6 +2880,8 @@ test("character card submits normal and modifier-key rolls for GM and player", a
       body: "{}",
     });
   });
+
+  await mockAuthenticatedGameCapabilities(page);
 
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
@@ -2967,6 +3006,7 @@ test("wallet batches rapid mutations and ignores unchanged blur", async ({
   await page.clock.install({
     time: new Date("2026-08-29T12:00:00.000Z"),
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
   const goldRow = page
@@ -3151,6 +3191,8 @@ test("UIX-468 resource counters batch, rebase and roll back conflicts", async ({
       body: JSON.stringify(character),
     });
   });
+
+  await mockAuthenticatedGameCapabilities(page);
 
   await page.goto("/");
   const activityPanel = page.locator("#chat-panel-activity");
@@ -3382,6 +3424,8 @@ test("UIX-621 activity actions follow snapshot character B and keep failures at 
     });
   });
 
+  await mockAuthenticatedGameCapabilities(page);
+
   await page.goto("/");
   const activityPanel = page.locator("#chat-panel-activity");
   const quickRolls = activityPanel.getByRole("region", {
@@ -3556,6 +3600,8 @@ test("structured resources persist and short rest uses the authoritative counter
     });
   });
 
+  await mockAuthenticatedGameCapabilities(page);
+
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
   const physical = page.getByRole("spinbutton", {
@@ -3620,6 +3666,7 @@ test("resource conflict replaces the structured draft with canonical bootstrap d
       }),
     });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
   const resourceCard = page
@@ -3681,6 +3728,7 @@ test("wallet refreshes and safely reapplies a delta after a stale revision", asy
       body: JSON.stringify(playerSnapshot.characters[0]),
     });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
   const goldRow = page
@@ -3766,6 +3814,7 @@ test("player fog clips partial foreign tokens while controlled tokens remain vis
       body: JSON.stringify(servedSnapshot),
     }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   const map = page.locator(".map-viewport");
@@ -3865,6 +3914,7 @@ test("map keyboard command core is scoped, observable, and accessible", async ({
   await page.route("**/api/player-access", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   const map = page.getByRole("region", {
@@ -3947,6 +3997,7 @@ test("player fog shortcut is permission-gated", async ({ page }) => {
   await page.route("**/api/player-access", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const map = page.getByRole("region", {
     name: "\u0418\u043d\u0442\u0435\u0440\u0430\u043a\u0442\u0438\u0432\u043d\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0441\u0446\u0435\u043d\u044b",
@@ -3978,6 +4029,7 @@ test("map object list preserves Escape priority and Delete cancellation", async 
   await page.route("**/api/player-access", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   const map = page.getByRole("region", {
@@ -4102,6 +4154,7 @@ test("selected token keyboard moves serialize delayed responses with ack revisio
       }),
     });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const map = page.getByRole("region", {
     name: "\u0418\u043d\u0442\u0435\u0440\u0430\u043a\u0442\u0438\u0432\u043d\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0441\u0446\u0435\u043d\u044b",
@@ -4219,6 +4272,7 @@ test("UIX-498 GM keeps story and rolls in Activity without redundant tabs", asyn
       }),
     });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect(page.getByRole("tablist", { name: "Потоки чата" })).toHaveCount(
     0,
@@ -4309,6 +4363,7 @@ test("UIX-498 PLAYER keeps Story and ROLLS in Activity without private tabs", as
       }),
     });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect(page.locator("#chat-panel-activity")).toBeVisible();
   await expect(page.getByRole("tablist", { name: "Потоки чата" })).toHaveCount(
@@ -4390,6 +4445,7 @@ test("UIX-274 activity read state reconciles and stays read after reload", async
       body: JSON.stringify({ posts: [], nextCursor: null }),
     }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect(page.getByText("UNREAD_STORY_MARKER")).toBeVisible();
   await expect
@@ -4544,6 +4600,8 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
       }),
     });
   });
+
+  await mockAuthenticatedGameCapabilities(page);
 
   await page.goto("/");
   const directTab = page.locator("#chat-tab-direct");
@@ -4726,6 +4784,8 @@ test("UIX-268 catalog picker routes authorized stickers and respects stream role
     });
   });
 
+  await mockAuthenticatedGameCapabilities(page);
+
   await page.goto("/");
   await expect(page.locator("#chat-panel-activity")).toBeVisible();
   const picker = page.locator(".chat-compose .sticker-picker");
@@ -4827,6 +4887,8 @@ test("UIX-268 reload render and tombstone are safe at narrow viewport", async ({
     }),
   );
 
+  await mockAuthenticatedGameCapabilities(page);
+
   await page.goto("/");
   await page.locator("#compact-nav-journal").click();
   const rendered = page.getByRole("img", { name: "Cartographer waves hello" });
@@ -4901,6 +4963,7 @@ test("GM can move tokens, pan the map, choose drawing color, and cannot republis
       body: "{}",
     });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   const viewport = page.locator(".map-viewport");
@@ -4997,6 +5060,7 @@ test("sidebar collapse persists and hidden-chat rolls surface their authoritativ
       body: JSON.stringify(snapshot),
     }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   const map = page.locator(".map-shell");
@@ -5104,6 +5168,7 @@ test("map shortcuts and object panel stay reachable without covering canvas UI",
         body: "[]",
       }),
     );
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
 
     const viewport = page.locator(".map-viewport");
@@ -5195,6 +5260,7 @@ for (const role of ["GM", "PLAYER"] as const) {
           body: "{}",
         });
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       const tray = page.locator(".map-dice-tray");
       await expect(tray).toBeVisible();

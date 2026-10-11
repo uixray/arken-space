@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { CharacterDto, GameSnapshot, StatLayout } from "@arken/contracts";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
@@ -208,6 +209,7 @@ test("UIX-682 PLAYER owner layout CRUD/order survives reload; compact sheet is a
   await mockApi(page, snapshot, (path, body) => writes.push({ path, body }));
 
   await page.setViewportSize({ width: 1280, height: 900 });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
   const sheet = page.getByRole("article", {

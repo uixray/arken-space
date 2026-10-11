@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { CharacterDto } from "@arken/contracts";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -94,6 +95,7 @@ for (const role of ["GM", "PLAYER"] as const)
         );
       });
       await page.setViewportSize({ width, height: 850 });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await openWorkspaceSection(page, "Персонажи");
       await page.getByRole("tab", { name: "Личность" }).click();

@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test, type Page } from "@playwright/test";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
 import { PLAYER_THEMES } from "../../apps/web/src/design-system/player-themes";
@@ -147,6 +148,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         await page.setViewportSize({ width, height });
         const snapshot = visualSnapshot(role, theme);
         const unexpectedWrites = await mockReadOnlyApp(page, snapshot);
+        await mockAuthenticatedGameCapabilities(page);
         await page.goto("/");
         await expect(page.locator("html")).toHaveAttribute(
           "data-player-theme",

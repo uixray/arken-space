@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import type { SpellProgressionGraph } from "@arken/contracts";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -131,6 +132,7 @@ for (const width of [390, 1280]) {
     });
 
     await page.setViewportSize({ width, height: 850 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator(".app-shell")).toBeVisible();
     await openWorkspaceSection(page, "Школы заклинаний");
@@ -227,6 +229,7 @@ test("UIX-458 PLAYER cannot open or preload the GM spell-school editor", async (
     return route.fulfill({ json: [] });
   });
   await page.setViewportSize({ width: 390, height: 850 });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect(page.locator(".app-shell")).toBeVisible();
   await expect(
@@ -298,6 +301,7 @@ test("UIX-458 ambiguous save keeps the actual workspace open until exact retry s
   });
 
   await page.setViewportSize({ width: 390, height: 850 });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect(page.locator(".app-shell")).toBeVisible();
   await openWorkspaceSection(page, "Школы заклинаний");

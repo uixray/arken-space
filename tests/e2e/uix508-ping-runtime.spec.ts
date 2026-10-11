@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 
@@ -76,6 +77,7 @@ for (const reducedMotion of [false, true]) {
         '0{"sid":"uix508-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
       );
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const map = page.locator(".map-viewport");
     await expect(map).toBeVisible();

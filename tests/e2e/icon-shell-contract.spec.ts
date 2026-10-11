@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import {
   paintedIconContrast,
   settleIconState,
@@ -75,6 +76,7 @@ for (const themeId of ["system", ...PLAYER_THEMES.map(({ id }) => id)])
             '0{"sid":"icons-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
           );
         });
+        await mockAuthenticatedGameCapabilities(page);
         await page.goto("/");
         await expect(page.locator(".map-viewport")).toBeVisible();
         if (themeId === "system") {

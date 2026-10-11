@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import type { SpellProgressionGraph } from "../../packages/contracts/src/spell-schools";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -108,6 +109,7 @@ for (const width of [390, 1280])
       return route.fulfill({ json: [] });
     });
     await page.setViewportSize({ width, height: 850 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator(".app-shell")).toBeVisible();
     await openWorkspaceSection(page, "Школы заклинаний");
@@ -189,6 +191,7 @@ test("UIX-262 PLAYER does not receive activation editor or draft fetch", async (
     return route.fulfill({ json: [] });
   });
   await page.setViewportSize({ width: 390, height: 850 });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect(page.locator(".app-shell")).toBeVisible();
   await expect(

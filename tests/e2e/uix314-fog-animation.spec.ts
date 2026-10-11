@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import type { Locator, Page, WebSocketRoute } from "@playwright/test";
 import type { GameSnapshot } from "@arken/contracts";
@@ -109,6 +110,7 @@ async function bootFogScene(
       '0{"sid":"uix314-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
     );
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const map = page.locator(".map-viewport");
   await expect(map).toBeVisible();
@@ -364,6 +366,7 @@ async function compareMovingMaskToSolidFailure(page: Page, map: Locator) {
       sessionStorage.setItem("uix314-expected-fog-alpha", JSON.stringify(mask)),
     animated,
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/?uix314-fog-fallback=1");
   const reloadedMap = page.locator(".map-viewport");
   await expect(reloadedMap).toBeVisible();
@@ -425,6 +428,7 @@ test.describe("UIX-314 DPR2 alpha-mask parity", () => {
         ),
       animatedMask,
     );
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/?uix314-fog-fallback=1");
     const reloadedMap = page.locator(".map-viewport");
     await expect(reloadedMap).toBeVisible();
