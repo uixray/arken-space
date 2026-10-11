@@ -1052,6 +1052,13 @@ describe("character action feedback", () => {
     await galleryLoaded();
     // Changing characters deliberately closes the old portrait dialog. Reopen
     // the new character's dialog before starting its independent upload epoch.
+    // Gravity retains the closing portal during its exit animation. Do not
+    // selectPortrait through that stale portal and mistake it for the new one.
+    await waitFor(() =>
+      expect(
+        screen.queryByLabelText("Загрузить портрет для персонажа"),
+      ).not.toBeInTheDocument(),
+    );
     const file = selectPortrait(
       new File(["b"], "b.png", { type: "image/png" }),
     );
