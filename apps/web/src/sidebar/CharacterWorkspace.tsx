@@ -74,9 +74,9 @@ import {
   AddIcon,
   CharacterArchiveIcon,
   CloseIcon,
-  CoinsIcon,
   CollapseCharacterRailIcon,
   DecreaseIcon,
+  DrawIcon,
   ExpandCharacterRailIcon,
 } from "../ui/icons";
 
@@ -206,6 +206,8 @@ export function CharacterWorkspace({
     };
   }, [active, onClose]);
 
+  const singlePlayerCharacter =
+    props.snapshot.me.role === "PLAYER" && characters.length === 1;
   const openCount = state.openIds.length;
   const sheetLimitReached = openCount >= MAX_OPEN_CHARACTER_SHEETS;
   return createPortal(
@@ -217,7 +219,7 @@ export function CharacterWorkspace({
       hidden={!active}
       inert={!active}
       aria-hidden={!active}
-      className={`character-workspace${props.collapsed ? " is-sidebar-collapsed" : ""}`}
+      className={`character-workspace${props.collapsed ? " is-sidebar-collapsed" : ""}${singlePlayerCharacter ? " is-single-player-character" : ""}`}
       aria-labelledby="character-workspace-title"
       style={
         props.workspaceSidebarWidth != null
@@ -311,7 +313,7 @@ export function CharacterWorkspace({
         </button>
       </header>
       <div
-        className={`character-workspace__body${railCollapsed ? " is-rail-collapsed" : ""}`}
+        className={`character-workspace__body${railCollapsed ? " is-rail-collapsed" : ""}${singlePlayerCharacter ? " is-single-character" : ""}`}
       >
         <nav className="character-rail" aria-label="Персонажи кампании">
           {sheetLimitReached && (
@@ -939,17 +941,15 @@ export function CharacterPanel({
     asset: assetActions,
     statLayout: statLayoutActions,
   } = useCampaignActions();
-  const statLabels = statLabelsFromLayout(snapshot.campaign.statLayout);
-  const characteristicRows = statRowsOfGroup(
-    snapshot.campaign.statLayout,
-    "characteristics",
-  );
-  const combatRows = statRowsOfGroup(snapshot.campaign.statLayout, "combat");
+  const layout = character?.statLayout ?? snapshot.campaign.statLayout;
+  const statLabels = statLabelsFromLayout(layout);
+  const characteristicRows = statRowsOfGroup(layout, "characteristics");
+  const combatRows = statRowsOfGroup(layout, "combat");
   const initiativeRows = combatRows.filter(
     (row) => row.key === "initiative" || row.key === "reaction",
   );
-  const resourceRows = statResourceRowsFromLayout(snapshot.campaign.statLayout);
-  const resourceLabels = resourceCostLabels(snapshot.campaign.statLayout);
+  const resourceRows = statResourceRowsFromLayout(layout);
+  const resourceLabels = resourceCostLabels(layout);
   const [countersPending, setCountersPending] = useState(0);
   const [vitalsTab, setVitalsTab] = useState<
     "stats" | "inventory" | "bio"
@@ -993,17 +993,31 @@ export function CharacterPanel({
    * не слиться. Ошибки не глушим — их показывает окно ввода, рядом с тем, что
    * не получилось.
    */
-  const layout = snapshot.campaign.statLayout;
+  const canEditCharacterLayout = Boolean(
+    character &&
+      snapshot.me.role === "PLAYER" &&
+      character.ownerMembershipId === snapshot.me.id,
+  );
+  const canEditLayout = snapshot.me.role === "GM" || canEditCharacterLayout;
   const statLayoutPendingRef = useRef(false);
   const saveLayout = async (next: typeof layout) => {
+    if (!character) return;
     if (statLayoutPendingRef.current)
       throw new Error("Дождитесь сохранения предыдущей правки.");
     statLayoutPendingRef.current = true;
     try {
-      await statLayoutActions.onUpdateStatLayout(
-        next,
-        snapshot.campaign.revision,
-      );
+      if (snapshot.me.role === "GM") {
+        await statLayoutActions.onUpdateStatLayout(
+          next,
+          snapshot.campaign.revision,
+        );
+      } else if (canEditCharacterLayout) {
+        await statLayoutActions.onUpdateCharacterStatLayout(
+          character.id,
+          next,
+          character.revision,
+        );
+      }
     } finally {
       statLayoutPendingRef.current = false;
     }
@@ -1582,6 +1596,11 @@ export function CharacterPanel({
                 {character.name.slice(0, 1).toLocaleUpperCase()}
               </div>
             )}
+            {editable && (
+              <span className="character-hero__avatar-edit" aria-hidden="true">
+                <AppIcon icon={DrawIcon} />
+              </span>
+            )}
           </button>
           <div className="character-hero__info">
             <div className="inline-fields">
@@ -1703,7 +1722,7 @@ export function CharacterPanel({
                 values={character.stats}
                 editable={Boolean(editable)}
                 rollPending={rollPending}
-                canEditLayout={snapshot.me.role === "GM"}
+                canEditLayout={canEditLayout}
                 onChangeValue={(key, value) =>
                   changeStatValue(character, key, value)
                 }
@@ -1738,7 +1757,7 @@ export function CharacterPanel({
                 values={character.stats}
                 editable={Boolean(editable)}
                 rollPending={rollPending}
-                canEditLayout={snapshot.me.role === "GM"}
+                canEditLayout={canEditLayout}
                 onChangeValue={(key, value) =>
                   changeStatValue(character, key, value)
                 }
@@ -2116,9 +2135,7 @@ export function CharacterPanel({
           </Button>
         </div>
         <div className="character-vital-chip character-vital-chip--wallet">
-          <span className="character-vital-chip__label">Кошелёк</span>
           <span className="character-vital-chip__value character-vital-chip__wallet-values">
-            <AppIcon icon={CoinsIcon} />
             {(["gold", "silver", "copper"] as const).map((key) => (
               <label className="character-wallet__coin" key={key}>
                 <span className="character-wallet__coin-label">
@@ -2161,9 +2178,6 @@ export function CharacterPanel({
                       if (event.key === "Enter") event.currentTarget.blur();
                     }}
                   />
-                  <span>
-                    {key === "gold" ? "зм" : key === "silver" ? "см" : "мм"}
-                  </span>
                   <Button
                     disabled={!editable}
                     aria-label={`Увеличить: ${WALLET_LABELS[key]}`}

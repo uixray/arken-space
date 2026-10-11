@@ -18,7 +18,18 @@ grep -Eq '^UHDR_MAX_DIMENSION:[A-Z]+=65500$' uhdr-build/CMakeCache.txt
 cmake --build uhdr-build -j2; cmake --install uhdr-build
 meson setup vips-8.18.6/build vips-8.18.6 --prefix=/usr/local --libdir=lib --buildtype=release -Dintrospection=disabled -Dexamples=false -Djpeg=enabled -Dpng=enabled -Dwebp=enabled -Dtiff=enabled -Dheif=enabled -Drsvg=enabled -Dpangocairo=enabled -Dlcms=enabled -Dexif=enabled -Darchive=enabled -Dcgif=enabled -Dimagequant=enabled -Duhdr=enabled -Dcpp_link_args=-Wl,-z,nodelete -Ddeprecated=false -Dcfitsio=disabled -Dfftw=disabled -Djpeg-xl=disabled -Dhighway=disabled -Dorc=disabled -Dmagick=disabled -Dmatio=disabled -Dnifti=disabled -Dopenexr=disabled -Dopenjpeg=disabled -Dopenslide=disabled -Dpdfium=disabled -Dpoppler=disabled -Dquantizr=disabled -Draw=disabled -Dspng=disabled -Dppm=false -Danalyze=false -Dradiance=false
 meson compile -C vips-8.18.6/build -j2
-meson test -C vips-8.18.6/build --num-processes 2
+if meson test -C vips-8.18.6/build --num-processes 1 --print-errorlogs; then
+  :
+else
+  test_status=$?
+  echo 'Meson tests failed; final 32 KiB of the Meson test log follows:' >&2
+  if [[ -f vips-8.18.6/build/meson-logs/testlog.txt ]]; then
+    tail -c 32768 vips-8.18.6/build/meson-logs/testlog.txt >&2 || true
+  else
+    echo 'Meson testlog.txt was not produced.' >&2
+  fi
+  exit "$test_status"
+fi
 meson install -C vips-8.18.6/build; ldconfig
 readelf -d /usr/local/lib/libvips-cpp.so | grep -q NODELETE
 cd /work/sharp-build

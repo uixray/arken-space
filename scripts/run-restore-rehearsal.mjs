@@ -709,6 +709,7 @@ try {
     report.captureManifestSha256 = restoreRequest.manifestSha256;
     report.captureReceiptSha256 = restoreRequest.receiptSha256;
     report.sourceSnapshotId = restoreRequest.sourceSnapshotId;
+    report.expectedSourceRevision = restoreRequest.expectedSourceRevision;
     report.copyReceiptSha256 = restoreRequest.copyReceiptSha256;
     report.recoveryMode =
       "captured server and PostgreSQL images; no source-build equivalence claim";
@@ -919,8 +920,11 @@ try {
     environment = composeEnvironment();
     record("service-v1-capture-manifest", "passed", {
       manifestSha256: serviceSnapshot.manifestSha256,
+      manifestFormat: serviceSnapshot.manifest.format,
+      sourceRevision: serviceSnapshot.sourceRevision,
+      sourceRevisionEvidence: "declared pin matched manifest and capture receipt",
       fileCount: serviceSnapshot.files,
-      capturedSchemaVersion: serviceSnapshot.schemaVersion,
+      runtimeSchemaVersion: serviceSnapshot.schemaVersion,
       capturedMigrationCount: migrationLedgerExpected.length,
       imagePinning:
         "server-and-postgres image IDs verified through isolated local tags; source build disabled",

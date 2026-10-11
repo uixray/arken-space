@@ -6,6 +6,12 @@ TMP=$(mktemp -d)
 trap 'rm -rf -- "$TMP"' EXIT
 mkdir -p "$TMP/bin" "$TMP/app/infra/backup" "$TMP/repo"
 REAL_NODE=$(command -v node)
+# Git Bash rewrites POSIX-looking argv before native Node sees it. The capture
+# guard must preserve container paths while leaving host Windows paths intact.
+NATIVE_NODE_ARGS=$(MSYS2_ARG_CONV_EXCL="*" "$REAL_NODE" -e 'process.stdout.write(process.argv.slice(1).join("|"))' /srv/arken-space/media C:/qa/private/runtime.env)
+[[ $NATIVE_NODE_ARGS == '/srv/arken-space/media|C:/qa/private/runtime.env' ]] || { echo 'native Node argv exclusion did not preserve container and host paths' >&2; exit 1; }
+grep -Fq " | MSYS2_ARG_CONV_EXCL='*' node -e " "$SCRIPT" || { echo 'cloned-review identity Node call lacks scoped MSYS exclusion' >&2; exit 1; }
+printf 'PASS: Git Bash native Node preserves POSIX container and Windows host arguments with invocation-local exclusion\n'
 cat > "$TMP/bin/node" <<'NODE_WRAPPER'
 #!/usr/bin/env bash
 set -eu
@@ -41,14 +47,16 @@ const c=[
 ];console.log(JSON.stringify(c.slice(0,Number(e.TEST_INSPECT_COUNT)-1)));'
 
 else
-cat <<JSON
-[
- {"Id":"$TEST_REVIEW_API_ID","Image":"$TEST_REVIEW_API_IMAGE","State":{"Status":"running"},"Name":"/review-api","Config":{"Env":["DATABASE_URL=postgres://review_user:REVIEW_SECRET_SENTINEL@pg-review/reviewdb"]},"NetworkSettings":{"Networks":{"review":{"NetworkID":"$TEST_REVIEW_NETWORK","Aliases":["review-api"]}}},"Mounts":[{"Type":"bind","Source":"$TEST_REVIEW_MEDIA_SOURCE","Destination":"/app/media"}]},
- {"Id":"$TEST_REVIEW_PG_ID","Image":"$TEST_REVIEW_PG_IMAGE","State":{"Status":"running"},"Name":"/pg-review","Config":{"Env":["POSTGRES_DB=reviewdb","POSTGRES_USER=postgres"]},"NetworkSettings":{"Networks":{"review":{"NetworkID":"$TEST_REVIEW_NETWORK","Aliases":["pg-review"]}}},"Mounts":[]},
- {"Id":"$TEST_REVIEW_WEB_ID","Image":"$TEST_REVIEW_WEB_IMAGE","State":{"Status":"running"},"Name":"/review-web","Config":{"Env":[]},"NetworkSettings":{"Networks":{"review":{"NetworkID":"$TEST_REVIEW_NETWORK","Aliases":["review-web"]}}},"Mounts":[]},
- {"Id":"$TEST_REVIEW_EDGE_ID","Image":"$TEST_REVIEW_EDGE_IMAGE","State":{"Status":"running"},"Name":"/review-edge","Config":{"Env":[]},"NetworkSettings":{"Networks":{"review":{"NetworkID":"$TEST_REVIEW_NETWORK","Aliases":["review-edge"]},"loopback":{"NetworkID":"$TEST_REVIEW_EDGE_EXTRA_NETWORK","Aliases":["review-loopback"]}}},"Mounts":[{"Type":"bind","Source":"$TEST_REVIEW_EDGE_SOURCE","Destination":"/etc/nginx/conf.d/default.conf"}]}
-]
-JSON
+node -e '
+const e=process.env, net={review:{NetworkID:e.TEST_REVIEW_NETWORK,Aliases:["review-api"]}};
+const edgeNetworks={review:{NetworkID:e.TEST_REVIEW_NETWORK,Aliases:["review-edge"]}};
+if(e.TEST_REVIEW_EDGE_EXTRA_NETWORK)edgeNetworks.loopback={NetworkID:e.TEST_REVIEW_EDGE_EXTRA_NETWORK,Aliases:["review-loopback"]};
+const c=[
+ {Id:e.TEST_REVIEW_API_ID,Image:e.TEST_REVIEW_API_IMAGE,State:{Status:"running"},Name:"/review-api",Config:{Env:["DATABASE_URL=postgres://review_user:REVIEW_SECRET_SENTINEL@pg-review/reviewdb"]},NetworkSettings:{Networks:net},Mounts:[{Type:"bind",Source:e.TEST_REVIEW_MEDIA_SOURCE,Destination:"/app/media"}]},
+ {Id:e.TEST_REVIEW_PG_ID,Image:e.TEST_REVIEW_PG_IMAGE,State:{Status:"running"},Name:"/pg-review",Config:{Env:["POSTGRES_DB=reviewdb","POSTGRES_USER=postgres"]},NetworkSettings:{Networks:{review:{NetworkID:e.TEST_REVIEW_NETWORK,Aliases:["pg-review"]}}},Mounts:[]},
+ {Id:e.TEST_REVIEW_WEB_ID,Image:e.TEST_REVIEW_WEB_IMAGE,State:{Status:"running"},Name:"/review-web",Config:{Env:[]},NetworkSettings:{Networks:{review:{NetworkID:e.TEST_REVIEW_NETWORK,Aliases:["review-web"]}}},Mounts:[]},
+ {Id:e.TEST_REVIEW_EDGE_ID,Image:e.TEST_REVIEW_EDGE_IMAGE,State:{Status:"running"},Name:"/review-edge",Config:{Env:[]},NetworkSettings:{Networks:edgeNetworks},Mounts:[{Type:"bind",Source:e.TEST_REVIEW_EDGE_SOURCE,Destination:"/etc/nginx/conf.d/default.conf"}]}
+]; process.stdout.write(JSON.stringify(c));'
 fi
 exit 0
 fi
@@ -96,7 +104,7 @@ case "$1" in
    if [[ ${ARKEN_CAPTURE_MODE:-compose} == cloned-review ]]; then
      test -f "$root/images/postgres.tar" && test -f "$root/images/web.tar" && test -f "$root/images/edge.tar" && test -f "$root/config/edge-nginx.conf"
      grep -q 'REVIEW_SECRET_SENTINEL' "$root/config/runtime.env"
-     node -e 'const m=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(m.captureMode!=="cloned-review"||m.target.databaseName!=="reviewdb"||m.images.edge!==process.argv[2]||!m.files.some(f=>f.path==="images/edge.tar"))process.exit(1)' "$root/capture-manifest.json" "$TEST_REVIEW_EDGE_IMAGE"
+     node -e 'const m=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(m.captureMode!=="cloned-review"||m.target.databaseName!=="reviewdb"||m.images.edge!==process.argv[2]||!m.files.some(f=>f.path==="images/edge.tar")||m.sourceRevision!==process.env.TEST_GIT_REVISION)process.exit(1)' "$root/capture-manifest.json" "$TEST_REVIEW_EDGE_IMAGE"
    else
      grep -q 'PRIVATE_TEST_SENTINEL=do-not-print' "$root/config/runtime.env"
      grep -q 'SERVER_SECRET_SENTINEL=must-stay-encrypted' "$root/config/server-runtime.env"
@@ -110,8 +118,19 @@ case "$1" in
  *) echo 'unexpected fake restic invocation' >&2; exit 8;;
 esac
 RESTIC
-chmod +x "$TMP/bin/docker" "$TMP/bin/restic" "$TMP/bin/node"
-export PATH="$TMP/bin:$PATH" TEST_REAL_NODE="$REAL_NODE" TEST_LOG="$TMP/commands.log" RESTIC_REPOSITORY="$TMP/repo" TEST_RUNTIME_ENV="$TMP/app/server-runtime.env"
+cat > "$TMP/bin/git" <<'GIT'
+#!/usr/bin/env bash
+set -eu
+case "$*" in
+  *"rev-parse --verify HEAD"*)
+    if [[ $TEST_GIT_REVISION == unknown ]]; then exit 128; fi
+    printf '%s\n' "$TEST_GIT_REVISION"
+    ;;
+  *) exit 1 ;;
+esac
+GIT
+chmod +x "$TMP/bin/docker" "$TMP/bin/restic" "$TMP/bin/node" "$TMP/bin/git"
+export PATH="$TMP/bin:$PATH" TEST_REAL_NODE="$REAL_NODE" TEST_LOG="$TMP/commands.log" RESTIC_REPOSITORY="$TMP/repo" TEST_RUNTIME_ENV="$TMP/app/server-runtime.env" TEST_GIT_REVISION=0123456789abcdef0123456789abcdef01234567
 export ARKEN_APP_ROOT="$TMP/app" ARKEN_COMPOSE_FILE="$TMP/app/compose.template.yml"
 export ARKEN_RUNTIME_ENV_FILE="$TMP/app/runtime.env" ARKEN_BACKUP_ROOT="$TMP/out"
 mkdir -p "$TMP/compose-media"
@@ -198,6 +217,17 @@ else
   exit 1
 fi
 test -s "$TMP/review-out/success.json"
+node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(r.sourceRevision!==process.env.TEST_GIT_REVISION)process.exit(1)' "$TMP/review-out/success.json"
+printf 'PASS: fake cloned-review capture emitted the known source revision in manifest and receipt\n'
+
+# Unresolvable Git provenance remains "unknown" in the legacy manifest and
+# is explicit null in the receipt required by the baseline recovery validator.
+export TEST_GIT_REVISION=unknown TEST_LOG="$TMP/review-unknown.log" ARKEN_CAPTURE_RECEIPT="$TMP/review-out/unknown.json"
+if ! bash "$SCRIPT" > "$TMP/review-unknown-output.log" 2>&1; then echo 'expected unknown-source cloned-review capture to pass' >&2; exit 1; fi
+test -s "$TMP/review-out/unknown.json"
+node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(r.sourceRevision!==null)process.exit(1)' "$TMP/review-out/unknown.json"
+printf 'PASS: unknown source remains legacy manifest value and explicit null receipt\n'
+export TEST_GIT_REVISION=0123456789abcdef0123456789abcdef01234567
 printf 'PASS: fake cloned-review capture completed\n'
 grep -q "stop $TEST_REVIEW_API_ID" "$TMP/review-success.log"
 grep -q "start $TEST_REVIEW_API_ID" "$TMP/review-success.log"
@@ -205,6 +235,38 @@ grep -q "start $TEST_REVIEW_API_ID" "$TMP/review-success.log"
 ! grep -q 'REVIEW_SECRET_SENTINEL' "$TMP/review-output.log"
 grep -q 'edge.tar' "$TMP/review-success.log"
 printf 'PASS: cloned-review success assertions\n'
+
+# An explicitly empty extra-network list is valid when edge is only on the shared network.
+export TEST_REVIEW_EDGE_EXTRA_NETWORK='' ARKEN_REVIEW_EDGE_EXTRA_NETWORK_IDS='' TEST_LOG="$TMP/review-empty-extra.log" ARKEN_CAPTURE_RECEIPT="$TMP/review-out/empty-extra.json"
+if ! bash "$SCRIPT" > "$TMP/review-empty-extra-output.log" 2>&1; then echo 'expected explicit-empty edge network list to pass' >&2; exit 1; fi
+test -s "$TMP/review-out/empty-extra.json"
+grep -q "stop $TEST_REVIEW_API_ID" "$TMP/review-empty-extra.log"
+printf 'PASS: explicitly empty edge extra-network list matches shared network only\n'
+
+# An unset value is not equivalent to an explicitly empty list and must fail before Docker/API downtime.
+unset ARKEN_REVIEW_EDGE_EXTRA_NETWORK_IDS
+export TEST_LOG="$TMP/review-extra-unset.log" ARKEN_CAPTURE_RECEIPT="$TMP/review-out/extra-unset.json"
+if bash "$SCRIPT" > "$TMP/review-extra-unset-output.log" 2>&1; then echo 'expected unset edge network list refusal' >&2; exit 1; fi
+test ! -s "$TMP/review-extra-unset.log"
+test ! -e "$TMP/review-out/extra-unset.json"
+export ARKEN_REVIEW_EDGE_EXTRA_NETWORK_IDS=''
+
+# A declared empty list must reject an actual extra edge network.
+export TEST_REVIEW_EDGE_EXTRA_NETWORK="$(printf 'f%.0s' {1..64})" TEST_LOG="$TMP/review-unexpected-extra.log" ARKEN_CAPTURE_RECEIPT="$TMP/review-out/unexpected-extra.json"
+if bash "$SCRIPT" > "$TMP/review-unexpected-extra-output.log" 2>&1; then echo 'expected undeclared edge network refusal' >&2; exit 1; fi
+! grep -q "stop $TEST_REVIEW_API_ID" "$TMP/review-unexpected-extra.log"
+test ! -e "$TMP/review-out/unexpected-extra.json"
+printf 'PASS: unset list and unexpected edge network refused before API downtime\n'
+
+# Malformed and duplicate extra IDs are rejected before API downtime.
+for invalid_ids in 'bad-id' "$TEST_REVIEW_EDGE_EXTRA_NETWORK,$TEST_REVIEW_EDGE_EXTRA_NETWORK"; do
+  export ARKEN_REVIEW_EDGE_EXTRA_NETWORK_IDS="$invalid_ids" TEST_LOG="$TMP/review-invalid-extra.log" ARKEN_CAPTURE_RECEIPT="$TMP/review-out/invalid-extra.json"
+  if bash "$SCRIPT" > "$TMP/review-invalid-extra-output.log" 2>&1; then echo 'expected malformed/duplicate edge network refusal' >&2; exit 1; fi
+  ! grep -q "stop $TEST_REVIEW_API_ID" "$TMP/review-invalid-extra.log"
+  test ! -e "$TMP/review-out/invalid-extra.json"
+done
+export ARKEN_REVIEW_EDGE_EXTRA_NETWORK_IDS="$TEST_REVIEW_EDGE_EXTRA_NETWORK"
+printf 'PASS: malformed and duplicate extra network IDs refused\n'
 
 # A mismatched reviewed image is refused before any API stop.
 export TEST_LOG="$TMP/review-mismatch.log" ARKEN_CAPTURE_RECEIPT="$TMP/review-out/mismatch.json" ARKEN_REVIEW_API_IMAGE_ID=sha256:$(printf '9%.0s' {1..64})

@@ -182,6 +182,19 @@ describe("SkillChatCard (UIX-389 formula humanization)", () => {
     expect(html).not.toContain("modifier_0");
   });
 
+  it("omits a duplicate resolved formula but keeps distinct breakdown detail", () => {
+    const repeated = renderCard(baseCard);
+    expect(repeated.match(/1d20 \+ 3/g)).toHaveLength(1);
+    expect(repeated).not.toContain(">Способность</span>");
+    expect(repeated).toContain('aria-label="Способность: Flame Lash"');
+
+    const distinct = renderCard({
+      ...baseCard,
+      result: { total: 17, breakdown: "1d20 + 3 · преимущество" },
+    });
+    expect(distinct).toContain("1d20 + 3 · преимущество");
+  });
+
   it("uses a human-readable fallback when an old result has no breakdown", () => {
     const html = renderCard({
       ...baseCard,

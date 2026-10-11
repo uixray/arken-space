@@ -1,5 +1,6 @@
-import type { CharacterDto } from "@arken/contracts";
-import { arkenSystem } from "@arken/system";
+import { statLayoutSchema, type CharacterDto, type StatLayout } from "@arken/contracts";
+import { arkenSystem, starterStatLayout } from "@arken/system";
+import { normalizeSystemRegenStatRows } from "./stat-layout.js";
 import { characterCatalogEntries, characters } from "@arken/db";
 import {
   normalizeLegacyEntryData,
@@ -41,10 +42,26 @@ export function normalizeCharacterWallet(
   };
 }
 
+export function resolveCharacterStatLayout(
+  override: unknown,
+  campaignDefault: unknown,
+): StatLayout {
+  const campaignParsed = statLayoutSchema.safeParse(campaignDefault);
+  const campaignLayout =
+    campaignParsed.success && campaignParsed.data.length > 0
+      ? campaignParsed.data
+      : statLayoutSchema.parse(starterStatLayout);
+  const ownParsed = statLayoutSchema.safeParse(override);
+  const effective =
+    ownParsed.success && ownParsed.data.length > 0 ? ownParsed.data : campaignLayout;
+  return normalizeSystemRegenStatRows(effective);
+}
+
 export function characterDto(
   character: CharacterRow,
   entries: CharacterEntryRow[],
   controllerMembershipIds: string[] = [],
+  campaignDefaultLayout: unknown,
 ): CharacterDto {
   const wallet =
     character.wallet && typeof character.wallet === "object"
@@ -57,6 +74,7 @@ export function characterDto(
     controllerMembershipIds,
     portraitAssetId: character.portraitAssetId,
     stats: normalizeLegacyStats(character.stats),
+    statLayout: resolveCharacterStatLayout(character.statLayout, campaignDefaultLayout),
     skills: (() => {
       const existing = Array.isArray(character.skills) ? character.skills : [];
       const keys = new Set(existing.map((skill) => skill.key));

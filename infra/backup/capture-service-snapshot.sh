@@ -19,9 +19,10 @@ case "$CAPTURE_MODE" in
     [[ ! -L $ENV_FILE ]] || die 'runtime env symlinks are not accepted'
     ;;
   cloned-review)
-    for name in ARKEN_REVIEW_API_CONTAINER_ID ARKEN_REVIEW_PG_CONTAINER_ID ARKEN_REVIEW_WEB_CONTAINER_ID ARKEN_REVIEW_EDGE_CONTAINER_ID ARKEN_REVIEW_API_IMAGE_ID ARKEN_REVIEW_PG_IMAGE_ID ARKEN_REVIEW_WEB_IMAGE_ID ARKEN_REVIEW_EDGE_IMAGE_ID ARKEN_REVIEW_NETWORK_ID ARKEN_REVIEW_EDGE_EXTRA_NETWORK_IDS ARKEN_REVIEW_MEDIA_SOURCE ARKEN_REVIEW_MEDIA_CONTAINER_PATH ARKEN_REVIEW_EDGE_CONFIG_SOURCE ARKEN_REVIEW_EDGE_CONFIG_CONTAINER_PATH ARKEN_REVIEW_RUNTIME_ENV_FILE ARKEN_REVIEW_EXPECTED_DATABASE_HOST; do
+    for name in ARKEN_REVIEW_API_CONTAINER_ID ARKEN_REVIEW_PG_CONTAINER_ID ARKEN_REVIEW_WEB_CONTAINER_ID ARKEN_REVIEW_EDGE_CONTAINER_ID ARKEN_REVIEW_API_IMAGE_ID ARKEN_REVIEW_PG_IMAGE_ID ARKEN_REVIEW_WEB_IMAGE_ID ARKEN_REVIEW_EDGE_IMAGE_ID ARKEN_REVIEW_NETWORK_ID ARKEN_REVIEW_MEDIA_SOURCE ARKEN_REVIEW_MEDIA_CONTAINER_PATH ARKEN_REVIEW_EDGE_CONFIG_SOURCE ARKEN_REVIEW_EDGE_CONFIG_CONTAINER_PATH ARKEN_REVIEW_RUNTIME_ENV_FILE ARKEN_REVIEW_EXPECTED_DATABASE_HOST; do
       [[ -n ${!name:-} ]] || die 'cloned-review identity inputs are incomplete'
     done
+    [[ ${ARKEN_REVIEW_EDGE_EXTRA_NETWORK_IDS+x} ]] || die 'cloned-review edge extra network list must be explicitly set (empty is allowed)'
     [[ -f $ARKEN_REVIEW_RUNTIME_ENV_FILE && ! -L $ARKEN_REVIEW_RUNTIME_ENV_FILE ]] || die 'review runtime env file is missing or a symlink'
     [[ -f $ARKEN_REVIEW_EDGE_CONFIG_SOURCE && ! -L $ARKEN_REVIEW_EDGE_CONFIG_SOURCE ]] || die 'review edge config file is missing or a symlink'
     [[ -d $ARKEN_REVIEW_MEDIA_SOURCE && ! -L $ARKEN_REVIEW_MEDIA_SOURCE ]] || die 'review media source must be an existing non-symlink directory'
@@ -97,12 +98,12 @@ try {
 ' "$server_id" "$pg_id") || die 'API DATABASE_URL does not identify the database and PG alias on the inspected PostgreSQL container'
   database_name=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).databaseName)' "$compose_identity")
 else
-  expected_identity=$(docker inspect "$ARKEN_REVIEW_API_CONTAINER_ID" "$ARKEN_REVIEW_PG_CONTAINER_ID" "$ARKEN_REVIEW_WEB_CONTAINER_ID" "$ARKEN_REVIEW_EDGE_CONTAINER_ID" | node -e '
+  expected_identity=$(docker inspect "$ARKEN_REVIEW_API_CONTAINER_ID" "$ARKEN_REVIEW_PG_CONTAINER_ID" "$ARKEN_REVIEW_WEB_CONTAINER_ID" "$ARKEN_REVIEW_EDGE_CONTAINER_ID" | MSYS2_ARG_CONV_EXCL='*' node -e '
 const fs=require("node:fs");
 try {
  const a=process.argv.slice(1);
  const [apiId,pgId,webId,edgeId,apiImage,pgImage,webImage,edgeImage,networkId,mediaSource,mediaTarget,expectedDbHost,edgeConfigSource,edgeConfigTarget,edgeExtraText]=a;
- const extra=edgeExtraText?edgeExtraText.split(",").filter(Boolean):[];
+ const extra=edgeExtraText===""?[]:edgeExtraText.split(","); if(extra.some(id=>! /^[0-9a-f]{64}$/i.test(id))||new Set(extra).size!==extra.length)process.exit(11);
  const c=JSON.parse(fs.readFileSync(0,"utf8"));
  if(!Array.isArray(c)||c.length!==4) process.exit(2);
  const ids=[apiId,pgId,webId,edgeId], images=[apiImage,pgImage,webImage,edgeImage];
@@ -314,13 +315,14 @@ else
   capture_identity=$expected_identity
 fi
 image_metadata=$(node -e 'const [s,p,w,e]=process.argv.slice(1); console.log(JSON.stringify({server:s,postgres:p,web:w,edge:e}))' "$server_image_id" "$pg_image_id" "$web_image_id" "$edge_image_id")
-node - "$work" "$APP_ROOT" "$health_json" "$image_metadata" "$capture_identity" <<'NODE'
+source_revision=$(git -C "$APP_ROOT" rev-parse --verify HEAD 2>/dev/null || printf 'unknown')
+if [[ ! $source_revision =~ ^[0-9a-fA-F]{40}$ ]]; then source_revision=unknown; fi
+node - "$work" "$source_revision" "$health_json" "$image_metadata" "$capture_identity" <<'NODE'
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
-const [root,app,health,image,identity]=process.argv.slice(2), h=JSON.parse(health), imgs=JSON.parse(image), id=JSON.parse(identity);
+const [root,sourceRevision,health,image,identity]=process.argv.slice(2), h=JSON.parse(health), imgs=JSON.parse(image), id=JSON.parse(identity);
 const hash=p=>new Promise((resolve,reject)=>{const h=crypto.createHash('sha256'),s=fs.createReadStream(p);s.on('error',reject);s.on('data',chunk=>h.update(chunk));s.on('end',()=>resolve(h.digest('hex')));});
 const files=[]; const walk=d=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);if(e.isSymbolicLink())throw new Error();if(e.isDirectory())walk(p);else if(e.isFile()&&path.basename(p)!=='capture-manifest.json')files.push({path:path.relative(root,p).split(path.sep).join('/'),bytes:fs.statSync(p).size});else if(!e.isFile())throw new Error();}}; try{walk(root)}catch{process.exit(3)}
-const git=(require('node:child_process').spawnSync('git',['-C',app,'rev-parse','HEAD'],{encoding:'utf8'}));
-(async()=>{for(const f of files)f.sha256=await hash(path.join(root,f.path));const manifest={format:'arken-service-snapshot-v1',captureMode:process.env.ARKEN_CAPTURE_MODE??'compose',capturedAt:new Date().toISOString(),target:id.containerIds?{containerIds:id.containerIds,networkId:id.networkId,databaseName:id.databaseName,mediaSource:id.mediaSource,mediaContainerPath:id.mediaContainerPath,edgeConfigSource:id.edgeConfigSource,edgeConfigContainerPath:id.edgeConfigContainerPath}:app,sourceRevision:git.status===0?git.stdout.trim():'unknown',buildRevision:h.buildRevision??'unknown',schemaVersion:h.schemaVersion??'unknown',images:imgs,files};fs.writeFileSync(path.join(root,'capture-manifest.json'),JSON.stringify(manifest,null,2)+'\n',{mode:0o600});})().catch(()=>process.exit(4));
+(async()=>{for(const f of files)f.sha256=await hash(path.join(root,f.path));const manifest={format:'arken-service-snapshot-v1',captureMode:process.env.ARKEN_CAPTURE_MODE??'compose',capturedAt:new Date().toISOString(),target:id.containerIds?{containerIds:id.containerIds,networkId:id.networkId,databaseName:id.databaseName,mediaSource:id.mediaSource,mediaContainerPath:id.mediaContainerPath,edgeConfigSource:id.edgeConfigSource,edgeConfigContainerPath:id.edgeConfigContainerPath}:app,sourceRevision,buildRevision:h.buildRevision??'unknown',schemaVersion:h.schemaVersion??'unknown',images:imgs,files};fs.writeFileSync(path.join(root,'capture-manifest.json'),JSON.stringify(manifest,null,2)+'\n',{mode:0o600});})().catch(()=>process.exit(4));
 NODE
 manifest_sha=$(sha256sum "$work/capture-manifest.json" | cut -d' ' -f1)
 # The database, media, configuration, image archives, and their manifest are
@@ -330,9 +332,9 @@ invocation="service-capture-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 # No forget/prune/check mutation: this is a new snapshot only.
 restic backup "$work" --host arken-space-service --tag arken-space --tag "$invocation" >/dev/null 2>&1 || die 'Restic backup failed'
 snapshot_id=$(restic snapshots --json --host arken-space-service --tag "$invocation" | node -e 'let s="";process.stdin.on("data",x=>s+=x).on("end",()=>{const a=JSON.parse(s);if(a.length!==1)process.exit(2);console.log(a[0].id)})') || die 'could not resolve unique Restic snapshot ID'
-node - "$RECEIPT" "$snapshot_id" "$invocation" "$manifest_sha" "$health_json" "$image_metadata" <<'NODE'
-const fs=require('node:fs');const [p,id,tag,sha,health,images]=process.argv.slice(2);
-const h=JSON.parse(health),i=JSON.parse(images);const r={format:'arken-service-capture-receipt-v1',snapshotId:id,tag,manifestSha256:sha,buildRevision:h.buildRevision??'unknown',schemaVersion:h.schemaVersion??'unknown',imageIds:i};
+node - "$RECEIPT" "$snapshot_id" "$invocation" "$manifest_sha" "$health_json" "$image_metadata" "$source_revision" <<'NODE'
+const fs=require('node:fs');const [p,id,tag,sha,health,images,sourceRevision]=process.argv.slice(2);
+const h=JSON.parse(health),i=JSON.parse(images);const r={format:'arken-service-capture-receipt-v1',snapshotId:id,tag,manifestSha256:sha,sourceRevision:sourceRevision==='unknown'?null:sourceRevision,buildRevision:h.buildRevision??'unknown',schemaVersion:h.schemaVersion??'unknown',imageIds:i};
 fs.writeFileSync(p,JSON.stringify(r,null,2)+'\n',{mode:0o600});
 NODE
 printf 'Encrypted service snapshot captured. Snapshot ID: %s\nReceipt: %s\n' "$snapshot_id" "$RECEIPT"

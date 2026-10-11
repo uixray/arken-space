@@ -1008,6 +1008,7 @@ export async function buildSnapshot(
           : (controllersByCharacter.get(character.id) ?? []).filter(
               (id) => id === auth.membershipId,
             ),
+        campaign.statLayout,
       ),
     ),
     scenes: visibleScenes.map((scene) => ({

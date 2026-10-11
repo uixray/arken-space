@@ -46,6 +46,7 @@ function fixture() {
   const manifest = {
     format: "arken-service-snapshot-v1",
     captureMode: "cloned-review",
+    sourceRevision: "unknown",
     buildRevision: "a".repeat(40),
     schemaVersion: 2,
     target: {
@@ -84,6 +85,7 @@ test("service-v1 requires explicit isolated mode, full snapshot ID, digest, and 
     format: "arken-service-capture-receipt-v1",
     snapshotId,
     manifestSha256: "b".repeat(64),
+    sourceRevision: null,
     buildRevision: "c".repeat(40),
     schemaVersion: 2,
     imageIds: {
@@ -99,6 +101,7 @@ test("service-v1 requires explicit isolated mode, full snapshot ID, digest, and 
     SNAPSHOT_ID: snapshotId,
     RESTORE_CAPTURE_RECEIPT_PATH: receiptPath,
     RESTORE_CAPTURE_RECEIPT_SHA256: sha(receiptText),
+    RESTORE_EXPECTED_SOURCE_REVISION: "null",
     RESTORE_REPORT_PATH: path.join(os.tmpdir(), "private-report.json"),
   };
   try {
@@ -109,6 +112,11 @@ test("service-v1 requires explicit isolated mode, full snapshot ID, digest, and 
     assert.equal(
       resolveRestoreMode({ ...base, RESTORE_FORMAT: "service-v1" }).snapshotId,
       base.SNAPSHOT_ID,
+    );
+    assert.equal(
+      resolveRestoreMode({ ...base, RESTORE_FORMAT: "service-v1" })
+        .expectedSourceRevision,
+      null,
     );
     for (const [key, value] of [
       ["ARKEN_ISOLATED_ONLY", "false"],
@@ -130,6 +138,70 @@ test("service-v1 requires explicit isolated mode, full snapshot ID, digest, and 
         RESTORE_FORMAT: "service-v1",
       }),
     );
+    assert.throws(
+      () =>
+        resolveRestoreMode({
+          ...base,
+          RESTORE_FORMAT: "service-v1",
+          RESTORE_EXPECTED_SOURCE_REVISION: undefined,
+        }),
+      /RESTORE_EXPECTED_SOURCE_REVISION/,
+    );
+    assert.throws(
+      () =>
+        resolveRestoreMode({
+          ...base,
+          RESTORE_FORMAT: "service-v1",
+          RESTORE_EXPECTED_SOURCE_REVISION: "d".repeat(40),
+        }),
+      /Candidate capture receipt sourceRevision/,
+    );
+    const missingSourceRevision = JSON.parse(receiptText);
+    delete missingSourceRevision.sourceRevision;
+    const missingReceiptText = JSON.stringify(missingSourceRevision);
+    writeFileSync(receiptPath, missingReceiptText);
+    assert.throws(
+      () =>
+        resolveRestoreMode({
+          ...base,
+          RESTORE_FORMAT: "service-v1",
+          RESTORE_CAPTURE_RECEIPT_SHA256: sha(missingReceiptText),
+        }),
+      /Declared baseline requires an explicit null/,
+    );
+    const candidateRevision = "e".repeat(40);
+    const candidateReceipt = {
+      format: "arken-service-capture-receipt-v1",
+      snapshotId,
+      manifestSha256: "b".repeat(64),
+      sourceRevision: candidateRevision,
+      buildRevision: "c".repeat(40),
+      schemaVersion: 2,
+      imageIds: {
+        server: "sha256:" + "1".repeat(64),
+        postgres: "sha256:" + "2".repeat(64),
+      },
+    };
+    const candidateText = JSON.stringify(candidateReceipt);
+    writeFileSync(receiptPath, candidateText);
+    const candidateEnv = {
+      ...base,
+      RESTORE_FORMAT: "service-v1",
+      RESTORE_CAPTURE_RECEIPT_SHA256: sha(candidateText),
+      RESTORE_EXPECTED_SOURCE_REVISION: candidateRevision,
+    };
+    assert.equal(
+      resolveRestoreMode(candidateEnv).expectedSourceRevision,
+      candidateRevision,
+    );
+    assert.throws(
+      () =>
+        resolveRestoreMode({
+          ...candidateEnv,
+          RESTORE_EXPECTED_SOURCE_REVISION: "f".repeat(40),
+        }),
+      /Candidate capture receipt sourceRevision/,
+    );
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
@@ -142,7 +214,9 @@ test("service-v1 resolves all database and media inputs from digest-pinned manif
       format: "service-v1",
       snapshotId: "c".repeat(64),
       manifestSha256: sample.digest,
+      expectedSourceRevision: null,
       receipt: {
+        sourceRevision: null,
         buildRevision: "a".repeat(40),
         schemaVersion: 2,
         imageIds: {
@@ -180,7 +254,9 @@ test("service-v1 resolves all database and media inputs from digest-pinned manif
     assert.equal(resolved.databaseCounts.assets, 1);
     assert.equal(resolved.migrationLedger.length, 1);
     assert.equal(resolved.schemaVersion, 2);
+    assert.equal(resolved.manifest.format, "arken-service-snapshot-v1");
     assert.equal(resolved.buildRevision, "a".repeat(40));
+    assert.equal(resolved.sourceRevision, null);
     assert.equal(resolved.serverImageId, "sha256:" + "1".repeat(64));
     const compose = serviceImageOverride({
       serverImage: "arken-restore-smoke-server:service-v1",
@@ -190,6 +266,62 @@ test("service-v1 resolves all database and media inputs from digest-pinned manif
     assert.match(compose, /image: arken-restore-smoke-server:service-v1/);
     assert.match(compose, /image: arken-restore-smoke-postgres:service-v1/);
     assert.match(compose, /build: !reset null/);
+  } finally {
+    rmSync(sample.temp, { recursive: true, force: true });
+  }
+});
+
+test("service-v1 candidate requires same declared 40-character source revision in manifest and receipt", async () => {
+  const sample = fixture();
+  const revision = "f".repeat(40);
+  try {
+    const manifestPath = path.join(sample.root, "capture-manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.sourceRevision = revision;
+    writeFileSync(manifestPath, JSON.stringify(manifest) + "\n");
+    const request = {
+      format: "service-v1",
+      snapshotId: "c".repeat(64),
+      manifestSha256: sha(readFileSync(manifestPath)),
+      expectedSourceRevision: revision,
+      receipt: {
+        sourceRevision: revision,
+        buildRevision: manifest.buildRevision,
+        schemaVersion: manifest.schemaVersion,
+        imageIds: manifest.images,
+      },
+    };
+    const resolved = await resolveServiceSnapshot(
+      path.dirname(path.dirname(sample.root)),
+      request,
+    );
+    assert.equal(resolved.sourceRevision, revision);
+    for (const patch of [
+      { expectedSourceRevision: null },
+      { receipt: { ...request.receipt, sourceRevision: "unknown" } },
+      { receipt: { ...request.receipt, sourceRevision: "e".repeat(40) } },
+    ]) {
+      await assert.rejects(
+        () =>
+          resolveServiceSnapshot(
+            path.dirname(path.dirname(sample.root)),
+            { ...request, ...patch },
+          ),
+        /source revision/,
+      );
+    }
+    for (const value of ["unknown", "short", "f".repeat(39)]) {
+      manifest.sourceRevision = value;
+      writeFileSync(manifestPath, JSON.stringify(manifest) + "\n");
+      await assert.rejects(
+        () =>
+          resolveServiceSnapshot(path.dirname(path.dirname(sample.root)), {
+            ...request,
+            manifestSha256: sha(readFileSync(manifestPath)),
+          }),
+        /Candidate source revision/,
+      );
+    }
   } finally {
     rmSync(sample.temp, { recursive: true, force: true });
   }
@@ -312,6 +444,7 @@ test("offline copied snapshot binds original capture through digest-pinned mappi
       format: "arken-service-capture-receipt-v1",
       snapshotId: source,
       manifestSha256: "c".repeat(64),
+      sourceRevision: null,
     });
     const mapping = JSON.stringify({
       format: "arken-restic-copy-receipt-v1",
@@ -329,6 +462,7 @@ test("offline copied snapshot binds original capture through digest-pinned mappi
       SNAPSHOT_ID: local,
       RESTORE_CAPTURE_RECEIPT_PATH: capturePath,
       RESTORE_CAPTURE_RECEIPT_SHA256: sha(capture),
+      RESTORE_EXPECTED_SOURCE_REVISION: "null",
       RESTORE_COPY_RECEIPT_PATH: mappingPath,
       RESTORE_COPY_RECEIPT_SHA256: sha(mapping),
       RESTORE_REPORT_PATH: path.join(temp, "report.json"),
@@ -389,7 +523,9 @@ test("compose capture accepts same four-service manifest contract", async () => 
     const request = {
       format: "service-v1",
       manifestSha256: sha(readFileSync(file)),
+      expectedSourceRevision: null,
       receipt: {
+        sourceRevision: null,
         buildRevision: manifest.buildRevision,
         schemaVersion: manifest.schemaVersion,
         imageIds: manifest.images,

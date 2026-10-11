@@ -284,6 +284,30 @@ export async function inspectStoredAudioDuration(storageKey: string) {
   return validatedAudioDuration(metadata.format.duration);
 }
 
+/** Server-only bounded source reader for trusted asset storage keys. */
+export async function openStoredAudioSource(storageKey: string) {
+  const path = storedPath(storageKey);
+  const info = await stat(path);
+  if (!info.isFile() || info.size <= 0 || info.size > env.MAX_AUDIO_BYTES)
+    throw new Error("UNSUPPORTED_AUDIO");
+  return { stream: createReadStream(path), sizeBytes: info.size };
+}
+
+/** Adopts already-encoded server output; callers must validate it before calling. */
+export async function storeGeneratedAudio(buffer: Buffer) {
+  if (buffer.length <= 0 || buffer.length > env.MAX_AUDIO_BYTES)
+    throw new Error("AUDIO_TOO_LARGE");
+  const detected = await fileTypeFromBuffer(buffer);
+  if (detected?.mime !== "audio/wav") throw new Error("UNSUPPORTED_AUDIO");
+  const metadata = await parseBuffer(buffer, { mimeType: detected.mime, size: buffer.length }, { duration: true, skipCovers: true });
+  const durationSeconds = validatedAudioDuration(metadata.format.duration);
+  if (durationSeconds > 10) throw new Error("INVALID_AUDIO_DURATION");
+  await mkdir(mediaRoot(), { recursive: true });
+  const storageKey = `${randomToken(18)}.wav`;
+  await writeFile(storedPath(storageKey), buffer, { flag: "wx" });
+  return { storageKey, mimeType: detected.mime, sizeBytes: buffer.length, width: null, height: null, durationSeconds };
+}
+
 export async function openStoredFile(
   storageKey: string,
   range: string | undefined,

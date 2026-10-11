@@ -3,6 +3,8 @@ import { ThemeProvider } from "@gravity-ui/uikit";
 import { afterEach, expect, it, vi } from "vitest";
 import { renderComponent, screen, userEvent } from "./test-support/render";
 import { CatalogEntryForm } from "./CatalogEntryForm";
+import { ApiError } from "./api";
+import type { CatalogEntryDto } from "@arken/contracts";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -29,13 +31,19 @@ it("explains machine keys in Russian without translating submitted keys", async 
     </ThemeProvider>,
   );
   const user = userEvent.setup();
-  await user.type(screen.getByLabelText("Название", { exact: true }), "Искра");
+  await user.type(
+    screen.getByLabelText("Название *", { exact: true }),
+    "Искра",
+  );
+  await user.click(screen.getByText("Дополнительные числовые параметры"));
   await user.click(screen.getByRole("button", { name: "Добавить значение" }));
   const key = screen.getByLabelText("Ключ", {
     exact: true,
   }) as HTMLInputElement;
   expect(key).toHaveAttribute("placeholder", "Код латиницей");
   expect(key).toHaveAttribute("pattern", "[a-z][a-z0-9_]{0,39}");
+  expect(screen.getByText("might = 2")).toBeInTheDocument();
+  expect(screen.getByText("+2")).toBeInTheDocument();
   await user.type(key, "magic");
   expect(key.validity.valid).toBe(true);
   await user.clear(screen.getByLabelText("Значение", { exact: true }));
@@ -71,13 +79,20 @@ it("keeps numeric ENTRY_VALUE modifiers separate from resource costs", async () 
     </ThemeProvider>,
   );
   const user = userEvent.setup();
-  await user.type(screen.getByLabelText("Название", { exact: true }), "Искра");
+  await user.type(
+    screen.getByLabelText("Название *", { exact: true }),
+    "Искра",
+  );
+  await user.click(screen.getByText("Дополнительные числовые параметры"));
   await user.click(screen.getByRole("button", { name: "Добавить значение" }));
   await user.type(screen.getByLabelText("Ключ", { exact: true }), "focus");
   await user.clear(screen.getByLabelText("Значение", { exact: true }));
   await user.type(screen.getByLabelText("Значение", { exact: true }), "3");
   await user.click(screen.getByRole("button", { name: "Добавить бросок" }));
-  await user.type(screen.getAllByLabelText("Название", { exact: true }).at(-1)!, "Усиление");
+  await user.type(
+    screen.getAllByLabelText("Название", { exact: true }).at(-1)!,
+    "Усиление",
+  );
   await user.click(screen.getByLabelText("Источник модификатора"));
   await user.click(screen.getByRole("option", { name: "Значение записи" }));
   await user.click(screen.getByLabelText("Ключ значения"));
@@ -104,8 +119,14 @@ it("keeps numeric ENTRY_VALUE modifiers separate from resource costs", async () 
 
 it("stores explicit no-roll activation cost separately from description prose", async () => {
   vi.stubGlobal("matchMedia", (media: string) => ({
-    matches: false, media, onchange: null, addEventListener() {}, removeEventListener() {},
-    addListener() {}, removeListener() {}, dispatchEvent: () => true,
+    matches: false,
+    media,
+    onchange: null,
+    addEventListener() {},
+    removeEventListener() {},
+    addListener() {},
+    removeListener() {},
+    dispatchEvent: () => true,
   }));
   const onSubmit = vi.fn();
   renderComponent(
@@ -119,10 +140,15 @@ it("stores explicit no-roll activation cost separately from description prose", 
     </ThemeProvider>,
   );
   const user = userEvent.setup();
-  await user.type(screen.getByLabelText("Название", { exact: true }), "Световой прыжок");
+  await user.type(
+    screen.getByLabelText("Название *", { exact: true }),
+    "Световой прыжок",
+  );
   await user.click(screen.getByLabelText("Тип"));
-  await user.click(screen.getByRole("option", { name: "Способность" }));
-  await user.click(screen.getByLabelText("Стоимость активации"));
+  await user.click(
+    screen.getByRole("option", { name: "Способность / заклинание" }),
+  );
+  await user.click(screen.getByLabelText("Стоимость"));
   await user.click(screen.getByRole("option", { name: "Выносливость" }));
   await user.clear(screen.getByLabelText("Количество ресурса"));
   await user.type(screen.getByLabelText("Количество ресурса"), "2");
@@ -130,6 +156,223 @@ it("stores explicit no-roll activation cost separately from description prose", 
   expect(onSubmit).toHaveBeenCalledOnce();
   expect(onSubmit.mock.calls[0]![0]).toMatchObject({
     kind: "ABILITY",
-    data: { activation: { consumeUse: false, cost: { type: "physical", amount: 2 } } },
+    data: {
+      activation: { consumeUse: false, cost: { type: "physical", amount: 2 } },
+    },
   });
+});
+
+it("saves an unlimited no-roll ability with cost after turning off its use limit", async () => {
+  vi.stubGlobal("matchMedia", (media: string) => ({
+    matches: false,
+    media,
+    onchange: null,
+    addEventListener() {},
+    removeEventListener() {},
+    addListener() {},
+    removeListener() {},
+    dispatchEvent: () => true,
+  }));
+  const onSubmit = vi.fn();
+  renderComponent(
+    <ThemeProvider theme="dark" lang="ru">
+      <CatalogEntryForm
+        statLabels={{}}
+        resourceLabels={{ physical: "Выносливость", magic: "Мана" }}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />
+    </ThemeProvider>,
+  );
+  const user = userEvent.setup();
+  await user.type(
+    screen.getByLabelText("Название *", { exact: true }),
+    "Световой прыжок",
+  );
+  await user.click(screen.getByLabelText("Тип"));
+  await user.click(
+    screen.getByRole("option", { name: "Способность / заклинание" }),
+  );
+  await user.click(
+    screen.getByLabelText("Ограничить количество использований"),
+  );
+  await user.click(screen.getByLabelText("Списывать одно использование"));
+  await user.click(
+    screen.getByLabelText("Ограничить количество использований"),
+  );
+  await user.click(screen.getByLabelText("Стоимость"));
+  await user.click(screen.getByRole("option", { name: "Мана" }));
+  await user.clear(screen.getByLabelText("Количество ресурса"));
+  await user.type(screen.getByLabelText("Количество ресурса"), "2");
+  await user.click(screen.getByRole("button", { name: /^Сохранить$/ }));
+
+  expect(onSubmit).toHaveBeenCalledOnce();
+  expect(onSubmit.mock.calls[0]![0]).toMatchObject({
+    kind: "ABILITY",
+    data: {
+      uses: undefined,
+      activation: { consumeUse: false, cost: { type: "magic", amount: 2 } },
+    },
+  });
+});
+
+it("preserves legacy activation data when renaming an ability that also has rolls", async () => {
+  vi.stubGlobal("matchMedia", (media: string) => ({
+    matches: false,
+    media,
+    onchange: null,
+    addEventListener() {},
+    removeEventListener() {},
+    addListener() {},
+    removeListener() {},
+    dispatchEvent: () => true,
+  }));
+  const activation = {
+    consumeUse: false,
+    cost: { type: "magic", amount: 2 },
+    legacyMetadata: { source: "imported", note: "retain untouched fields" },
+  };
+  const existing = {
+    id: "entry-1",
+    kind: "ABILITY",
+    name: "Старое имя",
+    description: "Описание",
+    revision: 3,
+    data: {
+      activation,
+      rollActions: [
+        {
+          id: "roll-1",
+          label: "Проверка",
+          kind: "CHECK",
+          dice: "1d20",
+          modifiers: [],
+          advantage: false,
+          consumeUse: false,
+          order: 0,
+        },
+      ],
+    },
+  } as unknown as CatalogEntryDto;
+  const onSubmit = vi.fn();
+  renderComponent(
+    <ThemeProvider theme="dark" lang="ru">
+      <CatalogEntryForm
+        existing={existing}
+        statLabels={{}}
+        resourceLabels={{ physical: "Выносливость", magic: "Мана" }}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />
+    </ThemeProvider>,
+  );
+  const user = userEvent.setup();
+  const name = screen.getByLabelText("Название *", { exact: true });
+  await user.clear(name);
+  await user.type(name, "Новое имя");
+  await user.click(screen.getByRole("button", { name: /^Сохранить$/ }));
+
+  expect(onSubmit).toHaveBeenCalledOnce();
+  expect(onSubmit.mock.calls[0]![0]).toMatchObject({
+    name: "Новое имя",
+    kind: "ABILITY",
+    data: { activation },
+  });
+});
+
+it("maps safe server field errors and keeps the submitted draft", async () => {
+  vi.stubGlobal("matchMedia", (media: string) => ({
+    matches: false,
+    media,
+    onchange: null,
+    addEventListener() {},
+    removeEventListener() {},
+    addListener() {},
+    removeListener() {},
+    dispatchEvent: () => true,
+  }));
+  const onSubmit = vi.fn().mockRejectedValue(
+    new ApiError(
+      400,
+      "INVALID_CATALOG_ENTRY",
+      "Проверьте заполнение полей навыка или способности.",
+      undefined,
+      undefined,
+      {
+        fieldErrors: [
+          { path: "data.activation.cost.amount", code: "too_small" },
+        ],
+      },
+    ),
+  );
+  renderComponent(
+    <ThemeProvider theme="dark" lang="ru">
+      <CatalogEntryForm
+        statLabels={{}}
+        resourceLabels={{ physical: "Выносливость", magic: "Мана" }}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />
+    </ThemeProvider>,
+  );
+  const user = userEvent.setup();
+  await user.type(
+    screen.getByLabelText("Название *", { exact: true }),
+    "Искра",
+  );
+  await user.click(screen.getByLabelText("Тип"));
+  await user.click(
+    screen.getByRole("option", { name: "Способность / заклинание" }),
+  );
+  await user.click(screen.getByLabelText("Стоимость"));
+  await user.click(screen.getByRole("option", { name: "Мана" }));
+  await user.click(screen.getByRole("button", { name: /^Сохранить$/ }));
+
+  const amount = screen.getByLabelText("Количество ресурса");
+  expect(amount).toHaveAttribute("aria-invalid", "true");
+  expect(
+    screen.getByText("Стоимость должна быть целым числом от 1 до 100000."),
+  ).toBeInTheDocument();
+  expect(screen.getByLabelText("Название *", { exact: true })).toHaveValue(
+    "Искра",
+  );
+  expect(amount).toHaveValue(1);
+});
+
+it("keeps technical values behind an accessible closed disclosure", async () => {
+  vi.stubGlobal("matchMedia", (media: string) => ({
+    matches: false,
+    media,
+    onchange: null,
+    addEventListener() {},
+    removeEventListener() {},
+    addListener() {},
+    removeListener() {},
+    dispatchEvent: () => true,
+  }));
+  const onSubmit = vi.fn();
+  renderComponent(
+    <ThemeProvider theme="dark" lang="ru">
+      <CatalogEntryForm
+        statLabels={{}}
+        resourceLabels={{ physical: "Выносливость", magic: "Мана" }}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />
+    </ThemeProvider>,
+  );
+  const details = screen
+    .getByText("Дополнительные числовые параметры")
+    .closest("details");
+  expect(details).not.toBeNull();
+  expect(details).not.toHaveAttribute("open");
+  expect(
+    screen
+      .getByRole("button", { name: "Добавить значение" })
+      .closest("details"),
+  ).toBe(details);
+  expect(screen.getByText(/Обычно заполнять не нужно/)).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Тип" })).toBeInTheDocument();
+  expect(screen.getByText("Лимит использований")).toBeInTheDocument();
+  expect(screen.getByText("Броски")).toBeInTheDocument();
 });

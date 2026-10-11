@@ -17,6 +17,12 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
+type CharacterStatLayout = Array<{
+  id: "characteristics" | "combat" | "skills" | "talents";
+  label: string;
+  rows: Array<{ key: string; label: string; source: "STAT" | "RESOURCE" }>;
+}>;
+
 export const roleEnum = pgEnum("role", ["GM", "PLAYER"]);
 export const projectionEnum = pgEnum("projection", [
   "ORTHOGRAPHIC_2D",
@@ -794,6 +800,89 @@ export const assets = pgTable(
   ],
 );
 
+/** Short-lived, campaign-scoped immutable clip previews and their quota reservations. */
+export const audioClipCandidates = pgTable(
+  "audio_clip_candidates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+    creatorMembershipId: uuid("creator_membership_id").notNull().references(() => memberships.id, { onDelete: "cascade" }),
+    sourceAssetId: uuid("source_asset_id").references(() => assets.id, { onDelete: "set null" }),
+    actionId: uuid("action_id").notNull(),
+    saveActionId: uuid("save_action_id"),
+    saveIntentHash: text("save_intent_hash"),
+    intentHash: text("intent_hash").notNull(),
+    sourceVersion: text("source_version").notNull(),
+    startMs: integer("start_ms").notNull(),
+    endMs: integer("end_ms").notNull(),
+    status: text("status").notNull().default("PROCESSING"),
+    reservedBytes: integer("reserved_bytes").notNull().default(0),
+    storageKey: text("storage_key").unique(),
+    sizeBytes: integer("size_bytes"),
+    sampleRate: integer("sample_rate"),
+    channels: integer("channels"),
+    frames: integer("frames"),
+    actualStartFrame: integer("actual_start_frame"),
+    actualEndFrame: integer("actual_end_frame"),
+    actualStartMs: doublePrecision("actual_start_ms"),
+    actualEndMs: doublePrecision("actual_end_ms"),
+    savedAssetId: uuid("saved_asset_id").references(() => assets.id, { onDelete: "set null" }),
+    savedSoundId: uuid("saved_sound_id"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("audio_clip_candidates_campaign_action_idx").on(table.campaignId, table.actionId),
+    uniqueIndex("audio_clip_candidates_campaign_save_action_idx").on(table.campaignId, table.saveActionId),
+    index("audio_clip_candidates_expiry_idx").on(table.status, table.expiresAt),
+    index("audio_clip_candidates_source_idx").on(table.sourceAssetId),
+    check("audio_clip_candidates_status_check", sql`${table.status} IN ('PROCESSING','READY','EXPIRED','CANCELLED','SAVED','FAILED')`),
+    check("audio_clip_candidates_range_check", sql`${table.startMs} >= 0 AND ${table.endMs} > ${table.startMs} AND ${table.endMs} - ${table.startMs} <= 10000`),
+    check("audio_clip_candidates_reservation_check", sql`${table.reservedBytes} >= 0 AND (${table.sizeBytes} IS NULL OR ${table.sizeBytes} >= 0)`),
+  ],
+);
+
+/** Independent derivative lineage; source deletion detaches rather than deletes the saved clip. */
+export const audioClipProvenance = pgTable(
+  "audio_clip_provenance",
+  {
+    assetId: uuid("asset_id").primaryKey().references(() => assets.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+    sourceAssetId: uuid("source_asset_id").references(() => assets.id, { onDelete: "set null" }),
+    sourceVersion: text("source_version").notNull(),
+    startMs: integer("start_ms").notNull(),
+    endMs: integer("end_ms").notNull(),
+    actualStartFrame: integer("actual_start_frame").notNull(),
+    actualEndFrame: integer("actual_end_frame").notNull(),
+    sampleRate: integer("sample_rate").notNull(),
+    createdByMembershipId: uuid("created_by_membership_id").notNull().references(() => memberships.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("audio_clip_provenance_asset_campaign_idx").on(table.assetId, table.campaignId),
+    index("audio_clip_provenance_source_idx").on(table.sourceAssetId),
+    check("audio_clip_provenance_range_check", sql`${table.startMs} >= 0 AND ${table.endMs} > ${table.startMs} AND ${table.endMs} - ${table.startMs} <= 10000 AND ${table.actualStartFrame} >= 0 AND ${table.actualEndFrame} > ${table.actualStartFrame} AND ${table.sampleRate} > 0`),
+  ],
+);
+
+/** Shared cross-writer quota accounting; held while any campaign media blob is prepared/previewed. */
+export const campaignMediaReservations = pgTable(
+  "campaign_media_reservations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+    requestKey: text("request_key").notNull(),
+    reservedBytes: integer("reserved_bytes").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("campaign_media_reservations_campaign_request_idx").on(table.campaignId, table.requestKey),
+    index("campaign_media_reservations_expiry_idx").on(table.expiresAt),
+    check("campaign_media_reservations_bytes_check", sql`${table.reservedBytes} > 0`),
+  ],
+);
+
 export const worldMaps = pgTable(
   "world_maps",
   {
@@ -871,6 +960,8 @@ export const characters = pgTable(
     }),
     name: text("name").notNull(),
     stats: jsonb("stats").$type<Record<string, number>>().notNull().default({}),
+    // UIX-682 C01: null inherits the campaign layout; explicit PLAYER-owned override otherwise.
+    statLayout: jsonb("stat_layout").$type<CharacterStatLayout | null>(),
     skills: jsonb("skills")
       .$type<
         Array<{

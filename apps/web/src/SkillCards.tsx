@@ -332,6 +332,13 @@ export function SkillChatCard({
       : actionFormula,
     statLabels,
   );
+  const normalized = (value: string) =>
+    value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+  const breakdownRepeatsFormula = Boolean(
+    card.result?.breakdown &&
+      normalized(humanizeFormula(card.result.breakdown, statLabels)) ===
+      normalized(visibleFormula),
+  );
   return (
     <section
       className={`skill-chat-card${critical ? ` roll-result--critical-${critical.kind}` : ""}`}
@@ -343,7 +350,7 @@ export function SkillChatCard({
             ? "Показано без выполнения"
             : card.entry.kind === "SKILL"
               ? "Навык"
-              : "Способность"}
+              : null}
         </span>
         <strong>{card.entry.name}</strong>
       </div>
@@ -384,7 +391,7 @@ export function SkillChatCard({
         {card.action?.modifiers.length ? (
           <p>Модификаторы: {card.action.modifiers.join(", ")}</p>
         ) : null}
-        {card.result?.breakdown && <p>{card.result.breakdown}</p>}
+        {card.result?.breakdown && !breakdownRepeatsFormula && <p>{card.result.breakdown}</p>}
         {(card.entry.sourceRemoved || sourceRemoved) && (
           <p className="muted">
             Исходная запись удалена; показан сохранённый снимок.

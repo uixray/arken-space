@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { AssetDto, AudioPurpose, Role, SoundpadPackDto } from "@arken/contracts";
 import type { GameSocket } from "./realtime.js";
 import { SoundEffectsPlayback } from "./sound-effects-playback.js";
+import { SoundClipEditor } from "./SoundClipEditor.js";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import "./SoundpadWorkspace.css";
 
@@ -50,6 +51,8 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
   const [newPackName, setNewPackName] = useState("");
   const [selectedPack, setSelectedPack] = useState("");
   const [sourceNote, setSourceNote] = useState("");
+  const [clipSourceAssetId, setClipSourceAssetId] = useState("");
+  const [clipEditorOpen, setClipEditorOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const favoriteStorageKey = `arken.soundpad.favorites.${campaignId}.${membershipId}`;
@@ -103,7 +106,14 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
     loadInFlight.current = task;
     return task;
   };
+  const refreshCatalogAfterClipSave = async () => {
+    const fresh = await load();
+    if (!fresh) throw new Error("SOUNDPAD_CATALOG_REFRESH_FAILED");
+    setClipEditorOpen(false);
+    setClipSourceAssetId("");
+  };
   useEffect(() => { void load(); }, [campaignId]);
+  useEffect(() => { setClipEditorOpen(false); setClipSourceAssetId(""); }, [campaignId]);
   useEffect(() => {
     if (!socket) return;
     const session = ++catalogueSession.current;
@@ -182,6 +192,7 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
   const setPackPublished = (packId: string, published: boolean) => mutate(() => request(`/api/soundpad/packs/${packId}`, "PATCH", { published }));
   const setPackAudience = (packId: string, audience: "ALL_MEMBERS" | "GM_ONLY") => mutate(() => request(`/api/soundpad/packs/${packId}`, "PATCH", { audience }));
   const closeSoundpad = () => {
+    setClipEditorOpen(false);
     setOpen(false);
     requestAnimationFrame(() => launcherRef.current?.focus());
   };
@@ -238,6 +249,9 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
     socket?.emit("soundpad:trigger", { soundId, actionId: crypto.randomUUID() });
   };
   const audioAssets = assets.filter((asset) => isEffectAsset(asset) && asset.durationSeconds !== null && asset.durationSeconds > 0 && asset.durationSeconds <= 10);
+  const sourceAudioAssets = assets.filter((asset) => asset.kind === "AUDIO");
+  const clipSource = sourceAudioAssets.find((asset) => asset.id === clipSourceAssetId);
+  const clipPackId = selectedPack || managementPack?.id || "";
 
   const launcher = <button ref={launcherRef} className="soundpad__launcher" type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>Саундпад</button>;
 
@@ -266,13 +280,16 @@ export function SoundpadWorkspace({ campaignId, membershipId, role, assets, sock
         <label>Название пака <input value={newPackName} maxLength={80} onChange={(event) => setNewPackName(event.target.value)} /></label>
         <button type="submit" disabled={busy || !newPackName.trim()}>Создать пак</button>
       </form>
-      <label>Пак для нового звука <select value={selectedPack} onChange={(event) => setSelectedPack(event.target.value)}>
+      <label>Пак для нового звука <select value={selectedPack} onChange={(event) => { setClipEditorOpen(false); setSelectedPack(event.target.value); }}>
         <option value="">Первый доступный пак</option>{data.packs.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}
       </select></label>
       <label>Источник / лицензия <input value={sourceNote} maxLength={240} onChange={(event) => setSourceNote(event.target.value)} placeholder="Укажите источник и права" /></label>
       <label>Добавить существующий AUDIO <select defaultValue="" onChange={(event) => { const asset = assetsById.get(event.target.value); if (asset) void addSound(asset.id, asset.name.replace(/\.[^.]+$/, ""), "🔊", "Другое", sourceNote); event.currentTarget.value = ""; }}>
         <option value="">Выберите файл ≤ 10 секунд</option>{audioAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
       </select></label>
+      <label>Источник для нового эффекта <select aria-label="Источник для нового эффекта" value={clipSourceAssetId} onChange={(event) => { setClipEditorOpen(false); setClipSourceAssetId(event.target.value); }}><option value="">Выберите аудиофайл</option>{sourceAudioAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name} · {asset.audioPurpose}</option>)}</select></label>
+      {clipSource && <button type="button" disabled={!clipPackId || busy} onClick={() => setClipEditorOpen(true)}>Редактировать отрезок</button>}
+      {clipEditorOpen && clipSource && clipPackId && <SoundClipEditor key={clipSource.id} source={clipSource} packId={clipPackId} sourceNote={sourceNote} onSaved={refreshCatalogAfterClipSave} onClose={() => setClipEditorOpen(false)} />}
       <label className="soundpad__policy"><input type="checkbox" checked={data.playerPlaybackEnabled} onChange={(event) => void setPlayerPolicy(event.target.checked)} disabled={busy} /> Игрокам можно запускать звуки</label>
     </div></details>}
     {data.packs.length === 0 && <p className="soundpad__empty">Пока нет паков. Ведущий может создать пак или добавить стартовый CC0-пак.</p>}

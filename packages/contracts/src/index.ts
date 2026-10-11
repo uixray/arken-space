@@ -4,6 +4,7 @@ import {
   type SoundpadTriggeredEvent,
 } from "./soundpad.js";
 export * from "./soundpad.js";
+export * from "./audio-clip.js";
 export * from "./account-auth.js";
 export * from "./fog-geometry.js";
 export * from "./story-attachment-lifecycle.js";
@@ -786,6 +787,14 @@ export const updateStatLayoutSchema = z.object({
   revision: z.number().int().nonnegative(),
   layout: statLayoutSchema,
 });
+
+/** UIX-682 C01: PLAYER-owned override for one character, CASed by character revision. */
+export const updateCharacterStatLayoutSchema = z.object({
+  actionId: actionIdSchema,
+  revision: z.number().int().nonnegative(),
+  layout: statLayoutSchema,
+});
+export type UpdateCharacterStatLayout = z.infer<typeof updateCharacterStatLayoutSchema>;
 
 /**
  * UIX-431 — порядок ходов в бою.
@@ -2401,6 +2410,8 @@ export interface CharacterDto {
   controllerMembershipIds: string[];
   portraitAssetId: string | null;
   stats: Record<string, number>;
+  /** Effective per-character stat layout (override or resolved campaign default). */
+  statLayout: StatLayout;
   skills: Array<{ key: string; name: string; rank: number; formula: string }>;
   spells: Array<{
     key: string;

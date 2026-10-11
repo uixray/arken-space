@@ -124,6 +124,7 @@ describe("useCampaignActions", () => {
     ["playerRequest", "onOpenPlayerRequestCreate"],
     ["asset", "replaceAsset"],
     ["statLayout", "onUpdateStatLayout"],
+    ["statLayout", "onUpdateCharacterStatLayout"],
     ["chatHistory", "onLoadThreadHistory"],
     ["character", "patchCharacter"],
     ["initiative", "onUpdateInitiative"],

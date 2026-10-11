@@ -107,6 +107,7 @@ function characterWithEntries(entries: CharacterDto["entries"]): CharacterDto {
     lifecycle: "ACTIVE",
     archivedAt: null,
     archivedByMembershipId: null,
+  statLayout: [],
   };
 }
 

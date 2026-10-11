@@ -8,12 +8,24 @@ import {
 } from "./restore-rehearsal-core.mjs";
 
 const sha256Pattern = /^[0-9a-f]{64}$/i;
+const gitRevisionPattern = /^[0-9a-f]{40}$/i;
 
+function parseExpectedSourceRevision(value) {
+  if (value === "null") return null;
+  if (typeof value === "string" && gitRevisionPattern.test(value))
+    return value.toLowerCase();
+  throw new Error(
+    "service-v1 restore requires RESTORE_EXPECTED_SOURCE_REVISION as null or a full 40-character Git revision",
+  );
+}
 export function resolveRestoreMode(env) {
   const format = env.RESTORE_FORMAT ?? "legacy";
   if (format !== "legacy" && format !== "service-v1")
     throw new Error("RESTORE_FORMAT must be legacy or service-v1");
   if (format === "legacy") return { format };
+  const expectedSourceRevision = parseExpectedSourceRevision(
+    env.RESTORE_EXPECTED_SOURCE_REVISION,
+  );
   if (env.ARKEN_ISOLATED_ONLY !== "true")
     throw new Error("service-v1 restore requires ARKEN_ISOLATED_ONLY=true");
   if (!sha256Pattern.test(env.SNAPSHOT_ID ?? ""))
@@ -45,6 +57,20 @@ export function resolveRestoreMode(env) {
     receipt = JSON.parse(receiptBytes.toString("utf8"));
   } catch {
     throw new Error("service-v1 capture receipt is invalid JSON");
+  }
+  if (expectedSourceRevision === null) {
+    if (receipt.sourceRevision !== null)
+      throw new Error(
+        "Declared baseline requires an explicit null sourceRevision in the capture receipt",
+      );
+  } else if (
+    typeof receipt.sourceRevision !== "string" ||
+    !gitRevisionPattern.test(receipt.sourceRevision) ||
+    receipt.sourceRevision.toLowerCase() !== expectedSourceRevision
+  ) {
+    throw new Error(
+      "Candidate capture receipt sourceRevision must match the declared 40-character Git revision",
+    );
   }
   let copyReceiptSha256;
   let copyReceiptPath;
@@ -94,6 +120,7 @@ export function resolveRestoreMode(env) {
     receiptSha256,
     receiptPath: path.resolve(env.RESTORE_CAPTURE_RECEIPT_PATH),
     receipt,
+    expectedSourceRevision,
     reportPath: path.resolve(env.RESTORE_REPORT_PATH),
   };
 }
@@ -119,6 +146,30 @@ export async function resolveServiceSnapshot(snapshotRoot, request) {
     !manifest.buildRevision.trim()
   )
     throw new Error("Service capture manifest lacks build/schema evidence");
+  const sourceRevision = manifest.sourceRevision;
+  if (request.expectedSourceRevision === null) {
+    if (
+      sourceRevision !== "unknown" ||
+      request.receipt?.sourceRevision !== null
+    )
+      throw new Error(
+        "Baseline source revision must be unknown in the manifest and explicitly null in the capture receipt",
+      );
+  } else if (
+    typeof request.expectedSourceRevision !== "string" ||
+    !gitRevisionPattern.test(request.expectedSourceRevision) ||
+    typeof sourceRevision !== "string" ||
+    !gitRevisionPattern.test(sourceRevision) ||
+    sourceRevision.toLowerCase() !== request.expectedSourceRevision ||
+    typeof request.receipt?.sourceRevision !== "string" ||
+    !gitRevisionPattern.test(request.receipt.sourceRevision) ||
+    request.receipt.sourceRevision.toLowerCase() !==
+      request.expectedSourceRevision
+  ) {
+    throw new Error(
+      "Candidate source revision must be the declared 40-character Git revision in both manifest and capture receipt",
+    );
+  }
   if (
     request.receipt.buildRevision !== manifest.buildRevision ||
     request.receipt.schemaVersion !== manifest.schemaVersion ||
@@ -148,6 +199,10 @@ export async function resolveServiceSnapshot(snapshotRoot, request) {
     databaseCounts,
     schemaVersion: manifest.schemaVersion,
     buildRevision: manifest.buildRevision,
+    sourceRevision:
+      request.expectedSourceRevision === null
+        ? null
+        : request.expectedSourceRevision,
     serverImageId: manifest.images.server.toLowerCase(),
     postgresImageId: manifest.images.postgres.toLowerCase(),
     databaseName: manifest.target.databaseName,

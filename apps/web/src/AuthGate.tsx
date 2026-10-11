@@ -173,9 +173,9 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
       </form>
     </section></main>;
   }
-  if (accountCapabilities?.accountAuthEnabled)
+  if (accountCapabilities?.accountAuthEnabled && mode === "account")
     return <AccountAuthWorkspace onAuthenticated={onAuthenticated} capabilities={accountCapabilities} />;
-  if (!accountCapabilities?.legacyDevEnabled || !isDevelopment)
+  if (!accountCapabilities?.accountAuthEnabled && (!accountCapabilities?.legacyDevEnabled || !isDevelopment))
     return <main className="account-auth-shell"><section className="account-auth-card"><h1>Вход временно недоступен</h1><p role="alert">{capabilityError || "Для этого окружения не настроен поддерживаемый режим входа."}</p><Button type="button" onClick={() => { setAccountCapabilities(null); setCapabilityRetry((value) => value + 1); }}>Повторить</Button></section></main>;
 
   return (
@@ -192,6 +192,9 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
           <span className="landing-badge">Ранний доступ</span>
         </div>
         <nav className="landing-section-nav" aria-label="Разделы страницы">
+          {accountCapabilities?.accountAuthEnabled && (
+            <a href="/account">Войти в аккаунт</a>
+          )}
           {new URLSearchParams(window.location.search).has("home") && (
             <a href="/">Вернуться в игру</a>
           )}

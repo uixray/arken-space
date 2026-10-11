@@ -1530,6 +1530,19 @@ describe("Pool B HTTP boundaries", () => {
   });
 
   it("enforces catalog permissions, receipts, assignment snapshots and role filtering", async () => {
+    const invalidCatalog = await app.inject({
+      method: "POST",
+      url: "/api/catalog",
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), kind: "ABILITY", name: "", description: "private-invalid-draft", data: {} },
+    });
+    expect(invalidCatalog.statusCode).toBe(400);
+    expect(invalidCatalog.json()).toMatchObject({
+      error: "INVALID_CATALOG_ENTRY",
+      message: "Проверьте заполнение полей навыка или способности.",
+      fieldErrors: [{ path: "name", code: "too_small" }],
+    });
+    expect(invalidCatalog.body).not.toContain("private-invalid-draft");
     const denied = await app.inject({
       method: "POST",
       url: "/api/catalog",
@@ -1558,6 +1571,12 @@ describe("Pool B HTTP boundaries", () => {
     });
     expect(created.statusCode).toBe(201);
     const template = created.json();
+    const invalidCatalogUpdate = await app.inject({
+      method: "PATCH", url: `/api/catalog/${template.id}`, headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), name: "" },
+    });
+    expect(invalidCatalogUpdate.statusCode).toBe(400);
+    expect(invalidCatalogUpdate.json().fieldErrors).toEqual([{ path: "name", code: "too_small" }]);
     const duplicate = await app.inject({
       method: "POST",
       url: "/api/catalog",

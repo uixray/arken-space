@@ -8,6 +8,7 @@ import {
 import type { CatalogEntryDto } from "@arken/contracts";
 import { Button } from "./design-system/Button";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
+import { ApiError } from "./api";
 
 export type CatalogEntryFormInput = Pick<
   CatalogEntryDto,
@@ -34,6 +35,44 @@ type EditableRollAction = {
 };
 
 type ValueRow = { id: string; key: string; value: string };
+type FieldErrorMap = Record<string, string>;
+
+function fieldErrorMessage(path: string): string | null {
+  if (path === "name") return "Укажите название длиной до 120 символов.";
+  if (path === "data.uses.current")
+    return "Остаток должен быть от 0 до максимума.";
+  if (path === "data.uses.max")
+    return "Максимум должен быть целым числом больше нуля.";
+  if (path === "data.activation.cost.amount")
+    return "Стоимость должна быть целым числом от 1 до 100000.";
+  if (/^data\.rollActions\.\d+\.label$/.test(path))
+    return "Укажите название броска.";
+  if (/^data\.rollActions\.\d+\.dice$/.test(path))
+    return "Проверьте формулу, например 1d20 или 2d6.";
+  if (/^data\.rollActions\.\d+\.cost\.amount$/.test(path))
+    return "Количество должно быть целым числом от 1 до 100000.";
+  return null;
+}
+
+function readFieldErrors(
+  details: Record<string, unknown> | undefined,
+): FieldErrorMap {
+  const raw = details?.fieldErrors;
+  if (!Array.isArray(raw)) return {};
+  const result: FieldErrorMap = {};
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const path = (item as Record<string, unknown>).path;
+    if (typeof path !== "string") continue;
+    const message = fieldErrorMessage(path);
+    if (message) result[path] = message;
+  }
+  return result;
+}
+
+function fieldErrorId(path: string) {
+  return `catalog-field-error-${path.replace(/[^a-z0-9_-]/gi, "-")}`;
+}
 
 type Props = {
   existing?: CatalogEntryDto;
@@ -145,9 +184,9 @@ export function CatalogEntryForm({
   const [activationConsumesUse, setActivationConsumesUse] = useState(
     existing?.data.activation?.consumeUse ?? Boolean(existing?.data.uses),
   );
-  const [activationCostType, setActivationCostType] = useState<"none" | "physical" | "magic">(
-    existing?.data.activation?.cost?.type ?? "none",
-  );
+  const [activationCostType, setActivationCostType] = useState<
+    "none" | "physical" | "magic"
+  >(existing?.data.activation?.cost?.type ?? "none");
   const [activationCostAmount, setActivationCostAmount] = useState(
     existing?.data.activation?.cost?.amount ?? 1,
   );
@@ -163,6 +202,7 @@ export function CatalogEntryForm({
   );
   const [notes, setNotes] = useState(existing?.data.notes ?? "");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrorMap>({});
   const [submitting, setSubmitting] = useState(false);
 
   const valueKeys = useMemo(
@@ -178,11 +218,33 @@ export function CatalogEntryForm({
     );
   }
 
+  function renderFieldError(path: string) {
+    const message = fieldErrors[path];
+    return message ? (
+      <p id={fieldErrorId(path)} role="alert">
+        {message}
+      </p>
+    ) : null;
+  }
+
+  function fieldErrorProps(path: string) {
+    return fieldErrors[path]
+      ? {
+          "aria-invalid": true as const,
+          "aria-describedby": fieldErrorId(path),
+        }
+      : {};
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setFieldErrors({});
     const cleanName = name.trim();
-    if (!cleanName) return setError("Укажите название.");
+    if (!cleanName) {
+      setFieldErrors({ name: "Укажите название." });
+      return setError("Проверьте обязательные поля.");
+    }
     if (
       usesEnabled &&
       (usesMax < 1 || usesCurrent < 0 || usesCurrent > usesMax)
@@ -236,16 +298,20 @@ export function CatalogEntryForm({
       return setError(
         "Для модификатора из значения выберите существующий ключ.",
       );
-    if (actions.some((action) => action.consumeUse && !usesEnabled))
-      return setError(
-        "Расход использования требует включённого лимита использований.",
-      );
-    if (kind === "ABILITY" && actions.length === 0 && activationConsumesUse && !usesEnabled)
-      return setError("Расход использования требует включённого лимита использований.");
     if (
-      kind === "ABILITY" && actions.length === 0 && activationCostType !== "none" &&
-      (!Number.isInteger(activationCostAmount) || activationCostAmount < 1 || activationCostAmount > 100000)
-    ) return setError("Стоимость активации должна быть целым числом от 1 до 100000.");
+      kind === "ABILITY" &&
+      actions.length === 0 &&
+      activationCostType !== "none" &&
+      (!Number.isInteger(activationCostAmount) ||
+        activationCostAmount < 1 ||
+        activationCostAmount > 100000)
+    ) {
+      setFieldErrors({
+        "data.activation.cost.amount":
+          "Стоимость должна быть целым числом от 1 до 100000.",
+      });
+      return setError("Проверьте стоимость активации.");
+    }
 
     const rollActions: RollAction[] = actions.map((action, index) => {
       const selectedModifier: RollModifier | null =
@@ -281,7 +347,7 @@ export function CatalogEntryForm({
         dice: action.dice,
         modifiers,
         advantage: action.advantage,
-        consumeUse: action.consumeUse,
+        consumeUse: usesEnabled && action.consumeUse,
         cost:
           action.costType === "none"
             ? undefined
@@ -298,13 +364,20 @@ export function CatalogEntryForm({
       activation:
         kind === "ABILITY" && rollActions.length === 0
           ? {
-              consumeUse: activationConsumesUse,
+              consumeUse: usesEnabled && activationConsumesUse,
               cost:
                 activationCostType === "none"
                   ? undefined
-                  : { type: activationCostType, amount: Math.max(1, activationCostAmount) },
+                  : {
+                      type: activationCostType,
+                      amount: Math.max(1, activationCostAmount),
+                    },
             }
-          : undefined,
+          : kind === existing?.kind &&
+              kind === "ABILITY" &&
+              (existing.data.rollActions?.length ?? 0) > 0
+            ? existing.data.activation
+            : undefined,
       values: values.length ? numericValues : undefined,
       uses: usesEnabled
         ? {
@@ -326,8 +399,15 @@ export function CatalogEntryForm({
         data,
       });
     } catch (cause) {
+      const mapped =
+        cause instanceof ApiError ? readFieldErrors(cause.details) : {};
+      setFieldErrors(mapped);
       setError(
-        cause instanceof Error ? cause.message : "Не удалось сохранить запись.",
+        cause instanceof ApiError && Object.keys(mapped).length > 0
+          ? cause.message
+          : cause instanceof Error
+            ? cause.message
+            : "Не удалось сохранить запись.",
       );
     } finally {
       setSubmitting(false);
@@ -351,20 +431,22 @@ export function CatalogEntryForm({
           }
         >
           <option value="SKILL">Навык</option>
-          <option value="ABILITY">Способность</option>
+          <option value="ABILITY">Способность / заклинание</option>
         </FormSelect>
       </label>
       <label>
-        Название
+        Название *
         <FormInput
+          {...fieldErrorProps("name")}
           value={name}
           maxLength={120}
           required
           onChange={(event) => setName(event.target.value)}
         />
       </label>
+      {renderFieldError("name")}
       <label>
-        Описание
+        Описание (необязательно)
         <FormTextArea
           controlRef={descriptionRef}
           rows={1}
@@ -375,8 +457,13 @@ export function CatalogEntryForm({
       </label>
 
       <fieldset>
-        <legend>Использования</legend>
+        <legend>Лимит использований</legend>
+        <p className="muted">
+          Не нужен лимит — оставьте переключатель выключенным. Это не влияет на
+          стоимость применения.
+        </p>
         <FormInput
+          className="catalog-entry-form__toggle"
           type="checkbox"
           checked={usesEnabled}
           onChange={(event) => setUsesEnabled(event.target.checked)}
@@ -389,21 +476,25 @@ export function CatalogEntryForm({
               Осталось
               <FormInput
                 type="number"
+                {...fieldErrorProps("data.uses.current")}
                 min={0}
                 max={usesMax}
                 value={usesCurrent}
                 onChange={(event) => setUsesCurrent(event.target.valueAsNumber)}
               />
             </label>
+            {renderFieldError("data.uses.current")}
             <label>
               Максимум
               <FormInput
                 type="number"
+                {...fieldErrorProps("data.uses.max")}
                 min={1}
                 value={usesMax}
                 onChange={(event) => setUsesMax(event.target.valueAsNumber)}
               />
             </label>
+            {renderFieldError("data.uses.max")}
             <label>
               Перезарядка
               <FormSelect
@@ -433,7 +524,11 @@ export function CatalogEntryForm({
 
       {kind === "ABILITY" && actions.length === 0 && (
         <fieldset>
-          <legend>Активация без броска</legend>
+          <legend>Стоимость применения без броска</legend>
+          <p className="muted">
+            Независимо от лимита использований. Создание записи ничего не
+            списывает.
+          </p>
           <FormInput
             type="checkbox"
             checked={activationConsumesUse}
@@ -443,10 +538,14 @@ export function CatalogEntryForm({
             Списывать одно использование
           </FormInput>
           <label>
-            Стоимость активации
+            Стоимость
             <FormSelect
               value={activationCostType}
-              onChange={(event) => setActivationCostType(event.target.value as typeof activationCostType)}
+              onChange={(event) =>
+                setActivationCostType(
+                  event.target.value as typeof activationCostType,
+                )
+              }
             >
               <option value="none">Без стоимости</option>
               <option value="physical">{resourceLabels.physical}</option>
@@ -454,28 +553,41 @@ export function CatalogEntryForm({
             </FormSelect>
           </label>
           {activationCostType !== "none" && (
-            <label>
-              Количество ресурса
-              <FormInput
-                type="number"
-                min={1}
-                max={100000}
-                value={activationCostAmount}
-                onChange={(event) => setActivationCostAmount(event.target.valueAsNumber)}
-              />
-            </label>
+            <>
+              <label>
+                Количество ресурса
+                <FormInput
+                  type="number"
+                  {...fieldErrorProps("data.activation.cost.amount")}
+                  min={1}
+                  max={100000}
+                  step={1}
+                  required
+                  value={activationCostAmount}
+                  onChange={(event) =>
+                    setActivationCostAmount(event.target.valueAsNumber)
+                  }
+                />
+              </label>
+              {renderFieldError("data.activation.cost.amount")}
+            </>
           )}
         </fieldset>
       )}
 
       <fieldset>
         <legend>Броски</legend>
+        <p className="muted">
+          Добавьте бросок только если он нужен для применения. Стоимость и лимит
+          задаются отдельно.
+        </p>
         {actions.map((action, index) => (
           <fieldset key={action.id}>
             <legend>Бросок {index + 1}</legend>
             <label>
               Название
               <FormInput
+                {...fieldErrorProps(`data.rollActions.${index}.label`)}
                 value={action.label}
                 maxLength={100}
                 onChange={(event) =>
@@ -483,6 +595,7 @@ export function CatalogEntryForm({
                 }
               />
             </label>
+            {renderFieldError(`data.rollActions.${index}.label`)}
             <label>
               Тип
               <FormSelect
@@ -501,6 +614,7 @@ export function CatalogEntryForm({
             <label>
               Кубики
               <FormInput
+                {...fieldErrorProps(`data.rollActions.${index}.dice`)}
                 value={action.dice}
                 placeholder="1d20"
                 onChange={(event) =>
@@ -508,6 +622,7 @@ export function CatalogEntryForm({
                 }
               />
             </label>
+            {renderFieldError(`data.rollActions.${index}.dice`)}
             <label>
               Источник модификатора
               <FormSelect
@@ -606,19 +721,28 @@ export function CatalogEntryForm({
               </FormSelect>
             </label>
             {action.costType !== "none" && (
-              <label>
-                Количество
-                <FormInput
-                  type="number"
-                  min={1}
-                  value={action.costAmount}
-                  onChange={(event) =>
-                    updateAction(action.id, {
-                      costAmount: event.target.valueAsNumber,
-                    })
-                  }
-                />
-              </label>
+              <>
+                <label>
+                  Количество
+                  <FormInput
+                    type="number"
+                    min={1}
+                    max={100000}
+                    step={1}
+                    required
+                    {...fieldErrorProps(
+                      `data.rollActions.${index}.cost.amount`,
+                    )}
+                    value={action.costAmount}
+                    onChange={(event) =>
+                      updateAction(action.id, {
+                        costAmount: event.target.valueAsNumber,
+                      })
+                    }
+                  />
+                </label>
+                {renderFieldError(`data.rollActions.${index}.cost.amount`)}
+              </>
             )}
             <label>
               <FormInput
@@ -652,80 +776,85 @@ export function CatalogEntryForm({
         </Button>
       </fieldset>
 
-      <fieldset>
-        <legend>Значения</legend>
+      <details>
+        <summary>Дополнительные числовые параметры</summary>
         <p className="muted">
-          Числовые параметры записи. Укажите ключ, если бросок использует модификатор «Значение записи»; эти числа не списываются как ресурс.
+          Обычно заполнять не нужно. Добавляйте параметр, только если бросок
+          использует модификатор «Значение записи». Это число прибавляется к
+          броску, а не списывается как ресурс. Например, <code>might = 2</code>{" "}
+          даст <code>+2</code>.
         </p>
-        {values.map((row) => (
-          <div key={row.id}>
-            <label>
-              Ключ
-              <FormInput
-                value={row.key}
-                pattern="[a-z][a-z0-9_]{0,39}"
-                placeholder="Код латиницей"
-                onChange={(event) =>
+        <fieldset>
+          <legend>Параметры</legend>
+          {values.map((row) => (
+            <div key={row.id}>
+              <label>
+                Ключ
+                <FormInput
+                  value={row.key}
+                  pattern="[a-z][a-z0-9_]{0,39}"
+                  placeholder="Код латиницей"
+                  onChange={(event) =>
+                    setValues((current) =>
+                      current.map((item) =>
+                        item.id === row.id
+                          ? { ...item, key: event.target.value }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+              </label>
+              <label>
+                Значение
+                <FormInput
+                  type="number"
+                  step="any"
+                  value={row.value}
+                  onChange={(event) =>
+                    setValues((current) =>
+                      current.map((item) =>
+                        item.id === row.id
+                          ? { ...item, value: event.target.value }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+              </label>
+              <Button
+                type="button"
+                onClick={() =>
                   setValues((current) =>
-                    current.map((item) =>
-                      item.id === row.id
-                        ? { ...item, key: event.target.value }
-                        : item,
-                    ),
+                    current.filter((item) => item.id !== row.id),
                   )
                 }
-              />
-            </label>
-            <label>
-              Значение
-              <FormInput
-                type="number"
-                step="any"
-                value={row.value}
-                onChange={(event) =>
-                  setValues((current) =>
-                    current.map((item) =>
-                      item.id === row.id
-                        ? { ...item, value: event.target.value }
-                        : item,
-                    ),
-                  )
-                }
-              />
-            </label>
-            <Button
-              type="button"
-              onClick={() =>
-                setValues((current) =>
-                  current.filter((item) => item.id !== row.id),
-                )
-              }
-            >
-              Удалить значение
-            </Button>
-          </div>
-        ))}
-        <Button
-          type="button"
-          onClick={() =>
-            setValues((current) => [
-              ...current,
-              { id: nextId("value"), key: "", value: "0" },
-            ])
-          }
-        >
-          Добавить значение
-        </Button>
-      </fieldset>
-
-      <label>
-        Заметки
-        <FormTextArea
-          value={notes}
-          maxLength={10000}
-          onChange={(event) => setNotes(event.target.value)}
-        />
-      </label>
+              >
+                Удалить значение
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            onClick={() =>
+              setValues((current) => [
+                ...current,
+                { id: nextId("value"), key: "", value: "0" },
+              ])
+            }
+          >
+            Добавить значение
+          </Button>
+        </fieldset>
+        <label>
+          Заметка (необязательно)
+          <FormTextArea
+            value={notes}
+            maxLength={10000}
+            onChange={(event) => setNotes(event.target.value)}
+          />
+        </label>
+      </details>
       {error && <p role="alert">{error}</p>}
       <div>
         <Button type="submit" disabled={submitting}>

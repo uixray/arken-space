@@ -184,7 +184,7 @@ const actions: CampaignActions = {
     refreshAssets: unexpectedAction,
     generateTokenImage: unexpectedAction,
   },
-  statLayout: { onUpdateStatLayout: unexpectedAction },
+  statLayout: { onUpdateStatLayout: unexpectedAction, onUpdateCharacterStatLayout: unexpectedAction },
   chatHistory: { onLoadThreadHistory: unexpectedAction },
   character: {
     replaceCharacterControllers: unexpectedAction,

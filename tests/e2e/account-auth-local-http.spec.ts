@@ -11,7 +11,7 @@ import { drainAccountMailOutboxOnce } from "../../apps/server/src/account-mail-o
 import { registerAccountAuthRoutes } from "../../apps/server/src/account-auth-routes.js";
 import { registerAccountCampaignRoutes } from "../../apps/server/src/account-campaigns.js";
 
-const webOrigin = "http://localhost:5173";
+const webOrigin = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 test.use({ trace: "off" });
 let database: PGlite;
 let db: ReturnType<typeof drizzle<typeof schema>>;
@@ -72,10 +72,14 @@ async function deliverQueuedMail() {
   });
 }
 
-test("real local HTTP account lifecycle and campaign create/select in browser", async ({ page, browser }) => {
+test("real local HTTP account lifecycle and campaign create/select in browser", async ({ page, browser }, testInfo) => {
+  const pageOrigin = testInfo.project.use.baseURL;
+  if (typeof pageOrigin !== "string") throw new Error("Playwright project baseURL is required for the second browser context.");
   test.setTimeout(60_000);
   await connectLocalApi(page);
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Всё необходимое для игры — в едином пространстве" })).toBeVisible();
+  await page.getByRole("link", { name: "Войти в аккаунт" }).click();
   await expect(page.getByRole("heading", { name: "Войти в аккаунт" })).toBeVisible();
   await page.getByRole("button", { name: "Создать аккаунт" }).click();
   await page.getByLabel("Email").fill("owner@example.invalid");
@@ -115,7 +119,9 @@ test("real local HTTP account lifecycle and campaign create/select in browser", 
   playerContext = context;
   const playerPage = await context.newPage();
   await connectLocalApi(playerPage);
-  await playerPage.goto(webOrigin);
+  await playerPage.goto(pageOrigin);
+  await expect(playerPage.getByRole("heading", { name: "Всё необходимое для игры — в едином пространстве" })).toBeVisible();
+  await playerPage.getByRole("link", { name: "Войти в аккаунт" }).click();
   await expect(playerPage.getByRole("heading", { name: "Войти в аккаунт" })).toBeVisible();
 
   await playerPage.getByRole("button", { name: "Создать аккаунт" }).click();
@@ -128,14 +134,14 @@ test("real local HTTP account lifecycle and campaign create/select in browser", 
   const playerVerifyText = outbox.read()[1]?.text ?? "";
   const playerVerifyToken = /#token=([A-Za-z0-9_-]+)/.exec(playerVerifyText)?.[1];
   expect(playerVerifyToken).toBeTruthy();
-  await playerPage.goto(`${webOrigin}/account/verify#token=${playerVerifyToken}`);
+  await playerPage.goto(`${pageOrigin}/account/verify#token=${playerVerifyToken}`);
   await playerPage.getByRole("button", { name: "Подтвердить email" }).click();
   await expect(playerPage.getByText("Email подтверждён. Теперь войдите в аккаунт.")).toBeVisible();
   await playerPage.getByLabel("Email").fill("player@example.invalid");
   await playerPage.getByLabel("Пароль").fill("synthetic player account password");
   await playerPage.getByRole("button", { name: "Войти" }).click();
   await expect(playerPage.getByRole("heading", { name: "Мои кампании" })).toBeVisible();
-  await playerPage.goto(`${webOrigin}/account/join#token=${inviteToken}`);
+  await playerPage.goto(`${pageOrigin}/account/join#token=${inviteToken}`);
   await expect(playerPage.getByRole("heading", { name: "Присоединиться" })).toBeVisible();
   await playerPage.getByRole("button", { name: "Принять приглашение" }).click();
   await expect(playerPage.getByText("Вы присоединились к кампании. Выберите её, чтобы открыть игровой стол.")).toBeVisible();

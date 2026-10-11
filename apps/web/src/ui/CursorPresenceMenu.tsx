@@ -88,7 +88,7 @@ export function CursorPresenceMenu({
       >
         <AppIcon icon={CursorPresenceIcon} />
         <span className="map-tool__label">
-          {preference.receiveEnabled ? "Курсоры" : "Курсоры скрыты"}
+          Курсоры
         </span>
       </ToolbarButton>
     );

@@ -287,7 +287,7 @@ export function QuickRollPanel({
         >
           {(rollCharacter.skills.length > 0 ||
             entries.some((entry) => entry.kind === "SKILL")) && (
-            <div className="activity-quick-rolls" aria-busy={quickRollPending}>
+            <div className="activity-quick-rolls quick-roll-panel__ability-group" aria-busy={quickRollPending}>
               {rollCharacter.skills.map((skill) => (
                 <QuickRollTooltip
                   key={skill.key}
@@ -341,7 +341,7 @@ export function QuickRollPanel({
           )}
           {entries.some((entry) => entry.kind === "ABILITY") && (
             <div
-              className="activity-quick-rolls"
+              className="activity-quick-rolls quick-roll-panel__ability-group"
               aria-busy={entryPending !== null}
             >
               {entries

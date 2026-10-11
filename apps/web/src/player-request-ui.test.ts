@@ -53,6 +53,7 @@ const character = (
   archivedAt: null,
   archivedByMembershipId: null,
   ...overrides,
+  statLayout: overrides.statLayout ?? [],
 });
 
 describe("player request UI policy", () => {

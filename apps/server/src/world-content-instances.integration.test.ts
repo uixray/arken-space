@@ -224,6 +224,78 @@ describe("world content instances HTTP: create", () => {
     });
   });
 
+  it("keeps one canonical entity's campaign instances independent", async () => {
+    const primaryCreate = await createInstance(secrets.gm, {
+      displayNameOverride: "The Wyrm of the North",
+    });
+    const foreignCreate = await createInstance(secrets.foreignGm, {
+      displayNameOverride: "The Wyrm of the South",
+    });
+    expect(primaryCreate.statusCode).toBe(201);
+    expect(foreignCreate.statusCode).toBe(201);
+    const primary = primaryCreate.json();
+    const foreign = foreignCreate.json();
+    expect(primary).toMatchObject({
+      campaignId: ids.campaign,
+      worldContentId: ids.entity,
+      displayNameOverride: "The Wyrm of the North",
+    });
+    expect(foreign).toMatchObject({
+      campaignId: ids.foreignCampaign,
+      worldContentId: ids.entity,
+      displayNameOverride: "The Wyrm of the South",
+    });
+    expect(foreign.id).not.toBe(primary.id);
+
+    const changed = await app.inject({
+      method: "PATCH",
+      url: `/api/world-content-instances/${primary.id}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        revision: primary.revision,
+        displayNameOverride: "The Wyrm of the North (wounded)",
+      },
+    });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.json()).toMatchObject({
+      id: primary.id,
+      displayNameOverride: "The Wyrm of the North (wounded)",
+      revision: primary.revision + 1,
+    });
+
+    const foreignStillIndependent = await app.inject({
+      method: "GET",
+      url: `/api/world-content-instances/${foreign.id}`,
+      headers: headers(secrets.foreignGm),
+    });
+    expect(foreignStillIndependent.statusCode).toBe(200);
+    expect(foreignStillIndependent.json()).toMatchObject({
+      id: foreign.id,
+      campaignId: ids.foreignCampaign,
+      worldContentId: ids.entity,
+      displayNameOverride: "The Wyrm of the South",
+      revision: foreign.revision,
+    });
+
+    const foreignCannotReadPrimary = await app.inject({
+      method: "GET",
+      url: `/api/world-content-instances/${primary.id}`,
+      headers: headers(secrets.foreignGm),
+    });
+    expect(foreignCannotReadPrimary.statusCode).toBe(404);
+    expect(foreignCannotReadPrimary.json()).not.toHaveProperty("id");
+
+    const [canonical] = await db
+      .select()
+      .from(schema.worldContent)
+      .where(eq(schema.worldContent.id, ids.entity));
+    expect(canonical).toMatchObject({
+      name: "The Dragon",
+      revision: 0,
+    });
+  });
+
   it("accepts campaign image/location references and rejects invalid references without audit writes", async () => {
     const accepted = await createInstance(secrets.gm, {
       portraitAssetId: ids.portrait,
@@ -392,13 +464,12 @@ describe("world content instances HTTP: list/get", () => {
 });
 
 describe("world content instances HTTP: update", () => {
-  it("validates new references but preserves and clears a historical orphan portrait", async () => {
+  it("validates new references but preserves and clears a valid portrait", async () => {
     const created = (await createInstance(secrets.gm)).json();
-    const orphanPortraitId = id();
     await db
       .update(schema.worldContentInstances)
       .set({
-        portraitAssetId: orphanPortraitId,
+        portraitAssetId: ids.portrait,
         currentLocationId: ids.location,
       })
       .where(eq(schema.worldContentInstances.id, created.id));
@@ -415,7 +486,7 @@ describe("world content instances HTTP: update", () => {
     });
     expect(unrelated.statusCode).toBe(200);
     expect(unrelated.json()).toMatchObject({
-      portraitAssetId: orphanPortraitId,
+      portraitAssetId: ids.portrait,
       currentLocationId: ids.location,
     });
 

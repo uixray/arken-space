@@ -41,6 +41,7 @@ import {
   assetUsagePolicy,
   deleteUnusedAsset,
 } from "./asset-lifecycle.js";
+import { lockCampaignMediaQuota, releaseCampaignMediaBytes, reserveCampaignMediaBytes, requireLiveCampaignMediaReservation } from "./media-quota-reservations.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type RealtimeServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -630,20 +631,18 @@ export function registerAssetLifecycleRoutes(
 
     let stored: Awaited<ReturnType<typeof storeUpload>> | undefined;
     let committed = false;
+    const reservationKey = `asset-replace:${actionId}`;
+    let reserved = false;
     try {
-      const [usage] = await db
-        .select({ used: sum(assets.sizeBytes) })
-        .from(assets)
-        .where(eq(assets.campaignId, auth.campaignId));
-      await assertStorageCapacity(
-        Math.max(0, Number(usage?.used ?? 0) - current.sizeBytes),
-        buffer.length,
-      );
+      await reserveCampaignMediaBytes(db, auth.campaignId, reservationKey, buffer.length);
+      reserved = true;
       stored = await storeUpload(
         buffer,
         current.kind === "AUDIO" ? "audio" : "image",
       );
       const result = await db.transaction(async (tx) => {
+        await lockCampaignMediaQuota(tx, auth.campaignId);
+        await requireLiveCampaignMediaReservation(tx, auth.campaignId, reservationKey, stored!.sizeBytes);
         const [locked] = await tx
           .select()
           .from(assets)
@@ -774,6 +773,8 @@ export function registerAssetLifecycleRoutes(
       if (errorCode !== "UPLOAD_FAILED")
         return reply.code(400).send({ error: errorCode });
       throw error;
+    } finally {
+      if (reserved) await releaseCampaignMediaBytes(db, auth.campaignId, reservationKey);
     }
   });
 }

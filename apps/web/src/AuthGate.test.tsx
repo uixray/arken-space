@@ -72,17 +72,27 @@ describe("AuthGate quick player login", () => {
     })));
   });
 
-  it("routes account mode to email/password UI without exposing beta aliases", async () => {
+  it("keeps the public landing visible in account-auth mode with a separate account entry", async () => {
     apiMock.mockImplementation((path: string) => path === "/api/account/capabilities"
       ? Promise.resolve({ accountAuthEnabled: true, registrationEnabled: true, legacyDevEnabled: false, campaignLinkAccessEnabled: false, campaignCreationEnabled: false })
       : path === "/api/account/session" ? Promise.resolve({ authenticated: false })
         : path === "/api/public/roadmap-votes" ? Promise.resolve({ items: roadmapItems }) : Promise.resolve());
     window.history.replaceState({}, "", "/");
     renderComponent(<AuthGate onAuthenticated={vi.fn()} />);
-    expect(await screen.findByRole("heading", { name: "Войти в аккаунт" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Всё необходимое для игры — в едином пространстве" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Войти в аккаунт" })).toHaveAttribute("href", "/account");
     expect(screen.queryByRole("navigation", { name: "Постоянные игроки" })).not.toBeInTheDocument();
   });
 
+  it("opens the existing email/password workspace on the explicit account path", async () => {
+    apiMock.mockImplementation((path: string) => path === "/api/account/capabilities"
+      ? Promise.resolve({ accountAuthEnabled: true, registrationEnabled: true, legacyDevEnabled: false, campaignLinkAccessEnabled: false, campaignCreationEnabled: false })
+      : path === "/api/account/session" ? Promise.resolve({ authenticated: false }) : Promise.resolve());
+    window.history.replaceState({}, "", "/account");
+    renderComponent(<AuthGate onAuthenticated={vi.fn()} />);
+    expect(await screen.findByRole("heading", { name: "Войти в аккаунт" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "arken-space" })).toHaveAttribute("href", "/");
+  });
   it("provides accessible links to the landing page sections", async () => {
     window.history.replaceState({}, "", "/");
     renderComponent(<AuthGate onAuthenticated={vi.fn()} />);

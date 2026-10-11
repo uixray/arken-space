@@ -47,6 +47,7 @@ vi.mock("./realtime", () => ({
     on: (event: string, callback: (snapshot: GameSnapshot) => void) =>
       boundary.events.set(event, callback),
     emit: vi.fn(),
+    off: vi.fn(),
     disconnect: vi.fn(),
     io: { on: vi.fn() },
   }),
@@ -121,6 +122,7 @@ const character: CharacterDto = {
   lifecycle: "ACTIVE",
   archivedAt: null,
   archivedByMembershipId: null,
+  statLayout: [],
 };
 beforeEach(() => {
   installMatchMediaMock();

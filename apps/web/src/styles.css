@@ -1916,8 +1916,10 @@ html[data-player-theme="light"] .character-card--stats {
   font-weight: 700;
 }
 .roll-button__formula {
+  align-self: flex-start;
   color: var(--muted);
   font-size: max(12px, 0.78rem);
+  text-align: left;
 }
 .plain-row {
   display: flex;
@@ -2930,11 +2932,25 @@ html[data-player-theme="light"] .character-card--stats {
   flex-direction: column;
   gap: var(--space-md);
 }
+@container (max-width: 539px) {
+  .character-sheet-stat-grid .character-card-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .character-sheet-stat-grid .character-card {
+    flex-basis: auto;
+    min-width: 0;
+  }
+}
 @container (min-width: 540px) {
   .character-sheet-stat-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: stretch;
+    grid-template-areas:
+      "stats combat"
+      "skills abilities";
+    grid-auto-flow: row;
+    align-items: start;
   }
   .character-sheet-stat-grid > .character-section,
   .character-sheet-stat-grid .character-card-row {
@@ -2942,6 +2958,19 @@ html[data-player-theme="light"] .character-card--stats {
   }
   .character-sheet-stat-grid .character-card {
     min-width: 0;
+    align-self: start;
+  }
+  .character-sheet-stat-grid .character-card--stats {
+    grid-area: stats;
+  }
+  .character-sheet-stat-grid .character-card--combat {
+    grid-area: combat;
+  }
+  .character-sheet-stat-grid .character-card--skills {
+    grid-area: skills;
+  }
+  .character-sheet-stat-grid .character-card--abilities {
+    grid-area: abilities;
   }
   .character-sheet-stat-grid .character-card--stats .stat-field,
   .character-sheet-stat-grid .character-card--combat .stat-field {
@@ -2984,6 +3013,7 @@ html[data-player-theme="light"] .character-card--stats {
   place-items: center;
   padding: 0;
   cursor: pointer;
+  position: relative;
 }
 .character-hero__avatar:hover:not(:disabled) {
   background: var(--surface-hover);
@@ -3004,6 +3034,24 @@ html[data-player-theme="light"] .character-card--stats {
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--accent);
+}
+.character-hero__avatar-edit {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: rgb(0 0 0 / 42%);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.character-hero__avatar:hover:not(:disabled) .character-hero__avatar-edit,
+.character-hero__avatar:focus-visible .character-hero__avatar-edit {
+  opacity: 1;
+}
+.character-hero__avatar-edit svg {
+  width: 20px;
+  height: 20px;
 }
 .character-hero__info {
   display: flex;
@@ -3194,12 +3242,15 @@ html[data-player-theme="light"] .character-card--stats {
   min-width: 0;
 }
 .character-vital-chip--resource {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-2));
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-rows: auto auto auto;
   gap: var(--space-sm);
   min-width: min(220px, 100%);
-  flex: 1 1 260px;
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  flex: 1 1 100%;
 }
 .character-vital-chip--resource > .character-vital-chip__label {
   grid-column: 1 / -1;
@@ -5195,7 +5246,7 @@ body:has(.landing-shell) {
 }
 .skill-chat-card__result {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 58px;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
 }
 .skill-chat-card__result > span {
@@ -5205,8 +5256,8 @@ body:has(.landing-shell) {
   overflow-wrap: anywhere;
 }
 .skill-chat-card__result .roll-total-wrap {
-  grid-column: 2;
-  grid-row: 1;
+  grid-column: 1;
+  grid-row: 2;
   width: 58px;
   height: 58px;
   min-width: 0;
@@ -6203,7 +6254,7 @@ body:has(.landing-shell) {
 .roll-mode-control {
   min-width: 0;
   margin: 0;
-  padding: 0;
+  padding: var(--space-sm) var(--space-xs);
   border: 0;
 }
 .roll-mode-control legend {
@@ -7707,14 +7758,8 @@ button:not([role="tab"]),
   font-size: max(12px, 0.78rem);
 }
 
-/* Keep the combat, skills, and spell cards in a readable single-column stack
-   in the narrow desktop character pane. */
-@media (min-width: 720px) and (max-width: 1279px) {
-  .character-sheet-stat-grid .character-section--combat > .character-card-row {
-    display: flex;
-    flex-direction: column;
-  }
-}
+
+
 
 .message header > .roll-avatar {
   border-radius: 0;
@@ -7746,6 +7791,7 @@ button:not([role="tab"]),
 }
 .skill-chat-card__result .roll-total-wrap {
   flex: 0 0 58px;
+  justify-self: center;
 }
 
 /* Every nested value/action cluster remains spaced, not only outer fieldsets. */
@@ -7760,6 +7806,29 @@ button:not([role="tab"]),
   padding: var(--space-md);
   background: var(--surface-2);
 }
+.arken-dialog .catalog-entry-form .catalog-entry-form__toggle {
+  display: inline-flex;
+  justify-self: start;
+  min-height: 36px;
+  align-items: center;
+  flex-direction: row;
+}
 .arken-dialog .catalog-entry-form fieldset fieldset {
   background: var(--surface-3);
+}
+/* One-character PLAYER sheets have no meaningful roster rail or close action. */
+.character-workspace.is-single-player-character .character-rail-toggle,
+.character-workspace.is-single-player-character .character-rail,
+.character-workspace.is-single-player-character .character-workspace__close,
+.character-workspace.is-single-player-character .character-workspace__header > div > .eyebrow,
+.character-workspace.is-single-player-character .character-workspace__header > p {
+  display: none;
+}
+.character-workspace.is-single-player-character .character-workspace__header {
+  gap: var(--space-sm);
+  min-height: 0;
+  padding: var(--space-sm) var(--space-md);
+}
+.character-workspace.is-single-player-character .character-workspace__header h2 {
+  margin: 0;
 }

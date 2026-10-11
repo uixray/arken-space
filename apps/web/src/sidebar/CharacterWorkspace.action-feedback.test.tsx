@@ -168,7 +168,7 @@ function actions(
       refreshAssets: unexpectedAction,
       generateTokenImage: unexpectedAction,
     },
-    statLayout: { onUpdateStatLayout: unexpectedAction },
+    statLayout: { onUpdateStatLayout: unexpectedAction, onUpdateCharacterStatLayout: unexpectedAction },
     chatHistory: { onLoadThreadHistory: unexpectedAction },
     character: {
       replaceCharacterControllers: unexpectedAction,
@@ -206,6 +206,7 @@ function character(overrides: Partial<CharacterDto> = {}): CharacterDto {
     controllerMembershipIds: ["player-owner"],
     portraitAssetId: null,
     stats: {},
+    statLayout: gmSnapshot().campaign.statLayout,
     skills: [],
     spells: [],
     notes: "",
@@ -529,6 +530,10 @@ describe("character action feedback", () => {
     renderComponent(view(state, { onUpdateCounters: update }));
     await galleryLoaded();
     fireEvent.click(screen.getByRole("tab", { name: "Инвентарь и ресурсы" }));
+    expect(screen.queryByText("Кошелёк", { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText("зм", { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText("см", { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText("мм", { exact: true })).not.toBeInTheDocument();
     const vitals = screen.getByLabelText("Ключевые показатели");
     expect(
       within(vitals).getByRole("spinbutton", { name: "Реген Выносливости" }),

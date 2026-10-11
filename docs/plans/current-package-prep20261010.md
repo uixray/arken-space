@@ -30,4 +30,11 @@ Then record immutable image/config IDs, export archive receipts, and keep readin
 - `C:/Users/UIXRay/.codex/worktrees/uix-512-soundpad/arken-space/.data/qa-prep/new-server-candidate-4cf4932-20261010/context-preparation-receipt.json` — source/context/font/config status.
 - `C:/Users/UIXRay/.codex/worktrees/uix-512-soundpad/arken-space/.data/qa-prep/new-server-candidate-4cf4932-20261010/public-config/` — compose, runtime-env example, and gateway templates only.
 
+## Latest context refresh — 2026-10-10
 
+- Source commit: `8ca8fccd2c9afe4481e9c948f87462733ca780da`; tree `fb28510022a1e3352f12c8453f02303ad0f95609`.
+- New ignored candidate staging: `.data/qa-prep/new-server-candidate-8ca8fcc-20261010` (historical 4cf staging preserved).
+- Server context: 203 Git-allowlisted files; context SHA-256 `b00fc7f227e702fc7ccff9fc69a7af7386608dcbe01de0cc29a0480bdc3c1828`.
+- Web context: 343 Git-allowlisted files, including `scripts/font-release-preflight.mjs`; context SHA-256 `f884a0c4f1c65a1a6dac16f78dffdeacfa6e9e1fc6e4f68acbd830884e78e958`. Local-only font injection matches the audited Git blob: 343,264 bytes, SHA-256 `7b4e50ec50c782077ee147ca5d8db8c4843bc7dd72ff8f133c2458e45347252d`; excluded from public Git history/export.
+- Fresh public configuration templates target `arken-khar.space`; auth enabled, registration/mail/legacy dev/campaign creation disabled, campaign-link access enabled. TLS, host, and database values remain placeholders.
+- **Preparation only / NOT ready**: image IDs unset; no build, Docker, load, host/browser acceptance, restore, or deployment performed. Context receipt and member manifests are under the ignored candidate staging directory.

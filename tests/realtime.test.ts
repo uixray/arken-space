@@ -2122,6 +2122,51 @@ describe("durable realtime token commands", () => {
   });
 });
 
+describe("UIX-682 C20 delayed ruler ghost", () => {
+  it("does not resurrect a cleared ruler after queued drag updates and reconnect", async () => {
+    const selfEvents: string[] = [];
+    const peerEvents: string[] = [];
+    const onUpdate = () => selfEvents.push("updated");
+    const onPeerUpdate = () => peerEvents.push("updated");
+    const onClear = () => selfEvents.push("cleared");
+    const onPeerClear = () => peerEvents.push("cleared");
+    client.on("ruler:updated", onUpdate);
+    client.on("ruler:cleared", onClear);
+    otherClient.on("ruler:updated", onPeerUpdate);
+    otherClient.on("ruler:cleared", onPeerClear);
+    try {
+      const cleared = new Promise<void>((resolve) => otherClient.once("ruler:cleared", () => resolve()));
+      for (let index = 0; index < 40; index += 1) {
+        client.emit("ruler:update", {
+          sceneId: ids.scene,
+          points: [{ x: 0, y: 0 }, { x: index + 1, y: 10 }],
+        });
+      }
+      client.emit("ruler:clear", { sceneId: ids.scene });
+      await cleared;
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      for (const events of [selfEvents, peerEvents]) {
+        const firstClear = events.indexOf("cleared");
+        expect(firstClear).toBeGreaterThan(-1);
+        expect(events.slice(firstClear)).not.toContain("updated");
+      }
+      const selfCount = selfEvents.length;
+      const peerCount = peerEvents.length;
+      client.disconnect();
+      const reconnected = waitForConnection(client);
+      client.connect();
+      await reconnected;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      expect(selfEvents.slice(selfCount)).not.toContain("updated");
+      expect(peerEvents.slice(peerCount)).not.toContain("updated");
+    } finally {
+      client.off("ruler:updated", onUpdate);
+      client.off("ruler:cleared", onClear);
+      otherClient.off("ruler:updated", onPeerUpdate);
+      otherClient.off("ruler:cleared", onPeerClear);
+    }
+  });
+});
 describe("cursor presence (UIX-392)", () => {
   it("broadcasts a GM cursor to the GM room only, never to a player socket", async () => {
     let leakedToPlayer = false;

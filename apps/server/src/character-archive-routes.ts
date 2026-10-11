@@ -6,12 +6,14 @@ import {
   restoreCharacterSchema,
 } from "@arken/contracts";
 import {
+  campaigns,
   characterCatalogEntries,
   characterControllers,
   characters,
 } from "@arken/db";
 import { requireAuth } from "./auth.js";
 import { characterDto } from "./character-dto.js";
+import { resolveStatLayout } from "./snapshot.js";
 import {
   archiveCharacter,
   restoreCharacter,
@@ -42,6 +44,12 @@ export function registerCharacterArchiveRoutes(
       )
       .orderBy(desc(characters.archivedAt));
     if (rows.length === 0) return reply.send([]);
+    const [campaign] = await db
+      .select({ statLayout: campaigns.statLayout })
+      .from(campaigns)
+      .where(eq(campaigns.id, auth.campaignId))
+      .limit(1);
+    const campaignLayout = resolveStatLayout(campaign?.statLayout);
     const entryRows = await db
       .select()
       .from(characterCatalogEntries)
@@ -78,6 +86,7 @@ export function registerCharacterArchiveRoutes(
           row,
           entriesByCharacter.get(row.id) ?? [],
           controllersByCharacter.get(row.id) ?? [],
+          campaignLayout,
         ),
       ),
     );
@@ -109,7 +118,14 @@ export function registerCharacterArchiveRoutes(
     if (outcome.kind === "conflict")
       return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
     await broadcastSnapshots(auth.campaignId);
-    return reply.send(characterDto(outcome.character, [], []));
+    const [campaign] = await db
+      .select({ statLayout: campaigns.statLayout })
+      .from(campaigns)
+      .where(eq(campaigns.id, auth.campaignId))
+      .limit(1);
+    return reply.send(
+      characterDto(outcome.character, [], [], resolveStatLayout(campaign?.statLayout)),
+    );
   });
 
   /** Restore does not reinstate detached controllers, token links, or invites. */
@@ -144,11 +160,17 @@ export function registerCharacterArchiveRoutes(
         .from(characterControllers)
         .where(eq(characterControllers.characterId, id)),
     ]);
+    const [campaign] = await db
+      .select({ statLayout: campaigns.statLayout })
+      .from(campaigns)
+      .where(eq(campaigns.id, auth.campaignId))
+      .limit(1);
     return reply.send(
       characterDto(
         outcome.character,
         entries,
         controllers.map((row) => row.membershipId),
+        resolveStatLayout(campaign?.statLayout),
       ),
     );
   });

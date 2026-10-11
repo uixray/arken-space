@@ -232,6 +232,7 @@ export function useCampaignActionsValue(
       },
       statLayout: {
         onUpdateStatLayout: actions.statLayout.onUpdateStatLayout,
+        onUpdateCharacterStatLayout: actions.statLayout.onUpdateCharacterStatLayout,
       },
       chatHistory: {
         onLoadThreadHistory: actions.chatHistory.onLoadThreadHistory,
@@ -334,6 +335,7 @@ export function useCampaignActionsValue(
       actions.asset.deleteAsset,
       actions.asset.generateTokenImage,
       actions.statLayout.onUpdateStatLayout,
+      actions.statLayout.onUpdateCharacterStatLayout,
       actions.chatHistory.onLoadThreadHistory,
       actions.character.replaceCharacterControllers,
       actions.character.patchCharacter,
