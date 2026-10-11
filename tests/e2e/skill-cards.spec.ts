@@ -97,6 +97,7 @@ function snapshotFor(
         archivedAt: null,
         archivedByMembershipId: null,
         stats,
+        statLayout: [],
         skills: [],
         spells: [],
         notes: "",
@@ -332,6 +333,10 @@ for (const width of [1280, 360]) {
         rows: [{ key: "intelligence", label: "Интеллект", source: "STAT" }],
       },
     ];
+    // Character fixtures carry the effective layout; mirror the campaign layout set above (UI falls back to it when absent).
+    snapshot.characters[0]!.statLayout = structuredClone(
+      snapshot.campaign.statLayout,
+    );
     await mockApp(page, () => snapshot);
 
     await page.goto("/");
@@ -500,6 +505,10 @@ for (const owner of ["edit", "picker", "setup"] as const) {
           rows: [{ key: "strength", label: "Сила", source: "STAT" }],
         },
       ];
+      // Character fixtures carry the effective layout; mirror the campaign layout set above (UI falls back to it when absent).
+      current.characters[0]!.statLayout = structuredClone(
+        current.campaign.statLayout,
+      );
       const unexpected: string[] = [];
       const clientLogs: unknown[] = [];
       await page.route("**/api/**", (route) => {

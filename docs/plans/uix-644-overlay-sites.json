@@ -10,11 +10,36 @@
     {
       "file": "apps/web/src/CatalogEntryForm.tsx",
       "kind": "tag:FormSelect",
-      "count": 7
+      "count": 8
+    },
+    {
+      "file": "apps/web/src/CatalogEntryForm.tsx",
+      "kind": "tag:details",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/CharacterSpellBranches.tsx",
+      "kind": "tag:select",
+      "count": 1
     },
     {
       "file": "apps/web/src/FeedbackReporter.tsx",
       "kind": "tag:FormSelect",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/GlobalStickerPackManager.tsx",
+      "kind": "tag:details",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/GlobalStickerPackManager.tsx",
+      "kind": "tag:select",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/LandingGuide.tsx",
+      "kind": "tag:details",
       "count": 1
     },
     {
@@ -26,6 +51,11 @@
       "file": "apps/web/src/MusicBar.tsx",
       "kind": "tag:details",
       "count": 2
+    },
+    {
+      "file": "apps/web/src/MusicBar.tsx",
+      "kind": "tag:select",
+      "count": 1
     },
     {
       "file": "apps/web/src/OperatorFeedbackFilters.tsx",
@@ -46,6 +76,36 @@
       "file": "apps/web/src/ScenePicker.tsx",
       "kind": "tag:details",
       "count": 1
+    },
+    {
+      "file": "apps/web/src/SoundClipEditor.tsx",
+      "kind": "tag:select",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/SoundpadWorkspace.tsx",
+      "kind": "tag:details",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/SoundpadWorkspace.tsx",
+      "kind": "tag:select",
+      "count": 5
+    },
+    {
+      "file": "apps/web/src/SpellNodeActivationEditor.tsx",
+      "kind": "tag:select",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/SpellSchoolsWorkspace.tsx",
+      "kind": "tag:select",
+      "count": 7
+    },
+    {
+      "file": "apps/web/src/StickerPackManager.tsx",
+      "kind": "tag:select",
+      "count": 6
     },
     {
       "file": "apps/web/src/StickerPicker.tsx",
@@ -73,6 +133,16 @@
       "count": 1
     },
     {
+      "file": "apps/web/src/WorldContentInstancesPanel.tsx",
+      "kind": "tag:AssetPicker",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/WorldContentInstancesPanel.tsx",
+      "kind": "tag:FormSelect",
+      "count": 2
+    },
+    {
       "file": "apps/web/src/WorldContentWorkspace.tsx",
       "kind": "tag:AssetPicker",
       "count": 2
@@ -85,6 +155,11 @@
     {
       "file": "apps/web/src/WorldEncyclopediaWorkspace.tsx",
       "kind": "tag:FormSelect",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/WorldMapCanonicalLocationPicker.tsx",
+      "kind": "tag:select",
       "count": 1
     },
     {
@@ -120,6 +195,16 @@
     {
       "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
       "kind": "role:menu",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
+      "kind": "tag:select",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/renderers/TerrainStampControls.tsx",
+      "kind": "tag:select",
       "count": 1
     },
     {
@@ -166,6 +251,11 @@
       "file": "apps/web/src/sidebar/InitiativePanel.tsx",
       "kind": "tag:details",
       "count": 1
+    },
+    {
+      "file": "apps/web/src/sidebar/MediaPanel.tsx",
+      "kind": "tag:select",
+      "count": 4
     },
     {
       "file": "apps/web/src/sidebar/QuickRollPanel.tsx",

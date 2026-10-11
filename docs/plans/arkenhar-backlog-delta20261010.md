@@ -1,0 +1,48 @@
+# Backlog delta — 2026-10-10
+
+## Scope and evidence
+
+This is a delta over the three exclusive 2026-10-09 audits and their index, not a new code audit or acceptance report. Baseline source was `888910b`; current task/status truth is the root-authored `arkenhar-live-inventory20261010.md` at source revision `8916874946a55cc719fa72f301630aa1ec0dd706` (public audit branch `b188a1d`, not deployment acceptance). The original three reports cover 76 unique issue rows: 35 implementation, 34 product, 7 QA. Current live inventory adds exactly UIX-677 and UIX-678. No task was closed or reclassified from source presence.
+
+The latest relevant owner checkpoint is `owner21-integration-checkpoint20261010.md`, especially its “Audit-access snapshot” section, and `owner-review-music-checkpoint20261010.md` / `backup-source-guard-checkpoint-20261010.md`. Product checkout HEAD is `24f1b61`; the linked checkpoints name their own source revisions. Do not transfer a PASS across those SHAs.
+
+## Current 78-issue coverage
+
+Use the live inventory for titles and authoritative current statuses. These grouped lists provide a compact exact-ID crosswalk; each of the historical 76 remains governed by its issue-specific row in the named audit report, while the two newer rows are actualized below.
+
+| Current Linear status | IDs |
+|---|---|
+| Backlog (56) | 217, 245, 262, 263, 264, 265, 269, 314, 365, 371, 378, 379, 382, 412, 429, 430, 457, 458, 459, 461, 473, 480, 495, 496, 499, 505, 506, 508, 509, 510, 512, 525, 526, 527, 588, 590, 591, 622, 625, 626, 627, 628, 629, 652, 653, 654, 655, 656, 657, 658, 659, 660, 661, 664, 665, 677 |
+| In Progress (14) | 214, 289, 317, 347, 364, 405, 407, 411, 572, 644, 647, 672, 674, 678 |
+| In Review (8) | 316, 318, 398, 497, 507, 649, 669, 670 |
+
+Totals reconcile to 78 open nonduplicate issues; this is not a count of missing features, unverified AC, or publication blockers. The other 195 of 273 are Done/Canceled/Duplicate per the live inventory and are outside this open set.
+
+## Delta since baseline `888910b`
+
+| Issue(s) | New evidence since the original reports | What remains / evidence boundary |
+|---|---|---|
+| UIX-505 | Owner checkpoint records source gate at `94a8511ca4f5669417719fa2f8ac4357c6156ef4`: GM prep visibility is based on the authoritative ACTIVE encounter; PLAYER turn order is absent without one. Focused tests and web typecheck passed at that source gate. | Still Backlog in live Linear. Do not convert focused source tests/typecheck into current-browser, reconnect, or full issue acceptance. Review stand was based on older source; no refreshed UIX-505 browser gate is recorded here. |
+| UIX-672, UIX-674 (and connected UIX-644/UIX-347 pool) | Owner checkpoint says the connected source gate reported 58/62; four MediaPanel assertions were stale against the explicit audio-purpose text/upload option and were updated afterward. Web typecheck had passed before those assertion edits. | The four corrected assertions were **not rerun** due owner-reported machine lag. 58/62 is not “39 of 39” nor “43 of 43” hand-review acceptance. Keep Linear In Progress; retain the existing annotation-by-annotation residuals. UIX-644's earlier audit still distinguishes implemented overlay core from broad menu/native Firefox/zoom coverage; no whole-registry pass is claimed. UIX-347 remains In Progress; no separate full terrain-stamp AC closure was provided by this delta. |
+| UIX-678 (new since the 76-row audit) | Backup source has capture/copy and restore-rehearsal tooling, private manifest/ACL safeguards, and synthetic/fake-command evidence in the backup checkpoints. | In Progress; not a fresh coherent service snapshot, real encrypted capture from the target, independent full restore of current data, or tested rollback. No actual 57→58 production-data migration/recovery proof. Do not equate test fixture/restic round-trip with recovered service state. |
+| UIX-677 (new since the 76-row audit) | Live title/status only: Windows installer for self-start without a developer; Backlog. No installer implementation or acceptance artifact was identified in the source checkpoints used for this delta. | New, unactualized request; requires bounded scope/host/runtime decision before implementation. It is not a current VTT publication gate. |
+| UIX-644, UIX-672, UIX-674 generally | Current live statuses remain In Progress; the original QA report already separates source-present UI from browser/native/manual acceptance. | Current issue descriptions/comment counts remain distinct from the 58/62 grouped source gate. Preserve any user-visible evidence and residuals, but do not infer comment closure. |
+
+### Migration/runtime evidence that must not be conflated
+
+At the latest owner checkpoint the source journal has 58 entries including `0057`; the timestamp monotonicity source test passed 7/7. That is source/schema evidence only. The previous server R4 isolated migration gate reached 57 ledger rows; it does not validate the new 57→58 migration. The current checkpoint explicitly says that migration/runtime gate is still open. No source journal length, HTTP health response, or successful typecheck alone proves migration against an existing database or live browser behavior.
+
+## Scope disposition
+
+- **Source-present, acceptance open:** use the three audit reports for issue-specific implementation/residual detail; source/tests are not inferred to meet full Linear AC.
+- **Browser/runtime/human/owner gates:** retain the exact targeted checks called out by those reports and latest checkpoints. Historical `partial-pass` browser receipts, UI screenshots, synthetic QA, and prior image/runtime receipts remain tied to their own source/data tuples.
+- **Deferred or separate work:** UIX-217 is the full GM+6 rehearsal after separately authorized test publication, not an implicit shortened prepublication blocker. Mobile children 625–629 remain beyond approved P1 responsive-foundation scope; ARKPATH/Dispatch, static-player content, research, portfolio and public-product-shell issues remain separate from core beta runtime readiness, as classified in the product audit.
+- **Owner decisions:** do not turn backlog counts into implementation priority or restart paused/owner-deferred work. Installer/support/signing and campaign entitlement/storage decisions remain separate. Open signup with mandatory email verification and the current gated new-server publication are already owner-approved; do not ask again for these approvals. Provider credentials/real SMTP acceptance, actual data migration and release verification remain evidence/input gates, not revoked publication permission.
+
+## Checkpoint
+
+- Decisions: retain all 78 open issues and live statuses; treat 76 historical rows as already mapped, not new work; add only the 677/678 delta; separate source, test, browser/runtime, human and production evidence.
+- Revisions: baseline `888910b`; audit/inventory source `8916874`; source-gate checkpoint through `118ca7d`; current product docs HEAD `24f1b61`.
+- Changed files: this new delta document only.
+- Verification: checked 76 unique issue rows across the three prior audits against the 78-ID live inventory (76 overlap + 677/678); cross-checked current status totals and latest owner checkpoint. No tests/builds/Docker/runtime or Linear writes.
+- Remaining: rerun the four corrected focused assertions on exact current source when the owner machine is available; then decide the next connected bounded acceptance pool. Separately verify actual 57→58 data migration/recovery. No issues closed by this document.

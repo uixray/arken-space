@@ -157,6 +157,12 @@ vi.mock("./CharacterMediaGallery", () => ({
   ),
 }));
 
+// Spell-branch API behavior has its own focused suite; keep role-access tests
+// isolated from that read-only request while asserting Identity placement.
+vi.mock("../CharacterSpellBranches", () => ({
+  CharacterSpellBranches: () => null,
+}));
+
 const unexpectedAction = (): never => {
   throw new Error("Backstory test must not execute another campaign command");
 };
@@ -244,8 +250,33 @@ const actions: CampaignActions = {
     refreshAssets: unexpectedAction,
     generateTokenImage: unexpectedAction,
   },
-  statLayout: { onUpdateStatLayout: unexpectedAction },
+  statLayout: { onUpdateStatLayout: unexpectedAction, onUpdateCharacterStatLayout: unexpectedAction },
   chatHistory: { onLoadThreadHistory: unexpectedAction },
+  character: {
+    replaceCharacterControllers: unexpectedAction,
+    patchCharacter: unexpectedAction,
+    updateCharacterCounters: unexpectedAction,
+    onCreateCharacter: unexpectedAction,
+  },
+  initiative: {
+    onUpdateInitiative: unexpectedAction,
+    onSetOwnInitiative: unexpectedAction,
+    onRollInitiative: unexpectedAction,
+    onSetBattleZone: unexpectedAction,
+    onRecruitFromBattleZone: unexpectedAction,
+  },
+  dice: { onRoll: unexpectedAction },
+  campaign: { onCampaignClock: unexpectedAction },
+  player: { onPreviewPlayer: unexpectedAction },
+  sidebar: {
+    onRequestedChatMessageHandled: unexpectedAction,
+    onChatVisibilityChange: unexpectedAction,
+    onCollapsedChange: unexpectedAction,
+    onResizeHandleDown: unexpectedAction,
+    onResizeHandleMove: unexpectedAction,
+    onResizeHandleUp: unexpectedAction,
+    onWorkspaceChange: unexpectedAction,
+  },
 };
 
 function makeCharacter(overrides: Partial<CharacterDto> = {}): CharacterDto {
@@ -269,6 +300,7 @@ function makeCharacter(overrides: Partial<CharacterDto> = {}): CharacterDto {
     archivedAt: null,
     archivedByMembershipId: null,
     ...overrides,
+    statLayout: overrides.statLayout ?? gmSnapshot().campaign.statLayout,
   };
 }
 
@@ -488,6 +520,9 @@ describe("CharacterPanel identity and portrait role wiring", () => {
         controllerMembershipIds: actor === "CONTROLLER" ? [snapshot.me.id] : [],
       });
       const calls = renderPanel(snapshot, character);
+      const portraitTrigger = screen.getByRole("button", { name: /^Изменить портрет:/ });
+      expect(portraitTrigger.querySelector(".character-hero__avatar-edit")).toHaveAttribute("aria-hidden", "true");
+      expect(screen.queryAllByRole("button", { name: "Добавить строку" })).toHaveLength(actor === "CONTROLLER" ? 0 : 2);
       const user = userEvent.setup();
       await user.click(screen.getByRole("button", { name: "Переименовать" }));
       const name = screen.getByRole("textbox", { name: "Имя персонажа" });
@@ -555,6 +590,8 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     });
     expect(rename, "UIX414_IDENTITY_RENAME_DISABLED").toBeDisabled();
     expect(portraitTrigger, "UIX414_IDENTITY_PICK_DISABLED").toBeDisabled();
+    expect(portraitTrigger.querySelector(".character-hero__avatar-edit")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Добавить строку" })).toBeNull();
     await user.click(rename);
     await user.click(portraitTrigger);
     expect(screen.queryByRole("dialog", { name: /^Портрет:/ })).toBeNull();

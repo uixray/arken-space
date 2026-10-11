@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { expect, it } from "vitest";
+import { useRef } from "react";
 import userEvent from "@testing-library/user-event";
 import {
   fireEvent,
@@ -8,6 +9,20 @@ import {
   waitFor,
 } from "../test-support/render";
 import { ToolbarButton, ToolbarSummary } from "./ToolbarTooltip";
+import { useDismissibleDetails } from "./dismissible-details";
+
+function NestedTooltipMenu() {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useDismissibleDetails(ref);
+  return (
+    <details ref={ref}>
+      <ToolbarSummary title="Настройки размера карты" aria-label="Размер">
+        Размер
+      </ToolbarSummary>
+      <p>Настройки</p>
+    </details>
+  );
+}
 it("uses one bounded multiline tooltip for hover and keyboard focus while preserving trigger semantics", async () => {
   const user = userEvent.setup();
   const description =
@@ -49,4 +64,28 @@ it("uses one bounded multiline tooltip for hover and keyboard focus while preser
   expect(summary).not.toHaveAttribute("title");
   expect(summary.parentElement?.tagName).toBe("DETAILS");
   expect(container.querySelector("button button")).toBeNull();
+});
+
+it("lets a focused tooltip dismiss before its owning details menu", async () => {
+  const user = userEvent.setup();
+  const { container } = renderComponent(<NestedTooltipMenu />);
+  const summary = screen.getByLabelText("Размер");
+  const details = container.querySelector("details")!;
+  await user.click(summary);
+  expect(details.open).toBe(true);
+  await user.unhover(summary);
+  await user.hover(summary);
+  expect(await screen.findByRole("tooltip")).toBeInTheDocument();
+  summary.focus();
+
+  await user.keyboard("{Escape}");
+  await waitFor(() =>
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument(),
+  );
+  expect(details.open).toBe(true);
+  expect(summary).toHaveFocus();
+
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(details.open).toBe(false));
+  expect(summary).toHaveFocus();
 });

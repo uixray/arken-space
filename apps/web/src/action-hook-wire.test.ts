@@ -40,10 +40,10 @@ const sourceOf = (file: string) => readFileSync(hookDir + file, "utf8");
  */
 const KNOWN_UNTESTED_HOOKS = new Set([
   "use-access-actions.ts",
-  "use-catalog-actions.ts",
-  "use-chat-actions.ts",
+
+
   "use-player-request-actions.ts",
-  "use-stat-layout-actions.ts",
+
   "use-story-actions.ts",
 ]);
 

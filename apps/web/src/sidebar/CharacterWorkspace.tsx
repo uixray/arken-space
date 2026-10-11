@@ -6,6 +6,7 @@ import {
   useReducer,
   useRef,
   useState,
+  type FormEvent,
   type CSSProperties,
 } from "react";
 import {
@@ -18,6 +19,7 @@ import {
   uniqueStatKey,
 } from "../stat-keys";
 import { useCampaignActions } from "../campaign-actions-context";
+import type { CampaignActions } from "../campaign-actions-context";
 import { createPortal } from "react-dom";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
 import { RESOURCE_REGEN_STAT, isSystemRegenStatKey } from "@arken/system";
@@ -41,6 +43,7 @@ import {
   type CharacterTemplateFields,
 } from "../character-workspace-state";
 import { CharacterMediaGallery } from "./CharacterMediaGallery";
+import { CharacterSpellBranches } from "../CharacterSpellBranches";
 import { CharacterActionCard } from "../SkillCards";
 import { humanizeFormula } from "../formula-display";
 import { rollModeFromEvent } from "../roll-modifier-keys";
@@ -71,9 +74,9 @@ import {
   AddIcon,
   CharacterArchiveIcon,
   CloseIcon,
-  CoinsIcon,
   CollapseCharacterRailIcon,
   DecreaseIcon,
+  DrawIcon,
   ExpandCharacterRailIcon,
 } from "../ui/icons";
 
@@ -97,7 +100,12 @@ export function CharacterWorkspace({
   ...props
 }: Props & { onClose: () => void; active?: boolean }) {
   // UIX-398 step B: archive/restore come from context, not through Sidebar.
-  const { worldMap: worldMapActions } = useCampaignActions();
+  const {
+    worldMap: worldMapActions,
+    character: characterActions,
+    campaign: campaignActions,
+    dice: diceActions,
+  } = useCampaignActions();
   const characters = useMemo(() => {
     const visible =
       props.snapshot.me.role === "GM"
@@ -198,6 +206,8 @@ export function CharacterWorkspace({
     };
   }, [active, onClose]);
 
+  const singlePlayerCharacter =
+    props.snapshot.me.role === "PLAYER" && characters.length === 1;
   const openCount = state.openIds.length;
   const sheetLimitReached = openCount >= MAX_OPEN_CHARACTER_SHEETS;
   return createPortal(
@@ -209,7 +219,7 @@ export function CharacterWorkspace({
       hidden={!active}
       inert={!active}
       aria-hidden={!active}
-      className={`character-workspace${props.collapsed ? " is-sidebar-collapsed" : ""}`}
+      className={`character-workspace${props.collapsed ? " is-sidebar-collapsed" : ""}${singlePlayerCharacter ? " is-single-player-character" : ""}`}
       aria-labelledby="character-workspace-title"
       style={
         props.workspaceSidebarWidth != null
@@ -265,7 +275,7 @@ export function CharacterWorkspace({
               setDayPending(true);
               void Promise.resolve()
                 .then(() =>
-                  props.onCampaignClock(
+                  campaignActions.onCampaignClock(
                     "ADVANCE_DAY",
                     props.snapshot.campaign.revision,
                   ),
@@ -303,7 +313,7 @@ export function CharacterWorkspace({
         </button>
       </header>
       <div
-        className={`character-workspace__body${railCollapsed ? " is-rail-collapsed" : ""}`}
+        className={`character-workspace__body${railCollapsed ? " is-rail-collapsed" : ""}${singlePlayerCharacter ? " is-single-character" : ""}`}
       >
         <nav className="character-rail" aria-label="Персонажи кампании">
           {sheetLimitReached && (
@@ -435,10 +445,14 @@ export function CharacterWorkspace({
                         dispatch({ type: "OPEN", id: nextId })
                       }
                       showCharacterPicker={false}
-                      onPatch={props.onPatchCharacter}
-                      onReplaceControllers={props.onReplaceCharacterControllers}
-                      onRoll={props.onRoll}
-                      onUpdateCounters={props.onUpdateCounters}
+                      onPatch={characterActions.patchCharacter}
+                      onReplaceControllers={
+                        characterActions.replaceCharacterControllers
+                      }
+                      onRoll={diceActions.onRoll}
+                      onUpdateCounters={
+                        characterActions.updateCharacterCounters
+                      }
                       onArchive={
                         props.snapshot.me.role === "GM"
                           ? () => setArchiveTarget(character)
@@ -456,7 +470,7 @@ export function CharacterWorkspace({
         open={createCharacterOpen}
         characters={props.snapshot.characters}
         onCreate={async (name, template) => {
-          await props.onCreateCharacter(name, template);
+          await characterActions.onCreateCharacter(name, template);
           setCreateCharacterOpen(false);
         }}
         onClose={() => setCreateCharacterOpen(false)}
@@ -795,7 +809,7 @@ function CharacterControllerAccess({
 }: {
   character: CharacterDto;
   members: GameSnapshot["members"];
-  onSave: Props["onReplaceCharacterControllers"];
+  onSave: CampaignActions["character"]["replaceCharacterControllers"];
 }) {
   const canonical = useMemo(
     () =>
@@ -913,10 +927,10 @@ export function CharacterPanel({
   selectedId: string;
   setSelectedId: (value: string) => void;
   showCharacterPicker?: boolean;
-  onPatch: Props["onPatchCharacter"];
-  onReplaceControllers: Props["onReplaceCharacterControllers"];
-  onRoll: Props["onRoll"];
-  onUpdateCounters: Props["onUpdateCounters"];
+  onPatch: CampaignActions["character"]["patchCharacter"];
+  onReplaceControllers: CampaignActions["character"]["replaceCharacterControllers"];
+  onRoll: CampaignActions["dice"]["onRoll"];
+  onUpdateCounters: CampaignActions["character"]["updateCharacterCounters"];
   onArchive?: () => void;
 }) {
   // The catalog handlers are read here rather than passed in: this panel is
@@ -927,27 +941,39 @@ export function CharacterPanel({
     asset: assetActions,
     statLayout: statLayoutActions,
   } = useCampaignActions();
-  const statLabels = statLabelsFromLayout(snapshot.campaign.statLayout);
-  const characteristicRows = statRowsOfGroup(
-    snapshot.campaign.statLayout,
-    "characteristics",
-  );
-  const combatRows = statRowsOfGroup(snapshot.campaign.statLayout, "combat");
+  const layout = character?.statLayout ?? snapshot.campaign.statLayout;
+  const statLabels = statLabelsFromLayout(layout);
+  const characteristicRows = statRowsOfGroup(layout, "characteristics");
+  const combatRows = statRowsOfGroup(layout, "combat");
   const initiativeRows = combatRows.filter(
     (row) => row.key === "initiative" || row.key === "reaction",
   );
-  const resourceRows = statResourceRowsFromLayout(snapshot.campaign.statLayout);
-  const resourceLabels = resourceCostLabels(snapshot.campaign.statLayout);
+  const resourceRows = statResourceRowsFromLayout(layout);
+  const resourceLabels = resourceCostLabels(layout);
   const [countersPending, setCountersPending] = useState(0);
   const [vitalsTab, setVitalsTab] = useState<
-    "resources" | "stats" | "inventory" | "bio"
-  >("resources");
+    "stats" | "inventory" | "bio"
+  >("stats");
   const vitalsTabId = useId();
   const [countersError, setCountersError] = useState("");
   // Undefined preserves each catalog action's legacy advantage setting until the player explicitly overrides it.
   const [rollPending, setRollPending] = useState(false);
   const [rollError, setRollError] = useState("");
   const [characterMutationError, setCharacterMutationError] = useState("");
+  const [editingStandardSkill, setEditingStandardSkill] = useState<
+    CharacterDto["skills"][number] | null
+  >(null);
+  const [standardSkillDraft, setStandardSkillDraft] = useState({
+    name: "",
+    rank: "",
+    formula: "",
+  });
+  const [standardSkillToDelete, setStandardSkillToDelete] = useState<
+    CharacterDto["skills"][number] | null
+  >(null);
+  const [standardSkillPending, setStandardSkillPending] = useState(false);
+  const standardSkillPendingRef = useRef(false);
+  const [standardSkillError, setStandardSkillError] = useState("");
   const [statLayoutError, setStatLayoutError] = useState("");
   const runCharacterMutation = async (action: () => Promise<unknown>) => {
     setCharacterMutationError("");
@@ -967,17 +993,31 @@ export function CharacterPanel({
    * не слиться. Ошибки не глушим — их показывает окно ввода, рядом с тем, что
    * не получилось.
    */
-  const layout = snapshot.campaign.statLayout;
+  const canEditCharacterLayout = Boolean(
+    character &&
+      snapshot.me.role === "PLAYER" &&
+      character.ownerMembershipId === snapshot.me.id,
+  );
+  const canEditLayout = snapshot.me.role === "GM" || canEditCharacterLayout;
   const statLayoutPendingRef = useRef(false);
   const saveLayout = async (next: typeof layout) => {
+    if (!character) return;
     if (statLayoutPendingRef.current)
       throw new Error("Дождитесь сохранения предыдущей правки.");
     statLayoutPendingRef.current = true;
     try {
-      await statLayoutActions.onUpdateStatLayout(
-        next,
-        snapshot.campaign.revision,
-      );
+      if (snapshot.me.role === "GM") {
+        await statLayoutActions.onUpdateStatLayout(
+          next,
+          snapshot.campaign.revision,
+        );
+      } else if (canEditCharacterLayout) {
+        await statLayoutActions.onUpdateCharacterStatLayout(
+          character.id,
+          next,
+          character.revision,
+        );
+      }
     } finally {
       statLayoutPendingRef.current = false;
     }
@@ -1265,6 +1305,66 @@ export function CharacterPanel({
     character.entries,
     "ABILITY",
   );
+  const saveStandardSkill = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editable || !editingStandardSkill || standardSkillPendingRef.current)
+      return;
+    const name = standardSkillDraft.name.trim();
+    const rank = Number(standardSkillDraft.rank);
+    const formula = standardSkillDraft.formula.trim();
+    if (!name || name.length > 120) {
+      setStandardSkillError("Название навыка должно содержать от 1 до 120 символов.");
+      return;
+    }
+    if (!Number.isInteger(rank) || rank < 0) {
+      setStandardSkillError("Ранг навыка должен быть целым неотрицательным числом.");
+      return;
+    }
+    if (!formula || formula.length > 160) {
+      setStandardSkillError("Формула броска должна содержать от 1 до 160 символов.");
+      return;
+    }
+    standardSkillPendingRef.current = true;
+    setStandardSkillPending(true);
+    setStandardSkillError("");
+    try {
+      await onPatch(character.id, {
+        skills: character.skills.map((skill) =>
+          skill.key === editingStandardSkill.key
+            ? { ...skill, name, rank, formula }
+            : skill,
+        ),
+        revision: character.revision,
+      });
+      setEditingStandardSkill(null);
+    } catch {
+      setStandardSkillError("Не удалось сохранить навык. Повторите попытку.");
+    } finally {
+      standardSkillPendingRef.current = false;
+      setStandardSkillPending(false);
+    }
+  };
+  const deleteStandardSkill = async () => {
+    if (!editable || !standardSkillToDelete || standardSkillPendingRef.current)
+      return;
+    standardSkillPendingRef.current = true;
+    setStandardSkillPending(true);
+    setStandardSkillError("");
+    try {
+      await onPatch(character.id, {
+        skills: character.skills.filter(
+          (skill) => skill.key !== standardSkillToDelete.key,
+        ),
+        revision: character.revision,
+      });
+      setStandardSkillToDelete(null);
+    } catch {
+      setStandardSkillError("Не удалось удалить навык. Повторите попытку.");
+    } finally {
+      standardSkillPendingRef.current = false;
+      setStandardSkillPending(false);
+    }
+  };
   const submitWallet = async (
     nextWallet: CharacterDto["wallet"],
     intent: Parameters<typeof onUpdateCounters>[3],
@@ -1496,6 +1596,11 @@ export function CharacterPanel({
                 {character.name.slice(0, 1).toLocaleUpperCase()}
               </div>
             )}
+            {editable && (
+              <span className="character-hero__avatar-edit" aria-hidden="true">
+                <AppIcon icon={DrawIcon} />
+              </span>
+            )}
           </button>
           <div className="character-hero__info">
             <div className="inline-fields">
@@ -1555,7 +1660,7 @@ export function CharacterPanel({
         role="tablist"
         aria-label="Ключевые показатели персонажа"
       >
-        {(["resources", "stats", "inventory", "bio"] as const).map((tab) => (
+        {(["stats", "inventory", "bio"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -1571,15 +1676,15 @@ export function CharacterPanel({
               )
                 return;
               event.preventDefault();
-              const tabs = ["resources", "stats", "inventory", "bio"] as const;
+              const tabs = ["stats", "inventory", "bio"] as const;
               const current = tabs.indexOf(vitalsTab);
               const next =
                 event.key === "Home"
                   ? tabs[0]
                   : event.key === "End"
-                    ? tabs[3]
+                    ? tabs[2]
                     : (tabs[
-                        (current + (event.key === "ArrowLeft" ? 3 : 1)) %
+                        (current + (event.key === "ArrowLeft" ? 2 : 1)) %
                           tabs.length
                       ] ?? tabs[0]);
               setVitalsTab(next);
@@ -1588,232 +1693,13 @@ export function CharacterPanel({
           >
             {
               {
-                resources: "Ресурсы",
                 stats: "Показатели",
-                inventory: "Инвентарь",
+                inventory: "Инвентарь и ресурсы",
                 bio: "Личность",
               }[tab]
             }
           </button>
         ))}
-      </div>
-      <div
-        className="character-vitals"
-        role="tabpanel"
-        id={`${vitalsTabId}-resources-panel`}
-        aria-labelledby={`${vitalsTabId}-resources-tab`}
-        aria-label="Ключевые показатели"
-        hidden={vitalsTab !== "resources"}
-      >
-        <div className="character-vitals__actions">
-          <Button
-            view="outlined"
-            disabled={!editable || countersPending > 0}
-            title="Половина регена выносливости и маны, округление вниз"
-            onClick={() => void runRest("SHORT")}
-          >
-            Короткий отдых
-          </Button>
-        </div>
-        <div className="character-vital-chip character-vital-chip--wallet">
-          <span className="character-vital-chip__label">Кошелёк</span>
-          <span className="character-vital-chip__value character-vital-chip__wallet-values">
-            <AppIcon icon={CoinsIcon} />
-            {(["gold", "silver", "copper"] as const).map((key) => (
-              <label className="character-wallet__coin" key={key}>
-                <span className="character-wallet__coin-label">
-                  {key === "gold"
-                    ? "Золото"
-                    : key === "silver"
-                      ? "Серебро"
-                      : "Медь"}
-                </span>
-                <span className="character-wallet__coin-controls">
-                  <Button
-                    disabled={
-                      !editable || !canSpendWalletCoin(walletDraft, key)
-                    }
-                    aria-label={`Уменьшить: ${WALLET_LABELS[key]}`}
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => changeWallet(key, -1)}
-                  >
-                    <AppIcon icon={DecreaseIcon} />
-                  </Button>
-                  <FormInput
-                    type="number"
-                    min={0}
-                    step={1}
-                    aria-label={`Кошелёк: ${WALLET_LABELS[key].toLowerCase()}`}
-                    value={walletDraft[key]}
-                    disabled={!editable}
-                    onChange={(event) => {
-                      cancelWalletBatch(false);
-                      const next = {
-                        ...walletDraftRef.current,
-                        [key]: normalizeWalletValue(event.target.value),
-                      };
-                      walletDraftRef.current = next;
-                      walletInputDirtyRef.current = true;
-                      setWalletDraft(next);
-                    }}
-                    onBlur={() => void saveWallet(walletDraftRef.current)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur();
-                    }}
-                  />
-                  <span>
-                    {key === "gold" ? "зм" : key === "silver" ? "см" : "мм"}
-                  </span>
-                  <Button
-                    disabled={!editable}
-                    aria-label={`Увеличить: ${WALLET_LABELS[key]}`}
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => changeWallet(key, 1)}
-                  >
-                    <AppIcon icon={AddIcon} />
-                  </Button>
-                </span>
-              </label>
-            ))}
-          </span>
-        </div>
-        {resourceRows.map(({ key, label }) => {
-          const res = resourcesDraft[key] ?? { current: 0, maximum: 0 };
-          const max = res.maximum ?? res.current;
-          const regenKey = RESOURCE_REGEN_STAT[key];
-          const regenRow = combatRows.find((row) => row.key === regenKey);
-          const regen = regenKey ? (character.stats[regenKey] ?? 0) : 0;
-          const changeResource = (delta: number) => {
-            const next = {
-              ...resourcesDraft,
-              [key]: { ...res, current: Math.max(0, res.current + delta) },
-            };
-            void saveResources(next);
-          };
-          return (
-            <div
-              className="character-vital-chip character-vital-chip--resource"
-              key={key}
-            >
-              <span className="character-vital-chip__label">{label}</span>
-              <span className="character-vital-chip__value character-vital-chip__resource-values">
-                <label className="character-vital-chip__number-field">
-                  <span>Текущее</span>
-                  <FormInput
-                    type="number"
-                    min={0}
-                    aria-label={`${label}: текущее`}
-                    value={res.current}
-                    disabled={!editable}
-                    onChange={(event) =>
-                      setResourcesDraft((current) => ({
-                        ...current,
-                        [key]: {
-                          ...res,
-                          current: Math.max(0, Number(event.target.value)),
-                        },
-                      }))
-                    }
-                    onBlur={() => void saveResources(resourcesDraft)}
-                  />
-                </label>
-                <label className="character-vital-chip__number-field">
-                  <span>Максимум</span>
-                  <FormInput
-                    type="number"
-                    min={0}
-                    aria-label={`${label}: максимум`}
-                    value={max}
-                    disabled={!editable}
-                    onChange={(event) =>
-                      setResourcesDraft((current) => ({
-                        ...current,
-                        [key]: {
-                          ...res,
-                          maximum: Math.max(0, Number(event.target.value)),
-                          recoverable: true,
-                        },
-                      }))
-                    }
-                    onBlur={() => void saveResources(resourcesDraft)}
-                  />
-                </label>
-              </span>
-              <div className="character-vital-chip__controls">
-                <Button
-                  disabled={
-                    !editable || countersPending > 0 || res.current <= 0
-                  }
-                  aria-label={`Уменьшить ${label}`}
-                  onClick={() => changeResource(-1)}
-                >
-                  <AppIcon icon={DecreaseIcon} />
-                </Button>
-                <Button
-                  disabled={!editable || countersPending > 0}
-                  aria-label={`Увеличить ${label}`}
-                  onClick={() => changeResource(1)}
-                >
-                  <AppIcon icon={AddIcon} />
-                </Button>
-                {regen > 0 && (
-                  <Button
-                    disabled={
-                      !editable || countersPending > 0 || res.current >= max
-                    }
-                    aria-label={`Восстановить ${regen}: ${label}`}
-                    title={`Восстановить на величину регена (${regen})`}
-                    onClick={() =>
-                      void saveResources({
-                        ...resourcesDraft,
-                        [key]: {
-                          ...res,
-                          current: Math.min(max, res.current + regen),
-                        },
-                      })
-                    }
-                  >
-                    <AppIcon icon={AddIcon} /> {regen}
-                  </Button>
-                )}
-              </div>
-              {regenKey && regenRow && (
-                <label className="character-vital-chip__regen">
-                  <span>Реген</span>
-                  <FormInput
-                    type="number"
-                    aria-label={regenRow.label}
-                    min={0}
-                    defaultValue={regen}
-                    disabled={!editable}
-                    onBlur={(event) =>
-                      changeStatValue(
-                        character,
-                        regenKey,
-                        Number(event.target.value),
-                      )
-                    }
-                  />
-                </label>
-              )}
-              <span className="character-vital-chip__track" aria-hidden="true">
-                <span
-                  style={{
-                    width: `${max > 0 ? Math.min(100, (res.current / max) * 100) : 0}%`,
-                  }}
-                />
-                {max > 0 && res.current > max && (
-                  <span
-                    className="character-vital-chip__excess"
-                    style={{
-                      width: `${Math.min(100, (((res.current - max) % max || max) / max) * 100)}%`,
-                    }}
-                  />
-                )}
-              </span>
-            </div>
-          );
-        })}
       </div>
       <div
         className="character-sheet-stat-panel"
@@ -1836,7 +1722,7 @@ export function CharacterPanel({
                 values={character.stats}
                 editable={Boolean(editable)}
                 rollPending={rollPending}
-                canEditLayout={snapshot.me.role === "GM"}
+                canEditLayout={canEditLayout}
                 onChangeValue={(key, value) =>
                   changeStatValue(character, key, value)
                 }
@@ -1871,7 +1757,7 @@ export function CharacterPanel({
                 values={character.stats}
                 editable={Boolean(editable)}
                 rollPending={rollPending}
-                canEditLayout={snapshot.me.role === "GM"}
+                canEditLayout={canEditLayout}
                 onChangeValue={(key, value) =>
                   changeStatValue(character, key, value)
                 }
@@ -1886,22 +1772,58 @@ export function CharacterPanel({
               />
               <div className="character-card character-card--skills">
                 <h3 className="character-card__header">Навыки</h3>
+                {standardSkillError && (
+                  <p className="field-error" role="alert">
+                    {standardSkillError}
+                  </p>
+                )}
                 <div className="character-card__body">
                   {character.skills.length > 0 &&
                     character.skills.map((skill) => (
-                      <RollButton
-                        key={skill.key}
-                        name={skill.name}
-                        formula={skill.formula}
-                        disabled={rollPending}
-                        onClick={(event) =>
-                          void submitCharacterRoll(
-                            skill.formula,
-                            skill.name,
-                            rollModeFromEvent(event.nativeEvent),
-                          )
-                        }
-                      />
+                      <div className="character-card__row" key={skill.key}>
+                        <RollButton
+                          name={skill.name}
+                          formula={skill.formula}
+                          disabled={rollPending}
+                          onClick={(event) =>
+                            void submitCharacterRoll(
+                              skill.formula,
+                              skill.name,
+                              rollModeFromEvent(event.nativeEvent),
+                            )
+                          }
+                        />
+                        {editable && (
+                          <div className="inline-fields">
+                            <Button
+                              disabled={standardSkillPending}
+                              aria-label={`Редактировать навык ${skill.name}`}
+                              onClick={() => {
+                                setStandardSkillError("");
+                                setEditingStandardSkill(skill);
+                                setStandardSkillDraft({
+                                  name: skill.name,
+                                  rank: String(skill.rank),
+                                  formula: skill.formula,
+                                });
+                              }}
+                            >
+                              Редактировать
+                            </Button>
+                            <Button
+                              className="danger-link"
+                              disabled={standardSkillPending}
+                              aria-label={`Удалить навык ${skill.name}`}
+                              onClick={() => {
+                                setStandardSkillError("");
+                                setStandardSkillToDelete(skill);
+                              }}
+                            >
+                              Удалить
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     ))}
                   {skillEntries.length ? (
                     skillEntries.map((entry) => (
@@ -2071,6 +1993,100 @@ export function CharacterPanel({
         />
       )}
 
+      {editingStandardSkill && (
+        <ArkenDialog
+          open
+          footer={false}
+          title={`Редактировать навык «${editingStandardSkill.name}»`}
+          onClose={() => !standardSkillPending && setEditingStandardSkill(null)}
+        >
+          <form
+            className="catalog-entry-form"
+            aria-label="Редактирование стандартного навыка"
+            onSubmit={(event) => void saveStandardSkill(event)}
+          >
+            <label>
+              Название
+              <FormInput
+                value={standardSkillDraft.name}
+                maxLength={120}
+                required
+                disabled={standardSkillPending}
+                onChange={(event) =>
+                  setStandardSkillDraft((draft) => ({
+                    ...draft,
+                    name: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Ранг
+              <FormInput
+                type="number"
+                min={0}
+                step={1}
+                value={standardSkillDraft.rank}
+                required
+                disabled={standardSkillPending}
+                onChange={(event) =>
+                  setStandardSkillDraft((draft) => ({
+                    ...draft,
+                    rank: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Формула броска
+              <FormInput
+                value={standardSkillDraft.formula}
+                maxLength={160}
+                required
+                disabled={standardSkillPending}
+                onChange={(event) =>
+                  setStandardSkillDraft((draft) => ({
+                    ...draft,
+                    formula: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            {standardSkillError && (
+              <p className="field-error" role="alert">
+                {standardSkillError}
+              </p>
+            )}
+            <Button type="submit" disabled={standardSkillPending}>
+              {standardSkillPending ? "Сохранение…" : "Сохранить навык"}
+            </Button>
+          </form>
+        </ArkenDialog>
+      )}
+
+      {standardSkillToDelete && (
+        <ArkenDialog
+          open
+          title="Удалить стандартный навык?"
+          applyLabel={standardSkillPending ? "Удаление…" : "Удалить навык"}
+          danger
+          loading={standardSkillPending}
+          onApply={() => void deleteStandardSkill()}
+          onClose={() =>
+            !standardSkillPending && setStandardSkillToDelete(null)
+          }
+        >
+          <p>
+            Навык «{standardSkillToDelete.name}» будет удалён с листа персонажа.
+          </p>
+          {standardSkillError && (
+            <p className="field-error" role="alert">
+              {standardSkillError}
+            </p>
+          )}
+        </ArkenDialog>
+      )}
+
       {entryEditor && (
         <ArkenDialog
           open
@@ -2101,9 +2117,222 @@ export function CharacterPanel({
 
       {/* Секция 2: Ресурсы и кошелёк */}
       <div
+        className="character-vitals-panel"
+        role="tabpanel"
+        id={`${vitalsTabId}-inventory-panel`}
+        aria-labelledby={`${vitalsTabId}-inventory-tab`}
+        hidden={vitalsTab !== "inventory"}
+      >
+      <div className="character-vitals" aria-label="Ключевые показатели">
+        <div className="character-vitals__actions">
+          <Button
+            view="outlined"
+            disabled={!editable || countersPending > 0}
+            title="Половина регена выносливости и маны, округление вниз"
+            onClick={() => void runRest("SHORT")}
+          >
+            Короткий отдых
+          </Button>
+        </div>
+        <div className="character-vital-chip character-vital-chip--wallet">
+          <span className="character-vital-chip__value character-vital-chip__wallet-values">
+            {(["gold", "silver", "copper"] as const).map((key) => (
+              <label className="character-wallet__coin" key={key}>
+                <span className="character-wallet__coin-label">
+                  {key === "gold"
+                    ? "Золото"
+                    : key === "silver"
+                      ? "Серебро"
+                      : "Медь"}
+                </span>
+                <span className="character-wallet__coin-controls">
+                  <Button
+                    disabled={
+                      !editable || !canSpendWalletCoin(walletDraft, key)
+                    }
+                    aria-label={`Уменьшить: ${WALLET_LABELS[key]}`}
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => changeWallet(key, -1)}
+                  >
+                    <AppIcon icon={DecreaseIcon} />
+                  </Button>
+                  <FormInput
+                    type="number"
+                    min={0}
+                    step={1}
+                    aria-label={`Кошелёк: ${WALLET_LABELS[key].toLowerCase()}`}
+                    value={walletDraft[key]}
+                    disabled={!editable}
+                    onChange={(event) => {
+                      cancelWalletBatch(false);
+                      const next = {
+                        ...walletDraftRef.current,
+                        [key]: normalizeWalletValue(event.target.value),
+                      };
+                      walletDraftRef.current = next;
+                      walletInputDirtyRef.current = true;
+                      setWalletDraft(next);
+                    }}
+                    onBlur={() => void saveWallet(walletDraftRef.current)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
+                  />
+                  <Button
+                    disabled={!editable}
+                    aria-label={`Увеличить: ${WALLET_LABELS[key]}`}
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => changeWallet(key, 1)}
+                  >
+                    <AppIcon icon={AddIcon} />
+                  </Button>
+                </span>
+              </label>
+            ))}
+          </span>
+        </div>
+        {resourceRows.map(({ key, label }) => {
+          const res = resourcesDraft[key] ?? { current: 0, maximum: 0 };
+          const max = res.maximum ?? res.current;
+          const regenKey = RESOURCE_REGEN_STAT[key];
+          const regenRow = combatRows.find((row) => row.key === regenKey);
+          const regen = regenKey ? (character.stats[regenKey] ?? 0) : 0;
+          const changeResource = (delta: number) => {
+            const next = {
+              ...resourcesDraft,
+              [key]: { ...res, current: Math.max(0, res.current + delta) },
+            };
+            void saveResources(next);
+          };
+          return (
+            <div
+              className="character-vital-chip character-vital-chip--resource"
+              key={key}
+            >
+              <span className="character-vital-chip__label">{label}</span>
+              <span className="character-vital-chip__value character-vital-chip__resource-values">
+                <label className="character-vital-chip__number-field">
+                  <span>Текущее</span>
+                  <FormInput
+                    type="number"
+                    min={0}
+                    aria-label={`${label}: текущее`}
+                    value={res.current}
+                    disabled={!editable}
+                    onChange={(event) =>
+                      setResourcesDraft((current) => ({
+                        ...current,
+                        [key]: {
+                          ...res,
+                          current: Math.max(0, Number(event.target.value)),
+                        },
+                      }))
+                    }
+                    onBlur={() => void saveResources(resourcesDraft)}
+                  />
+                </label>
+                <label className="character-vital-chip__number-field">
+                  <span>Максимум</span>
+                  <FormInput
+                    type="number"
+                    min={0}
+                    aria-label={`${label}: максимум`}
+                    value={max}
+                    disabled={!editable}
+                    onChange={(event) =>
+                      setResourcesDraft((current) => ({
+                        ...current,
+                        [key]: {
+                          ...res,
+                          maximum: Math.max(0, Number(event.target.value)),
+                          recoverable: true,
+                        },
+                      }))
+                    }
+                    onBlur={() => void saveResources(resourcesDraft)}
+                  />
+                </label>
+              </span>
+              <div className="character-vital-chip__controls">
+                <Button
+                  disabled={
+                    !editable || countersPending > 0 || res.current <= 0
+                  }
+                  aria-label={`Уменьшить ${label}`}
+                  onClick={() => changeResource(-1)}
+                >
+                  <AppIcon icon={DecreaseIcon} />
+                </Button>
+                <Button
+                  disabled={!editable || countersPending > 0}
+                  aria-label={`Увеличить ${label}`}
+                  onClick={() => changeResource(1)}
+                >
+                  <AppIcon icon={AddIcon} />
+                </Button>
+                {regen > 0 && (
+                  <Button
+                    disabled={
+                      !editable || countersPending > 0 || res.current >= max
+                    }
+                    aria-label={`Восстановить ${regen}: ${label}`}
+                    title={`Восстановить на величину регена (${regen})`}
+                    onClick={() =>
+                      void saveResources({
+                        ...resourcesDraft,
+                        [key]: {
+                          ...res,
+                          current: Math.min(max, res.current + regen),
+                        },
+                      })
+                    }
+                  >
+                    <AppIcon icon={AddIcon} /> {regen}
+                  </Button>
+                )}
+              </div>
+              {regenKey && regenRow && (
+                <label className="character-vital-chip__regen">
+                  <span>Реген</span>
+                  <FormInput
+                    type="number"
+                    aria-label={regenRow.label}
+                    min={0}
+                    defaultValue={regen}
+                    disabled={!editable}
+                    onBlur={(event) =>
+                      changeStatValue(
+                        character,
+                        regenKey,
+                        Number(event.target.value),
+                      )
+                    }
+                  />
+                </label>
+              )}
+              <span className="character-vital-chip__track" aria-hidden="true">
+                <span
+                  style={{
+                    width: `${max > 0 ? Math.min(100, (res.current / max) * 100) : 0}%`,
+                  }}
+                />
+                {max > 0 && res.current > max && (
+                  <span
+                    className="character-vital-chip__excess"
+                    style={{
+                      width: `${Math.min(100, (((res.current - max) % max || max) / max) * 100)}%`,
+                    }}
+                  />
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div
         className="character-section character-section--resources"
         data-character-section="resources"
-        hidden={vitalsTab !== "resources"}
       >
         <h3 className="character-block-heading">Дополнительные ресурсы</h3>
         <div className="subsection character-resource-editor">
@@ -2458,10 +2687,6 @@ export function CharacterPanel({
       <div
         className="character-section character-section--inventory"
         data-character-section="inventory"
-        role="tabpanel"
-        id={`${vitalsTabId}-inventory-panel`}
-        aria-labelledby={`${vitalsTabId}-inventory-tab`}
-        hidden={vitalsTab !== "inventory"}
       >
         <h3 className="character-block-heading">Инвентарь и снаряжение</h3>
         <label className="field">
@@ -2500,6 +2725,7 @@ export function CharacterPanel({
           />
         </label>
       </div>
+      </div>
 
       {/* Секция 4: Личность, медиа и доступ */}
       <div
@@ -2510,6 +2736,13 @@ export function CharacterPanel({
         aria-labelledby={`${vitalsTabId}-bio-tab`}
         hidden={vitalsTab !== "bio"}
       >
+        {vitalsTab === "bio" && (
+          <CharacterSpellBranches
+            key={character.id}
+            character={character}
+            isGm={snapshot.me.role === "GM"}
+          />
+        )}
         {snapshot.me.role === "GM" && (
           <CharacterControllerAccess
             character={character}

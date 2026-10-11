@@ -54,9 +54,10 @@ describe("Orthographic2DRenderer persisted drawing interactions", () => {
     );
   });
 
-  it("rebuilds cached fog when the asynchronously loaded pattern image changes", () => {
+  it("keeps cached fog geometry separate from the animated pattern overlay", () => {
     expect(rendererSource).toMatch(
-      /mask\.cache\([\s\S]*?\n\s*\}, \[fogPatternImage, orderedFogReveals, worldDraft\.width, worldDraft\.height\]\);/,
+      /mask\.cache\([\s\S]*?\n\s*\}, \[orderedFogReveals, worldDraft\.width, worldDraft\.height\]\);/,
     );
+    expect(rendererSource).toContain('<FogPatternOverlay width={worldDraft.width} height={worldDraft.height} />');
   });
 });

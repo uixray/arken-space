@@ -17,7 +17,7 @@ beforeEach(() => window.localStorage.clear());
 
 for (const kind of ["ABILITY", "SKILL"] as const) {
   for (const executable of [false, true]) {
-    it(`${kind} ${executable ? "executes its roll" : "shares without an invalid execute request"}`, async () => {
+    it(`${kind} ${executable ? "executes its roll" : kind === "ABILITY" ? "activates without a roll" : "shares without an invalid execute request"}`, async () => {
       const entry = {
         id: "entry",
         kind,
@@ -26,6 +26,12 @@ for (const kind of ["ABILITY", "SKILL"] as const) {
         sourceCatalogEntryId: null,
         revision: 3,
         data: {
+          ...(kind === "ABILITY" && !executable
+            ? {
+                activation: { consumeUse: true },
+                uses: { current: 1, max: 1, recharge: "DAY" },
+              }
+            : {}),
           rollActions: executable
             ? [
                 {
@@ -62,7 +68,9 @@ for (const kind of ["ABILITY", "SKILL"] as const) {
       fireEvent.click(screen.getByRole("button", { name: "Теневой шаг" }));
       await waitFor(() => expect(onEntryAction).toHaveBeenCalledOnce());
       const [, mode, rollActionId] = onEntryAction.mock.calls[0]!;
-      expect(mode).toBe(executable ? "EXECUTE" : "SHARE");
+      const expectedMode =
+        executable || kind === "ABILITY" ? "EXECUTE" : "SHARE";
+      expect(mode).toBe(expectedMode);
       expect(rollActionId).toBe(executable ? "strike" : undefined);
       expect(
         entryRollRequestSchema.safeParse({
@@ -76,6 +84,54 @@ for (const kind of ["ABILITY", "SKILL"] as const) {
     });
   }
 }
+
+it("posts the info control as SHARE without activating the ability name", async () => {
+  const entry = {
+    id: "ability-info",
+    kind: "ABILITY" as const,
+    name: "Вспышка",
+    description: "Описание способности",
+    sourceCatalogEntryId: null,
+    revision: 4,
+    data: {
+      activation: { consumeUse: true, cost: { type: "physical", amount: 2 } },
+      uses: { current: 1, max: 1, recharge: "DAY" },
+      rollActions: [],
+    },
+  };
+  const onEntryAction = vi.fn().mockResolvedValue(undefined);
+  renderComponent(
+    <QuickRollPanel
+      rollCharacter={
+        { stats: {}, skills: [], entries: [entry] } as unknown as CharacterDto
+      }
+      campaignId="campaign"
+      membershipId="member"
+      rows={[]}
+      quickRollPending={false}
+      gmOnly={false}
+      onQuickRoll={() => {}}
+      onEntryAction={onEntryAction}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("tab", { name: "Способности" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Показать без выполнения: Вспышка" }),
+  );
+
+  await waitFor(() => expect(onEntryAction).toHaveBeenCalledOnce());
+  expect(onEntryAction).toHaveBeenCalledWith(entry, "SHARE", undefined);
+  expect(onEntryAction).not.toHaveBeenCalledWith(entry, "EXECUTE", undefined);
+  expect(
+    entryRollRequestSchema.safeParse({
+      actionId: "11111111-1111-4111-8111-111111111111",
+      entryRevision: entry.revision,
+      mode: "SHARE",
+      visibility: "PUBLIC",
+    }).success,
+  ).toBe(true);
+});
 
 it("предлагает число бросков характеристики по Shift без немедленного броска", async () => {
   const onQuickRoll = vi.fn();

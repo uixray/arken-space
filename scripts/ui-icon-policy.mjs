@@ -212,8 +212,10 @@ function isSkillUsesResultArrow(node, file, tree) {
   const expression = (child) =>
     child && ts.isJsxExpression(child) ? child.expression?.getText(tree) : null;
   return (
-    expression(siblings[index - 1]) === "card.uses.before" &&
-    expression(siblings[index + 1]) === "card.uses.after"
+    (expression(siblings[index - 1]) === "card.uses.before" &&
+      expression(siblings[index + 1]) === "card.uses.after") ||
+    (expression(siblings[index - 1]) === "card.activationCost.before" &&
+      expression(siblings[index + 1]) === "card.activationCost.after")
   );
 }
 
@@ -247,6 +249,34 @@ function isLandingGuideKeycap(node, file) {
 }
 
 /** Scan TS/JS/TSX source AST; comments are intentionally ignored. */
+// Sound icons are editable domain content, not a replacement for UI controls.
+// Permit only the three existing defaults in their exact metadata contexts.
+function isSoundMetadataDefault(node, file, tree) {
+  const normalized = file.replaceAll("\\", "/");
+  const valueNode = ts.isPropertyAssignment(node) ? node.initializer : node;
+  const value = literalValue(valueNode);
+  if (!["🔊", "😈", "😮"].includes(value)) return false;
+  if (normalized.endsWith("apps/web/src/SoundpadWorkspace.tsx")) {
+    const property = ts.isPropertyAssignment(node) ? node : node.parent;
+    if (property && ts.isPropertyAssignment(property) && propertyName(property) === "icon") {
+      for (let parent = property; parent; parent = parent.parent) {
+        if (ts.isVariableDeclaration(parent) && parent.name.getText(tree) === "DEFAULT_CLIPS")
+          return value === "😈" || value === "😮";
+      }
+    }
+    return value === "🔊" && ts.isCallExpression(node.parent) &&
+      node.parent.expression.getText(tree) === "addSound" && node.parent.arguments[2] === node;
+  }
+  if (normalized.endsWith("apps/web/src/SoundClipEditor.tsx") && value === "🔊") {
+    if (ts.isCallExpression(node.parent) && node.parent.expression.getText(tree) === "useState" &&
+        ts.isVariableDeclaration(node.parent.parent) && node.parent.parent.name.getText(tree) === "[icon, setIcon]") return true;
+    return ts.isBinaryExpression(node.parent) && node.parent.operatorToken.kind === ts.SyntaxKind.BarBarToken &&
+      node.parent.left.getText(tree) === "icon.trim()" && ts.isPropertyAssignment(node.parent.parent) &&
+      propertyName(node.parent.parent) === "icon";
+  }
+  return false;
+}
+
 export function scanUiSource(source, file = "<inline>.tsx") {
   const tree = ts.createSourceFile(
     file,
@@ -265,6 +295,7 @@ export function scanUiSource(source, file = "<inline>.tsx") {
     return findings;
   }
   const visit = (node) => {
+    if (isSoundMetadataDefault(node, file, tree)) return;
     if (
       ts.isJsxText(node) &&
       !isSkillUsesResultArrow(node, file, tree) &&

@@ -15,6 +15,7 @@ let database: PGlite;
 let db: ReturnType<typeof drizzle<typeof schema>>;
 let app: FastifyInstance;
 let disconnectedRooms: string[];
+const originalLinkAccess = env.CAMPAIGN_LINK_ACCESS_ENABLED;
 
 async function createApp() {
   app = Fastify();
@@ -36,6 +37,7 @@ async function createApp() {
 }
 
 beforeEach(async () => {
+  env.CAMPAIGN_LINK_ACCESS_ENABLED = true;
   database = new PGlite();
   const migrationsUrl = new URL("../packages/db/drizzle/", import.meta.url);
   for (const file of (await readdir(migrationsUrl))
@@ -54,6 +56,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  env.CAMPAIGN_LINK_ACCESS_ENABLED = originalLinkAccess;
   await app.close();
   await database.close();
 });
@@ -111,6 +114,7 @@ describe("GM access rotation", () => {
     const oldLogin = await app.inject({
       method: "POST",
       url: "/api/auth/gm",
+      headers: { origin: env.WEB_ORIGIN },
       payload: { token: env.GM_ACCESS_TOKEN },
     });
     expect(oldLogin.statusCode, oldLogin.body).toBe(200);
@@ -148,12 +152,14 @@ describe("GM access rotation", () => {
     const oldTokenRejected = await app.inject({
       method: "POST",
       url: "/api/auth/gm",
+      headers: { origin: env.WEB_ORIGIN },
       payload: { token: env.GM_ACCESS_TOKEN },
     });
     expect(oldTokenRejected.statusCode).toBe(403);
     const newTokenAccepted = await app.inject({
       method: "POST",
       url: "/api/auth/gm",
+      headers: { origin: env.WEB_ORIGIN },
       payload: { token: newToken },
     });
     expect(newTokenAccepted.statusCode, newTokenAccepted.body).toBe(200);
@@ -165,12 +171,14 @@ describe("GM access rotation", () => {
     const oldAfterRestart = await app.inject({
       method: "POST",
       url: "/api/auth/gm",
+      headers: { origin: env.WEB_ORIGIN },
       payload: { token: env.GM_ACCESS_TOKEN },
     });
     expect(oldAfterRestart.statusCode).toBe(403);
     const newAfterRestart = await app.inject({
       method: "POST",
       url: "/api/auth/gm",
+      headers: { origin: env.WEB_ORIGIN },
       payload: { token: newToken },
     });
     expect(newAfterRestart.statusCode, newAfterRestart.body).toBe(200);

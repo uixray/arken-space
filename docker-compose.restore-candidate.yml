@@ -1,0 +1,66 @@
+# Source template only. Render with exact image IDs and a unique project name
+# after root freezes a candidate and separately authorizes the synthetic gate.
+services:
+  postgres:
+    image: ${CANDIDATE_POSTGRES_IMAGE_ID:?Set exact cached PostgreSQL image ID}
+    pull_policy: never
+    environment:
+      POSTGRES_DB: candidate
+      POSTGRES_USER: candidate
+      POSTGRES_PASSWORD: ${SYNTHETIC_POSTGRES_PASSWORD:?Synthetic-only password required}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [candidate-internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U candidate -d candidate"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  server:
+    image: ${CANDIDATE_SERVER_IMAGE_ID:?Set exact candidate server image ID}
+    pull_policy: never
+    environment:
+      NODE_ENV: production
+      ACCOUNT_AUTH_ENABLED: "true"
+      ACCOUNT_REGISTRATION_ENABLED: "false"
+      ACCOUNT_REGISTRATION_POLICY_APPROVED: "false"
+      LEGACY_DEV_AUTH_ENABLED: "false"
+      ACCOUNT_CAMPAIGN_CREATION_ENABLED: "false"
+      ACCOUNT_CAMPAIGN_CREATION_POLICY_APPROVED: "false"
+      CAMPAIGN_LINK_ACCESS_ENABLED: "false"
+      ACCOUNT_MAIL_RUNTIME_ENABLED: "false"
+      BUILD_REVISION: ${CANDIDATE_FULL_SHA:?Set exact full candidate SHA}
+      DATABASE_URL: postgres://candidate:${SYNTHETIC_POSTGRES_PASSWORD:?Synthetic-only password required}@postgres:5432/candidate
+      WEB_ORIGIN: http://127.0.0.1:${CANDIDATE_WEB_QA_PORT:?Set explicit loopback web port}
+      PUBLIC_URL: http://127.0.0.1:${CANDIDATE_WEB_QA_PORT:?Set explicit loopback web port}
+      SESSION_COOKIE_NAME: arken_candidate_session
+      ACCOUNT_SESSION_COOKIE_NAME: arken_candidate_account
+      ACCOUNT_CSRF_COOKIE_NAME: arken_candidate_csrf
+      GM_ACCESS_TOKEN: ${SYNTHETIC_GM_TOKEN:?Synthetic-only GM token required}
+      MEDIA_ROOT: /srv/arken-space/media
+      MEDIA_QUOTA_BYTES: 5368709120
+      MIN_FREE_DISK_BYTES: 1
+    ports:
+      - "127.0.0.1:${CANDIDATE_QA_PORT:?Set explicit loopback QA port}:4100"
+    volumes:
+      - candidate-media:/srv/arken-space/media
+    networks: [candidate-internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: ${CANDIDATE_WEB_IMAGE_ID:?Set exact candidate web image ID}
+    pull_policy: never
+    ports:
+      - "127.0.0.1:${CANDIDATE_WEB_QA_PORT:?Set explicit loopback web port}:80"
+    networks: [candidate-internal]
+    depends_on: [server]
+
+networks:
+  candidate-internal:
+    internal: true
+volumes:
+  postgres-data:
+  candidate-media:

@@ -1,0 +1,8 @@
+ALTER TABLE "drawings" ADD COLUMN "kind" text DEFAULT 'FREEHAND' NOT NULL;--> statement-breakpoint
+ALTER TABLE "drawings" ADD COLUMN "stamp_asset_key" text;--> statement-breakpoint
+ALTER TABLE "drawings" ADD COLUMN "stamp_pack_id" text;--> statement-breakpoint
+ALTER TABLE "drawings" ADD COLUMN "stamp_size" double precision;--> statement-breakpoint
+ALTER TABLE "drawings" ADD COLUMN "stamp_rotation" double precision;--> statement-breakpoint
+ALTER TABLE "drawings" ADD COLUMN "stamp_layer" text;--> statement-breakpoint
+ALTER TABLE "drawings" ADD CONSTRAINT "drawings_kind_check" CHECK ("drawings"."kind" in ('FREEHAND', 'STAMP'));--> statement-breakpoint
+ALTER TABLE "drawings" ADD CONSTRAINT "drawings_stamp_fields_check" CHECK (("drawings"."kind" = 'FREEHAND' and "drawings"."stamp_asset_key" is null and "drawings"."stamp_pack_id" is null and "drawings"."stamp_size" is null and "drawings"."stamp_rotation" is null and "drawings"."stamp_layer" is null) or ("drawings"."kind" = 'STAMP' and "drawings"."stamp_asset_key" is not null and "drawings"."stamp_asset_key" in ('forest', 'mountains', 'clouds') and "drawings"."stamp_pack_id" is not null and "drawings"."stamp_pack_id" = 'builtin-terrain-v1' and "drawings"."stamp_size" is not null and "drawings"."stamp_size" between 16 and 1024 and "drawings"."stamp_rotation" is not null and "drawings"."stamp_rotation" between -360 and 360 and "drawings"."stamp_layer" is not null and "drawings"."stamp_layer" in ('PUBLIC', 'GM')));

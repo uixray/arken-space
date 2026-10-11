@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, gt } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
@@ -429,6 +429,133 @@ async function sendMutationOutcome<
 }
 
 export function registerSpellPackRoutes(app: FastifyInstance, db: Database) {
+  // The editor discovers only a small campaign-scoped window. Never expose
+  // database rows directly: the list is a deliberately narrow summary DTO.
+  app.get("/api/spell-packs", async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
+    const auth = await requireGm(request, reply, db);
+    if (!auth) return;
+    const packs = await db
+      .select({ id: spellPacks.id, createdAt: spellPacks.createdAt })
+      .from(spellPacks)
+      .where(eq(spellPacks.campaignId, auth.campaignId))
+      .orderBy(desc(spellPacks.createdAt))
+      .limit(100);
+    const summaries = await Promise.all(
+      packs.map(async (pack) => {
+        const [latest] = await db
+          .select()
+          .from(spellPackVersions)
+          .where(
+            and(
+              eq(spellPackVersions.campaignId, auth.campaignId),
+              eq(spellPackVersions.packId, pack.id),
+            ),
+          )
+          .orderBy(desc(spellPackVersions.version))
+          .limit(1);
+        if (!latest) return null;
+        const validated = validatedVersion(latest);
+        return {
+          id: pack.id,
+          latestVersionId: latest.id,
+          latestVersion: latest.version,
+          lifecycle: latest.lifecycle,
+          title: validated.row.graph.title,
+          createdAt: pack.createdAt.toISOString(),
+        };
+      }),
+    );
+    return reply.send({ packs: summaries.filter((item) => item !== null) });
+  });
+
+  // Assignment discovers one immutable ACTIVE version at a time so an older
+  // active version remains selectable even when a newer draft is latest.
+  // The cursor advances by version identity; player-facing routes never use
+  // this GM-only graph summary.
+  app.get("/api/spell-assignable-schools", async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
+    const auth = await requireGm(request, reply, db);
+    if (!auth) return;
+    const query = z
+      .object({ afterVersionId: z.string().uuid().optional() })
+      .strict()
+      .safeParse(request.query);
+    if (!query.success) return fail(reply, 400, "INVALID_REQUEST");
+    const conditions = [
+      eq(spellPackVersions.campaignId, auth.campaignId),
+      eq(spellPackVersions.lifecycle, "ACTIVE"),
+    ];
+    if (query.data.afterVersionId)
+      conditions.push(gt(spellPackVersions.id, query.data.afterVersionId));
+    const rows = await db
+      .select()
+      .from(spellPackVersions)
+      .where(and(...conditions))
+      .orderBy(asc(spellPackVersions.id))
+      .limit(2);
+    const row = rows[0];
+    if (!row) return reply.send({ schools: [], nextCursor: null });
+    const graph = validatedVersion(row).row.graph;
+    const [pack] = await db
+      .select({ id: spellPacks.id })
+      .from(spellPacks)
+      .where(
+        and(
+          eq(spellPacks.id, row.packId),
+          eq(spellPacks.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!pack) return fail(reply, 404, "SPELL_PACK_VERSION_NOT_FOUND");
+    return reply.send({
+      schools: graph.schools
+        .map((school) => ({
+          packId: row.packId,
+          packVersionId: row.id,
+          packVersion: row.version,
+          packTitle: graph.title,
+          schoolId: school.id,
+          schoolName: school.displayName,
+          visibilityPolicy: school.visibilityPolicy,
+        }))
+        .sort(
+          (left, right) =>
+            left.schoolName.localeCompare(right.schoolName) ||
+            left.schoolId.localeCompare(right.schoolId),
+        ),
+      nextCursor: rows.length > 1 ? row.id : null,
+    });
+  });
+
+  app.get(
+    "/api/spell-packs/:id/versions/:versionId",
+    async (request, reply) => {
+      reply.header("Cache-Control", "private, no-store");
+      const auth = await requireGm(request, reply, db);
+      if (!auth) return;
+      const params = z
+        .object({ id: z.string().uuid(), versionId: z.string().uuid() })
+        .strict()
+        .safeParse(request.params);
+      if (!params.success) return fail(reply, 400, "INVALID_REQUEST");
+      const [row] = await db
+        .select()
+        .from(spellPackVersions)
+        .where(
+          and(
+            eq(spellPackVersions.campaignId, auth.campaignId),
+            eq(spellPackVersions.packId, params.data.id),
+            eq(spellPackVersions.id, params.data.versionId),
+          ),
+        )
+        .limit(1);
+      if (!row) return fail(reply, 404, "SPELL_PACK_VERSION_NOT_FOUND");
+      const validated = validatedVersion(row);
+      return reply.send(versionDto(validated.row, validated.warnings));
+    },
+  );
+
   app.post(
     "/api/spell-packs/imports/reference/preview",
     { bodyLimit: SPELL_REFERENCE_IMPORT_MAX_SOURCE_CHARS * 4 },

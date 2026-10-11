@@ -40,7 +40,7 @@ vi.mock("@gravity-ui/uikit", () => ({
  * setting that changes nothing they can observe.
  */
 describe("cursor presence control", () => {
-  it("shows a visible off state after a player clicks the toggle", async () => {
+  it("keeps the concise visible label and exposes the off state accessibly", async () => {
     function StatefulPlayer() {
       const [preference, setPreference] = useState(
         cursorPreferenceDefault("PLAYER"),
@@ -61,7 +61,8 @@ describe("cursor presence control", () => {
       name: "Показывать курсоры остальных",
     });
     expect(hidden).toHaveAttribute("aria-pressed", "false");
-    expect(hidden).toHaveTextContent("Курсоры скрыты");
+    expect(hidden).toHaveTextContent("Курсоры");
+    expect(hidden).not.toHaveTextContent("Курсоры скрыты");
   });
 
   it("gives a player one toggle and no menu", async () => {

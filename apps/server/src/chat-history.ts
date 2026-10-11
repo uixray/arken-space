@@ -184,6 +184,7 @@ export async function projectChatMessages(
         message.stickerId && revokedStickerIds.has(message.stickerId)
           ? null
           : message.stickerId,
+      globalStickerId: message.globalStickerId,
       stickerPresentation:
         message.stickerId && revokedStickerIds.has(message.stickerId)
           ? revokedStickerTombstone

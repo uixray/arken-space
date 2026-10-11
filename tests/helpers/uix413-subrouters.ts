@@ -18,6 +18,7 @@ export const SUBROUTER_CAMPAIGN_PROBE_KEYS = [
   "POST /api/spell-packs/:id/archive",
   "POST /api/spell-packs/:id/lifecycle",
   "POST /api/spell-packs/:id/versions",
+  "GET /api/spell-packs/:id/versions/:versionId",
   "GET /api/world-content-instances/:id",
   "PATCH /api/world-content-instances/:id",
   "DELETE /api/world-content-instances/:id",

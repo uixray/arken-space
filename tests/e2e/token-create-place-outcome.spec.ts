@@ -4,6 +4,7 @@ import type {
   GameSnapshot,
   TokenDto,
 } from "@arken/contracts";
+import { starterStatLayout } from "@arken/system";
 import type { Locator, Page, Route, TestInfo } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import { expect, test } from "./react-console-guard";
@@ -85,6 +86,7 @@ function fixtureSnapshot(): GameSnapshot {
         controllerMembershipIds: [],
         portraitAssetId: null,
         stats: {},
+        statLayout: starterStatLayout,
         skills: [],
         spells: [],
         entries: [],

@@ -11,5 +11,7 @@ export default defineConfig({
       "/socket.io": { target: "ws://localhost:4100", ws: true },
     },
   },
-  build: { target: "es2022", sourcemap: true },
+  // Dist is served as public static content. Do not publish source maps that
+  // embed original client source (including development-only modules).
+  build: { target: "es2022", sourcemap: false },
 });

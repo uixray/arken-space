@@ -16,10 +16,18 @@ import { registerRoutes } from "./routes.js";
 import { ensureSeed } from "./seed.js";
 import { requestActionId } from "./telemetry.js";
 import { isCampaignCanvasGuardError } from "./campaign-pause-guard.js";
+import { accountErrorLogDetails } from "./account-error-logging.js";
+import { installGracefulShutdown } from "./graceful-shutdown.js";
+import { createAccountMailRuntime } from "./account-mail-runtime.js";
+import { createAccountMailContext } from "./account-mail-context.js";
+
+// Validate transport/key configuration before opening the database connection.
+const accountMailContext = createAccountMailContext(env);
 
 const app = Fastify({
   logger: { level: env.NODE_ENV === "production" ? "info" : "debug" },
-  trustProxy: true,
+  // Never trust forwarded headers by default. Public auth rate limits use the
+  // direct TCP peer; proxy trust needs an explicit peer allow-list first.
   bodyLimit: env.MAX_AUDIO_BYTES + 1024,
 });
 
@@ -69,11 +77,13 @@ if (env.DEV_DATABASE_DRIVER === "pglite") {
   app.log.info("database.postgres_connected");
 }
 
-try {
-  await ensureSeed(db);
-} catch {
-  await client.end().catch(() => undefined);
-  throw new Error("Не удалось подготовить базу данных при запуске сервера");
+if (!env.ACCOUNT_AUTH_ENABLED) {
+  try {
+    await ensureSeed(db);
+  } catch {
+    await client.end().catch(() => undefined);
+    throw new Error("Не удалось подготовить базу данных при запуске сервера");
+  }
 }
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(app.server, {
@@ -82,13 +92,26 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(app.server, {
     maxDisconnectionDuration: 120_000,
     skipMiddlewares: false,
   },
+  allowRequest: (request, callback) => {
+    callback(null, request.headers.origin === env.WEB_ORIGIN);
+  },
+});
+
+const accountMailRuntime = createAccountMailRuntime({
+  enabled: accountMailContext.runtimeEnabled,
+  db,
+  keyring: accountMailContext.keyring,
+  adapter: accountMailContext.adapter,
+  workerId: `server-${process.pid}`,
+  logger: app.log,
 });
 
 registerRealtime(io, db, app.log);
-registerRoutes(app, db, io);
+registerRoutes(app, db, io, accountMailContext);
 
 app.addHook("onClose", async () => {
-  io.close();
+  await accountMailRuntime.stop();
+  await io.close();
   await client.end();
 });
 
@@ -100,8 +123,9 @@ app.setErrorHandler((error, request, reply) => {
   const isValidationError =
     Boolean(problem.validation) || problem.name === "ZodError";
   const statusCode = isValidationError ? 400 : (problem.statusCode ?? 500);
+  const sensitiveAccountRoute = request.url.startsWith("/api/account/") || request.url.startsWith("/api/auth/");
   const details = {
-    err: problem,
+    ...(sensitiveAccountRoute ? accountErrorLogDetails({ requestId: request.id, actionId: requestActionId(request.headers["x-action-id"]), statusCode, validation: isValidationError }) : { err: problem }),
     requestId: request.id,
     actionId: requestActionId(request.headers["x-action-id"]),
     statusCode,
@@ -114,18 +138,21 @@ app.setErrorHandler((error, request, reply) => {
   if (isValidationError)
     return reply.code(400).send({
       error: "VALIDATION_ERROR",
-      message:
+      message: sensitiveAccountRoute ? "Не удалось выполнить запрос" :
         env.NODE_ENV === "production"
           ? "Некорректные данные запроса"
           : problem.message,
     });
   return reply.code(statusCode).send({
     error: "REQUEST_FAILED",
-    message:
+    message: sensitiveAccountRoute ? "Не удалось выполнить запрос" :
       env.NODE_ENV === "production"
         ? "Не удалось выполнить запрос"
         : problem.message,
   });
 });
 
+installGracefulShutdown(() => app.close(), app.log);
 await app.listen({ host: "0.0.0.0", port: env.PORT });
+// Start only after the listener is live. Default runtime/SMTP config is off.
+accountMailRuntime.start();

@@ -2,7 +2,7 @@
 import { useCallback, useState } from "react";
 import { describe, expect, it } from "vitest";
 import { renderComponent, screen, userEvent } from "./test-support/render";
-import { useLatestRef } from "./use-latest-ref";
+import { useLatestCallback, useLatestRef } from "./use-latest-ref";
 
 /**
  * The two properties that make this worth having, both of which have to hold
@@ -68,5 +68,47 @@ describe("useLatestRef", () => {
 
     expect(seen.length).toBeGreaterThanOrEqual(3);
     for (const ref of seen.slice(1)) expect(ref).toBe(seen[0]);
+  });
+
+  it("keeps an action reference stable while invoking the latest committed closure", async () => {
+    const calls: string[] = [];
+    const identities: unknown[] = [];
+    function LatestActionHarness() {
+      const [campaignRevision, setCampaignRevision] = useState(4);
+      const [collapseValue, setCollapseValue] = useState(false);
+      const action = useLatestCallback((value: boolean) => {
+        calls.push(`${campaignRevision}:${value}`);
+      });
+      identities.push(action);
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              setCampaignRevision(9);
+              setCollapseValue(true);
+            }}
+          >
+            update latest state
+          </button>
+          <button type="button" onClick={() => action(collapseValue)}>
+            invoke action
+          </button>
+        </>
+      );
+    }
+
+    renderComponent(<LatestActionHarness />);
+    const invoke = screen.getByRole("button", { name: "invoke action" });
+    const original = identities[0];
+    await userEvent.click(invoke);
+    await userEvent.click(
+      screen.getByRole("button", { name: "update latest state" }),
+    );
+    await userEvent.click(invoke);
+
+    expect(identities.length).toBeGreaterThanOrEqual(2);
+    for (const identity of identities) expect(identity).toBe(original);
+    expect(calls).toEqual(["4:false", "9:true"]);
   });
 });

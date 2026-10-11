@@ -33,7 +33,7 @@ export function StickerPicker({
   disabled = false,
   iconOnly = false,
 }: {
-  onSelect: (stickerId: string) => Promise<void>;
+  onSelect: (stickerId: string, scope?: "GLOBAL_PUBLIC") => Promise<void>;
   disabled?: boolean;
   /** A compact trigger for use inside a chat composer. */
   iconOnly?: boolean;
@@ -202,7 +202,7 @@ export function StickerPicker({
             ref={searchRef}
             type="search"
             aria-label="Поиск стикеров"
-            placeholder="Поиск по имени и описанию"
+            placeholder="Поиск по описанию и паку"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -235,7 +235,7 @@ export function StickerPicker({
             role="listbox"
             onKeyDown={onGridKeyDown}
           >
-            {visible.map(({ sticker }) => (
+            {visible.map(({ pack, sticker }) => (
               <button
                 className="sticker-option"
                 type="button"
@@ -250,7 +250,9 @@ export function StickerPicker({
                   setSending(true);
                   setError("");
                   try {
-                    await onSelect(sticker.id);
+                    if (pack.scope === "GLOBAL_PUBLIC")
+                      await onSelect(sticker.id, "GLOBAL_PUBLIC");
+                    else await onSelect(sticker.id);
                     if (mountedRef.current && sessionRef.current === session) {
                       changeOpen(false);
                     }

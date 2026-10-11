@@ -142,11 +142,13 @@ export function QuickRollPanel({
     setEntryPending(entry.id);
     setEntryError("");
     try {
-      // Description-only entries have no executable roll. Match the character
-      // card: post their description without consuming uses or resources.
+      // A no-roll ability is still an activation. Only description-only skills
+      // fall back to the explicit, no-cost SHARE path.
       await onEntryAction(
         entry,
-        mode === "EXECUTE" && !rollActionId ? "SHARE" : mode,
+        mode === "EXECUTE" && !rollActionId && entry.kind !== "ABILITY"
+          ? "SHARE"
+          : mode,
         rollActionId,
       );
     } catch (reason) {
@@ -285,7 +287,7 @@ export function QuickRollPanel({
         >
           {(rollCharacter.skills.length > 0 ||
             entries.some((entry) => entry.kind === "SKILL")) && (
-            <div className="activity-quick-rolls" aria-busy={quickRollPending}>
+            <div className="activity-quick-rolls quick-roll-panel__ability-group" aria-busy={quickRollPending}>
               {rollCharacter.skills.map((skill) => (
                 <QuickRollTooltip
                   key={skill.key}
@@ -339,7 +341,7 @@ export function QuickRollPanel({
           )}
           {entries.some((entry) => entry.kind === "ABILITY") && (
             <div
-              className="activity-quick-rolls"
+              className="activity-quick-rolls quick-roll-panel__ability-group"
               aria-busy={entryPending !== null}
             >
               {entries

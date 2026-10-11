@@ -92,6 +92,54 @@ describe("token generation replay key", () => {
   });
 });
 
+it.each(["MUSIC", "SOUND_EFFECT", "BOTH"] as const)(
+  "uploads AUDIO with explicit %s purpose in the query",
+  async (audioPurpose) => {
+    const asset = { id: "audio-asset", kind: "AUDIO", createdAt: new Date(0) };
+    apiMock.mockReset().mockResolvedValue(asset);
+    const load = vi.fn().mockResolvedValue(undefined);
+    let actions!: AssetActions;
+    renderComponent(
+      <Harness
+        load={load}
+        receive={(value) => {
+          actions = value;
+        }}
+      />,
+    );
+    const file = new File(["synthetic"], "clip.ogg", { type: "audio/ogg" });
+    await actions.uploadAsset(file, "AUDIO", { audioPurpose });
+    expect(apiMock).toHaveBeenCalledTimes(1);
+    const [path, request] = apiMock.mock.calls[0]!;
+    expect(path).toBe(`/api/assets?kind=AUDIO&audioPurpose=${audioPurpose}`);
+    expect(request.method).toBe("POST");
+    expect(request.body.get("file")).toBe(file);
+    expect(load).toHaveBeenCalledTimes(1);
+  },
+);
+
+it("keeps legacy audio upload default and ignores purpose for non-audio", async () => {
+  const asset = { id: "legacy-asset", kind: "AUDIO", createdAt: new Date(0) };
+  apiMock.mockReset().mockResolvedValue(asset);
+  const load = vi.fn().mockResolvedValue(undefined);
+  let actions!: AssetActions;
+  renderComponent(
+    <Harness
+      load={load}
+      receive={(value) => {
+        actions = value;
+      }}
+    />,
+  );
+  const file = new File(["synthetic"], "legacy.ogg", { type: "audio/ogg" });
+  await actions.uploadAsset(file, "AUDIO");
+  expect(apiMock.mock.calls[0]?.[0]).toBe("/api/assets?kind=AUDIO");
+  apiMock.mockClear();
+  await actions.uploadAsset(new File(["image"], "map.png"), "MAP", {
+    audioPurpose: "MUSIC",
+  });
+  expect(apiMock.mock.calls[0]?.[0]).toBe("/api/assets?kind=MAP");
+});
 it("replacement commit and refresh are separate stable actions", async () => {
   const result = { asset: { id: "asset" }, version: '"new"', replayed: false };
   apiMock.mockReset().mockResolvedValue(result);

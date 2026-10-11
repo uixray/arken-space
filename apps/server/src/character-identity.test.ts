@@ -1,9 +1,9 @@
-import { readdir, readFile } from "node:fs/promises";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../../../packages/db/src/schema.js";
 import { buildSnapshot } from "./snapshot.js";
+import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
 
 /**
  * UIX-454 — публичная личность персонажа в снапшоте.
@@ -39,17 +39,7 @@ const snapshotFor = (membershipId: string, role: "GM" | "PLAYER") =>
   );
 
 beforeEach(async () => {
-  database = new PGlite();
-  const migrations = new URL("../../../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrations))
-    .filter((name) => name.endsWith(".sql"))
-    .sort())
-    await database.exec(
-      (await readFile(new URL(file, migrations), "utf8")).replaceAll(
-        "--> statement-breakpoint",
-        "",
-      ),
-    );
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
   await db
     .insert(schema.campaigns)

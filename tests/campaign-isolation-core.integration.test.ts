@@ -1,9 +1,9 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import Fastify, { type FastifyInstance } from "fastify";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -15,6 +15,7 @@ import {
   CORE_CAMPAIGN_PROBE_KEYS,
   type CoreCampaignProbeKey,
 } from "./helpers/uix413-core.js";
+import { createMigratedPglite } from "./helpers/pglite-template.js";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 type ProbeRequest = {
@@ -63,6 +64,8 @@ const ids = {
   foreignDrawing: crypto.randomUUID(),
   asset: crypto.randomUUID(),
   foreignAsset: crypto.randomUUID(),
+  invite: crypto.randomUUID(),
+  foreignInvite: crypto.randomUUID(),
   ownActivePack: crypto.randomUUID(),
   ownDraftPack: crypto.randomUUID(),
   foreignActivePack: crypto.randomUUID(),
@@ -128,6 +131,7 @@ const stickerUploadUrl = (packId: string) => {
  * запроса; grant остаётся в снимке и ловит ошибочный revoke/rotate.
  */
 const fingerprintTables = [
+  "invites",
   "campaigns",
   "memberships",
   "assets",
@@ -220,20 +224,7 @@ beforeAll(async () => {
     writeFile(join(mediaRoot, "foreign-sticker.webp"), tinyPng),
   ]);
 
-  database = new PGlite();
-  for (const file of (
-    await readdir(new URL("../packages/db/drizzle/", import.meta.url))
-  )
-    .filter((name) => name.endsWith(".sql"))
-    .sort())
-    await database.exec(
-      (
-        await readFile(
-          new URL(`../packages/db/drizzle/${file}`, import.meta.url),
-          "utf8",
-        )
-      ).replaceAll("--> statement-breakpoint", ""),
-    );
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
 
   await db.insert(schema.campaigns).values([
@@ -561,6 +552,12 @@ beforeAll(async () => {
     },
   ]);
 
+  await db.insert(schema.invites).values([
+    { id: ids.invite, campaignId: ids.campaign, characterId: ids.character,
+      label: "Own invite", tokenHash: hashToken("uix413-own-invite"), expiresAt: new Date(Date.now() + 60_000) },
+    { id: ids.foreignInvite, campaignId: ids.foreignCampaign, characterId: ids.foreignCharacter,
+      label: "Foreign invite", tokenHash: hashToken("uix413-foreign-invite"), expiresAt: new Date(Date.now() + 60_000) },
+  ]);
   app = Fastify();
   await app.register(cookie);
   await app.register(multipart);
@@ -1039,12 +1036,41 @@ const probes: readonly Probe[] = [
         200,
       ),
   },
+  {
+    key: "GET /api/gm/sticker-packs/:id",
+    request: () => ({ method: "GET", url: `/api/gm/sticker-packs/${ids.foreignActivePack}` }),
+    status: 404,
+    error: "STICKER_PACK_NOT_FOUND",
+    control: () => expectControl({ method: "GET", url: `/api/gm/sticker-packs/${ids.ownActivePack}` }, 200),
+  },
+  {
+    key: "PATCH /api/assets/:id/audio-purpose",
+    request: () => ({ method: "PATCH", url: `/api/assets/${ids.foreignAsset}/audio-purpose`,
+      payload: { actionId: actionId(), audioPurpose: "SOUND_EFFECT" } }),
+    status: 404,
+    error: "ASSET_NOT_FOUND",
+    // The own image reaches type validation; the foreign image must not reveal it.
+    control: async () => {
+      const response = await app.inject({ method: "PATCH", url: `/api/assets/${ids.asset}/audio-purpose`,
+        headers: headers(), payload: { actionId: actionId(), audioPurpose: "SOUND_EFFECT" } });
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ error: "AUDIO_ASSET_REQUIRED" });
+    },
+  },
 ];
+
+probes.push({
+  key: "POST /api/invites/:id/revoke",
+  request: () => ({ method: "POST", url: `/api/invites/${ids.foreignInvite}/revoke`, payload: { actionId: actionId() } }),
+  status: 404,
+  error: "INVITE_NOT_FOUND",
+  control: () => expectControl({ method: "POST", url: `/api/invites/${ids.invite}/revoke`, payload: { actionId: actionId() } }, 200),
+});
 
 describe("UIX-413 core campaign isolation", () => {
   it("keeps the exported behavioral inventory exact and executable", () => {
     expect(probes.map((probe) => probe.key)).toEqual(CORE_CAMPAIGN_PROBE_KEYS);
-    expect(new Set(probes.map((probe) => probe.key)).size).toBe(40);
+    expect(new Set(probes.map((probe) => probe.key)).size).toBe(43);
   });
 
   it.each(probes)("rejects foreign entity: $key", async (probe) => {

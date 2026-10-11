@@ -1,3 +1,4 @@
+import { createMigratedPglite } from "./helpers/pglite-template.js";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -5,6 +6,7 @@ import { join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
+import { growingJpeg } from "../apps/server/test-fixtures/growing-jpeg.js";
 import { PGlite } from "@electric-sql/pglite";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
@@ -101,20 +103,7 @@ beforeEach(async () => {
   env.MEDIA_QUOTA_BYTES = 64 * 1024 * 1024;
   for (const key of ["used.webp", "unused.webp", "foreign.webp"])
     await writeFile(join(mediaRoot, key), Buffer.from(key));
-  database = new PGlite();
-  for (const file of (
-    await readdir(new URL("../packages/db/drizzle/", import.meta.url))
-  )
-    .filter((name) => name.endsWith(".sql"))
-    .sort())
-    await database.exec(
-      (
-        await readFile(
-          new URL(`../packages/db/drizzle/${file}`, import.meta.url),
-          "utf8",
-        )
-      ).replaceAll("--> statement-breakpoint", ""),
-    );
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
   await db.insert(schema.campaigns).values([
     { id: ids.campaign, name: "A", activeSceneId: ids.scene },
@@ -217,6 +206,53 @@ afterEach(async () => {
 });
 
 describe("UIX-293 asset lifecycle HTTP", () => {
+  it("reserves encoded WebP growth and rejects over-quota upload without creating blobs", async () => {
+    const { source, encoded } = await growingJpeg();
+    env.MEDIA_QUOTA_BYTES = 20 + encoded.length;
+    const upload = async () => {
+      const form = multipartFile(source, "compressed.jpg", "image/jpeg");
+      return app.inject({ method: "POST", url: "/api/assets?kind=IMAGE", payload: form.body,
+        headers: { ...headers(secrets.gm), "x-action-id": crypto.randomUUID(), "content-type": form.contentType } });
+    };
+    const created = await upload();
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json().sizeBytes).toBe(encoded.length);
+    const inventory = await fileInventory();
+    const denied = await upload();
+    expect(denied.statusCode).toBe(400);
+    expect(denied.json().error).toBe("MEDIA_QUOTA_EXCEEDED");
+    expect(await fileInventory()).toEqual(inventory);
+    expect(await db.select().from(schema.campaignMediaReservations)).toHaveLength(0);
+  });
+
+  it("credits the exact replacement at full quota and cleans a stale staged replacement", async () => {
+    const { source, encoded } = await growingJpeg();
+    await writeFile(join(mediaRoot, "unused.webp"), encoded);
+    await db.update(schema.assets).set({ sizeBytes: encoded.length }).where(eq(schema.assets.id, ids.unused));
+    env.MEDIA_QUOTA_BYTES = 9 + encoded.length;
+    const content = await app.inject({ url: `/api/assets/${ids.unused}/content`, headers: headers(secrets.gm) });
+    const oldVersion = content.headers.etag as string;
+    const replace = async (version: string) => {
+      const form = multipartFile(source, "compressed.jpg", "image/jpeg");
+      return app.inject({ method: "PUT", url: `/api/assets/${ids.unused}/content`, payload: form.body,
+        headers: { ...headers(secrets.gm), "x-action-id": crypto.randomUUID(), "if-match": version, "content-type": form.contentType } });
+    };
+    const replaced = await replace(oldVersion);
+    expect(replaced.statusCode, replaced.body).toBe(200);
+    expect(replaced.json().asset.sizeBytes).toBe(encoded.length);
+    const inventory = await fileInventory();
+    const stale = await replace(oldVersion);
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error).toBe("ASSET_VERSION_CONFLICT");
+    expect(await fileInventory()).toEqual(inventory);
+    env.MEDIA_QUOTA_BYTES -= 1;
+    const denied = await replace(replaced.json().version);
+    expect(denied.statusCode).toBe(400);
+    expect(denied.json().error).toBe("MEDIA_QUOTA_EXCEEDED");
+    expect(await fileInventory()).toEqual(inventory);
+    expect(await db.select().from(schema.campaignMediaReservations)).toHaveLength(0);
+  });
+
   it("localizes resolved usage details without translating names or changing access and deletion policy", async () => {
     const tokenAssetId = crypto.randomUUID();
     const portraitAssetId = crypto.randomUUID();
@@ -233,6 +269,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
         uploadedByMembershipId: ids.gm,
         storageKey: `${asset.id}.media`,
         mimeType: asset.kind === "AUDIO" ? "audio/mpeg" : "image/webp",
+        audioPurpose: asset.kind === "AUDIO" ? "MUSIC" as const : null,
         sizeBytes: 10,
       })),
     );
@@ -338,7 +375,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
       label: string,
       location: string,
       visibility: AssetUsageDto["visibility"] = "GM_ONLY",
-      deletionPolicy: AssetUsageDto["deletionPolicy"] = "BLOCK",
+      deletionPolicy: AssetUsageDto["deletionPolicy"] = "DETACH",
     ): AssetUsageDto => ({
       kind,
       entityId,
@@ -464,25 +501,14 @@ describe("UIX-293 asset lifecycle HTTP", () => {
           name: expected.name,
         },
         inUse: true,
-        canDelete: false,
-        deletionBlockedReason: "ASSET_IN_USE",
+        canDelete: true,
+        deletionBlockedReason: null,
         hiddenUsageCount: 0,
       });
       expect(resolved.json().usages).toHaveLength(expected.usages.length);
       expect(resolved.json().usages).toEqual(
         expect.arrayContaining(expected.usages),
       );
-      const blocked = await app.inject({
-        method: "DELETE",
-        url: `/api/assets/${expected.assetId}`,
-        headers: headers(secrets.gm),
-      });
-      expect(blocked.statusCode, blocked.body).toBe(409);
-      expect(blocked.json()).toEqual({
-        error: "ASSET_IN_USE",
-        usageCount: expected.usages.length,
-        usages: expect.arrayContaining(expected.usages),
-      });
     }
     // Even visible public/participant assets must not disclose usage names to players.
     for (const assetId of [ids.used, portraitAssetId, audioAssetId]) {
@@ -568,7 +594,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     expect(usage.statusCode, usage.body).toBe(200);
     expect(usage.json()).toMatchObject({
       inUse: true,
-      canDelete: false,
+      canDelete: true,
       usages: [{ kind: "SCENE_BACKGROUND", label: "Secret scene" }],
     });
     const foreign = await app.inject({
@@ -681,7 +707,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     }
   });
 
-  it("blocks deletion of character resource artwork and replacement preserves the resource link", async () => {
+  it("replaces resource artwork without losing the link and detaches it on authorized deletion", async () => {
     const [character] = await db
       .insert(schema.characters)
       .values({
@@ -706,7 +732,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     expect(usage.statusCode, usage.body).toBe(200);
     expect(usage.json()).toMatchObject({
       inUse: true,
-      canDelete: false,
+      canDelete: true,
       usages: [
         {
           kind: "CHARACTER_RESOURCE",
@@ -714,21 +740,11 @@ describe("UIX-293 asset lifecycle HTTP", () => {
           label: "Resource artwork character",
           location: "Ресурс персонажа",
           visibility: "PARTICIPANT",
-          deletionPolicy: "BLOCK",
+          deletionPolicy: "DETACH",
         },
       ],
     });
 
-    const blocked = await app.inject({
-      method: "DELETE",
-      url: `/api/assets/${ids.unused}`,
-      headers: headers(secrets.gm),
-    });
-    expect(blocked.statusCode, blocked.body).toBe(409);
-    expect(blocked.json()).toMatchObject({
-      error: "ASSET_IN_USE",
-      usages: [{ kind: "CHARACTER_RESOURCE", entityId: character!.id }],
-    });
 
     const before = await app.inject({
       method: "GET",
@@ -755,19 +771,22 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     expect(after!.resources).toMatchObject({
       mana: { imageAssetId: ids.unused },
     });
+    const deleted = await app.inject({ method: "DELETE", url: `/api/assets/${ids.unused}`, headers: headers(secrets.gm) });
+    expect(deleted.statusCode).toBe(200);
+    const [detached] = await db.select({ resources: schema.characters.resources }).from(schema.characters).where(eq(schema.characters.id, character!.id));
+    expect(detached!.resources).toEqual({ mana: { current: 3, maximum: 5 } });
   });
 
-  it("returns 409 for used content and deletes unused metadata plus blob", async () => {
+  it("detaches used scene content and deletes unused metadata plus blob", async () => {
     const blocked = await app.inject({
       method: "DELETE",
       url: `/api/assets/${ids.used}`,
       headers: headers(secrets.gm),
     });
-    expect(blocked.statusCode, blocked.body).toBe(409);
-    expect(blocked.json()).toMatchObject({
-      error: "ASSET_IN_USE",
-      usageCount: 1,
-    });
+    expect(blocked.statusCode, blocked.body).toBe(200);
+    const [scene] = await db.select().from(schema.scenes).where(eq(schema.scenes.id, ids.scene));
+    expect(scene!.mapAssetId).toBeNull();
+    await expect(readFile(join(mediaRoot, "used.webp"))).rejects.toMatchObject({ code: "ENOENT" });
     const deleted = await app.inject({
       method: "DELETE",
       url: `/api/assets/${ids.unused}`,
@@ -829,6 +848,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
         width: isAudio ? null : 1,
         height: isAudio ? null : 1,
         durationSeconds: isAudio ? 0.7 : null,
+        audioPurpose: isAudio ? "MUSIC" : null,
       });
     }
     const [scene] = await db

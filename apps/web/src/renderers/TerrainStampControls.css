@@ -1,0 +1,36 @@
+.terrain-stamp-controls {
+  position: fixed;
+  z-index: 40;
+  display: grid;
+  gap: 0.5rem;
+  min-width: min(22rem, 90vw);
+  max-width: calc(100vw - 1rem);
+  max-height: calc(100vh - 1rem);
+  overflow: auto;
+  padding: 0.65rem;
+  background: var(--color-surface, #222);
+  box-shadow: var(--shadow-overlay, 0 10px 28px rgb(0 0 0 / 35%));
+}
+.terrain-stamp-controls [role="group"] {
+  display: flex;
+  gap: 0.35rem;
+}
+.terrain-stamp-controls button {
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+}
+.terrain-stamp-controls img {
+  width: 2.75rem;
+  height: 2.75rem;
+  object-fit: contain;
+}
+.terrain-stamp-controls label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.terrain-stamp-controls input[type="range"] {
+  max-width: 10rem;
+}

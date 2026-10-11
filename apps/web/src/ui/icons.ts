@@ -59,6 +59,7 @@ export {
   Undo2 as UndoIcon,
   UsersRound as PartyLocationIcon,
   Volume2 as VolumeIcon,
+  Star as FavoriteIcon,
   VolumeX as MutedVolumeIcon,
   Coins as CoinsIcon,
   Search as SearchIcon,

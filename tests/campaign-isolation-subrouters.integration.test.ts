@@ -1,6 +1,5 @@
-import { readdir, readFile } from "node:fs/promises";
 import cookie from "@fastify/cookie";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import Fastify, { type FastifyInstance } from "fastify";
 import { drizzle } from "drizzle-orm/pglite";
 import { and, eq } from "drizzle-orm";
@@ -19,6 +18,7 @@ import {
   SUBROUTER_CAMPAIGN_PROBE_KEYS,
   type SubrouterCampaignProbeKey,
 } from "./helpers/uix413-subrouters.js";
+import { createMigratedPglite } from "./helpers/pglite-template.js";
 
 let database: PGlite;
 let app: FastifyInstance;
@@ -169,17 +169,7 @@ async function rowById<
 }
 
 beforeAll(async () => {
-  database = new PGlite();
-  const migrations = new URL("../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrations))
-    .filter((name) => name.endsWith(".sql"))
-    .sort())
-    await database.exec(
-      (await readFile(new URL(file, migrations), "utf8")).replaceAll(
-        "--> statement-breakpoint",
-        "",
-      ),
-    );
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
 
   await db.insert(schema.campaigns).values([
@@ -1123,6 +1113,25 @@ describe("UIX-413 campaign isolation: world map sub-router", () => {
 });
 
 describe("UIX-580 campaign isolation: spell-pack sub-router", () => {
+  it("isolates version reads and rejects mixed pack/version campaign IDs", async () => {
+    const key = "GET /api/spell-packs/:id/versions/:versionId" as const;
+    const packs = ids.spellPack.versions;
+    const versions = ids.spellPackVersion.versions;
+    for (const [packId, versionId] of [
+      [packs.foreign, versions.foreign],
+      [packs.own, versions.foreign],
+      [packs.foreign, versions.own],
+    ]) {
+      await expectForeignNotFound(key, {
+        method: "GET", url: `/api/spell-packs/${packId}/versions/${versionId}`, headers: ownGmHeaders,
+      }, "SPELL_PACK_VERSION_NOT_FOUND");
+    }
+    const own = await app.inject({ method: "GET",
+      url: `/api/spell-packs/${packs.own}/versions/${versions.own}`, headers: ownGmHeaders });
+    expect(own.statusCode).toBe(200);
+    expect(own.json()).toMatchObject({ packId: packs.own, version: 1 });
+  });
+
   const cases = [
     {
       key: "POST /api/spell-packs/:id/versions" as const,

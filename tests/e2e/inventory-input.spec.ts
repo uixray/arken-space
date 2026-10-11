@@ -30,6 +30,7 @@ const snapshot = {
       lifecycle: "ACTIVE" as const,
       archivedAt: null,
       archivedByMembershipId: null,
+      statLayout: [],
       stats: {
         might: 1,
         agility: 1,

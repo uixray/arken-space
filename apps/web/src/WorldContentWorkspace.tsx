@@ -1,9 +1,19 @@
-import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type {
   AssetDto,
   WorldContentDto,
   WorldContentLifecycle,
   WorldContentMediaDto,
+  MembershipDto,
+  WorldMapsSnapshotDto,
   WorldContentRelationEdgeDto,
   WorldContentType,
 } from "@arken/contracts";
@@ -14,6 +24,7 @@ import { AssetPicker } from "./ui/AssetPicker";
 import type { AssetActions } from "./use-asset-actions";
 import { ApiError, formatApiError } from "./api";
 import { WORLD_EDITOR_TITLE } from "./world-workspace-labels";
+import { WorldContentInstancesPanel } from "./WorldContentInstancesPanel";
 import { AppIcon } from "./ui/AppIcon";
 import { MoveDownIcon, MoveUpIcon } from "./ui/icons";
 import {
@@ -40,10 +51,35 @@ import {
   transitionWorldContentLifecycle,
   updateWorldContent,
   updateWorldContentMedia,
+  isDuplicateWorldContentUpdate,
 } from "./world-content-client";
+import {
+  canonicalDraftFromEntity,
+  canonicalEditFieldLabel,
+  canonicalEditFieldValue,
+  canonicalEditPatch,
+  canonicalEditValue,
+  createCanonicalEditEnvelope,
+  reapplyCanonicalEditPatch,
+  type CanonicalEditEnvelope,
+  type CanonicalEditPatch,
+  type CanonicalEntityDraft,
+} from "./canonical-edit-state";
 import "./WorldContentWorkspace.css";
 
 const safeError = "Не удалось выполнить операцию. Попробуйте ещё раз.";
+
+type PendingCanonicalSave = {
+  envelope: CanonicalEditEnvelope;
+  base: WorldContentDto;
+  status: "sending" | "unknown" | "reconciling";
+};
+
+type CanonicalConflict = {
+  base: WorldContentDto;
+  payload: CanonicalEditPatch;
+  latest: WorldContentDto | null;
+};
 
 /**
  * GM entity manager + review queue (UIX-245 Stage 3). Self-fetches against
@@ -57,23 +93,22 @@ const safeError = "Не удалось выполнить операцию. По
  * World Content still has no dedicated upload endpoint (its assetId has no FK).
  *
  * UIX-395: memoized — the entity list/detail/relations/media all self-fetch
- * (see above); `assets` is the only prop sourced from `GameSnapshot`
- * (`snapshot.assets`, passed through from `Sidebar.tsx`), and its array
- * reference stays stable across realtime events that don't touch assets
- * (App.tsx's handlers only replace `snapshot.assets` when an asset is
- * actually uploaded/changed, never as an incidental side effect of an
- * unrelated `setSnapshot` spread). Combined with a stable `onClose` (see
- * `closeWorkspace` in `Sidebar.tsx`), this panel is inert to unrelated
- * realtime snapshot events and only re-renders when assets actually change.
+ * (see above); `assets`, `members` and `worldMaps` are narrowly sourced from
+ * `GameSnapshot` in `Sidebar.tsx` for the instance editor's authorized
+ * selectors. Stable snapshot fields avoid unrelated panel refreshes.
  */
 export const WorldContentWorkspace = memo(function WorldContentWorkspace({
   open,
   assets,
+  members = [],
+  worldMaps,
   onUpload,
   onClose,
 }: {
   open: boolean;
   assets: AssetDto[];
+  members?: readonly MembershipDto[];
+  worldMaps?: WorldMapsSnapshotDto;
   onUpload?: AssetActions["uploadAsset"];
   onClose: () => void;
 }) {
@@ -88,6 +123,60 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
   const [filterQ, setFilterQ] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editorGuard, setEditorGuard] = useState({
+    dirty: false,
+    pending: false,
+  });
+  const editorGuardRef = useRef(editorGuard);
+  const [pendingExit, setPendingExit] = useState<
+    { kind: "close" } | { kind: "select"; id: string } | null
+  >(null);
+  const selectedIdRef = useRef(selectedId);
+  const selectionEpochRef = useRef(0);
+
+  const setSelection = (id: string | null) => {
+    selectionEpochRef.current += 1;
+    selectedIdRef.current = id;
+    setSelectedId(id);
+    editorGuardRef.current = { dirty: false, pending: false };
+    setEditorGuard(editorGuardRef.current);
+  };
+
+  const requestSelection = (id: string) => {
+    if (id === selectedIdRef.current) return;
+    if (editorGuardRef.current.dirty || editorGuardRef.current.pending) {
+      setPendingExit({ kind: "select", id });
+      return;
+    }
+    setSelection(id);
+  };
+
+  const requestClose = () => {
+    if (editorGuardRef.current.dirty || editorGuardRef.current.pending) {
+      setPendingExit({ kind: "close" });
+      return;
+    }
+    selectionEpochRef.current += 1;
+    onClose();
+  };
+
+  const onEditorStateChange = useCallback(
+    (state: { dirty: boolean; pending: boolean }) => {
+      editorGuardRef.current = state;
+      setEditorGuard(state);
+    },
+    [],
+  );
+
+  const confirmExit = () => {
+    const next = pendingExit;
+    setPendingExit(null);
+    if (next?.kind === "select") setSelection(next.id);
+    else if (next?.kind === "close") {
+      selectionEpochRef.current += 1;
+      onClose();
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -129,171 +218,218 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
   };
 
   const refetchSelected = async (id: string) => {
+    const epoch = selectionEpochRef.current;
     try {
       const fresh = await fetchWorldContentDetail(id);
+      if (epoch !== selectionEpochRef.current || selectedIdRef.current !== id)
+        return null;
       applyUpdated(fresh);
+      return fresh;
     } catch {
       // Entity may have been archived/removed elsewhere; leave stale copy,
       // the next full list refresh will reconcile it.
+      return null;
     }
   };
 
   return (
-    <ArkenDialog
-      open={open}
-      footer={false}
-      title={WORLD_EDITOR_TITLE}
-      variant="workspace"
-      className="world-content-workspace"
-      workspaceDraggable={false}
-      onClose={onClose}
-    >
-      <div className="world-content-workspace__grid">
-        <section className="world-content-workspace__list-pane">
-          <div className="world-content-workspace__filters">
-            <label className="field">
-              Тип
-              <FormSelect
-                value={filterType}
-                onChange={(event) =>
-                  setFilterType(event.target.value as WorldContentType | "")
-                }
-              >
-                <option value="">Все типы</option>
-                {WORLD_CONTENT_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {WORLD_CONTENT_TYPE_LABELS[type]}
-                  </option>
-                ))}
-              </FormSelect>
-            </label>
-            <label className="field">
-              Статус
-              <FormSelect
-                value={filterLifecycle}
-                onChange={(event) =>
-                  setFilterLifecycle(
-                    event.target.value as WorldContentLifecycle | "ALL",
-                  )
-                }
-              >
-                <option value="ALL">Все статусы (очередь проверки)</option>
-                {WORLD_CONTENT_LIFECYCLES.map((lifecycle) => (
-                  <option key={lifecycle} value={lifecycle}>
-                    {WORLD_CONTENT_LIFECYCLE_LABELS[lifecycle]}
-                  </option>
-                ))}
-              </FormSelect>
-            </label>
-            <label className="field">
-              Поиск
-              <FormInput
-                value={filterQ}
-                placeholder="Название, описание, алиас…"
-                onChange={(event) => setFilterQ(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void load();
-                }}
-              />
-            </label>
-            <label className="field">
-              Теги (через запятую)
-              <FormInput
-                value={filterTags}
-                placeholder="фракция, порт"
-                onChange={(event) => setFilterTags(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void load();
-                }}
-              />
-            </label>
-            <Button onClick={() => void load()} disabled={loading}>
-              Применить
-            </Button>
-            <Button view="action" onClick={() => setCreateOpen(true)}>
-              Создать сущность
-            </Button>
-          </div>
-          {listError && (
-            <p className="field-error" role="alert">
-              {listError}
-            </p>
-          )}
-          {loading ? (
-            <p className="muted">Загрузка…</p>
-          ) : visible.length === 0 ? (
-            <p className="muted">Ничего не найдено.</p>
-          ) : (
-            <ul className="world-content-workspace__list">
-              {visible.map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    className={
-                      item.id === selectedId
-                        ? "world-content-workspace__row is-selected"
-                        : "world-content-workspace__row"
-                    }
-                    onClick={() => setSelectedId(item.id)}
-                  >
-                    <span
-                      className={`world-content-workspace__badge world-content-workspace__badge--${item.lifecycle.toLowerCase()}`}
+    <>
+      <ArkenDialog
+        open={open}
+        footer={false}
+        title={WORLD_EDITOR_TITLE}
+        variant="workspace"
+        className="world-content-workspace"
+        workspaceDraggable={false}
+        onClose={requestClose}
+      >
+        <div className="world-content-workspace__grid">
+          <section className="world-content-workspace__list-pane">
+            <div className="world-content-workspace__filters">
+              <label className="field">
+                Тип
+                <FormSelect
+                  value={filterType}
+                  onChange={(event) =>
+                    setFilterType(event.target.value as WorldContentType | "")
+                  }
+                >
+                  <option value="">Все типы</option>
+                  {WORLD_CONTENT_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {WORLD_CONTENT_TYPE_LABELS[type]}
+                    </option>
+                  ))}
+                </FormSelect>
+              </label>
+              <label className="field">
+                Статус
+                <FormSelect
+                  value={filterLifecycle}
+                  onChange={(event) =>
+                    setFilterLifecycle(
+                      event.target.value as WorldContentLifecycle | "ALL",
+                    )
+                  }
+                >
+                  <option value="ALL">Все статусы (очередь проверки)</option>
+                  {WORLD_CONTENT_LIFECYCLES.map((lifecycle) => (
+                    <option key={lifecycle} value={lifecycle}>
+                      {WORLD_CONTENT_LIFECYCLE_LABELS[lifecycle]}
+                    </option>
+                  ))}
+                </FormSelect>
+              </label>
+              <label className="field">
+                Поиск
+                <FormInput
+                  value={filterQ}
+                  placeholder="Название, описание, алиас…"
+                  onChange={(event) => setFilterQ(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void load();
+                  }}
+                />
+              </label>
+              <label className="field">
+                Теги (через запятую)
+                <FormInput
+                  value={filterTags}
+                  placeholder="фракция, порт"
+                  onChange={(event) => setFilterTags(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void load();
+                  }}
+                />
+              </label>
+              <Button onClick={() => void load()} disabled={loading}>
+                Применить
+              </Button>
+              <Button view="action" onClick={() => setCreateOpen(true)}>
+                Создать сущность
+              </Button>
+            </div>
+            {listError && (
+              <p className="field-error" role="alert">
+                {listError}
+              </p>
+            )}
+            {loading ? (
+              <p className="muted">Загрузка…</p>
+            ) : visible.length === 0 ? (
+              <p className="muted">Ничего не найдено.</p>
+            ) : (
+              <ul className="world-content-workspace__list">
+                {visible.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      className={
+                        item.id === selectedId
+                          ? "world-content-workspace__row is-selected"
+                          : "world-content-workspace__row"
+                      }
+                      onClick={() => requestSelection(item.id)}
                     >
-                      {WORLD_CONTENT_LIFECYCLE_LABELS[item.lifecycle]}
-                    </span>
-                    <span className="world-content-workspace__row-name">
-                      {item.name}
-                    </span>
-                    <span className="world-content-workspace__row-type">
-                      {WORLD_CONTENT_TYPE_LABELS[item.type]}
-                    </span>
-                    {item.tags.length > 0 && (
-                      <span className="world-content-workspace__row-tags">
-                        {item.tags.map((tag) => (
-                          <span key={tag} className="chip">
-                            {tag}
-                          </span>
-                        ))}
+                      <span
+                        className={`world-content-workspace__badge world-content-workspace__badge--${item.lifecycle.toLowerCase()}`}
+                      >
+                        {WORLD_CONTENT_LIFECYCLE_LABELS[item.lifecycle]}
                       </span>
-                    )}
-                    <span className="world-content-workspace__row-updated">
-                      {new Date(item.updatedAt).toLocaleString()}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-        <section className="world-content-workspace__detail-pane">
-          {selected ? (
-            <EntityDetail
-              key={selected.id}
-              entity={selected}
-              allEntities={items}
-              assets={assets}
-              onUpload={onUpload}
-              onSaved={applyUpdated}
-              onConflict={() => void refetchSelected(selected.id)}
-            />
-          ) : (
-            <p className="muted">
-              Выберите сущность слева, чтобы просмотреть или отредактировать её.
-            </p>
-          )}
-        </section>
-      </div>
-      {createOpen && (
-        <CreateEntityDialog
-          onClose={() => setCreateOpen(false)}
-          onCreated={(created) => {
-            setItems((current) => [created, ...current]);
-            setSelectedId(created.id);
-            setCreateOpen(false);
-          }}
-        />
-      )}
-    </ArkenDialog>
+                      <span className="world-content-workspace__row-name">
+                        {item.name}
+                      </span>
+                      <span className="world-content-workspace__row-type">
+                        {WORLD_CONTENT_TYPE_LABELS[item.type]}
+                      </span>
+                      {item.tags.length > 0 && (
+                        <span className="world-content-workspace__row-tags">
+                          {item.tags.map((tag) => (
+                            <span key={tag} className="chip">
+                              {tag}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                      <span className="world-content-workspace__row-updated">
+                        {new Date(item.updatedAt).toLocaleString()}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section className="world-content-workspace__detail-pane">
+            {selected ? (
+              <>
+                <EntityDetail
+                  key={selected.id}
+                  entity={selected}
+                  allEntities={items}
+                  assets={assets}
+                  onUpload={onUpload}
+                  onSaved={applyUpdated}
+                  onConflict={() => refetchSelected(selected.id)}
+                  onEditorStateChange={onEditorStateChange}
+                />
+                <WorldContentInstancesPanel
+                  key={selected.id}
+                  canonical={{
+                    id: selected.id,
+                    name: selected.name,
+                    type: selected.type,
+                  }}
+                  members={members}
+                  assets={assets}
+                  maps={worldMaps?.maps ?? []}
+                  locations={[
+                    ...(worldMaps?.locations ?? []),
+                    ...(worldMaps?.gmLocations ?? []),
+                  ]}
+                  onUpload={onUpload}
+                />
+              </>
+            ) : (
+              <p className="muted">
+                Выберите сущность слева, чтобы просмотреть или отредактировать
+                её.
+              </p>
+            )}
+          </section>
+        </div>
+        {createOpen && (
+          <CreateEntityDialog
+            onClose={() => setCreateOpen(false)}
+            onCreated={(created) => {
+              setItems((current) => [created, ...current]);
+              setCreateOpen(false);
+              requestSelection(created.id);
+            }}
+          />
+        )}
+      </ArkenDialog>
+      <ArkenDialog
+        open={pendingExit !== null}
+        footer={false}
+        title="Покинуть редактор?"
+        onClose={() => setPendingExit(null)}
+      >
+        <p>
+          {editorGuard.pending
+            ? "Есть незавершённый запрос сохранения. Сервер мог применить его; при уходе вы потеряете черновик и возможность повторить тот же запрос."
+            : "Есть несохранённые изменения. Если продолжить, локальный черновик будет отброшен."}
+        </p>
+        <div className="world-content-workspace__exit-actions">
+          <Button onClick={() => setPendingExit(null)}>Остаться</Button>
+          <Button view="flat-danger" onClick={confirmExit}>
+            {pendingExit?.kind === "select"
+              ? "Отбросить и открыть выбранную сущность"
+              : "Отбросить и закрыть редактор"}
+          </Button>
+        </div>
+      </ArkenDialog>
+    </>
   );
 });
 
@@ -476,66 +612,210 @@ function EntityDetail({
   onUpload,
   onSaved,
   onConflict,
+  onEditorStateChange,
 }: {
   entity: WorldContentDto;
   allEntities: WorldContentDto[];
   assets: AssetDto[];
   onUpload?: AssetActions["uploadAsset"];
   onSaved: (updated: WorldContentDto) => void;
-  onConflict: () => void;
+  onConflict: () => Promise<WorldContentDto | null>;
+  onEditorStateChange: (state: { dirty: boolean; pending: boolean }) => void;
 }) {
-  const [name, setName] = useState(entity.name);
-  const [subtype, setSubtype] = useState(entity.subtype ?? "");
-  const [aliases, setAliases] = useState(entity.aliases.join(", "));
-  const [summary, setSummary] = useState(entity.summary);
-  const [publicText, setPublicText] = useState(entity.publicText);
-  const [gmOnlyText, setGmOnlyText] = useState(entity.gmOnlyText);
-  const [tags, setTags] = useState(entity.tags.join(", "));
-  const [coverAssetId, setCoverAssetId] = useState(entity.coverAssetId ?? "");
+  const [draft, setDraft] = useState<CanonicalEntityDraft>(() =>
+    canonicalDraftFromEntity(entity),
+  );
+  const baseRef = useRef(entity);
+  const [baseline, setBaseline] = useState(entity);
+  const [pending, setPending] = useState<PendingCanonicalSave | null>(null);
+  const [conflict, setConflict] = useState<CanonicalConflict | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const requestEpochRef = useRef(0);
+  const inFlightRef = useRef(false);
 
-  const dirty =
-    name !== entity.name ||
-    subtype !== (entity.subtype ?? "") ||
-    aliases !== entity.aliases.join(", ") ||
-    summary !== entity.summary ||
-    publicText !== entity.publicText ||
-    gmOnlyText !== entity.gmOnlyText ||
-    tags !== entity.tags.join(", ") ||
-    coverAssetId !== (entity.coverAssetId ?? "");
+  const dirty = Object.keys(canonicalEditPatch(baseline, draft)).length > 0;
+  const editorLocked = busy || pending !== null || conflict !== null;
 
-  const save = async () => {
+  useEffect(() => {
+    onEditorStateChange({ dirty, pending: pending !== null });
+  }, [dirty, pending, onEditorStateChange]);
+
+  useEffect(
+    () => () => {
+      requestEpochRef.current += 1;
+    },
+    [],
+  );
+
+  const changeDraft = <K extends keyof CanonicalEntityDraft>(
+    field: K,
+    value: CanonicalEntityDraft[K],
+  ) => {
+    const next = { ...draft, [field]: value };
+    setDraft(next);
+    onEditorStateChange({
+      dirty: Object.keys(canonicalEditPatch(baseRef.current, next)).length > 0,
+      pending: pending !== null,
+    });
+  };
+
+  const commitUpdated = (updated: WorldContentDto, message: string) => {
+    baseRef.current = updated;
+    setBaseline(updated);
+    setDraft(canonicalDraftFromEntity(updated));
+    setPending(null);
+    setConflict(null);
+    onSaved(updated);
+    setNotice(message);
+  };
+
+  const sendEnvelope = async (
+    envelope: CanonicalEditEnvelope,
+    base: WorldContentDto,
+  ) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    const epoch = ++requestEpochRef.current;
+    const isCurrent = () => epoch === requestEpochRef.current;
     setBusy(true);
     setError("");
     setNotice("");
+    setConflict(null);
+    setPending({ envelope, base, status: "sending" });
     try {
-      const updated = await updateWorldContent(entity.id, {
-        revision: entity.revision,
-        name: name.trim(),
-        subtype: subtype.trim() || null,
-        aliases: parseTagList(aliases),
-        summary,
-        publicText,
-        gmOnlyText,
-        tags: parseTagList(tags),
-        coverAssetId: coverAssetId || null,
-      });
-      onSaved(updated);
-      setNotice("Сохранено.");
+      const result = await updateWorldContent(
+        envelope.entityId,
+        { revision: envelope.revision, ...envelope.payload },
+        envelope.actionId,
+      );
+      if (!isCurrent()) return;
+      if (isDuplicateWorldContentUpdate(result)) {
+        setPending({ envelope, base, status: "reconciling" });
+        try {
+          const authoritative = await fetchWorldContentDetail(
+            envelope.entityId,
+          );
+          if (!isCurrent()) return;
+          commitUpdated(
+            authoritative,
+            "Этот запрос уже был применён. Загружена актуальная версия.",
+          );
+        } catch {
+          if (!isCurrent()) return;
+          setPending({ envelope, base, status: "unknown" });
+          setError(
+            "Сервер подтвердил повтор запроса, но актуальную версию загрузить не удалось. Повторите тот же запрос для сверки.",
+          );
+        }
+        return;
+      }
+      commitUpdated(result, "Сохранено.");
     } catch (reason) {
+      if (!isCurrent()) return;
       if (reason instanceof ApiError && reason.status === 409) {
-        onConflict();
+        setPending(null);
+        const nextConflict: CanonicalConflict = {
+          base,
+          payload: { ...envelope.payload },
+          latest: null,
+        };
+        setConflict(nextConflict);
         setError(
-          "Сущность изменена в другом месте. Данные обновлены — проверьте поля и сохраните снова.",
+          "Версия изменилась на сервере. Сверьте локальные и серверные значения.",
+        );
+        const latest = await onConflict();
+        if (!isCurrent()) return;
+        if (latest) setConflict({ ...nextConflict, latest });
+        else
+          setError(
+            "Не удалось загрузить актуальную версию. Черновик сохранён локально; повторите загрузку.",
+          );
+      } else if (
+        reason instanceof ApiError &&
+        reason.status >= 400 &&
+        reason.status < 500
+      ) {
+        setPending(null);
+        setError(formatApiError(reason, safeError));
+      } else {
+        setPending({ envelope, base, status: "unknown" });
+        setError(
+          "Не удалось подтвердить результат сохранения. Черновик и исходный запрос сохранены в этом редакторе; повтор отправит тот же запрос.",
+        );
+      }
+    } finally {
+      if (isCurrent()) {
+        inFlightRef.current = false;
+        setBusy(false);
+      }
+    }
+  };
+
+  const save = async () => {
+    if (!dirty || pending || conflict) return;
+    const base = baseRef.current;
+    const payload = canonicalEditPatch(base, draft);
+    if (Object.keys(payload).length === 0) return;
+    await sendEnvelope(
+      createCanonicalEditEnvelope(base, payload, crypto.randomUUID()),
+      base,
+    );
+  };
+
+  const retryPending = () => {
+    if (pending && pending.status !== "sending")
+      void sendEnvelope(pending.envelope, pending.base);
+  };
+
+  const loadLatestAndDiscard = (latest: WorldContentDto) => {
+    baseRef.current = latest;
+    setBaseline(latest);
+    setDraft(canonicalDraftFromEntity(latest));
+    setConflict(null);
+    setError("");
+    setNotice("Черновик отброшен. Загружена актуальная версия.");
+  };
+
+  const refreshConflict = async () => {
+    if (inFlightRef.current || !conflict) return;
+    inFlightRef.current = true;
+    const epoch = ++requestEpochRef.current;
+    const isCurrent = () => epoch === requestEpochRef.current;
+    setBusy(true);
+    setError("");
+    try {
+      const latest = await onConflict();
+      if (!isCurrent()) return;
+      if (!latest) {
+        setError(
+          "Актуальную версию загрузить не удалось. Черновик не изменён.",
         );
         return;
       }
-      setError(formatApiError(reason, safeError));
+      setConflict((current) => (current ? { ...current, latest } : current));
     } finally {
-      setBusy(false);
+      if (isCurrent()) {
+        inFlightRef.current = false;
+        setBusy(false);
+      }
     }
+  };
+
+  const reapplyConflict = () => {
+    if (!conflict?.latest || conflict.latest.lifecycle === "ARCHIVED") return;
+    const latest = conflict.latest;
+    const payload = { ...conflict.payload };
+    const mergedDraft = reapplyCanonicalEditPatch(latest, payload);
+    baseRef.current = latest;
+    setBaseline(latest);
+    setDraft(mergedDraft);
+    setConflict(null);
+    void sendEnvelope(
+      createCanonicalEditEnvelope(latest, payload, crypto.randomUUID()),
+      latest,
+    );
   };
 
   const transition = async (lifecycle: WorldContentLifecycle) => {
@@ -598,7 +878,7 @@ function EntityDetail({
           <Button
             key={next}
             size="s"
-            disabled={busy}
+            disabled={busy || editorLocked || dirty}
             onClick={() => void transition(next)}
           >
             {next === "ARCHIVED"
@@ -610,7 +890,7 @@ function EntityDetail({
           <Button
             size="s"
             view="flat-danger"
-            disabled={busy}
+            disabled={busy || editorLocked || dirty}
             title="Мягкое удаление: переводит сущность в архив."
             onClick={() => void archive()}
           >
@@ -628,70 +908,152 @@ function EntityDetail({
           {notice}
         </p>
       )}
+      {pending && (
+        <section
+          className="world-content-workspace__save-pending"
+          aria-label="Незавершённое сохранение"
+        >
+          <h3>Результат сохранения не подтверждён</h3>
+          <p>
+            Черновик заблокирован до сверки. Повтор отправит тот же запрос с
+            исходной версией и идентификатором действия.
+          </p>
+          {pending.status !== "sending" && (
+            <Button disabled={busy} onClick={retryPending}>
+              Повторить тот же запрос
+            </Button>
+          )}
+        </section>
+      )}
+      {conflict && (
+        <section
+          className="world-content-workspace__conflict"
+          aria-label="Сверка конфликта версии"
+        >
+          <h3>Сверка изменений</h3>
+          {conflict.latest ? (
+            <>
+              <p>
+                На сервере версия {conflict.latest.revision}. Черновик не
+                применён автоматически.
+              </p>
+              <ul className="world-content-workspace__conflict-fields">
+                {(
+                  Object.entries(conflict.payload) as [
+                    keyof CanonicalEditPatch,
+                    CanonicalEditPatch[keyof CanonicalEditPatch],
+                  ][]
+                ).map(([field, localValue]) => (
+                  <li key={field}>
+                    <strong>{canonicalEditFieldLabel(field)}</strong>
+                    <p>Было: {canonicalEditFieldValue(conflict.base, field)}</p>
+                    <p>Ваш черновик: {canonicalEditValue(localValue)}</p>
+                    <p>
+                      На сервере:{" "}
+                      {canonicalEditFieldValue(conflict.latest!, field)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <div className="world-content-workspace__conflict-actions">
+                <Button disabled={busy} onClick={refreshConflict}>
+                  Обновить сравнение
+                </Button>
+                <Button
+                  disabled={busy}
+                  onClick={() => loadLatestAndDiscard(conflict.latest!)}
+                >
+                  Отбросить черновик и загрузить версию{" "}
+                  {conflict.latest.revision}
+                </Button>
+                <Button
+                  view="action"
+                  disabled={busy || conflict.latest.lifecycle === "ARCHIVED"}
+                  onClick={reapplyConflict}
+                >
+                  {conflict.latest.lifecycle === "ARCHIVED"
+                    ? "Архивную версию нельзя сохранить"
+                    : `Перенести мои изменения на версию ${conflict.latest.revision} и сохранить`}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p>
+                Актуальную версию загрузить не удалось. Локальный черновик
+                сохранён, но повторное применение недоступно до сверки.
+              </p>
+              <Button disabled={busy} onClick={refreshConflict}>
+                Загрузить актуальную версию
+              </Button>
+            </>
+          )}
+        </section>
+      )}
       <label className="field">
         Название
         <FormInput
-          value={name}
-          disabled={busy}
-          onChange={(event) => setName(event.target.value)}
+          value={draft.name}
+          disabled={editorLocked}
+          onChange={(event) => changeDraft("name", event.target.value)}
         />
       </label>
       <label className="field">
         Подтип
         <FormInput
-          value={subtype}
-          disabled={busy}
-          onChange={(event) => setSubtype(event.target.value)}
+          value={draft.subtype}
+          disabled={editorLocked}
+          onChange={(event) => changeDraft("subtype", event.target.value)}
         />
       </label>
       <label className="field">
         Алиасы (через запятую)
         <FormInput
-          value={aliases}
-          disabled={busy}
-          onChange={(event) => setAliases(event.target.value)}
+          value={draft.aliases}
+          disabled={editorLocked}
+          onChange={(event) => changeDraft("aliases", event.target.value)}
         />
       </label>
       <label className="field">
         Теги (через запятую)
         <FormInput
-          value={tags}
-          disabled={busy}
-          onChange={(event) => setTags(event.target.value)}
+          value={draft.tags}
+          disabled={editorLocked}
+          onChange={(event) => changeDraft("tags", event.target.value)}
         />
       </label>
       <div className="field">
         <span>Обложка</span>
         <AssetPicker
           aria-label="Обложка"
-          value={coverAssetId || null}
+          value={draft.coverAssetId || null}
           onUpload={
             onUpload
               ? async (file) => (await onUpload(file, "IMAGE")).id
               : undefined
           }
           noneLabel="Без обложки"
-          disabled={busy}
+          disabled={editorLocked}
           assets={assets.filter((asset) => asset.mimeType.startsWith("image/"))}
-          onChange={(assetId) => setCoverAssetId(assetId ?? "")}
+          onChange={(assetId) => changeDraft("coverAssetId", assetId ?? "")}
         />
       </div>
       <label className="field">
         Краткое описание
         <FormTextArea
-          value={summary}
+          value={draft.summary}
           rows={2}
-          disabled={busy}
-          onChange={(event) => setSummary(event.target.value)}
+          disabled={editorLocked}
+          onChange={(event) => changeDraft("summary", event.target.value)}
         />
       </label>
       <label className="field">
         Текст для игроков (публичный)
         <FormTextArea
-          value={publicText}
+          value={draft.publicText}
           rows={8}
-          disabled={busy}
-          onChange={(event) => setPublicText(event.target.value)}
+          disabled={editorLocked}
+          onChange={(event) => changeDraft("publicText", event.target.value)}
         />
       </label>
       <div className="world-content-workspace__gm-only">
@@ -699,15 +1061,15 @@ function EntityDetail({
           Только для мастера — игроки этот текст никогда не увидят
         </p>
         <FormTextArea
-          value={gmOnlyText}
+          value={draft.gmOnlyText}
           rows={8}
-          disabled={busy}
-          onChange={(event) => setGmOnlyText(event.target.value)}
+          disabled={editorLocked}
+          onChange={(event) => changeDraft("gmOnlyText", event.target.value)}
         />
       </div>
       <Button
         view="action"
-        disabled={busy || !dirty}
+        disabled={editorLocked || !dirty}
         loading={busy}
         onClick={() => void save()}
       >

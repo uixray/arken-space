@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type {
+  AssetKind,
+  AudioPurpose,
   AssetDto,
   AssetUsageDto,
   AssetUsageResponseDto,
@@ -11,9 +13,21 @@ export function assetContentVersion(storageKey: string) {
   return `"${createHash("sha256").update(storageKey).digest("hex")}"`;
 }
 
+/** Compare upload idempotency receipts without letting purpose drift on replay. */
+export function assetUploadActionMatches(
+  payload: { kind?: string; audioPurpose?: string | null } | null,
+  kind: AssetKind,
+  audioPurpose: AudioPurpose | null,
+) {
+  if (payload?.kind !== kind) return false;
+  if (kind !== "AUDIO") return payload.audioPurpose == null && audioPurpose === null;
+  return (payload.audioPurpose ?? "MUSIC") === (audioPurpose ?? "MUSIC");
+}
+
 export const ASSET_DEPENDENCY_REGISTRY = [
   "SCENE_BACKGROUND",
   "TOKEN_DEFINITION",
+  "TOKEN_INSTANCE",
   "CHARACTER_PORTRAIT",
   "CHARACTER_RESOURCE",
   "CHARACTER_MEDIA",
@@ -21,6 +35,7 @@ export const ASSET_DEPENDENCY_REGISTRY = [
   "AUDIO_TRACK",
   "WORLD_CONTENT_COVER",
   "WORLD_CONTENT_MEDIA",
+  "WORLD_CONTENT_INSTANCE_PORTRAIT",
   "GENERATED_TOKEN_SOURCE",
 ] as const;
 
@@ -33,6 +48,7 @@ export function assetDto(asset: AssetMetadata): AssetDto {
   return {
     id: asset.id,
     kind: asset.kind,
+    audioPurpose: asset.audioPurpose,
     name: asset.name,
     mimeType: asset.mimeType,
     sizeBytes: asset.sizeBytes,

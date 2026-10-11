@@ -46,6 +46,7 @@ function makeCharacter(overrides: Partial<CharacterDto> = {}): CharacterDto {
     archivedAt: null,
     archivedByMembershipId: null,
     ...overrides,
+    statLayout: overrides.statLayout ?? [],
   };
 }
 

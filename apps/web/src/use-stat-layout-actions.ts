@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import type { StatLayout } from "@arken/contracts";
 import { api } from "./api";
 
@@ -15,6 +15,11 @@ import { api } from "./api";
  */
 export interface StatLayoutActions {
   onUpdateStatLayout: (layout: StatLayout, revision: number) => Promise<void>;
+  onUpdateCharacterStatLayout: (
+    characterId: string,
+    layout: StatLayout,
+    revision: number,
+  ) => Promise<void>;
 }
 
 export function useStatLayoutActions(dependencies: {
@@ -22,6 +27,7 @@ export function useStatLayoutActions(dependencies: {
   load: () => Promise<void>;
 }): StatLayoutActions {
   const { load } = dependencies;
+  const retryRef = useRef<{ fingerprint: string; actionId: string } | null>(null);
   return useMemo<StatLayoutActions>(
     () => ({
       onUpdateStatLayout: async (layout, revision) => {
@@ -34,6 +40,20 @@ export function useStatLayoutActions(dependencies: {
           }),
         });
         await load();
+      },
+      onUpdateCharacterStatLayout: async (characterId, layout, revision) => {
+        const fingerprint = JSON.stringify([characterId, revision, layout]);
+        const actionId =
+          retryRef.current?.fingerprint === fingerprint
+            ? retryRef.current.actionId
+            : crypto.randomUUID();
+        retryRef.current = { fingerprint, actionId };
+        await api(`/api/characters/${encodeURIComponent(characterId)}/stat-layout`, {
+          method: "PATCH",
+          body: JSON.stringify({ actionId, revision, layout }),
+        });
+        await load();
+        if (retryRef.current?.actionId === actionId) retryRef.current = null;
       },
     }),
     [load],

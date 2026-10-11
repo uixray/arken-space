@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { WorldContentMediaDto } from "@arken/contracts";
 import {
   computeWorldContentMediaSwap,
@@ -7,7 +7,57 @@ import {
   parseTagList,
   slugifyWorldContentName,
   sortWorldContentMedia,
+  worldContentListQueryString,
+  isDuplicateWorldContentUpdate,
+  updateWorldContent,
 } from "./world-content-client";
+
+const apiMock = vi.hoisted(() => vi.fn());
+vi.mock("./api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./api")>()),
+  api: apiMock,
+}));
+
+describe("world content list query", () => {
+  it("serializes relatedTo alongside existing conjunctive filters", () => {
+    expect(
+      worldContentListQueryString({
+        type: "PERSON",
+        tags: ["ally", "harbor"],
+        q: "Mira Vale",
+        relatedTo: "11111111-1111-4111-8111-111111111111",
+      }),
+    ).toBe(
+      "?type=PERSON&tags=ally%2Charbor&q=Mira+Vale&relatedTo=11111111-1111-4111-8111-111111111111",
+    );
+  });
+});
+
+describe("canonical PATCH result", () => {
+  it("sends the supplied action ID verbatim and preserves duplicate as a union result", async () => {
+    apiMock.mockResolvedValueOnce({ duplicate: true });
+    const result = await updateWorldContent(
+      "entity-id",
+      { revision: 7, name: "Changed" },
+      "same-action-id",
+    );
+    expect(apiMock).toHaveBeenCalledWith("/api/world-content/entity-id", {
+      method: "PATCH",
+      body: JSON.stringify({
+        revision: 7,
+        name: "Changed",
+        actionId: "same-action-id",
+      }),
+    });
+    expect(result).toEqual({ duplicate: true });
+    expect(isDuplicateWorldContentUpdate(result)).toBe(true);
+    expect(
+      isDuplicateWorldContentUpdate({
+        duplicate: false,
+      } as unknown as typeof result),
+    ).toBe(false);
+  });
+});
 
 function media(id: string, ordering: number): WorldContentMediaDto {
   return {

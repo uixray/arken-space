@@ -46,6 +46,7 @@ const snapshot: GameSnapshot = {
       lifecycle: "ACTIVE" as const,
       archivedAt: null,
       archivedByMembershipId: null,
+      statLayout: starterStatLayout,
       stats: {
         might: 2,
         agility: 3,

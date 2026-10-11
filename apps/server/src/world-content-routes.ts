@@ -1,4 +1,13 @@
-import { and, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  eq,
+  exists,
+  ilike,
+  inArray,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
@@ -179,6 +188,7 @@ const listQuerySchema = z
     type: worldContentTypeSchema.optional(),
     tags: z.string().trim().min(1).max(500).optional(),
     q: z.string().trim().min(1).max(200).optional(),
+    relatedTo: z.string().uuid().optional(),
   })
   .partial()
   .passthrough();
@@ -187,9 +197,44 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
   app.get("/api/world-content", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    const query = listQuerySchema.parse(request.query);
+    const parsedQuery = listQuerySchema.safeParse(request.query);
+    if (!parsedQuery.success)
+      return fail(reply, 400, "WORLD_CONTENT_QUERY_INVALID");
+    const query = parsedQuery.data;
     const authCtx: WorldContentAuthContext = { role: auth.role };
     const conditions: SQL[] = [worldContentVisibility(authCtx)];
+    if (query.relatedTo) {
+      // Match the relation-detail endpoint's subject 404 before inspecting
+      // edges. A hidden/unknown subject must not be distinguishable by result
+      // count, even for a caller who guessed its UUID.
+      const [subject] = await db
+        .select({ id: worldContent.id })
+        .from(worldContent)
+        .where(worldContentByIdVisibleTo(authCtx, query.relatedTo))
+        .limit(1);
+      if (!subject) return fail(reply, 404, "WORLD_CONTENT_NOT_FOUND");
+      // Direct adjacency only; EXISTS prevents duplicate result rows and the
+      // outer visibility condition hides PLAYER-invisible endpoints.
+      conditions.push(
+        exists(
+          db
+            .select({ id: worldContentRelations.id })
+            .from(worldContentRelations)
+            .where(
+              or(
+                and(
+                  eq(worldContentRelations.fromWorldContentId, query.relatedTo),
+                  eq(worldContentRelations.toWorldContentId, worldContent.id),
+                ),
+                and(
+                  eq(worldContentRelations.toWorldContentId, query.relatedTo),
+                  eq(worldContentRelations.fromWorldContentId, worldContent.id),
+                ),
+              ),
+            ),
+        ),
+      );
+    }
     if (query.type) conditions.push(eq(worldContent.type, query.type));
     const tags = query.tags
       ? query.tags

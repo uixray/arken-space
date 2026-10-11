@@ -1,0 +1,20 @@
+[
+  {
+    "file": "evil-laugh.ogg",
+    "author": "AntumDeluge",
+    "source": "https://opengameart.org/content/evil-laugh",
+    "license": "CC0-1.0",
+    "download": "https://opengameart.org/sites/default/files/laugh-evil-1_0.ogg",
+    "sha256": "2662D484FD3F174145DE1AC7527994D153B109FF8F1EE3AC83591BEEC58D62E4",
+    "bytes": 28146
+  },
+  {
+    "file": "surprise-oh-my.wav",
+    "author": "rubenwardy",
+    "source": "https://opengameart.org/content/oh-my-help-me-posh-english-high-pitched",
+    "license": "CC0-1.0",
+    "download": "https://opengameart.org/sites/default/files/ohmy.wav",
+    "sha256": "434762A2600DBB33BEA22453BC6B02442A9C18BA8A21F9E67FB5782C1D8781D6",
+    "bytes": 74690
+  }
+]

@@ -1,0 +1,198 @@
+.sound-clip-editor {
+  display: grid;
+  gap: 0.875rem;
+  padding-block: 0.875rem;
+  border-block-start: 1px solid var(--border-color, currentColor);
+  color: var(--text, inherit);
+}
+.sound-clip-editor__topline,
+.sound-clip-editor__waveform-label,
+.sound-clip-editor__actions,
+.sound-clip-editor__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}
+.sound-clip-editor__topline h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.sound-clip-editor__source,
+.sound-clip-editor__hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  opacity: 0.78;
+}
+.sound-clip-editor__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  opacity: 0.8;
+}
+.sound-clip-editor__waveform-wrap {
+  display: grid;
+  gap: 0.5rem;
+}
+.sound-clip-editor__waveform-label {
+  align-items: baseline;
+  font-size: 0.8125rem;
+}
+.sound-clip-editor__waveform-label span:last-child {
+  opacity: 0.75;
+}
+.sound-clip-editor__waveform {
+  position: relative;
+  height: 7.5rem;
+  min-height: 7.5rem;
+  touch-action: none;
+  overflow: visible;
+}
+.sound-clip-editor__waveform svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+.sound-clip-editor__baseline {
+  stroke: currentColor;
+  stroke-opacity: 0.25;
+  stroke-width: 1;
+}
+.sound-clip-editor__peak {
+  fill: var(--text, currentColor);
+  fill-opacity: 0.34;
+}
+.sound-clip-editor__peak--selected {
+  fill: var(--focus-ring, #86c7ff);
+  fill-opacity: 0.88;
+}
+.sound-clip-editor__dim {
+  fill: var(--surface-1, #000);
+  fill-opacity: 0.48;
+  pointer-events: none;
+}
+.sound-clip-editor__marker {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  height: calc(100% + 0.5rem);
+  width: 1.5rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--focus-ring, #86c7ff);
+  cursor: ew-resize;
+  transform: translateX(-50%);
+  touch-action: none;
+}
+.sound-clip-editor__marker::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0.5rem;
+  left: 50%;
+  border-left: 2px solid currentColor;
+}
+.sound-clip-editor__marker::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-inline: 0.45rem solid transparent;
+  border-top: 0.55rem solid currentColor;
+  transform: translateX(-50%);
+}
+.sound-clip-editor__marker span {
+  position: absolute;
+  bottom: -0.125rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.125rem 0.3rem;
+  border-radius: 0.25rem;
+  background: var(--surface-2, #242424);
+  color: inherit;
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+.sound-clip-editor__marker:focus-visible {
+  outline: 2px solid var(--focus-ring, #86c7ff);
+  outline-offset: 2px;
+  border-radius: 0.2rem;
+}
+.sound-clip-editor__marker--end {
+  color: var(--text-accent, #f2b36f);
+}
+.sound-clip-editor__range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(9rem, 1fr));
+  gap: 0.625rem;
+  align-items: end;
+}
+.sound-clip-editor__range label,
+.sound-clip-editor__details label {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.sound-clip-editor__range input,
+.sound-clip-editor__details input,
+.sound-clip-editor__details select {
+  width: 100%;
+  min-height: 2.4rem;
+  box-sizing: border-box;
+}
+.sound-clip-editor__range-summary {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.8125rem;
+  opacity: 0.8;
+}
+.sound-clip-editor__details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(9rem, 1fr));
+  gap: 0.625rem;
+}
+.sound-clip-editor__note {
+  grid-column: 1 / -1;
+}
+.sound-clip-editor__loop {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.5rem;
+}
+.sound-clip-editor audio {
+  width: min(100%, 28rem);
+}
+.sound-clip-editor__error {
+  margin: 0;
+  color: var(--text-danger, #ff8a8a);
+}
+.sound-clip-editor__success {
+  margin: 0;
+  color: var(--text-success, #9bd69b);
+}
+.sound-clip-editor :is(button, input, select):focus-visible {
+  outline: 2px solid var(--focus-ring, #86c7ff);
+  outline-offset: 2px;
+}
+@media (max-width: 42rem) {
+  .sound-clip-editor__range,
+  .sound-clip-editor__details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sound-clip-editor__range-summary,
+  .sound-clip-editor__note {
+    grid-column: auto;
+  }
+  .sound-clip-editor__waveform-label {
+    align-items: start;
+    flex-direction: column;
+  }
+}

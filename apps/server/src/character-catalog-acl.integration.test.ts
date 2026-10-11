@@ -1,7 +1,6 @@
-import { readdir, readFile } from "node:fs/promises";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -9,6 +8,7 @@ import * as schema from "@arken/db";
 import { env } from "./env.js";
 import { hashToken } from "./security.js";
 import { registerRoutes } from "./routes.js";
+import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
 
 let database: PGlite;
 let app: FastifyInstance;
@@ -37,18 +37,7 @@ const headers = (secret: string) => ({
 });
 
 beforeEach(async () => {
-  database = new PGlite();
-  const migrations = new URL("../../../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrations))
-    .filter((name) => name.endsWith(".sql"))
-    .sort()) {
-    await database.exec(
-      (await readFile(new URL(file, migrations), "utf8")).replaceAll(
-        "--> statement-breakpoint",
-        "",
-      ),
-    );
-  }
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
 
   await db.insert(schema.campaigns).values([
@@ -131,6 +120,385 @@ afterEach(async () => {
 });
 
 describe("Character catalog ACL and player ability management", () => {
+  it("executes a configured no-roll ability once and replays its receipt", async () => {
+    const entryId = id();
+    const actionId = id();
+    await db.insert(schema.characterCatalogEntries).values({
+      id: entryId,
+      characterId: ids.character,
+      kind: "ABILITY",
+      name: "Ward",
+      description: "Raise a ward",
+      data: {
+        activation: { consumeUse: true },
+        uses: { current: 1, max: 1, recharge: "DAY" },
+      },
+    });
+
+    const execute = () =>
+      app.inject({
+        method: "POST",
+        url: `/api/characters/${ids.character}/catalog/${entryId}/roll`,
+        headers: headers(secrets.owner),
+        payload: { actionId, entryRevision: 0 },
+      });
+    const first = await execute();
+    expect(first.statusCode, first.body).toBe(201);
+    const replay = await execute();
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().duplicate).toBe(true);
+
+    const [entry] = await db
+      .select()
+      .from(schema.characterCatalogEntries)
+      .where(eq(schema.characterCatalogEntries.id, entryId));
+    expect(entry?.revision).toBe(1);
+    expect((entry?.data as { uses: { current: number } }).uses.current).toBe(0);
+    const receipts = await db
+      .select()
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.actionId, actionId));
+    expect(receipts).toHaveLength(1);
+  });
+
+  it("does not double-spend a no-roll ability resource or use under concurrent actions", async () => {
+    const entryId = id();
+    await db
+      .update(schema.characters)
+      .set({ resources: { physicalPower: { current: 5, maximum: 5 } } })
+      .where(eq(schema.characters.id, ids.character));
+    await db.insert(schema.characterCatalogEntries).values({
+      id: entryId,
+      characterId: ids.character,
+      kind: "ABILITY",
+      name: "Shield",
+      data: {
+        activation: { consumeUse: true, cost: { type: "physical", amount: 2 } },
+        uses: { current: 2, max: 2, recharge: "DAY" },
+      },
+    });
+    const request = (actionId: string) =>
+      app.inject({
+        method: "POST",
+        url: `/api/characters/${ids.character}/catalog/${entryId}/roll`,
+        headers: headers(secrets.owner),
+        payload: { actionId, entryRevision: 0 },
+      });
+    const [first, second] = await Promise.all([request(id()), request(id())]);
+    expect([first.statusCode, second.statusCode].sort()).toEqual([201, 409]);
+    const [afterCharacter] = await db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    const [entry] = await db
+      .select()
+      .from(schema.characterCatalogEntries)
+      .where(eq(schema.characterCatalogEntries.id, entryId));
+    expect(
+      (afterCharacter?.resources as { physicalPower: { current: number } })
+        .physicalPower.current,
+    ).toBe(3);
+    expect(afterCharacter?.revision).toBe(1);
+    expect((entry?.data as { uses: { current: number } }).uses.current).toBe(1);
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.gameEvents)
+          .where(eq(schema.gameEvents.type, "entry.roll"))
+      ).length,
+    ).toBe(1);
+  });
+
+  it("rolls back resource spend when the entry revision CAS fails mid-transaction", async () => {
+    const entryId = id();
+    const actionId = id();
+    await db
+      .update(schema.characters)
+      .set({ resources: { physicalPower: { current: 5, maximum: 5 } } })
+      .where(eq(schema.characters.id, ids.character));
+    await db.insert(schema.characterCatalogEntries).values({
+      id: entryId,
+      characterId: ids.character,
+      kind: "ABILITY",
+      name: "Ward",
+      data: {
+        activation: { consumeUse: true, cost: { type: "physical", amount: 2 } },
+        uses: { current: 1, max: 1, recharge: "DAY" },
+      },
+    });
+    await database.exec(`
+      CREATE FUNCTION reject_test_entry_update() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RETURN NULL; END; $$;
+      CREATE TRIGGER reject_test_entry_update BEFORE UPDATE ON character_catalog_entries
+      FOR EACH ROW WHEN (OLD.id = '${entryId}') EXECUTE FUNCTION reject_test_entry_update();
+    `);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entryId}/roll`,
+      headers: headers(secrets.owner),
+      payload: { actionId, entryRevision: 0 },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ error: "ENTRY_CONFLICT" });
+    const [character] = await db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    const [entry] = await db
+      .select()
+      .from(schema.characterCatalogEntries)
+      .where(eq(schema.characterCatalogEntries.id, entryId));
+    expect(character?.revision).toBe(0);
+    expect(
+      (character?.resources as { physicalPower: { current: number } })
+        .physicalPower.current,
+    ).toBe(5);
+    expect(entry?.revision).toBe(0);
+    expect((entry?.data as { uses: { current: number } }).uses.current).toBe(1);
+    expect(
+      await db
+        .select()
+        .from(schema.gameEvents)
+        .where(eq(schema.gameEvents.actionId, actionId)),
+    ).toHaveLength(0);
+  });
+
+  it("shares ability information once without spending resources or uses", async () => {
+    const entryId = id();
+    const actionId = id();
+    await db
+      .update(schema.characters)
+      .set({ resources: { physicalPower: { current: 5, maximum: 5 } } })
+      .where(eq(schema.characters.id, ids.character));
+    await db.insert(schema.characterCatalogEntries).values({
+      id: entryId,
+      characterId: ids.character,
+      kind: "ABILITY",
+      name: "Flash",
+      description: "A synthetic ability description.",
+      data: {
+        activation: {
+          consumeUse: true,
+          cost: { type: "physical", amount: 2 },
+        },
+        uses: { current: 1, max: 1, recharge: "DAY" },
+      },
+    });
+    const messageCountBefore = (
+      await db
+        .select()
+        .from(schema.chatMessages)
+        .where(eq(schema.chatMessages.campaignId, ids.campaign))
+    ).length;
+
+    const request = () =>
+      app.inject({
+        method: "POST",
+        url: `/api/characters/${ids.character}/catalog/${entryId}/roll`,
+        headers: headers(secrets.owner),
+        payload: {
+          actionId,
+          mode: "SHARE",
+          entryRevision: 0,
+          visibility: "PUBLIC",
+        },
+      });
+    const response = await request();
+    expect(response.statusCode, response.body).toBe(201);
+    expect(response.json().skillCard).toMatchObject({
+      execution: "SHARED",
+      action: null,
+      formula: null,
+      result: null,
+      uses: { before: 1, after: 1, max: 1 },
+      activationCost: null,
+    });
+
+    const [characterAfterShare] = await db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    const [entryAfterShare] = await db
+      .select()
+      .from(schema.characterCatalogEntries)
+      .where(eq(schema.characterCatalogEntries.id, entryId));
+    expect(characterAfterShare?.revision).toBe(0);
+    expect(characterAfterShare?.resources).toEqual({
+      physicalPower: { current: 5, maximum: 5 },
+    });
+    expect(entryAfterShare?.revision).toBe(0);
+    expect(
+      (entryAfterShare?.data as { uses: { current: number } }).uses.current,
+    ).toBe(1);
+
+    const messagesAfterShare = await db
+      .select()
+      .from(schema.chatMessages)
+      .where(eq(schema.chatMessages.campaignId, ids.campaign));
+    expect(messagesAfterShare).toHaveLength(messageCountBefore + 1);
+    expect(messagesAfterShare).toContainEqual(
+      expect.objectContaining({
+        id: response.json().messageId,
+        kind: "DICE",
+        dice: expect.objectContaining({
+          skillCard: expect.objectContaining({ execution: "SHARED" }),
+        }),
+      }),
+    );
+    const shareEvents = await db
+      .select()
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.actionId, actionId));
+    expect(shareEvents).toHaveLength(1);
+    expect(shareEvents[0]?.type).toBe("entry.shared");
+    expect(shareEvents[0]?.payload).toMatchObject({
+      skillCard: { execution: "SHARED", activationCost: null },
+      resourceCost: null,
+    });
+    expect(
+      await db
+        .select()
+        .from(schema.gameEvents)
+        .where(eq(schema.gameEvents.type, "entry.roll")),
+    ).toHaveLength(0);
+
+    const replay = await request();
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual({ duplicate: true });
+    expect(
+      await db
+        .select()
+        .from(schema.chatMessages)
+        .where(eq(schema.chatMessages.campaignId, ids.campaign)),
+    ).toHaveLength(messageCountBefore + 1);
+    expect(
+      await db
+        .select()
+        .from(schema.gameEvents)
+        .where(eq(schema.gameEvents.actionId, actionId)),
+    ).toHaveLength(1);
+  });
+
+  it("leaves an exhausted no-roll ability unchanged", async () => {
+    const entryId = id();
+    const actionId = id();
+    await db
+      .update(schema.characters)
+      .set({ resources: { physicalPower: { current: 5, maximum: 5 } } })
+      .where(eq(schema.characters.id, ids.character));
+    await db.insert(schema.characterCatalogEntries).values({
+      id: entryId,
+      characterId: ids.character,
+      kind: "ABILITY",
+      name: "Exhausted ward",
+      data: {
+        activation: {
+          consumeUse: true,
+          cost: { type: "physical", amount: 2 },
+        },
+        uses: { current: 0, max: 1, recharge: "DAY" },
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entryId}/roll`,
+      headers: headers(secrets.owner),
+      payload: { actionId, entryRevision: 0 },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ error: "NO_ABILITY_USES" });
+    const [character] = await db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    const [entry] = await db
+      .select()
+      .from(schema.characterCatalogEntries)
+      .where(eq(schema.characterCatalogEntries.id, entryId));
+    expect(character?.revision).toBe(0);
+    expect(character?.resources).toEqual({
+      physicalPower: { current: 5, maximum: 5 },
+    });
+    expect(entry?.revision).toBe(0);
+    expect((entry?.data as { uses: { current: number } }).uses.current).toBe(0);
+    expect(
+      await db
+        .select()
+        .from(schema.chatMessages)
+        .where(eq(schema.chatMessages.campaignId, ids.campaign)),
+    ).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(schema.gameEvents)
+        .where(eq(schema.gameEvents.actionId, actionId)),
+    ).toHaveLength(0);
+  });
+
+  it("leaves a no-roll ability unchanged when its resource cost is unaffordable", async () => {
+    const entryId = id();
+    const actionId = id();
+    await db
+      .update(schema.characters)
+      .set({ resources: { physicalPower: { current: 1, maximum: 5 } } })
+      .where(eq(schema.characters.id, ids.character));
+    await db.insert(schema.characterCatalogEntries).values({
+      id: entryId,
+      characterId: ids.character,
+      kind: "ABILITY",
+      name: "Costly ward",
+      data: {
+        activation: {
+          consumeUse: true,
+          cost: { type: "physical", amount: 2 },
+        },
+        uses: { current: 1, max: 1, recharge: "DAY" },
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entryId}/roll`,
+      headers: headers(secrets.owner),
+      payload: { actionId, entryRevision: 0 },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      error: "INSUFFICIENT_CHARACTER_RESOURCE",
+      resource: "physical",
+      required: 2,
+      available: 1,
+    });
+    const [character] = await db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    const [entry] = await db
+      .select()
+      .from(schema.characterCatalogEntries)
+      .where(eq(schema.characterCatalogEntries.id, entryId));
+    expect(character?.revision).toBe(0);
+    expect(character?.resources).toEqual({
+      physicalPower: { current: 1, maximum: 5 },
+    });
+    expect(entry?.revision).toBe(0);
+    expect((entry?.data as { uses: { current: number } }).uses.current).toBe(1);
+    expect(
+      await db
+        .select()
+        .from(schema.chatMessages)
+        .where(eq(schema.chatMessages.campaignId, ids.campaign)),
+    ).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(schema.gameEvents)
+        .where(eq(schema.gameEvents.actionId, actionId)),
+    ).toHaveLength(0);
+  });
+
   it("recharges only this character's short-rest abilities even when resources are full", async () => {
     const otherCharacterId = id();
     await db.insert(schema.characters).values({

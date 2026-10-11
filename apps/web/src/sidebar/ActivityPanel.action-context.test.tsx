@@ -46,6 +46,7 @@ function character(id: string, name: string, revision: number): CharacterDto {
     lifecycle: "ACTIVE",
     archivedAt: null,
     archivedByMembershipId: null,
+  statLayout: [],
   };
 }
 

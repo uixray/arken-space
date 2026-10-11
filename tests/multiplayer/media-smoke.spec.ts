@@ -173,6 +173,9 @@ test("UIX-642 synthetic image and real OGG survive download, playback, reload an
     process.env.E2E_BASE_URL,
     "Run only through the disposable Compose runner",
   ).toBe(origin);
+  expect(process.env.E2E_DISPOSABLE_PROJECT).toMatch(
+    /^arken-e2e-[a-z0-9][a-z0-9_-]*$/,
+  );
   const revision = process.env.E2E_BUILD_REVISION ?? "";
   expect(revision).toMatch(/^[a-f0-9]{40}$/);
   expect(audio.subarray(0, 4).toString()).toBe("OggS");
@@ -186,6 +189,14 @@ test("UIX-642 synthetic image and real OGG survive download, playback, reload an
   let authenticated = false;
   try {
     await healthy(gm.request, revision); // До любого database/API write.
+    const capabilities = await response(
+      gm.request,
+      "/api/account/capabilities",
+    );
+    expect(await capabilities.json()).toMatchObject({
+      accountAuthEnabled: true,
+      campaignLinkAccessEnabled: true,
+    });
     const { db, client } = createDatabase(databaseUrl);
     const token = `media-smoke-${randomUUID()}-${randomUUID()}`;
     let campaignId: string;
@@ -248,6 +259,7 @@ test("UIX-642 synthetic image and real OGG survive download, playback, reload an
       reconnectionDelay: 250,
       reconnectionDelayMax: 1000,
       extraHeaders: {
+        Origin: origin,
         Cookie: (await gm.cookies(origin))
           .map(({ name, value }) => `${name}=${value}`)
           .join("; "),

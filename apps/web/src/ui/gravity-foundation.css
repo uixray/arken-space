@@ -2,7 +2,7 @@
   /* Gravity UI preview tokens stay namespaced because this is a separate
    * surface. Their scale and typography deliberately reference the app
    * foundation, while the preview palette remains independent. */
-  --arken-font-sans: var(--font-sans, system-ui, sans-serif);
+  --arken-font-sans: var(--font-family-sans, system-ui, sans-serif);
   --arken-space-sm: var(--space-sm, 8px);
   --arken-space-md: var(--space-md, 12px);
   --arken-space-lg: var(--space-lg, 16px);

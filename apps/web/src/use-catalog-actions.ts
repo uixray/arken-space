@@ -86,7 +86,13 @@ export function useCatalogActions(dependencies: {
             method: "POST",
             body: withAction({ ...input, data: input.data ?? {} }),
           });
-          await load();
+          try {
+            await load();
+          } catch {
+            // The POST has committed. Do not invite another create by rejecting
+            // the save just because the follow-up snapshot refresh failed.
+            setError("Запись сохранена, но список не обновился. Обновите страницу; повторно создавать запись не нужно.");
+          }
           return entry;
         } catch (reason) {
           setError(formatApiError(reason));

@@ -5,7 +5,6 @@ import {
   ToasterComponent,
   ToasterProvider,
 } from "@gravity-ui/uikit";
-import "@gravity-ui/uikit/styles/fonts.css";
 import "@gravity-ui/uikit/styles/styles.css";
 import "./random-uuid-polyfill";
 import { App } from "./App";

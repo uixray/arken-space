@@ -1,0 +1,4 @@
+# Soundpad backup/restore coverage correction — 2026-10-09
+Revision base2a60ca7; Astra found new0054 Soundpad tables missing from both count allowlists. Root added campaign_sound_packs, campaign_soundpad_settings, campaign_sounds to infra/backup/database-counts.sql and scripts/restore-rehearsal-core.mjs only. No DB/schema/migration changes.
+Connected safety gate: direct existingVitest, tests/backup-safety.test.ts + tests/restore-config-safety.test.ts, maxWorkers1:2files31testsPASS. Source coverage updated; this doesnot prove newmigration orproductionderivedrestore. OriginalR2/frozenarchives immutable, no private data read.
+Next: freeze finalconnectedsourceafteractivepools; execute NEWisolatedproduction-derivedR2copy migration/replay/count68 vs prior65/ledger55 vs54 as candidateplanrequires, confirmactualschema ratherthan assume counts. No restore over originaldata/remote/deploy/push/merge. Otherdirtyfiles preserved.

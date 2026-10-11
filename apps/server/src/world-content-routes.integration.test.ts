@@ -1,7 +1,6 @@
-import { readdir, readFile } from "node:fs/promises";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -9,6 +8,7 @@ import * as schema from "@arken/db";
 import { env } from "./env.js";
 import { hashToken } from "./security.js";
 import { registerWorldContentRoutes } from "./world-content-routes.js";
+import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
 
 let database: PGlite;
 let app: FastifyInstance;
@@ -17,33 +17,29 @@ let db: ReturnType<typeof drizzle<typeof schema>>;
 const id = () => crypto.randomUUID();
 const ids = {
   campaign: id(),
+  foreignCampaign: id(),
   gm: id(),
   player: id(),
+  foreignPlayer: id(),
 };
 const secrets = {
   gm: "g".repeat(40),
   player: "p".repeat(40),
+  foreignPlayer: "f".repeat(40),
 };
 const headers = (secret: string) => ({
   cookie: `${env.SESSION_COOKIE_NAME}=${secret}`,
 });
 
 beforeAll(async () => {
-  database = new PGlite();
-  const migrations = new URL("../../../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrations))
-    .filter((name) => name.endsWith(".sql"))
-    .sort())
-    await database.exec(
-      (await readFile(new URL(file, migrations), "utf8")).replaceAll(
-        "--> statement-breakpoint",
-        "",
-      ),
-    );
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
   await db
     .insert(schema.campaigns)
-    .values([{ id: ids.campaign, name: "Campaign" }]);
+    .values([
+      { id: ids.campaign, name: "Campaign" },
+      { id: ids.foreignCampaign, name: "Foreign Campaign" },
+    ]);
   await db.insert(schema.memberships).values([
     { id: ids.gm, campaignId: ids.campaign, role: "GM", displayName: "GM" },
     {
@@ -52,10 +48,17 @@ beforeAll(async () => {
       role: "PLAYER",
       displayName: "Player",
     },
+    {
+      id: ids.foreignPlayer,
+      campaignId: ids.foreignCampaign,
+      role: "PLAYER",
+      displayName: "Foreign Campaign Player",
+    },
   ]);
   for (const [membershipId, secret] of [
     [ids.gm, secrets.gm],
     [ids.player, secrets.player],
+    [ids.foreignPlayer, secrets.foreignPlayer],
   ] as const)
     await db.insert(schema.sessions).values({
       membershipId,
@@ -96,6 +99,18 @@ async function publish(entityId: string, revision: number) {
     url: `/api/world-content/${entityId}/lifecycle`,
     headers: headers(secrets.gm),
     payload: { actionId: id(), revision, lifecycle: "PUBLISHED" },
+  });
+}
+async function seedGalleryAsset(assetId: string) {
+  await db.insert(schema.assets).values({
+    id: assetId,
+    campaignId: ids.campaign,
+    uploadedByMembershipId: ids.gm,
+    kind: "IMAGE",
+    name: "World content gallery fixture",
+    storageKey: `uix245-gallery/${assetId}`,
+    mimeType: "image/png",
+    sizeBytes: 128,
   });
 }
 
@@ -195,6 +210,117 @@ describe("world content HTTP: list + get visibility", () => {
     expect(playerGetPublished.json()).not.toHaveProperty("gmOnlyText");
   });
 
+  it("reuses published canon across campaigns without exposing hidden entities or GM fields", async () => {
+    const published = (
+      await createEntity(secrets.gm, {
+        name: "Shared Published Canon",
+        gmOnlyText: "Foreign campaign secret text",
+      })
+    ).json();
+    await db
+      .update(schema.worldContent)
+      .set({
+        sourceUrl: "https://example.test/private-provenance",
+        rawContentHash: "private-provenance-hash",
+      })
+      .where(eq(schema.worldContent.id, published.id));
+    const publishedRow = (await publish(published.id, 0)).json();
+    const draft = (
+      await createEntity(secrets.gm, { name: "Foreign Hidden Draft" })
+    ).json();
+    const archived = (
+      await createEntity(secrets.gm, { name: "Foreign Hidden Archive" })
+    ).json();
+    const archivedPublished = (await publish(archived.id, 0)).json();
+    const archivedResult = await app.inject({
+      method: "POST",
+      url: `/api/world-content/${archived.id}/lifecycle`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        revision: archivedPublished.revision,
+        lifecycle: "ARCHIVED",
+      },
+    });
+    expect(archivedResult.statusCode).toBe(200);
+
+    for (const hidden of [draft, archived]) {
+      const relation = await app.inject({
+        method: "POST",
+        url: `/api/world-content/${published.id}/relations`,
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: id(),
+          toWorldContentId: hidden.id,
+          relationType: "NEAR",
+        },
+      });
+      expect(relation.statusCode, relation.body).toBe(201);
+    }
+
+    const foreignPlayer = headers(secrets.foreignPlayer);
+    const playerGetPublished = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${published.id}`,
+      headers: foreignPlayer,
+    });
+    expect(playerGetPublished.statusCode).toBe(200);
+    expect(playerGetPublished.json()).toMatchObject({
+      id: publishedRow.id,
+      name: "Shared Published Canon",
+      publicText: "",
+    });
+    for (const key of ["gmOnlyText", "provenance", "lifecycle"])
+      expect(playerGetPublished.json()).not.toHaveProperty(key);
+    expect(playerGetPublished.body).not.toContain("Foreign campaign secret text");
+    expect(playerGetPublished.body).not.toContain("private-provenance");
+
+    const hiddenIds = [draft.id, archived.id];
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/world-content",
+      headers: foreignPlayer,
+    });
+    expect(listed.statusCode).toBe(200);
+    const listedRows = listed.json();
+    expect(listedRows.map((row: { id: string }) => row.id)).toContain(published.id);
+    for (const hiddenId of hiddenIds)
+      expect(listedRows.map((row: { id: string }) => row.id)).not.toContain(hiddenId);
+    for (const key of ["gmOnlyText", "provenance", "lifecycle"])
+      for (const row of listedRows) expect(row).not.toHaveProperty(key);
+
+    const relations = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${published.id}/relations`,
+      headers: foreignPlayer,
+    });
+    expect(relations.statusCode).toBe(200);
+    expect(relations.json()).toEqual([]);
+    for (const hidden of [draft, archived]) {
+      const detail = await app.inject({
+        method: "GET",
+        url: `/api/world-content/${hidden.id}`,
+        headers: foreignPlayer,
+      });
+      const unknown = await app.inject({
+        method: "GET",
+        url: `/api/world-content/${id()}`,
+        headers: foreignPlayer,
+      });
+      expect(detail.statusCode).toBe(404);
+      expect(detail.body).toBe(unknown.body);
+
+      const search = await app.inject({
+        method: "GET",
+        url: `/api/world-content?q=${encodeURIComponent(hidden.name)}`,
+        headers: foreignPlayer,
+      });
+      expect(search.statusCode).toBe(200);
+      expect(search.json()).toEqual([]);
+      expect(search.body).not.toContain(hidden.name);
+    }
+  });
+
   it("filters by type, tags, and free-text search", async () => {
     const monster = (
       await createEntity(secrets.gm, {
@@ -239,6 +365,106 @@ describe("world content HTTP: list + get visibility", () => {
       })
     ).json();
     expect(bySearch.map((r: { id: string }) => r.id)).toContain(monster.id);
+  });
+});
+
+describe("world content HTTP: relatedTo list filter", () => {
+  it("matches both edge directions, intersects other filters, and hides inaccessible IDs and endpoints", async () => {
+    const subject = (
+      await createEntity(secrets.gm, { name: "Known Subject" })
+    ).json();
+    const incoming = (
+      await createEntity(secrets.gm, {
+        type: "PERSON",
+        name: "Mira Vale",
+        tags: ["ally", "harbor"],
+        gmOnlyText: "private note",
+      })
+    ).json();
+    const outgoing = (
+      await createEntity(secrets.gm, {
+        type: "LOCATION",
+        name: "Old Harbor",
+        tags: ["harbor"],
+      })
+    ).json();
+    const hidden = (
+      await createEntity(secrets.gm, { name: "Hidden Target" })
+    ).json();
+    await publish(subject.id, 0);
+    await publish(incoming.id, 0);
+    await publish(outgoing.id, 0);
+
+    for (const [from, to] of [
+      [incoming.id, subject.id],
+      [subject.id, outgoing.id],
+      [subject.id, hidden.id],
+    ]) {
+      const relation = await app.inject({
+        method: "POST",
+        url: `/api/world-content/${from}/relations`,
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: id(),
+          toWorldContentId: to,
+          relationType: "CONNECTED_TO",
+        },
+      });
+      expect(relation.statusCode).toBe(201);
+    }
+
+    const playerResponse = await app.inject({
+      method: "GET",
+      url: `/api/world-content?relatedTo=${subject.id}`,
+      headers: headers(secrets.player),
+    });
+    expect(playerResponse.statusCode).toBe(200);
+    const playerRows = playerResponse.json();
+    expect(playerRows.map((row: { id: string }) => row.id)).toEqual(
+      expect.arrayContaining([incoming.id, outgoing.id]),
+    );
+    expect(playerRows.map((row: { id: string }) => row.id)).not.toContain(
+      hidden.id,
+    );
+    for (const row of playerRows) expect(row).not.toHaveProperty("gmOnlyText");
+
+    const gmResponse = await app.inject({
+      method: "GET",
+      url: `/api/world-content?relatedTo=${subject.id}`,
+      headers: headers(secrets.gm),
+    });
+    expect(gmResponse.json().map((row: { id: string }) => row.id)).toContain(
+      hidden.id,
+    );
+
+    const combined = await app.inject({
+      method: "GET",
+      url: `/api/world-content?relatedTo=${subject.id}&type=PERSON&tags=ally&q=Mira`,
+      headers: headers(secrets.player),
+    });
+    expect(combined.json().map((row: { id: string }) => row.id)).toEqual([
+      incoming.id,
+    ]);
+
+    const invalid = await app.inject({
+      method: "GET",
+      url: "/api/world-content?relatedTo=not-a-uuid",
+      headers: headers(secrets.player),
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    const hiddenSubject = await app.inject({
+      method: "GET",
+      url: `/api/world-content?relatedTo=${hidden.id}`,
+      headers: headers(secrets.player),
+    });
+    const unknownSubject = await app.inject({
+      method: "GET",
+      url: `/api/world-content?relatedTo=${id()}`,
+      headers: headers(secrets.player),
+    });
+    expect(hiddenSubject.statusCode).toBe(404);
+    expect(hiddenSubject.body).toBe(unknownSubject.body);
   });
 });
 
@@ -291,6 +517,7 @@ describe("world content HTTP: update", () => {
       payload,
     });
     expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({ name: "Once", revision: 1 });
     const retry = await app.inject({
       method: "PATCH",
       url: `/api/world-content/${created.id}`,
@@ -299,6 +526,18 @@ describe("world content HTTP: update", () => {
     });
     expect(retry.statusCode).toBe(200);
     expect(retry.json()).toEqual({ duplicate: true });
+
+    const authoritative = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${created.id}`,
+      headers: headers(secrets.gm),
+    });
+    expect(authoritative.json()).toMatchObject({ name: "Once", revision: 1 });
+    const actions = await db
+      .select()
+      .from(schema.worldContentActions)
+      .where(eq(schema.worldContentActions.actionId, actionId));
+    expect(actions).toHaveLength(1);
   });
 });
 
@@ -607,18 +846,22 @@ describe("world content HTTP: GET media (UIX-245 stage 4)", () => {
     ).json();
     const assetOne = id();
     const assetTwo = id();
-    await app.inject({
+    await seedGalleryAsset(assetOne);
+    await seedGalleryAsset(assetTwo);
+    const attachOne = await app.inject({
       method: "POST",
       url: `/api/world-content/${entity.id}/media`,
       headers: headers(secrets.gm),
       payload: { actionId: id(), assetId: assetOne, caption: "First" },
     });
-    await app.inject({
+    expect(attachOne.statusCode, attachOne.body).toBe(201);
+    const attachTwo = await app.inject({
       method: "POST",
       url: `/api/world-content/${entity.id}/media`,
       headers: headers(secrets.gm),
       payload: { actionId: id(), assetId: assetTwo, caption: "Second" },
     });
+    expect(attachTwo.statusCode, attachTwo.body).toBe(201);
 
     const gmRes = await app.inject({
       method: "GET",
@@ -653,6 +896,7 @@ describe("world content HTTP: media", () => {
   it("attaches, reorders/recaptions, and removes gallery entries", async () => {
     const entity = (await createEntity(secrets.gm)).json();
     const assetId = id();
+    await seedGalleryAsset(assetId);
 
     const attached = await app.inject({
       method: "POST",
@@ -660,7 +904,7 @@ describe("world content HTTP: media", () => {
       headers: headers(secrets.gm),
       payload: { actionId: id(), assetId, caption: "Cover art" },
     });
-    expect(attached.statusCode).toBe(201);
+    expect(attached.statusCode, attached.body).toBe(201);
     const media = attached.json();
     expect(media).toMatchObject({ assetId, caption: "Cover art", ordering: 0 });
 

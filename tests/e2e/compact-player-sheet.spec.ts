@@ -1,7 +1,14 @@
-import type { CharacterDto } from "@arken/contracts";
+import type { CharacterDto, StatLayout } from "@arken/contracts";
 import type { Route } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { playerSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+const characteristicsLayout: StatLayout = [
+  {
+    id: "characteristics",
+    label: "Характеристики",
+    rows: [{ key: "strength", label: "Сила", source: "STAT" }],
+  },
+];
 const character: CharacterDto = {
   id: "64500000-0000-4000-8000-000000000001",
   name: "Арина, хранительница переправы",
@@ -9,6 +16,7 @@ const character: CharacterDto = {
   controllerMembershipIds: [],
   portraitAssetId: null,
   stats: { strength: 4 },
+  statLayout: structuredClone(characteristicsLayout),
   skills: [],
   spells: [],
   entries: [],
@@ -29,13 +37,7 @@ test("UIX-624 PLAYER sheet targets and pending backstory survive journal and rot
   await page.setViewportSize({ width: 360, height: 640 });
   const snapshot = playerSnapshot({ characters: [character] });
   snapshot.me.characterId = character.id;
-  snapshot.campaign.statLayout = [
-    {
-      id: "characteristics",
-      label: "Характеристики",
-      rows: [{ key: "strength", label: "Сила", source: "STAT" }],
-    },
-  ];
+  snapshot.campaign.statLayout = structuredClone(characteristicsLayout);
   const patches: Record<string, unknown>[] = [];
   const unexpected: string[] = [];
   let held: Route | undefined;

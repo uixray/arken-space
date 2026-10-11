@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { InitiativeParticipantDto } from "@arken/contracts";
+import type { GameSnapshot, InitiativeParticipantDto } from "@arken/contracts";
 import { api } from "./api";
 import { initiativeRollFormula, initiativeRollLabel } from "./initiative-roll";
 
@@ -79,6 +79,19 @@ export interface InitiativeActions {
    * Пополняет, не выбрасывая: вышедший из зоны мог отступить, а не выйти из боя.
    */
   onRecruitFromBattleZone: (revision: number) => Promise<void>;
+}
+
+/** Preserve App's preview-aware guard and campaign revision at click time. */
+export function createBattleZoneRecruitHandler(
+  readCurrentView: () => Pick<GameSnapshot, "campaign"> | null,
+  run: (action: () => Promise<void>) => unknown,
+  recruit: InitiativeActions["onRecruitFromBattleZone"],
+): () => void {
+  return () => {
+    const currentView = readCurrentView();
+    if (!currentView?.campaign.battleZone) return;
+    void run(() => recruit(currentView.campaign.revision));
+  };
 }
 
 export function useInitiativeActions(dependencies: {

@@ -47,6 +47,9 @@ export const CORE_CAMPAIGN_PROBE_KEYS = [
   "GET /api/assets/:id/usage",
   "PUT /api/assets/:id/content",
   "GET /api/assets/:id/content",
+  "GET /api/gm/sticker-packs/:id",
+  "PATCH /api/assets/:id/audio-purpose",
+  "POST /api/invites/:id/revoke",
 ] as const;
 
 export type CoreCampaignProbeKey = (typeof CORE_CAMPAIGN_PROBE_KEYS)[number];

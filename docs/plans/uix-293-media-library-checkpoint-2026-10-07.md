@@ -1,0 +1,9 @@
+# UIX-293 media library UI checkpoint — 2026-10-07
+
+- **Revision/base:** implementation in `codex/uix-293-catalog-20261007`, based on `origin/main` `9d441bdf`.
+- **Decision:** keep the existing upload API unchanged. The UI clarifies intended asset kind and says upload does not attach automatically; journal/story attachment storage remains separate.
+- **Changed:** `apps/web/src/sidebar/MediaPanel.tsx` adds an accessible kind filter, per-kind groups/counts, empty states, and upload-purpose guidance. `apps/web/src/sidebar/MediaPanel.test.tsx` covers filtering, groups, empty states, purpose copy, and kind callbacks for GM/PLAYER.
+- **Verification:** Prettier check and `git diff --check` pass. The first connected gate resolved dependencies and found three scoped test failures; test selectors were corrected to select the TOKEN section. The next verifier run found two remaining selector mismatches because AUDIO uses its real labeled input/button while IMAGE fields are mocked. Role checks now query the real audio label and scope each uploader assertion to its `.upload-section`; no assertions were removed or weakened.
+- **Final independent gate:** Luna verifier accepted the bounded diff; MediaPanel + audio suites 2 files / 18 tests PASS, web typecheck PASS, scoped Prettier PASS, diff check PASS. Local required system package build PASS. Offline frozen dependencies reused 657 packages, no downloads/global setup; original checkout unchanged.
+- **Blockers:** runtime acceptance is unverified with the application intentionally stopped. Full E2E intentionally excluded by owner, not a blocker. No server/API/ACL changes, no production access, merge or deployment.
+- **Next:** hand off this local source/test slice for targeted browser acceptance on an approved running target; do not close the lifecycle parent solely from component tests. Source is uncommitted on base 9d441bdf; changed manifest above.

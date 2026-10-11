@@ -1,9 +1,10 @@
-﻿import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { createRequire } from "node:module";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -14,6 +15,12 @@ import {
 } from "../apps/server/src/operator-feedback.js";
 import { env } from "../apps/server/src/env.js";
 import { hashToken } from "../apps/server/src/security.js";
+import { createMigratedPglite } from "./helpers/pglite-template.js";
+
+const serverRequire = createRequire(
+  new URL("../apps/server/package.json", import.meta.url),
+);
+const rateLimit = serverRequire("@fastify/rate-limit");
 
 let database: PGlite;
 let app: FastifyInstance;
@@ -32,20 +39,7 @@ const auth = (token: string) => ({
 });
 
 beforeEach(async () => {
-  database = new PGlite();
-  for (const file of (
-    await readdir(new URL("../packages/db/drizzle/", import.meta.url))
-  )
-    .filter((name) => name.endsWith(".sql"))
-    .sort())
-    await database.exec(
-      (
-        await readFile(
-          new URL(`../packages/db/drizzle/${file}`, import.meta.url),
-          "utf8",
-        )
-      ).replaceAll("--> statement-breakpoint", ""),
-    );
+  database = await createMigratedPglite();
   const db = drizzle(database, { schema });
   await db
     .insert(schema.campaigns)
@@ -69,6 +63,10 @@ beforeEach(async () => {
   env.MEDIA_ROOT = mediaRoot;
   app = Fastify();
   await app.register(cookie);
+  await app.register(rateLimit, {
+    max: env.RATE_LIMIT_MAX,
+    timeWindow: "1 minute",
+  });
   registerOperatorFeedbackRoutes(app, db as never);
   await app.ready();
 });
@@ -357,6 +355,26 @@ describe("operator feedback boundary", () => {
     expect(exported.body).toContain("Safe reproduction step");
   });
 
+  it("enforces the configured operator route limit and returns retry-after", async () => {
+    const capabilityRequest = () =>
+      app.inject({
+        method: "GET",
+        url: "/api/operator/feedback/capability",
+        headers: auth(tokens.operator),
+      });
+
+    for (
+      let request = 0;
+      request < env.OPERATOR_FEEDBACK_RATE_LIMIT_MAX;
+      request++
+    ) {
+      expect((await capabilityRequest()).statusCode).toBe(200);
+    }
+
+    const limited = await capabilityRequest();
+    expect(limited.statusCode).toBe(429);
+    expect(Number(limited.headers["retry-after"])).toBeGreaterThan(0);
+  });
   it("applies a dedicated operator rate limit", () => {
     env.OPERATOR_FEEDBACK_RATE_LIMIT_MAX = 7;
     expect(operatorFeedbackRateLimit()).toEqual({

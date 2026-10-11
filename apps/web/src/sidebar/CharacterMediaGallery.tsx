@@ -37,6 +37,13 @@ type RemovalTarget = {
   actionId: string;
 };
 
+type ShareDraft = {
+  item: CharacterMediaDto;
+  caption: string;
+  actionId: string;
+  attemptedCaption?: string;
+};
+
 /**
  * Owner-facing gallery for a single character sheet (UIX-292 Stage 3): an
  * ordered set of media entries alongside the existing single `portraitAssetId`.
@@ -74,10 +81,18 @@ export function CharacterMediaGallery({
   const [removalTarget, setRemovalTarget] = useState<RemovalTarget | null>(
     null,
   );
+  const [shareDraft, setShareDraft] = useState<ShareDraft | null>(null);
+  const [sharePendingId, setSharePendingId] = useState<string | null>(null);
+  const [shareError, setShareError] = useState("");
+  const [shareFeedback, setShareFeedback] = useState<{
+    mediaId: string;
+    message: string;
+  } | null>(null);
   const activeCharacterIdRef = useRef(characterId);
   const loadRequestIdRef = useRef(0);
   const removalOperationRef = useRef<string | null>(null);
   const reorderOperationRef = useRef<object | null>(null);
+  const shareOperationRef = useRef<string | null>(null);
 
   const load = async (): Promise<boolean> => {
     const requestId = ++loadRequestIdRef.current;
@@ -107,11 +122,16 @@ export function CharacterMediaGallery({
     activeCharacterIdRef.current = characterId;
     removalOperationRef.current = null;
     reorderOperationRef.current = null;
+    shareOperationRef.current = null;
     setLoading(true);
     setViewerId(null);
     setEditingId(null);
     setPendingId(null);
     setRemovalTarget(null);
+    setShareDraft(null);
+    setSharePendingId(null);
+    setShareError("");
+    setShareFeedback(null);
     setItems([]);
     void load();
     return () => {
@@ -252,6 +272,54 @@ export function CharacterMediaGallery({
     setRemovalTarget(null);
   };
 
+  const openShareDialog = (item: CharacterMediaDto) => {
+    if (shareOperationRef.current) return;
+    setShareError("");
+    setShareDraft({
+      item,
+      caption: item.caption ?? "",
+      actionId: crypto.randomUUID(),
+    });
+  };
+
+  const shareToPublicChat = async () => {
+    if (!shareDraft || shareOperationRef.current) return;
+    const draft = shareDraft;
+    shareOperationRef.current = draft.actionId;
+    setSharePendingId(draft.item.id);
+    setShareFeedback(null);
+    setShareDraft({ ...draft, attemptedCaption: draft.caption });
+    try {
+      const sourceCaption = draft.item.caption ?? "";
+      const captionIsUnchanged = draft.caption === sourceCaption;
+      await api("/api/chat/gallery-shares", {
+        method: "POST",
+        body: JSON.stringify({
+          actionId: draft.actionId,
+          characterMediaId: draft.item.id,
+          ...(captionIsUnchanged
+            ? {}
+            : { caption: draft.caption.trim() || null }),
+        }),
+      });
+      if (activeCharacterIdRef.current !== draft.item.characterId) return;
+      setShareDraft(null);
+      setShareFeedback({
+        mediaId: draft.item.id,
+        message: "Изображение опубликовано в общем чате.",
+      });
+    } catch {
+      if (activeCharacterIdRef.current !== draft.item.characterId) return;
+      setShareDraft({ ...draft, attemptedCaption: draft.caption });
+      setShareError("Не удалось опубликовать изображение. Проверьте доступ и повторите попытку.");
+    } finally {
+      if (shareOperationRef.current === draft.actionId) {
+        shareOperationRef.current = null;
+        setSharePendingId(null);
+      }
+    }
+  };
+
   /*
    * GM-only hard delete (AC2/AC14) permanently removes the gallery entry
    * row rather than just hiding it. Never offered to the owner; the source
@@ -304,6 +372,20 @@ export function CharacterMediaGallery({
                   {CHARACTER_MEDIA_CATEGORY_LABELS[item.category]}
                 </span>
                 {item.caption && <p>{item.caption}</p>}
+              {shareFeedback?.mediaId === item.id && (
+                <p className="muted" role="status">
+                  {shareFeedback.message}
+                </p>
+              )}
+              </div>
+              <div className="character-media-gallery__actions">
+                <Button
+                  size="s"
+                  disabled={sharePendingId !== null || pendingId !== null}
+                  onClick={() => openShareDialog(item)}
+                >
+                  Поделиться в общем чате
+                </Button>
               </div>
               {editable && (
                 <div className="character-media-gallery__actions">
@@ -411,6 +493,57 @@ export function CharacterMediaGallery({
               ? detachDescription
               : hardDeleteDescription}
           </p>
+        </ArkenDialog>
+      )}
+      {shareDraft && (
+        <ArkenDialog
+          open
+          title="Опубликовать арт в чате"
+          applyLabel="Опубликовать"
+          loading={sharePendingId === shareDraft.item.id}
+          error={shareError}
+          onApply={() => void shareToPublicChat()}
+          onClose={() => {
+            if (!shareOperationRef.current) {
+              setShareError("");
+              setShareDraft(null);
+            }
+          }}
+        >
+          <p className="arken-dialog-message">
+            Изображение станет доступно участникам кампании в общем чате.
+          </p>
+          <label className="field">
+            Подпись к сообщению (необязательно)
+            <FormTextArea
+              value={shareDraft.caption}
+              maxLength={500}
+              rows={3}
+              disabled={sharePendingId === shareDraft.item.id}
+              onChange={(event) => {
+                const caption = event.target.value;
+                setShareDraft((current) =>
+                  current
+                    ? {
+                        ...current,
+                        caption,
+                        actionId:
+                          current.attemptedCaption !== undefined &&
+                          caption !== current.attemptedCaption
+                            ? crypto.randomUUID()
+                            : current.actionId,
+                        attemptedCaption:
+                          current.attemptedCaption !== undefined &&
+                          caption !== current.attemptedCaption
+                            ? undefined
+                            : current.attemptedCaption,
+                      }
+                    : current,
+                );
+              }}
+            />
+          </label>
+          <p className="muted">До 500 символов. Подпись галереи подставлена по умолчанию.</p>
         </ArkenDialog>
       )}
     </div>

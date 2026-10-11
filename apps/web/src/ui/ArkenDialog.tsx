@@ -44,6 +44,12 @@ export function ArkenDialog({
   const closeRef = useRef<HTMLButtonElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const wasOpen = useRef(open);
+  // Firefox can leave `:open` true after the native popup consumed Escape.
+  // Track per-select Escape ownership so stale :open state cannot trap later
+  // Escape at the workspace boundary after the native interaction ends.
+  const nativeSelectEscapeState = useRef(
+    new WeakMap<HTMLSelectElement, "yielded" | "closed">(),
+  );
   const {
     setWindowElement,
     position,
@@ -96,6 +102,48 @@ export function ArkenDialog({
             zIndex,
           }}
           onPointerDown={bringToFront}
+          onPointerDownCapture={(event) => {
+            const target = event.target;
+            if (
+              target instanceof HTMLSelectElement &&
+              target.closest('[role="dialog"]') === event.currentTarget
+            )
+              nativeSelectEscapeState.current.delete(target);
+          }}
+          onBlurCapture={(event) => {
+            const target = event.target;
+            if (
+              target instanceof HTMLSelectElement &&
+              target.closest('[role="dialog"]') === event.currentTarget
+            )
+              nativeSelectEscapeState.current.set(target, "closed");
+          }}
+          onChangeCapture={(event) => {
+            const target = event.target;
+            if (
+              target instanceof HTMLSelectElement &&
+              target.closest('[role="dialog"]') === event.currentTarget
+            )
+              // A value change does not guarantee the native list closed.
+              // Re-check its live state rather than treating change as blur.
+              nativeSelectEscapeState.current.delete(target);
+          }}
+          onKeyDownCapture={(event) => {
+            if (event.key === "Escape") return;
+            const target = event.target;
+            const opensNativeSelect =
+              event.key === "ArrowDown" ||
+              event.key === "ArrowUp" ||
+              event.key === " " ||
+              event.key === "Enter" ||
+              event.key === "F4";
+            if (
+              opensNativeSelect &&
+              target instanceof HTMLSelectElement &&
+              target.closest('[role="dialog"]') === event.currentTarget
+            )
+              nativeSelectEscapeState.current.delete(target);
+          }}
           onFocusCapture={bringToFront}
           onKeyDown={(event) => {
             if (event.key !== "Escape" || event.defaultPrevented) return;
@@ -123,6 +171,53 @@ export function ArkenDialog({
               targetElement?.closest('[role="combobox"][aria-expanded="true"]')
             )
               return;
+
+            // Native popups do not expose aria-expanded. In Firefox the
+            // Escape bubbles while :open may still be true. Yield the first
+            // Escape to the browser without cancelling its default behavior;
+            // then route the next non-repeat Escape to this workspace even if
+            // Firefox continues to report stale :open state.
+            if (targetElement instanceof HTMLSelectElement) {
+              const state = nativeSelectEscapeState.current.get(targetElement);
+              // A held key is one gesture. If this is the first event we saw
+              // while a native popup is open, remember that Escape was yielded
+              // so the next physical press still belongs to the workspace.
+              if (event.nativeEvent.repeat) {
+                if (state === undefined) {
+                  try {
+                    if (targetElement.matches(":open"))
+                      nativeSelectEscapeState.current.set(
+                        targetElement,
+                        "yielded",
+                      );
+                  } catch {
+                    // Unsupported :open keeps ordinary closed-select behavior.
+                  }
+                }
+                return;
+              }
+              if (state === "yielded") {
+                nativeSelectEscapeState.current.delete(targetElement);
+                onClose();
+                return;
+              }
+              if (state === "closed") {
+                // Blur closed the native interaction. Ignore stale
+                // Firefox :open until a new pointer/key opening gesture.
+                nativeSelectEscapeState.current.delete(targetElement);
+                onClose();
+                return;
+              }
+              try {
+                if (targetElement.matches(":open")) {
+                  nativeSelectEscapeState.current.set(targetElement, "yielded");
+                  return;
+                }
+              } catch {
+                // Older engines may not support :open. Keep ordinary closed
+                // control Escape behavior rather than trapping every select.
+              }
+            }
 
             onClose();
           }}
