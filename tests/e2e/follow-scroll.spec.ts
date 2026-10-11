@@ -321,9 +321,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         const initial = (await bootstrap.json()) as GameSnapshot;
         const character = initial.characters[0];
         expect(character.resources.physicalPower.current).toBe(10);
-        // Current journal typography fits more rows; retain the >400px scroll
-        // precondition by creating enough real history, not lowering the oracle.
-        await seedLog(gmPage, 60);
+        await seedLog(gmPage, 40);
 
         if (role === "PLAYER") {
           const response = await gmPage.request.post("/api/invites", {
@@ -358,6 +356,18 @@ for (const role of ["GM", "PLAYER"] as const) {
           await expect(page.locator("#activity-sidebar")).toBeVisible();
         };
         await openCompactJournal();
+        const prepareOverflowingHistory = async () => {
+          // Each mount initially renders only six events. Load real history
+          // before the resource journey and again after its intentional reload.
+          // New short rolls must not replace the entire overflowing slice.
+          await page
+            .locator(LIST)
+            .getByRole("button", { name: "Показать больше", exact: true })
+            .click();
+          await page.locator(LIST).focus();
+          await page.locator(LIST).press("Control+End");
+        };
+        await prepareOverflowingHistory();
         const assertSavedResource = async (value: string) => {
           const snapshot = await page.request.get("/api/bootstrap");
           await expect(snapshot).toBeOK();
@@ -449,6 +459,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         await capture("before-reload");
         await page.reload();
         await openCompactJournal();
+        await prepareOverflowingHistory();
         await expect(toggle).toHaveAttribute("aria-expanded", "false");
         await expect(input).toHaveValue("6");
         await observeResourceFollow(page);
@@ -485,7 +496,7 @@ for (const role of ["GM", "PLAYER"] as const) {
           // A single wheel stroke did not reach the top in Firefox. Navigate
           // with bounded real input, requiring progress after every stroke;
           // do not replace the reader interaction with a scrollTop assignment.
-          for (let stroke = 0; stroke < 12; stroke += 1) {
+          for (let stroke = 0; stroke < 32; stroke += 1) {
             const previousTop = await page
               .locator(LIST)
               .evaluate((list) => list.scrollTop);

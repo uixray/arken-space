@@ -7,6 +7,7 @@ import type {
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { createDatabase } from "../../packages/db/src/index.js";
 import { expect, test } from "./campaign-fixture";
 import { seedChatLog } from "./chat-seed";
 
@@ -383,6 +384,7 @@ for (const layout of [
         });
       }
       async function seedStoryPortraits() {
+        let latestPublishedAt = 0;
         // Resolve the already-installed server dependency, not a new root
         // package. These flat-colour PNGs contain no external/private content.
         const requireServer = createRequire(
@@ -455,9 +457,33 @@ for (const layout of [
             status: published.status(),
           });
           expect(published.status()).toBe(200);
-          expect(
-            ((await published.json()) as StoryPostAdminDto).lifecycle,
-          ).toBe("PUBLISHED");
+          const publishedPost = (await published.json()) as StoryPostAdminDto;
+          expect(publishedPost.lifecycle).toBe("PUBLISHED");
+          latestPublishedAt = Math.max(
+            latestPublishedAt,
+            Date.parse(publishedPost.publishedAt!),
+          );
+        }
+        if (historyAfterMedia) {
+          // Story publication uses the API clock; chat defaults use Postgres.
+          // The retained failing trace had chat timestamps two seconds before
+          // the already-published portraits. Establish the scenario's actual
+          // chronology without changing records or the strict DOM order check.
+          const { client } = createDatabase(process.env.DATABASE_URL!);
+          try {
+            await expect
+              .poll(async () => {
+                const [row] = await client<{ ready: boolean }[]>`
+                  SELECT clock_timestamp() >
+                    to_timestamp(${latestPublishedAt}::double precision / 1000)
+                    AS ready
+                `;
+                return row.ready;
+              })
+              .toBe(true);
+          } finally {
+            await client.end();
+          }
         }
       }
       if (layout === "expanded-restored-story-media")
@@ -571,7 +597,19 @@ for (const layout of [
         // Match the production setup's actual wheel-to-bottom action before
         // the observed collapse/restore, rather than changing hook internals.
         await page.locator(LIST).hover();
-        await page.mouse.wheel(0, 100_000);
+        // Firefox can discard one oversized wheel event. Reach the same real
+        // bottom through bounded wheel input and prove progress at each step.
+        for (let attempt = 0; attempt < 32; attempt++) {
+          const before = await page.locator(LIST).evaluate((list) => ({
+            top: list.scrollTop,
+            bottom: list.scrollHeight - list.scrollTop - list.clientHeight,
+          }));
+          if (before.bottom <= BOTTOM_TOLERANCE) break;
+          await page.mouse.wheel(0, 1000);
+          await expect
+            .poll(() => page.locator(LIST).evaluate((list) => list.scrollTop))
+            .toBeGreaterThan(before.top);
+        }
         await expect
           .poll(() =>
             page

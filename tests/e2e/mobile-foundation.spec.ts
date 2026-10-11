@@ -684,7 +684,10 @@ for (const role of ["GM", "PLAYER"] as const) {
             await confirm.click();
           }
           await expect(
-            page.getByRole("heading", { name: "Выберите игрока", exact: true }),
+            page.getByRole("heading", {
+              name: "Войти по персональной ссылке игрока",
+              exact: true,
+            }),
           ).toBeVisible();
           await expect
             .poll(async () =>
@@ -696,7 +699,10 @@ for (const role of ["GM", "PLAYER"] as const) {
           await recordLayout("signed-out", true);
           await page.reload();
           await expect(
-            page.getByRole("heading", { name: "Выберите игрока", exact: true }),
+            page.getByRole("heading", {
+              name: "Войти по персональной ссылке игрока",
+              exact: true,
+            }),
           ).toBeVisible();
           await expect(
             page.getByText(`Вы играете как: ${playerName}`, { exact: true }),
