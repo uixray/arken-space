@@ -140,6 +140,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
   ) {
     const triggerRef = useRef<HTMLButtonElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
+    const optionNavigationRef = useRef(false);
 
     useImperativeHandle(ref, () => triggerRef.current as HTMLButtonElement);
     useImperativeHandle(
@@ -257,8 +258,11 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
     useLayoutEffect(() => {
       if (!isOpen || !triggerRef.current) return;
       const control = triggerRef.current;
+      optionNavigationRef.current = false;
       let frame = 0;
       let restoreTriggerFocus = false;
+      let restoreInitialFocus = false;
+      let firstObservation = true;
       const measure = (isResize = false) => {
         const width = control.getBoundingClientRect().width;
         setPopupWidth(
@@ -270,12 +274,17 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
           control.focus();
         }
       };
-      const schedule = (shouldRestoreFocus = false) => {
+      const schedule = (shouldRestoreFocus = false, initial = false) => {
         restoreTriggerFocus ||= shouldRestoreFocus;
+        restoreInitialFocus ||= initial;
         cancelAnimationFrame(frame);
         frame = requestAnimationFrame(() => {
-          measure(restoreTriggerFocus);
+          measure(
+            restoreTriggerFocus ||
+              (restoreInitialFocus && !optionNavigationRef.current),
+          );
           restoreTriggerFocus = false;
+          restoreInitialFocus = false;
         });
       };
       measure(false);
@@ -283,10 +292,11 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
         typeof ResizeObserver === "undefined"
           ? undefined
           : new ResizeObserver(() => {
-              // The initial notification is measurement, not a user resize.
-              // It can arrive after Home has focused an option; never steal
-              // that focus. Actual viewport resize still restores the trigger.
-              schedule(false);
+              // Opening retains trigger focus, unless the user has already
+              // navigated options. Recheck in the frame: navigation can occur
+              // after this notification but before measurement executes.
+              schedule(false, firstObservation);
+              firstObservation = false;
             });
       observer?.observe(control);
       const onWindowResize = () => schedule(true);
@@ -486,6 +496,19 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
             }
           }}
           onKeyDownCapture={(event) => {
+            if (
+              isOpen &&
+              [
+                "Home",
+                "End",
+                "ArrowUp",
+                "ArrowDown",
+                "PageUp",
+                "PageDown",
+              ].includes(event.key)
+            ) {
+              optionNavigationRef.current = true;
+            }
             if (!isOpen || event.key !== "Home") return;
             const first = popupRef.current?.querySelector<HTMLElement>(
               '[role="option"]:not([aria-disabled="true"])',
@@ -553,6 +576,18 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
               ref={popupRef}
               className="arken-select__popup"
               onKeyDownCapture={(event) => {
+                if (
+                  [
+                    "Home",
+                    "End",
+                    "ArrowUp",
+                    "ArrowDown",
+                    "PageUp",
+                    "PageDown",
+                  ].includes(event.key)
+                ) {
+                  optionNavigationRef.current = true;
+                }
                 if (event.key !== "Home") return;
                 const first = popupRef.current?.querySelector<HTMLElement>(
                   '[role="option"]:not([aria-disabled="true"])',
