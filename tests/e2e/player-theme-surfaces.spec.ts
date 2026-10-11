@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Page } from "@playwright/test";
 import type { GameSnapshot } from "@arken/contracts";
 import { PLAYER_THEMES } from "../../apps/web/src/design-system/player-themes";
@@ -198,6 +199,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         { id: "system", name: "Системное оформление" },
       ]) {
         snapshot.personalTheme!.selectedThemeId = theme.id;
+        await mockAuthenticatedGameCapabilities(page);
         await page.goto("/");
         await expect(page.locator(".map-viewport")).toBeVisible();
         if (theme.id === "system")

@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -132,6 +133,7 @@ for (const width of [1280, 390]) {
       defaultThemeId: "forest",
       defaultThemeRevision: 0,
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openWorkspaceSection(page, "Подготовка");
     const participant = page.getByRole("combobox", {
@@ -213,6 +215,7 @@ for (const role of ["GM", "PLAYER"] as const) {
     }, info) => {
       await page.setViewportSize({ width, height: 850 });
       const fixture = await preferenceFixture(page, role);
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await expect(page.locator(".map-viewport")).toBeVisible();
       await expect(page.locator("html")).toHaveAttribute(
