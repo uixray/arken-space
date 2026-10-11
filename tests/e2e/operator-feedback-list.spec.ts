@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import AxeBuilder from "@axe-core/playwright";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -74,6 +75,7 @@ for (const width of [1280, 390]) {
       );
     });
     await page.setViewportSize({ width, height: 850 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator(".app-shell")).toBeVisible();
     await openWorkspaceSection(page, "Обратная связь");

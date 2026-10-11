@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { GameSnapshot, SceneDto } from "@arken/contracts";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
@@ -32,6 +33,11 @@ async function install(page: Page, role: "GM" | "PLAYER" = "GM") {
   current.me.role = role;
   await page.route("**/api/**", (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/soundpad")
+      return route.fulfill({
+        json: { packs: [], playerPlaybackEnabled: true },
+      });
+
     if (path === "/api/story/posts")
       return route.fulfill({ json: { posts: [], nextCursor: null } });
     if (path === "/api/operator/feedback/capability")
@@ -71,6 +77,7 @@ for (const width of [1024, 1440]) {
   }) => {
     await page.setViewportSize({ width, height: 800 });
     await install(page);
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const trigger = page.getByLabel("Выбрать просматриваемую сцену");
     const list = page.getByRole("menu", { name: "Сцены", exact: true });
@@ -134,6 +141,7 @@ test("UIX-644 hidden desktop picker closes across compact resize and PLAYER stay
 }) => {
   await page.setViewportSize({ width: 1024, height: 800 });
   await install(page);
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const trigger = page.getByLabel("Выбрать просматриваемую сцену");
   await trigger.click();
@@ -148,6 +156,7 @@ test("UIX-644 hidden desktop picker closes across compact resize and PLAYER stay
   ).toBeHidden();
   await page.unroute("**/api/**");
   await install(page, "PLAYER");
+  await mockAuthenticatedGameCapabilities(page);
   await page.reload();
   await expect(trigger).toHaveCount(0);
   await expect(
@@ -166,6 +175,7 @@ test("UIX-644 short viewport scrolls options without dismissing and keeps focus 
     name: `Сцена ${index + 1}`,
     active: index === 0,
   }));
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const trigger = page.getByLabel("Выбрать просматриваемую сцену");
   await trigger.focus();
@@ -198,6 +208,7 @@ for (const role of ["GM", "PLAYER"] as const) {
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("request", (request) => {
       const path = new URL(request.url()).pathname;
+
       if (
         path.startsWith("/api/") &&
         !["GET", "HEAD"].includes(request.method()) &&
@@ -205,6 +216,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       )
         writes.push(`${request.method()} ${path}`);
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const trigger = page.locator("#compact-nav-menu");
     const menu = page.getByRole("region", { name: "Меню кампании" });
@@ -247,7 +259,8 @@ for (const role of ["GM", "PLAYER"] as const) {
 }
 
 for (const { role, width, target } of [
-  { role: "GM", width: 1024, target: "Сцены" },
+  // Scenes now fit the priority row; Files remains in the real overflow menu.
+  { role: "GM", width: 1024, target: "Файлы" },
   { role: "GM", width: 390, target: "Сцены" },
   { role: "PLAYER", width: 390, target: "Токены" },
 ] as const) {
@@ -261,6 +274,7 @@ for (const { role, width, target } of [
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("request", (r) => {
       const p = new URL(r.url()).pathname;
+
       if (
         p.startsWith("/api/") &&
         !["GET", "HEAD"].includes(r.method()) &&
@@ -268,6 +282,7 @@ for (const { role, width, target } of [
       )
         writes.push(`${r.method()} ${p}`);
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const trigger =
       width === 1024
@@ -337,6 +352,7 @@ for (const role of ["GM", "PLAYER"] as const)
       page.on("pageerror", (e) => errors.push(e.message));
       page.on("request", (r) => {
         const p = new URL(r.url()).pathname;
+
         if (
           p.startsWith("/api/") &&
           !["GET", "HEAD"].includes(r.method()) &&
@@ -344,6 +360,7 @@ for (const role of ["GM", "PLAYER"] as const)
         )
           writes.push(`${r.method()} ${p}`);
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       const music = page.getByRole("region", { name: "Музыка", exact: true });
       const menu = music.getByLabel("Плейлист", { exact: true });
@@ -435,6 +452,7 @@ for (const role of ["GM", "PLAYER"] as const)
       page.on("pageerror", (e) => errors.push(e.message));
       page.on("request", (r) => {
         const p = new URL(r.url()).pathname;
+
         if (
           p.startsWith("/api/") &&
           !["GET", "HEAD"].includes(r.method()) &&
@@ -442,6 +460,7 @@ for (const role of ["GM", "PLAYER"] as const)
         )
           writes.push(`${r.method()} ${p}`);
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       const tray = page.locator(".token-tray"),
         summary = tray.locator("summary"),
@@ -536,6 +555,7 @@ for (const width of [1280, 390])
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("request", (r) => {
       const p = new URL(r.url()).pathname;
+
       if (
         p.startsWith("/api/") &&
         !["GET", "HEAD"].includes(r.method()) &&
@@ -543,6 +563,7 @@ for (const width of [1280, 390])
       )
         writes.push(`${r.method()} ${p}`);
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openWorkspaceSection(page, "Сцены");
     const workspace = page.getByRole("dialog", { name: "Сцены", exact: true });
@@ -654,6 +675,7 @@ for (const role of ["GM", "PLAYER"] as const)
       page.on("pageerror", (e) => errors.push(e.message));
       page.on("request", (r) => {
         const p = new URL(r.url()).pathname;
+
         if (
           p.startsWith("/api/") &&
           !["GET", "HEAD"].includes(r.method()) &&
@@ -661,9 +683,10 @@ for (const role of ["GM", "PLAYER"] as const)
         )
           writes.push(`${r.method()} ${p}`);
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       const trigger = page.getByRole("button", {
-          name: "Объекты карты",
+          name: "Список объектов и токенов карты",
           exact: true,
         }),
         list = page.getByRole("region", { name: "Объекты карты", exact: true });
@@ -740,6 +763,7 @@ for (const role of ["GM", "PLAYER"] as const)
       page.on("pageerror", (e) => errors.push(e.message));
       page.on("request", (r) => {
         const p = new URL(r.url()).pathname;
+
         if (
           p.startsWith("/api/") &&
           !["GET", "HEAD"].includes(r.method()) &&
@@ -747,6 +771,7 @@ for (const role of ["GM", "PLAYER"] as const)
         )
           writes.push(`${r.method()} ${p}`);
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       const draw = page.getByRole("button", { name: "Рисование", exact: true });
       await draw.click();

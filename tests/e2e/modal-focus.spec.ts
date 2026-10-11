@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { stripVTControlCharacters } from "node:util";
 import { expect, test } from "./react-console-guard";
 import { playerSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -15,6 +16,7 @@ for (const width of [360, 820]) {
         json: path === "/api/bootstrap" ? snapshot : [],
       });
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await page.locator("#compact-nav-menu").click();
     await page

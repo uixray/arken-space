@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Locator, WebSocketRoute } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -136,8 +137,16 @@ for (const role of ["GM", "PLAYER"] as const)
       socket!.send(
         "42" +
           JSON.stringify([
-            "audio:state",
-            { sequence: snapshot.snapshotVersion, data: snapshot.audio },
+            "audio:track:state",
+            {
+              sequence: snapshot.snapshotVersion,
+              data: {
+                id: "64500000-0000-4000-8000-000000000098",
+                mixVolume: 1,
+                slotOrder: 0,
+                ...snapshot.audio,
+              },
+            },
           ]),
       );
     };
@@ -183,7 +192,7 @@ for (const role of ["GM", "PLAYER"] as const)
         const match = raw.match(/^42(\d*)\[/);
         if (!match) return;
         const [event, data] = JSON.parse(raw.slice(2 + match[1].length));
-        if (event !== "audio:set") return;
+        if (event !== "audio:track:set") return;
         commands.push(data);
         if (data.command === "PLAY" || data.command === "PAUSE")
           snapshot.audio = {
@@ -200,6 +209,7 @@ for (const role of ["GM", "PLAYER"] as const)
     });
     try {
       await page.setViewportSize({ width: 1280, height: 850 });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       const music = page.getByRole("region", { name: "Музыка" });
       const playback = music.locator(".music-icon-button"),
