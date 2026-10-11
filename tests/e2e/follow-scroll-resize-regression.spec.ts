@@ -537,6 +537,10 @@ for (const layout of [
           }),
           "both real story posts precede the rendered message history",
         ).toBe(true);
+      }
+      if (layout !== "collapsed") {
+        // The restored GM initiative panel consumes vertical space. Keep the
+        // follow threshold meaningful by resizing the quick-roll panel in UI.
         // Synthetic geometry calibration through the existing native resize
         // handle, not a copied preference, localStorage write or CSS injection.
         const quickRolls = page.locator(".quick-roll-panel");
@@ -555,13 +559,13 @@ for (const layout of [
           handle.y + handle.height / 2,
         );
         await page.mouse.down();
-        await page.mouse.move(handle.x + handle.width / 2, panel.y + 204, {
+        await page.mouse.move(handle.x + handle.width / 2, panel.y + 140, {
           steps: 5,
         });
         await page.mouse.up();
         await expect
           .poll(async () =>
-            Math.abs((await quickRolls.boundingBox())!.height - 204),
+            Math.abs((await quickRolls.boundingBox())!.height - 140),
           )
           .toBeLessThanOrEqual(1);
         // Match the production setup's actual wheel-to-bottom action before
@@ -629,7 +633,7 @@ for (const layout of [
       }
       if (historyAfterMedia) {
         expect(before.articles).toBe(40);
-        expect(Math.abs(before.quickRolls!.height - 204)).toBeLessThanOrEqual(
+        expect(Math.abs(before.quickRolls!.height - 140)).toBeLessThanOrEqual(
           1,
         );
         expect(before.quickRolls!.expanded).toBe("true");

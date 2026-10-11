@@ -32,7 +32,9 @@ export async function seedChatLog(
     if (index > 0) await wait(250);
     const payload: ChatSeedPayload = {
       actionId: actionId(),
-      body: `Запись журнала ${index} — достаточно длинная, чтобы занять высоту и переполнить ленту событий.`,
+      // Keep genuine text overflow even with compact cards and a tall viewport;
+      // message count and rate-limit behavior remain unchanged.
+      body: `Запись журнала ${index} — ${"достаточно длинная, чтобы занять высоту и переполнить ленту событий. ".repeat(4)}`,
       stream: "TABLE",
     };
     for (;;) {

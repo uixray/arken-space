@@ -51,6 +51,12 @@
   display: grid;
   gap: 0.9rem;
 }
+.account-auth-card .g-button,
+.account-auth-card .g-text-input,
+.account-auth-card .g-text-input__content,
+.account-auth-card .g-text-input__control {
+  min-height: 44px;
+}
 .account-auth-card label {
   display: grid;
   gap: 0.4rem;

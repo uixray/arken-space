@@ -241,3 +241,27 @@ test("PLAYER creates personal skill and ability through the sheet, survives relo
     );
   }
 });
+for (const viewport of [
+  { width: 360, height: 800 },
+  { width: 820, height: 1180 },
+]) {
+  test(`campaign-link controls have accessible touch targets at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await connectLocalApi(page);
+    await page.goto(`/gm/${gmLinkToken}`);
+    const gmButton = page.getByRole("button", { name: "Продолжить в игру" });
+    await expect(gmButton).toBeVisible();
+    expect((await gmButton.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await page.goto(`/join/${playerGrantToken}`);
+    const nameInput = page.getByLabel("Имя в кампании");
+    await expect(nameInput).toBeVisible();
+    expect((await nameInput.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(
+      (await page
+        .getByRole("button", { name: "Продолжить в игру" })
+        .boundingBox())!.height,
+    ).toBeGreaterThanOrEqual(44);
+  });
+}
