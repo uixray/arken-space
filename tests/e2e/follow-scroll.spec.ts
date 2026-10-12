@@ -311,6 +311,23 @@ for (const role of ["GM", "PLAYER"] as const) {
           page.getByRole("button", { name: /Новые события/ }),
         ).toHaveCount(0);
       };
+      const revealHistory = async () => {
+        for (let attempt = 0; attempt < 8; attempt++) {
+          const overflow = await page
+            .locator(LIST)
+            .evaluate((list) => list.scrollHeight - list.clientHeight);
+          if (overflow > 400) break;
+          const more = page.getByRole("button", { name: "Показать больше" });
+          await expect(more).toBeVisible();
+          const articles = page.locator(LIST).locator("article.message");
+          const before = await articles.count();
+          await more.click();
+          await expect.poll(() => articles.count()).toBeGreaterThan(before);
+        }
+        await page.locator(LIST).evaluate((list) => {
+          list.scrollTop = list.scrollHeight;
+        });
+      };
 
       try {
         await signInAsGm(gmPage, gmToken);
@@ -350,6 +367,7 @@ for (const role of ["GM", "PLAYER"] as const) {
           await expect(page.locator("#activity-sidebar")).toBeVisible();
         };
         await openCompactJournal();
+        await revealHistory();
         const assertSavedResource = async (value: string) => {
           const snapshot = await page.request.get("/api/bootstrap");
           await expect(snapshot).toBeOK();
@@ -441,6 +459,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         await capture("before-reload");
         await page.reload();
         await openCompactJournal();
+        await revealHistory();
         await expect(toggle).toHaveAttribute("aria-expanded", "false");
         await expect(input).toHaveValue("6");
         await observeResourceFollow(page);

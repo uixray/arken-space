@@ -547,6 +547,21 @@ for (const role of ["GM", "PLAYER"] as const) {
     await page.route("**/api/**", (route) => {
       const r = route.request(),
         path = new URL(r.url()).pathname;
+      if (r.method() === "POST" && path === "/api/client-logs") {
+        const report = r.postDataJSON() as {
+          event?: string;
+          message?: string;
+        };
+        // Firefox may emit this browser ResizeObserver warning during the
+        // intentional rapid viewport changes below. It is not an app write or
+        // exception; every other client report still fails the assertion.
+        if (
+          report.event === "window.error" &&
+          report.message ===
+            "ResizeObserver loop completed with undelivered notifications."
+        )
+          return route.fulfill({ json: [] });
+      }
       if (!["GET", "HEAD"].includes(r.method()) && path !== "/api/chat/read")
         writes.push(`${r.method()} ${path}`);
       if (path === "/api/bootstrap") return route.fulfill({ json: current });
