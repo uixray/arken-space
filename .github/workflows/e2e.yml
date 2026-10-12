@@ -122,7 +122,9 @@ jobs:
           tail -40 /tmp/server.log
           exit 1
 
-      - run: pnpm test:e2e --project=${{ matrix.project }} --workers=1 --fail-on-flaky-tests --shard=${{ matrix.shard }}/3 --reporter=line,json
+      - name: Verify duration planner invariants
+        run: node --test scripts/ci/balance-browser-files.test.mjs
+      - run: node scripts/ci/run-balanced-browser.mjs ${{ matrix.project }} ${{ matrix.shard }} 3
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: e2e-report.json
 
@@ -131,7 +133,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-result-${{ matrix.project }}-${{ matrix.shard }}
-          path: e2e-report.json
+          path: |
+            e2e-report.json
+            e2e-plan-${{ matrix.project }}-${{ matrix.shard }}.json
           retention-days: 7
           if-no-files-found: error
 

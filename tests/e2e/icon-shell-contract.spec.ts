@@ -1,3 +1,4 @@
+import { inspectIconStructure } from "./helpers/icon-structure";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import {
   paintedIconContrast,
@@ -92,24 +93,13 @@ for (const themeId of ["system", ...PLAYER_THEMES.map(({ id }) => id)])
           );
         }
         const icons = page.locator("svg.arken-icon:visible");
-        expect(await icons.count()).toBeGreaterThan(5);
-        for (const icon of await icons.all()) {
-          await expect(icon).toHaveAttribute("aria-hidden", "true");
-          await expect(icon).toHaveAttribute("focusable", "false");
-          await expect(icon).toHaveAttribute("stroke", "currentColor");
-          await expect(icon).toHaveAttribute("stroke-width", "2");
-          const box = await icon.boundingBox();
-          expect(box!.width).toBeGreaterThan(0);
-          expect(box!.height).toBeGreaterThan(0);
-        }
         const controls = page
           .locator("button:visible,summary:visible")
           .filter({ has: page.locator("svg.arken-icon") });
+        await inspectIconStructure(icons, controls);
+        // Preserve actual accessibility semantics, not a DOM-label approximation.
         for (const control of await controls.all()) {
           await expect(control).toHaveAccessibleName(/\S/);
-          const box = await control.boundingBox();
-          expect(box!.width).toBeGreaterThanOrEqual(24);
-          expect(box!.height).toBeGreaterThanOrEqual(24);
         }
         const contrastStates: {
           label: string;

@@ -93,10 +93,14 @@ test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
 });
 
-test("лента при входе стоит у последних записей", async ({ page, gmToken }) => {
+test("лента при входе стоит у последних записей", async ({
+  page,
+  gmToken,
+  seedChatHistory,
+}) => {
   await signInAsGm(page, gmToken);
   await expect(page.locator("canvas").first()).toBeVisible();
-  await seedLog(page, 40);
+  await seedChatHistory(gmToken, 40);
 
   await page.reload();
   await page.locator(LIST).waitFor();
@@ -109,10 +113,11 @@ test("лента при входе стоит у последних записе
 test("содержимое, доехавшее после закрепления, возвращает ленту к низу", async ({
   page,
   gmToken,
+  seedChatHistory,
 }) => {
   await signInAsGm(page, gmToken);
   await expect(page.locator("canvas").first()).toBeVisible();
-  await seedLog(page, 40);
+  await seedChatHistory(gmToken, 40);
   await page.reload();
   await page.locator(LIST).waitFor();
   await expect
@@ -131,10 +136,11 @@ test("содержимое, доехавшее после закрепления
 test("ушедшего вверх читателя подгрузка не утаскивает вниз", async ({
   page,
   gmToken,
+  seedChatHistory,
 }) => {
   await signInAsGm(page, gmToken);
   await expect(page.locator("canvas").first()).toBeVisible();
-  await seedLog(page, 40);
+  await seedChatHistory(gmToken, 40);
   await page.reload();
   await page.locator(LIST).waitFor();
   await expect
@@ -175,10 +181,11 @@ test("ушедшего вверх читателя подгрузка не ут�
 test("слежение возвращается, когда читатель сам вернулся к низу", async ({
   page,
   gmToken,
+  seedChatHistory,
 }) => {
   await signInAsGm(page, gmToken);
   await expect(page.locator("canvas").first()).toBeVisible();
-  await seedLog(page, 40);
+  await seedChatHistory(gmToken, 40);
   await page.reload();
   await page.locator(LIST).waitFor();
   await expect
@@ -266,6 +273,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       browser,
       baseURL,
       gmToken,
+      seedChatHistory,
     }, testInfo) => {
       test.setTimeout(90_000);
       await page.setViewportSize(viewport);
@@ -321,7 +329,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         const initial = (await bootstrap.json()) as GameSnapshot;
         const character = initial.characters[0];
         expect(character.resources.physicalPower.current).toBe(10);
-        await seedLog(gmPage, 40);
+        await seedChatHistory(gmToken, 40);
 
         if (role === "PLAYER") {
           const response = await gmPage.request.post("/api/invites", {
