@@ -114,6 +114,8 @@ const result = spawnSync(
     ...filters,
     `--project=${project}`,
     "--workers=1",
+    // Leave time for JSON/diagnostic uploads before the 45-minute job deadline.
+    "--global-timeout=2400000",
     "--fail-on-flaky-tests",
     "--reporter=line,json",
   ],

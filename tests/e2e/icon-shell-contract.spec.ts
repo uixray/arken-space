@@ -1,4 +1,8 @@
 import { inspectIconStructure } from "./helpers/icon-structure";
+import {
+  readIconKeyboardFocus,
+  tagIconKeyboardControls,
+} from "./helpers/icon-keyboard-probe";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import {
   paintedIconContrast,
@@ -212,10 +216,8 @@ for (const themeId of ["system", ...PLAYER_THEMES.map(({ id }) => id)])
         // take focus, disabled controls must be skipped, and enabled icon
         // controls must retain a visible keyboard indicator.
         const pending = new Set<number>();
+        await tagIconKeyboardControls(controls);
         for (const [index, control] of (await controls.all()).entries()) {
-          await control.evaluate((element, id) => {
-            element.setAttribute("data-icon-keyboard-gate", String(id));
-          }, index);
           if (await control.isEnabled()) pending.add(index);
         }
         const keyboardControls = pending.size;
@@ -223,34 +225,20 @@ for (const themeId of ["system", ...PLAYER_THEMES.map(({ id }) => id)])
         for (let step = 0; step < 120 && pending.size > 0; step += 1) {
           await page.keyboard.press(radioSteps > 0 ? "ArrowRight" : "Tab");
           if (radioSteps > 0) radioSteps -= 1;
-          const focused = page.locator(":focus");
+          const focus = await readIconKeyboardFocus(page);
           // At the end of the document the browser chrome owns focus for a Tab.
-          if ((await focused.count()) === 0) continue;
-          await expect(focused).not.toHaveJSProperty("tagName", "svg");
-          const id = await focused.getAttribute("data-icon-keyboard-gate");
+          if (focus === null) continue;
+          expect(focus.tagName).not.toBe("svg");
+          const id = focus.id;
           if (id === null) continue;
           // Radio groups deliberately have one Tab stop. Visit their other
           // options using their actual arrow-key interaction, then leave by Tab.
-          if (
-            (await focused.getAttribute("role")) === "radio" &&
-            pending.has(Number(id))
-          ) {
+          if (focus.role === "radio" && pending.has(Number(id))) {
             radioSteps = Math.max(radioSteps, 2);
           }
-          await expect(focused).toBeEnabled();
-          const indicator = await focused.evaluate((element) => {
-            const style = getComputedStyle(element);
-            return {
-              visible: element.matches(":focus-visible"),
-              outline:
-                style.outlineStyle !== "none" &&
-                parseFloat(style.outlineWidth) > 0 &&
-                style.outlineColor !== "rgba(0, 0, 0, 0)",
-              shadow: style.boxShadow !== "none",
-            };
-          });
-          expect(indicator.visible).toBe(true);
-          expect(indicator.outline || indicator.shadow).toBe(true);
+          await expect(page.locator(":focus")).toBeEnabled();
+          expect(focus.visible).toBe(true);
+          expect(focus.outline || focus.shadow).toBe(true);
           pending.delete(Number(id));
         }
         const unreachable = await Promise.all(

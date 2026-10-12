@@ -30,7 +30,8 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 4
+      # Каждый shard имеет отдельный runner и Postgres: локальная очередь не нужна.
+      max-parallel: 6
       matrix:
         project: [chromium, firefox]
         shard: [1, 2, 3]
@@ -82,9 +83,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Та же причина, что и в checks.yml: workspace-пакеты экспортируются из
-      # `dist`, и без сборки сервер не стартует.
-      - run: pnpm build
+      # Здесь web работает через Vite dev, а не apps/web/dist. Полная release
+      # сборка остаётся в checks; каждый shard собирает свежий API и его deps.
+      # Не скачиваем чужой/stale dist и не ждём отдельный artifact runner.
+      - run: pnpm --filter @arken/server... --workspace-concurrency=1 build
 
       # GM-токен генерируется на прогон. Это не про секретность — база здесь
       # одноразовая, — а про то, что seed записывает hash только в пустую базу.
@@ -123,7 +125,7 @@ jobs:
           exit 1
 
       - name: Verify duration planner invariants
-        run: node --test scripts/ci/balance-browser-files.test.mjs
+        run: node --test scripts/ci/balance-browser-files.test.mjs scripts/ci/verify-staged-pool.test.mjs
       - run: node scripts/ci/run-balanced-browser.mjs ${{ matrix.project }} ${{ matrix.shard }} 3
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: e2e-report.json
