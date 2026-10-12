@@ -199,6 +199,7 @@ jobs:
           path: |
             test-results/
             playwright-report/
+            browser-run.log
           retention-days: 7
           if-no-files-found: ignore
 
