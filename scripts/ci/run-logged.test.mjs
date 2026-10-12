@@ -43,6 +43,22 @@ test("preserves successful exit", async () => {
   }
 });
 
+test("invalid graceful protocol rejects before opening the log", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "arken-log-"));
+  try {
+    const path = join(dir, "run.log");
+    await assert.rejects(
+      runLogged(process.execPath, ["-e", "process.exit(0)"], path, {
+        gracefulSignal: "SIGKILL",
+      }),
+      /Unsupported graceful/,
+    );
+    assert.equal(existsSync(path), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("spawn and log-open errors reject rather than pass", async () => {
   const dir = mkdtempSync(join(tmpdir(), "arken-log-"));
   try {
@@ -153,6 +169,79 @@ test("child terminated by a signal cannot become success", async () => {
 });
 
 import { spawnSync } from "node:child_process";
+
+test(
+  "cooperative SIGINT preserves first external cancellation and allows cleanup",
+  { skip: process.platform === "win32" },
+  async () => {
+    const dir = mkdtempSync(join(tmpdir(), "arken-cooperative-"));
+    const ready = join(dir, "ready");
+    let poll;
+    try {
+      const child = `const fs=require('node:fs'); let signals=0; process.on('SIGINT',()=>{if(++signals>1)process.exit(8); setTimeout(()=>{console.log('cleanup done');process.exit(0)},150)}); fs.writeFileSync(${JSON.stringify(ready)},String(process.pid)); setTimeout(()=>process.exit(9),10000)`;
+      const result = runLogged(
+        process.execPath,
+        ["-e", child],
+        join(dir, "run.log"),
+        {
+          gracefulSignal: "SIGINT",
+        },
+      );
+      poll = setInterval(() => {
+        if (existsSync(ready)) {
+          clearInterval(poll);
+          process.emit("SIGTERM");
+          process.emit("SIGINT");
+          process.emit("SIGTERM");
+        }
+      }, 20);
+      assert.equal(await result, 143);
+      assert.match(readFileSync(join(dir, "run.log"), "utf8"), /cleanup done/);
+      assert.throws(
+        () => process.kill(Number(readFileSync(ready, "utf8")), 0),
+        /ESRCH/,
+      );
+    } finally {
+      clearInterval(poll);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  "unresponsive POSIX runner is forcibly reaped after grace period",
+  { skip: process.platform === "win32" },
+  async () => {
+    const dir = mkdtempSync(join(tmpdir(), "arken-force-"));
+    const ready = join(dir, "ready");
+    let poll;
+    try {
+      const child = `process.on('SIGINT',()=>{}); require('node:fs').writeFileSync(${JSON.stringify(ready)},String(process.pid)); setTimeout(()=>process.exit(9),12000)`;
+      const result = runLogged(
+        process.execPath,
+        ["-e", child],
+        join(dir, "run.log"),
+        {
+          gracefulSignal: "SIGINT",
+        },
+      );
+      poll = setInterval(() => {
+        if (existsSync(ready)) {
+          clearInterval(poll);
+          process.emit("SIGTERM");
+        }
+      }, 20);
+      assert.equal(await result, 143);
+      assert.throws(
+        () => process.kill(Number(readFileSync(ready, "utf8")), 0),
+        /ESRCH/,
+      );
+    } finally {
+      clearInterval(poll);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);
 
 test("tee error rejects and reaps the owned child", () => {
   // Do not inject stream errors into node:test's own reporting transport.

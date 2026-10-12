@@ -25,7 +25,11 @@ The CLI rejects directories, option-like targets and inherited/unknown type scop
 Unit targets are passed as absolute Vitest file filters (Vitest matching is not a
 transitive impact map); always inspect the executed file inventory.
 The logger drains both streams, flushes console writes before returning, and fails
-closed on spawn/log/tee errors. SIGINT/SIGTERM cannot become PASS: POSIX forwards
-to Playwright for cleanup then kills only its owned group after 5 seconds; Windows
-terminates the owned process tree. SIGKILL/runner loss cannot guarantee teardown
+closed on spawn/log/tee errors. SIGINT/SIGTERM cannot become PASS: the browser caller
+opts into Playwright's cooperative SIGINT protocol on POSIX for both cancellation
+and tee/log failures, while external cancellation retains exit 130/143. The first
+stop request wins; repeated requests do not interrupt cleanup. After 5 seconds,
+the fallback kills only the runner's owned group; Windows terminates its owned
+process tree. Independently detached webServers require cooperative teardown:
+SIGKILL, an unresponsive runner, or runner loss cannot guarantee their cleanup
 or artifact upload. These controls do not add a mandatory CI scenario.

@@ -5,8 +5,16 @@ import { setTimeout, clearTimeout } from "node:timers";
 
 // Synchronous writes keep diagnostics durable even if the job is later killed.
 // Cancellation gives Playwright time to tear down its webServers before forcing
-// only this invocation's process tree down. SIGKILL/runner loss is best-effort.
-export async function runLogged(command, args, logPath) {
+// its owned group down. Separate webServer groups rely on cooperative cleanup;
+// SIGKILL, an unresponsive runner or runner loss remains best-effort.
+export async function runLogged(
+  command,
+  args,
+  logPath,
+  { gracefulSignal } = {},
+) {
+  if (gracefulSignal !== undefined && gracefulSignal !== "SIGINT")
+    throw new Error("Unsupported graceful cancellation signal");
   const fd = openSync(logPath, "w");
   const child = spawn(command, args, {
     stdio: ["inherit", "pipe", "pipe"],
@@ -15,6 +23,7 @@ export async function runLogged(command, args, logPath) {
   let failure;
   let cancellation;
   let killTimer;
+  let stopping = false;
   let pendingWrites = 0;
   let closed = false;
   let finish;
@@ -27,7 +36,8 @@ export async function runLogged(command, args, logPath) {
   });
   let exitCode;
   const stop = (signal) => {
-    if (!child.pid || closed) return;
+    if (!child.pid || closed || stopping) return;
+    stopping = true;
     if (process.platform === "win32") {
       // Windows child.kill is uncatchable and loses the parent PID before a
       // later tree kill. Terminate the owned tree while that PID still exists.
@@ -41,7 +51,9 @@ export async function runLogged(command, args, logPath) {
       if (result.status !== 0) child.kill(signal);
       return;
     }
-    child.kill(signal);
+    // Playwright listens for SIGINT, not SIGTERM. Its caller opts into the
+    // cooperative protocol; the wrapper still reports the original 130/143.
+    child.kill(gracefulSignal ?? signal);
     if (!killTimer) {
       killTimer = setTimeout(() => {
         try {
@@ -61,11 +73,11 @@ export async function runLogged(command, args, logPath) {
     finish(exitCode);
   };
   const onInterrupt = () => {
-    cancellation = 130;
+    cancellation ??= 130;
     stop("SIGINT");
   };
   const onTerminate = () => {
-    cancellation = 143;
+    cancellation ??= 143;
     stop("SIGTERM");
   };
   const tee = (source, stream, chunk) => {

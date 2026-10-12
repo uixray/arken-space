@@ -121,5 +121,6 @@ const status = await runLogged(
     "--reporter=line,json",
   ],
   "browser-run.log",
+  { gracefulSignal: "SIGINT" },
 );
 process.exit(status);
