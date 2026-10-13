@@ -1,7 +1,7 @@
-import { readdir, readFile } from "node:fs/promises";
+import { createMigratedPglite } from "./helpers/pglite-template.js";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -30,17 +30,7 @@ let app: FastifyInstance;
 let logged: unknown[];
 
 beforeEach(async () => {
-  database = new PGlite();
-  const migrationsUrl = new URL("../packages/db/drizzle/", import.meta.url);
-  for (const file of (await readdir(migrationsUrl))
-    .filter((name) => name.endsWith(".sql"))
-    .sort())
-    await database.exec(
-      (await readFile(new URL(file, migrationsUrl), "utf8")).replaceAll(
-        "--> statement-breakpoint",
-        "",
-      ),
-    );
+  database = await createMigratedPglite();
   db = drizzle(database, { schema });
   await ensureSeed(db as never);
 

@@ -257,7 +257,7 @@ for (const layout of [
         : layout === "expanded-restored-story-media"
           ? "UIX-475 resize story-media preserves follow through real resource PATCH and new rolls"
           : "UIX-475 resize history-after-media preserves follow through real resource PATCH and new rolls";
-  test(title, async ({ page, gmToken }, testInfo) => {
+  test(title, async ({ page, gmToken, seedChatHistory }, testInfo) => {
     test.setTimeout(90_000);
     const checkpoints: Array<{ phase: string; geometry: Geometry }> = [];
     const requests: Array<{
@@ -334,25 +334,9 @@ for (const layout of [
       const character = snapshot.characters[0];
       expect(character.resources.physicalPower.current).toBe(10);
       if (historyAfterMedia) await seedStoryPortraits();
-      await seedChatLog(historyAfterMedia ? 20 : 40, {
-        actionId: randomUUID,
-        wait: (milliseconds) => page.waitForTimeout(milliseconds),
-        extendTimeout: (milliseconds) =>
-          test.setTimeout(test.info().timeout + milliseconds),
-        post: async (payload) => {
-          const response = await page.request.post("/api/chat", {
-            data: payload,
-          });
-          return {
-            ok: response.ok(),
-            status: response.status(),
-            retryAfter: response.headers()["retry-after"] ?? null,
-            body: response.ok() ? "" : await response.text(),
-          };
-        },
-      });
+      await seedChatHistory(gmToken, historyAfterMedia ? 20 : 40);
       if (historyAfterMedia) {
-        // The bootstrap is limited to20 per thread. Real TABLE +ROLLS traffic
+        // The bootstrap is limited to20 per thread. Prepared TABLE +real ROLLS traffic
         // therefore produces40 articles after reload, all newer than the media.
         await seedChatLog(20, {
           actionId: randomUUID,
