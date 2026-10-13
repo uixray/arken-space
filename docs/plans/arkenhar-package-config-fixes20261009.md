@@ -31,6 +31,7 @@ Prefer two clearly named command sets: private rehearsal/default-off versus expl
 ### 4. Real volume restore before default CMD
 
 Use explicit external existing-volume names (or equally fail-closed exact-volume binding) for runtime DB/media, with required identifiers. Avoid silent fresh volume creation on first `up`. Runbook order:
+
 1. Verify/load archive IDs and hashes; resolve approved project/network/volume names.
 2. Authorized recovery owner prepares/restores exact selected private DB/media tuple to those resources, mail/app stopped; validates baseline/schema/count/FK/media and migration receipt.
 3. Operator confirms rendered runtime volume names exactly match recovery receipt. No `down -v`, broad prune or replacement of a populated volume.

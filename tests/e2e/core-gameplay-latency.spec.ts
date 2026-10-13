@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Page, type Route, type WebSocketRoute } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
@@ -162,6 +163,7 @@ async function openPlacementFixture(page: Page) {
   await page.route("**/api/token-definitions/*/placements", (route) => {
     held.push(route);
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await page.locator(".token-tray > summary").click();
   const button = page

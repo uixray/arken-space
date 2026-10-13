@@ -210,6 +210,9 @@ describe("operational documentation keeps its safety boundaries", () => {
     };
     expect(packageJson.scripts.format).toContain("prettier --write");
     expect(packageJson.scripts["format:check"]).toContain("prettier --check");
+    expect(await read(".prettierignore")).toContain(
+      "packages/db/drizzle/**/*.sql",
+    );
 
     const testing = await read("docs/testing.md");
     expect(testing).toContain("`pnpm format:check` ничего не меняет");

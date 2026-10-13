@@ -1,4 +1,8 @@
-import { statLayoutSchema, type CharacterDto, type StatLayout } from "@arken/contracts";
+import {
+  statLayoutSchema,
+  type CharacterDto,
+  type StatLayout,
+} from "@arken/contracts";
 import { arkenSystem, starterStatLayout } from "@arken/system";
 import { normalizeSystemRegenStatRows } from "./stat-layout.js";
 import { characterCatalogEntries, characters } from "@arken/db";
@@ -53,7 +57,9 @@ export function resolveCharacterStatLayout(
       : statLayoutSchema.parse(starterStatLayout);
   const ownParsed = statLayoutSchema.safeParse(override);
   const effective =
-    ownParsed.success && ownParsed.data.length > 0 ? ownParsed.data : campaignLayout;
+    ownParsed.success && ownParsed.data.length > 0
+      ? ownParsed.data
+      : campaignLayout;
   return normalizeSystemRegenStatRows(effective);
 }
 
@@ -74,7 +80,10 @@ export function characterDto(
     controllerMembershipIds,
     portraitAssetId: character.portraitAssetId,
     stats: normalizeLegacyStats(character.stats),
-    statLayout: resolveCharacterStatLayout(character.statLayout, campaignDefaultLayout),
+    statLayout: resolveCharacterStatLayout(
+      character.statLayout,
+      campaignDefaultLayout,
+    ),
     skills: (() => {
       const existing = Array.isArray(character.skills) ? character.skills : [];
       const keys = new Set(existing.map((skill) => skill.key));

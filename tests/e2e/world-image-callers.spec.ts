@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Locator } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -117,6 +118,7 @@ for (const width of [1280, 390])
       });
     });
     await page.setViewportSize({ width, height: 800 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     async function open() {
       await openWorkspaceSection(page, "Редактор мира");

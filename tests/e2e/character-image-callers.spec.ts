@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Locator } from "@playwright/test";
 import type { CharacterDto } from "@arken/contracts";
 import { expect, test } from "./react-console-guard";
@@ -100,6 +101,7 @@ for (const role of ["GM", "PLAYER"] as const)
         });
       });
       await page.setViewportSize({ width, height: 800 });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await openWorkspaceSection(page, "Персонажи");
       const sheet = page.getByRole("article", {
@@ -158,6 +160,13 @@ for (const role of ["GM", "PLAYER"] as const)
       });
       await page.keyboard.press("Escape");
       await expect(portraitDialog).toBeHidden();
+      await sheet
+        .getByRole("tab", { name: "Инвентарь и ресурсы", exact: true })
+        .click();
+      await sheet
+        .getByRole("group", { name: "Заря", exact: true })
+        .getByRole("button", { name: "Настроить", exact: true })
+        .click();
       await expect(
         resource.getByRole("button", { name: "Без изображения", exact: true }),
       ).toHaveAttribute("aria-pressed", "true");
@@ -215,6 +224,13 @@ for (const role of ["GM", "PLAYER"] as const)
       await openPortrait();
       await expect(portraitTile).toHaveAttribute("aria-pressed", "true");
       await page.keyboard.press("Escape");
+      await sheet
+        .getByRole("tab", { name: "Инвентарь и ресурсы", exact: true })
+        .click();
+      await sheet
+        .getByRole("group", { name: "Заря", exact: true })
+        .getByRole("button", { name: "Настроить", exact: true })
+        .click();
       await expect(none).toHaveAttribute("aria-pressed", "true");
       expect(character.resources.Заря).toMatchObject({
         current: 3,

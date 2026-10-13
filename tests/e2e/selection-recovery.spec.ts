@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { GameSnapshot } from "@arken/contracts";
 import type { Locator, Page, Route, WebSocketRoute } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
@@ -167,7 +168,7 @@ async function boundary(page: Page) {
 async function selectMixed(page: Page) {
   const map = page.locator(".map-viewport");
   const trigger = page.getByRole("button", {
-    name: "Объекты карты",
+    name: "Список объектов и токенов карты",
     exact: true,
   });
   await trigger.click();
@@ -251,6 +252,7 @@ for (const origin of ["token", "drawing"] as const) {
     await page.setViewportSize({ width: 1280, height: 900 });
     const mock = await boundary(page);
     try {
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       const { map, point, scale } = await selectMixed(page);
       await inspectSelection(
@@ -316,7 +318,7 @@ for (const origin of ["token", "drawing"] as const) {
         .toBeCloseTo(before.x + 32 * scale, 0);
       await page.keyboard.press("Escape");
       const trigger = page.getByRole("button", {
-        name: "Объекты карты",
+        name: "Список объектов и токенов карты",
         exact: true,
       });
       await trigger.click();
@@ -349,6 +351,7 @@ test("UIX-507 rapid mixed MOVE keeps queued members aligned and acknowledges eac
   await page.setViewportSize({ width: 1280, height: 900 });
   const mock = await boundary(page);
   try {
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const { map, point, scale } = await selectMixed(page);
     await inspectSelection(
@@ -405,6 +408,7 @@ test("UIX-507 in-place authoritative deletion prunes only the missing selected m
   await page.setViewportSize({ width: 1280, height: 900 });
   const mock = await boundary(page);
   try {
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await selectMixed(page);
     await inspectSelection(

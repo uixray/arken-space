@@ -6,7 +6,9 @@ test("master can exchange the access link for a browser session", async ({
   gmToken,
 }) => {
   await page.goto(`/gm/${gmToken}`);
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page
+    .getByRole("button", { name: /^(Войти(?: в игру)?|Продолжить в игру)$/ })
+    .click();
   await expect(page.getByRole("img", { name: "ARKPATH" })).toBeVisible();
   // UIX-472 moved the workspace sections into a row that hides the overflow
   // behind «Ещё», so «Подготовка» is no longer a top-level button and a bare

@@ -2,7 +2,10 @@ import type { AudioTrackDto } from "@arken/contracts";
 
 /** Per-track event ordering: global campaign events can interleave with audio,
  * so a newer event for a different entity must not hide this track's update. */
-export type AudioTrackEventCursor = Map<string, { sequence: number; revision: number; removed?: boolean }>;
+export type AudioTrackEventCursor = Map<
+  string,
+  { sequence: number; revision: number; removed?: boolean }
+>;
 
 export function seedAudioTrackCursor(
   snapshotTracks: AudioTrackDto[],
@@ -14,11 +17,19 @@ export function seedAudioTrackCursor(
   for (const track of snapshotTracks) {
     const seen = cursor.get(track.id);
     if (!seen || seen.sequence <= snapshotVersion)
-      cursor.set(track.id, { sequence: snapshotVersion, revision: track.revision, removed: false });
+      cursor.set(track.id, {
+        sequence: snapshotVersion,
+        revision: track.revision,
+        removed: false,
+      });
   }
   for (const previous of previousTracks)
     if (!present.has(previous.id))
-      cursor.set(previous.id, { sequence: snapshotVersion, revision: Number.MAX_SAFE_INTEGER, removed: true });
+      cursor.set(previous.id, {
+        sequence: snapshotVersion,
+        revision: Number.MAX_SAFE_INTEGER,
+        removed: true,
+      });
 }
 
 export function applyAudioTrackState(
@@ -49,6 +60,10 @@ export function applyAudioTrackRemoved(
   if (sequence <= canonicalFloor) return tracks;
   const seen = cursor.get(trackId);
   if (seen && sequence <= seen.sequence) return tracks;
-  cursor.set(trackId, { sequence, revision: Number.MAX_SAFE_INTEGER, removed: true });
+  cursor.set(trackId, {
+    sequence,
+    revision: Number.MAX_SAFE_INTEGER,
+    removed: true,
+  });
   return tracks.filter((track) => track.id !== trackId);
 }

@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 
+test.use({ baseURL: "http://127.0.0.1:14244" });
+
 test("terrain stamp prototype placement, editing, camera, round-trip and density metrics", async ({
   page,
 }, testInfo) => {

@@ -8,6 +8,14 @@ for (const width of [360, 820]) {
     const mutations: string[] = [];
     await page.route("**/api/**", (route) => {
       const request = route.request();
+      if (new URL(request.url()).pathname === "/api/account/capabilities")
+        return route.fulfill({
+          json: {
+            accountAuthEnabled: true,
+            campaignLinkAccessEnabled: true,
+            legacyDevEnabled: false,
+          },
+        });
       if (
         request.method() !== "GET" &&
         !request.url().endsWith("/api/client-logs")
@@ -40,7 +48,10 @@ for (const width of [360, 820]) {
     await page.getByRole("button", { name: "Показать все планы" }).click();
     await expect(plannedItems).toHaveCount(11);
     await expect(
-      page.getByRole("heading", { name: "Выберите игрока", exact: true }),
+      page.getByRole("heading", {
+        name: "Войти по персональной ссылке игрока",
+        exact: true,
+      }),
     ).toBeVisible();
     const failures: object[] = [];
     for (const link of await page.locator(".landing-shell a:visible").all()) {

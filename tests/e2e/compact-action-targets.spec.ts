@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Locator } from "@playwright/test";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { expect, test } from "./react-console-guard";
@@ -59,6 +60,7 @@ for (const role of ["GM", "PLAYER"] as const)
           '0{"sid":"icons-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
         );
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await expect(page.locator(".map-viewport")).toBeVisible();
       const failures: object[] = [];
@@ -90,6 +92,11 @@ for (const role of ["GM", "PLAYER"] as const)
               className: node.className,
               width: box.width,
               height: box.height,
+              x: box.x,
+              y: box.y,
+              blocker: document
+                .elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)
+                ?.outerHTML.slice(0, 200),
               hit: node.contains(
                 document.elementFromPoint(
                   box.x + box.width / 2,
@@ -166,6 +173,11 @@ for (const role of ["GM", "PLAYER"] as const)
               className: node.className,
               width: box.width,
               height: box.height,
+              x: box.x,
+              y: box.y,
+              blocker: document
+                .elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)
+                ?.outerHTML.slice(0, 200),
               hit: node.contains(
                 document.elementFromPoint(
                   box.x + box.width / 2,

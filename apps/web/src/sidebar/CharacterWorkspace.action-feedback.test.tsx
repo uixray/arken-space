@@ -168,7 +168,10 @@ function actions(
       refreshAssets: unexpectedAction,
       generateTokenImage: unexpectedAction,
     },
-    statLayout: { onUpdateStatLayout: unexpectedAction, onUpdateCharacterStatLayout: unexpectedAction },
+    statLayout: {
+      onUpdateStatLayout: unexpectedAction,
+      onUpdateCharacterStatLayout: unexpectedAction,
+    },
     chatHistory: { onLoadThreadHistory: unexpectedAction },
     character: {
       replaceCharacterControllers: unexpectedAction,
@@ -530,7 +533,9 @@ describe("character action feedback", () => {
     renderComponent(view(state, { onUpdateCounters: update }));
     await galleryLoaded();
     fireEvent.click(screen.getByRole("tab", { name: "Инвентарь и ресурсы" }));
-    expect(screen.queryByText("Кошелёк", { exact: true })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Кошелёк", { exact: true }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("зм", { exact: true })).not.toBeInTheDocument();
     expect(screen.queryByText("см", { exact: true })).not.toBeInTheDocument();
     expect(screen.queryByText("мм", { exact: true })).not.toBeInTheDocument();
@@ -1047,6 +1052,13 @@ describe("character action feedback", () => {
     await galleryLoaded();
     // Changing characters deliberately closes the old portrait dialog. Reopen
     // the new character's dialog before starting its independent upload epoch.
+    // Gravity retains the closing portal during its exit animation. Do not
+    // selectPortrait through that stale portal and mistake it for the new one.
+    await waitFor(() =>
+      expect(
+        screen.queryByLabelText("Загрузить портрет для персонажа"),
+      ).not.toBeInTheDocument(),
+    );
     const file = selectPortrait(
       new File(["b"], "b.png", { type: "image/png" }),
     );

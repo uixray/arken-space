@@ -951,9 +951,9 @@ export function CharacterPanel({
   const resourceRows = statResourceRowsFromLayout(layout);
   const resourceLabels = resourceCostLabels(layout);
   const [countersPending, setCountersPending] = useState(0);
-  const [vitalsTab, setVitalsTab] = useState<
-    "stats" | "inventory" | "bio"
-  >("stats");
+  const [vitalsTab, setVitalsTab] = useState<"stats" | "inventory" | "bio">(
+    "stats",
+  );
   const vitalsTabId = useId();
   const [countersError, setCountersError] = useState("");
   // Undefined preserves each catalog action's legacy advantage setting until the player explicitly overrides it.
@@ -995,8 +995,8 @@ export function CharacterPanel({
    */
   const canEditCharacterLayout = Boolean(
     character &&
-      snapshot.me.role === "PLAYER" &&
-      character.ownerMembershipId === snapshot.me.id,
+    snapshot.me.role === "PLAYER" &&
+    character.ownerMembershipId === snapshot.me.id,
   );
   const canEditLayout = snapshot.me.role === "GM" || canEditCharacterLayout;
   const statLayoutPendingRef = useRef(false);
@@ -1313,15 +1313,21 @@ export function CharacterPanel({
     const rank = Number(standardSkillDraft.rank);
     const formula = standardSkillDraft.formula.trim();
     if (!name || name.length > 120) {
-      setStandardSkillError("Название навыка должно содержать от 1 до 120 символов.");
+      setStandardSkillError(
+        "Название навыка должно содержать от 1 до 120 символов.",
+      );
       return;
     }
     if (!Number.isInteger(rank) || rank < 0) {
-      setStandardSkillError("Ранг навыка должен быть целым неотрицательным числом.");
+      setStandardSkillError(
+        "Ранг навыка должен быть целым неотрицательным числом.",
+      );
       return;
     }
     if (!formula || formula.length > 160) {
-      setStandardSkillError("Формула броска должна содержать от 1 до 160 символов.");
+      setStandardSkillError(
+        "Формула броска должна содержать от 1 до 160 символов.",
+      );
       return;
     }
     standardSkillPendingRef.current = true;
@@ -1989,7 +1995,13 @@ export function CharacterPanel({
           onAssign={(catalogEntryId) =>
             catalogActions.onAssignCatalogEntry(character.id, catalogEntryId)
           }
-          onCreate={(input) => catalogActions.onCreateCatalogEntry(input)}
+          createAlreadyAssigned={snapshot.me.role === "PLAYER"}
+          onCreate={(input) =>
+            catalogActions.onCreateCatalogEntry(
+              input,
+              snapshot.me.role === "PLAYER" ? character.id : undefined,
+            )
+          }
         />
       )}
 
@@ -2123,276 +2135,446 @@ export function CharacterPanel({
         aria-labelledby={`${vitalsTabId}-inventory-tab`}
         hidden={vitalsTab !== "inventory"}
       >
-      <div className="character-vitals" aria-label="Ключевые показатели">
-        <div className="character-vitals__actions">
-          <Button
-            view="outlined"
-            disabled={!editable || countersPending > 0}
-            title="Половина регена выносливости и маны, округление вниз"
-            onClick={() => void runRest("SHORT")}
-          >
-            Короткий отдых
-          </Button>
-        </div>
-        <div className="character-vital-chip character-vital-chip--wallet">
-          <span className="character-vital-chip__value character-vital-chip__wallet-values">
-            {(["gold", "silver", "copper"] as const).map((key) => (
-              <label className="character-wallet__coin" key={key}>
-                <span className="character-wallet__coin-label">
-                  {key === "gold"
-                    ? "Золото"
-                    : key === "silver"
-                      ? "Серебро"
-                      : "Медь"}
+        <div className="character-vitals" aria-label="Ключевые показатели">
+          <div className="character-vitals__actions">
+            <Button
+              view="outlined"
+              disabled={!editable || countersPending > 0}
+              title="Половина регена выносливости и маны, округление вниз"
+              onClick={() => void runRest("SHORT")}
+            >
+              Короткий отдых
+            </Button>
+          </div>
+          <div className="character-vital-chip character-vital-chip--wallet">
+            <span className="character-vital-chip__value character-vital-chip__wallet-values">
+              {(["gold", "silver", "copper"] as const).map((key) => (
+                <label className="character-wallet__coin" key={key}>
+                  <span className="character-wallet__coin-label">
+                    {key === "gold"
+                      ? "Золото"
+                      : key === "silver"
+                        ? "Серебро"
+                        : "Медь"}
+                  </span>
+                  <span className="character-wallet__coin-controls">
+                    <Button
+                      disabled={
+                        !editable || !canSpendWalletCoin(walletDraft, key)
+                      }
+                      aria-label={`Уменьшить: ${WALLET_LABELS[key]}`}
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => changeWallet(key, -1)}
+                    >
+                      <AppIcon icon={DecreaseIcon} />
+                    </Button>
+                    <FormInput
+                      type="number"
+                      min={0}
+                      step={1}
+                      aria-label={`Кошелёк: ${WALLET_LABELS[key].toLowerCase()}`}
+                      value={walletDraft[key]}
+                      disabled={!editable}
+                      onChange={(event) => {
+                        cancelWalletBatch(false);
+                        const next = {
+                          ...walletDraftRef.current,
+                          [key]: normalizeWalletValue(event.target.value),
+                        };
+                        walletDraftRef.current = next;
+                        walletInputDirtyRef.current = true;
+                        setWalletDraft(next);
+                      }}
+                      onBlur={() => void saveWallet(walletDraftRef.current)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") event.currentTarget.blur();
+                      }}
+                    />
+                    <Button
+                      disabled={!editable}
+                      aria-label={`Увеличить: ${WALLET_LABELS[key]}`}
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => changeWallet(key, 1)}
+                    >
+                      <AppIcon icon={AddIcon} />
+                    </Button>
+                  </span>
+                </label>
+              ))}
+            </span>
+          </div>
+          {resourceRows.map(({ key, label }) => {
+            const res = resourcesDraft[key] ?? { current: 0, maximum: 0 };
+            const max = res.maximum ?? res.current;
+            const regenKey = RESOURCE_REGEN_STAT[key];
+            const regenRow = combatRows.find((row) => row.key === regenKey);
+            const regen = regenKey ? (character.stats[regenKey] ?? 0) : 0;
+            const changeResource = (delta: number) => {
+              const next = {
+                ...resourcesDraft,
+                [key]: { ...res, current: Math.max(0, res.current + delta) },
+              };
+              void saveResources(next);
+            };
+            return (
+              <div
+                className="character-vital-chip character-vital-chip--resource"
+                key={key}
+              >
+                <span className="character-vital-chip__label">{label}</span>
+                <span className="character-vital-chip__value character-vital-chip__resource-values">
+                  <label className="character-vital-chip__number-field">
+                    <span>Текущее</span>
+                    <FormInput
+                      type="number"
+                      min={0}
+                      aria-label={`${label}: текущее`}
+                      value={res.current}
+                      disabled={!editable}
+                      onChange={(event) =>
+                        setResourcesDraft((current) => ({
+                          ...current,
+                          [key]: {
+                            ...res,
+                            current: Math.max(0, Number(event.target.value)),
+                          },
+                        }))
+                      }
+                      onBlur={() => void saveResources(resourcesDraft)}
+                    />
+                  </label>
+                  <label className="character-vital-chip__number-field">
+                    <span>Максимум</span>
+                    <FormInput
+                      type="number"
+                      min={0}
+                      aria-label={`${label}: максимум`}
+                      value={max}
+                      disabled={!editable}
+                      onChange={(event) =>
+                        setResourcesDraft((current) => ({
+                          ...current,
+                          [key]: {
+                            ...res,
+                            maximum: Math.max(0, Number(event.target.value)),
+                            recoverable: true,
+                          },
+                        }))
+                      }
+                      onBlur={() => void saveResources(resourcesDraft)}
+                    />
+                  </label>
                 </span>
-                <span className="character-wallet__coin-controls">
+                <div className="character-vital-chip__controls">
                   <Button
                     disabled={
-                      !editable || !canSpendWalletCoin(walletDraft, key)
+                      !editable || countersPending > 0 || res.current <= 0
                     }
-                    aria-label={`Уменьшить: ${WALLET_LABELS[key]}`}
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => changeWallet(key, -1)}
+                    aria-label={`Уменьшить ${label}`}
+                    onClick={() => changeResource(-1)}
                   >
                     <AppIcon icon={DecreaseIcon} />
                   </Button>
-                  <FormInput
-                    type="number"
-                    min={0}
-                    step={1}
-                    aria-label={`Кошелёк: ${WALLET_LABELS[key].toLowerCase()}`}
-                    value={walletDraft[key]}
-                    disabled={!editable}
-                    onChange={(event) => {
-                      cancelWalletBatch(false);
-                      const next = {
-                        ...walletDraftRef.current,
-                        [key]: normalizeWalletValue(event.target.value),
-                      };
-                      walletDraftRef.current = next;
-                      walletInputDirtyRef.current = true;
-                      setWalletDraft(next);
-                    }}
-                    onBlur={() => void saveWallet(walletDraftRef.current)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur();
-                    }}
-                  />
                   <Button
-                    disabled={!editable}
-                    aria-label={`Увеличить: ${WALLET_LABELS[key]}`}
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => changeWallet(key, 1)}
+                    disabled={!editable || countersPending > 0}
+                    aria-label={`Увеличить ${label}`}
+                    onClick={() => changeResource(1)}
                   >
                     <AppIcon icon={AddIcon} />
                   </Button>
-                </span>
-              </label>
-            ))}
-          </span>
-        </div>
-        {resourceRows.map(({ key, label }) => {
-          const res = resourcesDraft[key] ?? { current: 0, maximum: 0 };
-          const max = res.maximum ?? res.current;
-          const regenKey = RESOURCE_REGEN_STAT[key];
-          const regenRow = combatRows.find((row) => row.key === regenKey);
-          const regen = regenKey ? (character.stats[regenKey] ?? 0) : 0;
-          const changeResource = (delta: number) => {
-            const next = {
-              ...resourcesDraft,
-              [key]: { ...res, current: Math.max(0, res.current + delta) },
-            };
-            void saveResources(next);
-          };
-          return (
-            <div
-              className="character-vital-chip character-vital-chip--resource"
-              key={key}
-            >
-              <span className="character-vital-chip__label">{label}</span>
-              <span className="character-vital-chip__value character-vital-chip__resource-values">
-                <label className="character-vital-chip__number-field">
-                  <span>Текущее</span>
-                  <FormInput
-                    type="number"
-                    min={0}
-                    aria-label={`${label}: текущее`}
-                    value={res.current}
-                    disabled={!editable}
-                    onChange={(event) =>
-                      setResourcesDraft((current) => ({
-                        ...current,
-                        [key]: {
-                          ...res,
-                          current: Math.max(0, Number(event.target.value)),
-                        },
-                      }))
-                    }
-                    onBlur={() => void saveResources(resourcesDraft)}
-                  />
-                </label>
-                <label className="character-vital-chip__number-field">
-                  <span>Максимум</span>
-                  <FormInput
-                    type="number"
-                    min={0}
-                    aria-label={`${label}: максимум`}
-                    value={max}
-                    disabled={!editable}
-                    onChange={(event) =>
-                      setResourcesDraft((current) => ({
-                        ...current,
-                        [key]: {
-                          ...res,
-                          maximum: Math.max(0, Number(event.target.value)),
-                          recoverable: true,
-                        },
-                      }))
-                    }
-                    onBlur={() => void saveResources(resourcesDraft)}
-                  />
-                </label>
-              </span>
-              <div className="character-vital-chip__controls">
-                <Button
-                  disabled={
-                    !editable || countersPending > 0 || res.current <= 0
-                  }
-                  aria-label={`Уменьшить ${label}`}
-                  onClick={() => changeResource(-1)}
-                >
-                  <AppIcon icon={DecreaseIcon} />
-                </Button>
-                <Button
-                  disabled={!editable || countersPending > 0}
-                  aria-label={`Увеличить ${label}`}
-                  onClick={() => changeResource(1)}
-                >
-                  <AppIcon icon={AddIcon} />
-                </Button>
-                {regen > 0 && (
-                  <Button
-                    disabled={
-                      !editable || countersPending > 0 || res.current >= max
-                    }
-                    aria-label={`Восстановить ${regen}: ${label}`}
-                    title={`Восстановить на величину регена (${regen})`}
-                    onClick={() =>
-                      void saveResources({
-                        ...resourcesDraft,
-                        [key]: {
-                          ...res,
-                          current: Math.min(max, res.current + regen),
-                        },
-                      })
-                    }
-                  >
-                    <AppIcon icon={AddIcon} /> {regen}
-                  </Button>
+                  {regen > 0 && (
+                    <Button
+                      disabled={
+                        !editable || countersPending > 0 || res.current >= max
+                      }
+                      aria-label={`Восстановить ${regen}: ${label}`}
+                      title={`Восстановить на величину регена (${regen})`}
+                      onClick={() =>
+                        void saveResources({
+                          ...resourcesDraft,
+                          [key]: {
+                            ...res,
+                            current: Math.min(max, res.current + regen),
+                          },
+                        })
+                      }
+                    >
+                      <AppIcon icon={AddIcon} /> {regen}
+                    </Button>
+                  )}
+                </div>
+                {regenKey && regenRow && (
+                  <label className="character-vital-chip__regen">
+                    <span>Реген</span>
+                    <FormInput
+                      type="number"
+                      aria-label={regenRow.label}
+                      min={0}
+                      defaultValue={regen}
+                      disabled={!editable}
+                      onBlur={(event) =>
+                        changeStatValue(
+                          character,
+                          regenKey,
+                          Number(event.target.value),
+                        )
+                      }
+                    />
+                  </label>
                 )}
-              </div>
-              {regenKey && regenRow && (
-                <label className="character-vital-chip__regen">
-                  <span>Реген</span>
-                  <FormInput
-                    type="number"
-                    aria-label={regenRow.label}
-                    min={0}
-                    defaultValue={regen}
-                    disabled={!editable}
-                    onBlur={(event) =>
-                      changeStatValue(
-                        character,
-                        regenKey,
-                        Number(event.target.value),
-                      )
-                    }
-                  />
-                </label>
-              )}
-              <span className="character-vital-chip__track" aria-hidden="true">
                 <span
-                  style={{
-                    width: `${max > 0 ? Math.min(100, (res.current / max) * 100) : 0}%`,
-                  }}
-                />
-                {max > 0 && res.current > max && (
+                  className="character-vital-chip__track"
+                  aria-hidden="true"
+                >
                   <span
-                    className="character-vital-chip__excess"
                     style={{
-                      width: `${Math.min(100, (((res.current - max) % max || max) / max) * 100)}%`,
+                      width: `${max > 0 ? Math.min(100, (res.current / max) * 100) : 0}%`,
                     }}
                   />
-                )}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+                  {max > 0 && res.current > max && (
+                    <span
+                      className="character-vital-chip__excess"
+                      style={{
+                        width: `${Math.min(100, (((res.current - max) % max || max) / max) * 100)}%`,
+                      }}
+                    />
+                  )}
+                </span>
+              </div>
+            );
+          })}
+        </div>
 
-      <div
-        className="character-section character-section--resources"
-        data-character-section="resources"
-      >
-        <h3 className="character-block-heading">Дополнительные ресурсы</h3>
-        <div className="subsection character-resource-editor">
-          {Object.entries(resourcesDraft)
-            .filter(([key]) => key !== "physicalPower" && key !== "magicPower")
-            .map(([key, resource]) => (
-              <fieldset
-                className="resource-card"
-                key={key}
-                disabled={!editable}
-              >
-                <legend>
-                  {editingResourceKey === key ? "Создание нового ресурса" : key}
-                </legend>
-                {editingResourceKey === key ? (
-                  <div className="resource-card__extra-fields">
-                    <label className="field">
-                      <span>Название</span>
-                      <FormInput
-                        defaultValue={key}
-                        required
-                        onBlur={(event) => {
-                          const nextKey = event.target.value.trim();
-                          if (
-                            !nextKey ||
-                            nextKey === key ||
-                            resourcesDraft[nextKey]
-                          ) {
-                            event.target.value = key;
-                            return;
+        <div
+          className="character-section character-section--resources"
+          data-character-section="resources"
+        >
+          <h3 className="character-block-heading">Дополнительные ресурсы</h3>
+          <div className="subsection character-resource-editor">
+            {Object.entries(resourcesDraft)
+              .filter(
+                ([key]) => key !== "physicalPower" && key !== "magicPower",
+              )
+              .map(([key, resource]) => (
+                <fieldset
+                  className="resource-card"
+                  key={key}
+                  disabled={!editable}
+                >
+                  <legend>
+                    {editingResourceKey === key
+                      ? "Создание нового ресурса"
+                      : key}
+                  </legend>
+                  {editingResourceKey === key ? (
+                    <div className="resource-card__extra-fields">
+                      <label className="field">
+                        <span>Название</span>
+                        <FormInput
+                          defaultValue={key}
+                          required
+                          onBlur={(event) => {
+                            const nextKey = event.target.value.trim();
+                            if (
+                              !nextKey ||
+                              nextKey === key ||
+                              resourcesDraft[nextKey]
+                            ) {
+                              event.target.value = key;
+                              return;
+                            }
+                            const { [key]: moved, ...rest } = resourcesDraft;
+                            void saveResources({ ...rest, [nextKey]: moved! });
+                          }}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Описание</span>
+                        <FormInput
+                          value={resource.description ?? ""}
+                          onChange={(event) =>
+                            setResourcesDraft((current) => ({
+                              ...current,
+                              [key]: {
+                                ...resource,
+                                description: event.target.value,
+                              },
+                            }))
                           }
-                          const { [key]: moved, ...rest } = resourcesDraft;
-                          void saveResources({ ...rest, [nextKey]: moved! });
-                        }}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Описание</span>
-                      <FormInput
-                        value={resource.description ?? ""}
-                        onChange={(event) =>
-                          setResourcesDraft((current) => ({
-                            ...current,
-                            [key]: {
-                              ...resource,
-                              description: event.target.value,
-                            },
-                          }))
-                        }
-                        onBlur={() => void saveResources(resourcesDraft)}
-                      />
-                    </label>
-                    <div className="resource-card__inputs">
+                          onBlur={() => void saveResources(resourcesDraft)}
+                        />
+                      </label>
+                      <div className="resource-card__inputs">
+                        <Button
+                          aria-label={`Уменьшить ${key}`}
+                          disabled={
+                            !editable ||
+                            countersPending > 0 ||
+                            resource.current <= 0
+                          }
+                          onClick={() =>
+                            void saveResources({
+                              ...resourcesDraft,
+                              [key]: {
+                                ...resource,
+                                current: resource.current - 1,
+                              },
+                            })
+                          }
+                        >
+                          <AppIcon icon={DecreaseIcon} />
+                        </Button>
+                        <label className="field">
+                          <span>Текущее</span>
+                          <FormInput
+                            type="number"
+                            min={0}
+                            value={resource.current}
+                            onChange={(event) =>
+                              setResourcesDraft((current) => ({
+                                ...current,
+                                [key]: {
+                                  ...resource,
+                                  current: Math.max(
+                                    0,
+                                    Number(event.target.value),
+                                  ),
+                                },
+                              }))
+                            }
+                            onBlur={() => void saveResources(resourcesDraft)}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Максимум</span>
+                          <FormInput
+                            type="number"
+                            min={0}
+                            value={resource.maximum ?? resource.current}
+                            onChange={(event) => {
+                              const maximum = Math.max(
+                                0,
+                                Number(event.target.value),
+                              );
+                              setResourcesDraft((current) => ({
+                                ...current,
+                                [key]: {
+                                  ...resource,
+                                  maximum: maximum,
+                                  current: resource.current,
+                                },
+                              }));
+                            }}
+                            onBlur={() => void saveResources(resourcesDraft)}
+                          />
+                        </label>
+                        <Button
+                          aria-label={`Увеличить ${key}`}
+                          disabled={!editable || countersPending > 0}
+                          onClick={() =>
+                            void saveResources({
+                              ...resourcesDraft,
+                              [key]: {
+                                ...resource,
+                                current: resource.current + 1,
+                              },
+                            })
+                          }
+                        >
+                          <AppIcon icon={AddIcon} />
+                        </Button>
+                      </div>
+                      <div className="field">
+                        <span>Изображение</span>
+                        <AssetPicker
+                          aria-label={`Изображение ресурса ${key}`}
+                          value={resource.imageAssetId ?? null}
+                          onUpload={async (file) =>
+                            (await assetActions.uploadAsset(file, "IMAGE")).id
+                          }
+                          assets={snapshot.assets.filter((asset) =>
+                            asset.mimeType.startsWith("image/"),
+                          )}
+                          onChange={(assetId) => {
+                            const next = {
+                              ...resourcesDraft,
+                              [key]: {
+                                ...resource,
+                                imageAssetId: assetId,
+                              },
+                            };
+                            void saveResources(next);
+                          }}
+                        />
+                      </div>
+                      <label className="compact-check">
+                        <input
+                          type="checkbox"
+                          checked={resource.recoverable !== false}
+                          onChange={(event) =>
+                            void saveResources({
+                              ...resourcesDraft,
+                              [key]: {
+                                ...resource,
+                                recoverable: event.target.checked,
+                              },
+                            })
+                          }
+                        />
+                        Восполнять при отдыхе
+                      </label>
+                      <label className="field">
+                        <span>Сколько восполнять за длинный отдых</span>
+                        <FormInput
+                          type="number"
+                          min={0}
+                          value={resource.restAmount ?? 0}
+                          onChange={(event) =>
+                            setResourcesDraft((current) => ({
+                              ...current,
+                              [key]: {
+                                ...resource,
+                                restAmount: Math.max(
+                                  0,
+                                  Number(event.target.value),
+                                ),
+                              },
+                            }))
+                          }
+                        />
+                      </label>
                       <Button
-                        aria-label={`Уменьшить ${key}`}
+                        disabled={countersPending > 0}
+                        onClick={async () => {
+                          if (await saveResources(resourcesDraft))
+                            setEditingResourceKey(null);
+                        }}
+                      >
+                        Сохранить
+                      </Button>
+                      <Button
+                        className="danger-link"
+                        onClick={() => {
+                          const { [key]: _removed, ...rest } = resourcesDraft;
+                          void saveResources(rest);
+                        }}
+                      >
+                        Удалить
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="resource-card__summary">
+                      <span className="resource-card__summary-value">
+                        {resource.current} /{" "}
+                        {resource.maximum ?? resource.current}
+                      </span>
+                      <Button
                         disabled={
                           !editable ||
-                          countersPending > 0 ||
-                          resource.current <= 0
+                          resource.current <= 0 ||
+                          countersPending > 0
                         }
+                        aria-label={`Уменьшить ${key}`}
                         onClick={() =>
                           void saveResources({
                             ...resourcesDraft,
@@ -2405,53 +2587,9 @@ export function CharacterPanel({
                       >
                         <AppIcon icon={DecreaseIcon} />
                       </Button>
-                      <label className="field">
-                        <span>Текущее</span>
-                        <FormInput
-                          type="number"
-                          min={0}
-                          value={resource.current}
-                          onChange={(event) =>
-                            setResourcesDraft((current) => ({
-                              ...current,
-                              [key]: {
-                                ...resource,
-                                current: Math.max(
-                                  0,
-                                  Number(event.target.value),
-                                ),
-                              },
-                            }))
-                          }
-                          onBlur={() => void saveResources(resourcesDraft)}
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Максимум</span>
-                        <FormInput
-                          type="number"
-                          min={0}
-                          value={resource.maximum ?? resource.current}
-                          onChange={(event) => {
-                            const maximum = Math.max(
-                              0,
-                              Number(event.target.value),
-                            );
-                            setResourcesDraft((current) => ({
-                              ...current,
-                              [key]: {
-                                ...resource,
-                                maximum: maximum,
-                                current: resource.current,
-                              },
-                            }));
-                          }}
-                          onBlur={() => void saveResources(resourcesDraft)}
-                        />
-                      </label>
                       <Button
-                        aria-label={`Увеличить ${key}`}
                         disabled={!editable || countersPending > 0}
+                        aria-label={`Увеличить ${key}`}
                         onClick={() =>
                           void saveResources({
                             ...resourcesDraft,
@@ -2464,267 +2602,154 @@ export function CharacterPanel({
                       >
                         <AppIcon icon={AddIcon} />
                       </Button>
-                    </div>
-                    <div className="field">
-                      <span>Изображение</span>
-                      <AssetPicker
-                        aria-label={`Изображение ресурса ${key}`}
-                        value={resource.imageAssetId ?? null}
-                        onUpload={async (file) =>
-                          (await assetActions.uploadAsset(file, "IMAGE")).id
-                        }
-                        assets={snapshot.assets.filter((asset) =>
-                          asset.mimeType.startsWith("image/"),
+                      <div
+                        className="resource-bar"
+                        role="progressbar"
+                        aria-label={`Уровень: ${key}`}
+                        aria-valuenow={resource.current}
+                        aria-valuemin={0}
+                        aria-valuemax={Math.max(
+                          resource.maximum ?? resource.current,
+                          resource.current,
                         )}
-                        onChange={(assetId) => {
-                          const next = {
-                            ...resourcesDraft,
-                            [key]: {
-                              ...resource,
-                              imageAssetId: assetId,
-                            },
-                          };
-                          void saveResources(next);
-                        }}
-                      />
-                    </div>
-                    <label className="compact-check">
-                      <input
-                        type="checkbox"
-                        checked={resource.recoverable !== false}
-                        onChange={(event) =>
+                      >
+                        <div
+                          className="resource-bar__fill resource-bar__fill--default"
+                          style={{
+                            width: `${Math.min(100, (resource.current / Math.max(1, resource.maximum ?? resource.current)) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <Button
+                        disabled={
+                          !editable ||
+                          countersPending > 0 ||
+                          resource.recoverable === false ||
+                          (resource.restAmount ?? 0) <= 0 ||
+                          resource.current >=
+                            (resource.maximum ?? resource.current)
+                        }
+                        aria-label={`Восстановить ${resource.restAmount ?? 0}: ${key}`}
+                        onClick={() =>
                           void saveResources({
                             ...resourcesDraft,
                             [key]: {
                               ...resource,
-                              recoverable: event.target.checked,
+                              current: Math.min(
+                                resource.maximum ?? resource.current,
+                                resource.current + (resource.restAmount ?? 0),
+                              ),
                             },
                           })
                         }
-                      />
-                      Восполнять при отдыхе
-                    </label>
-                    <label className="field">
-                      <span>Сколько восполнять за длинный отдых</span>
-                      <FormInput
-                        type="number"
-                        min={0}
-                        value={resource.restAmount ?? 0}
-                        onChange={(event) =>
-                          setResourcesDraft((current) => ({
-                            ...current,
-                            [key]: {
-                              ...resource,
-                              restAmount: Math.max(
-                                0,
-                                Number(event.target.value),
-                              ),
-                            },
-                          }))
-                        }
-                      />
-                    </label>
-                    <Button
-                      disabled={countersPending > 0}
-                      onClick={async () => {
-                        if (await saveResources(resourcesDraft))
-                          setEditingResourceKey(null);
-                      }}
-                    >
-                      Сохранить
-                    </Button>
-                    <Button
-                      className="danger-link"
-                      onClick={() => {
-                        const { [key]: _removed, ...rest } = resourcesDraft;
-                        void saveResources(rest);
-                      }}
-                    >
-                      Удалить
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="resource-card__summary">
-                    <span className="resource-card__summary-value">
-                      {resource.current} /{" "}
-                      {resource.maximum ?? resource.current}
-                    </span>
-                    <Button
-                      disabled={
-                        !editable ||
-                        resource.current <= 0 ||
-                        countersPending > 0
-                      }
-                      aria-label={`Уменьшить ${key}`}
-                      onClick={() =>
-                        void saveResources({
-                          ...resourcesDraft,
-                          [key]: { ...resource, current: resource.current - 1 },
-                        })
-                      }
-                    >
-                      <AppIcon icon={DecreaseIcon} />
-                    </Button>
-                    <Button
-                      disabled={!editable || countersPending > 0}
-                      aria-label={`Увеличить ${key}`}
-                      onClick={() =>
-                        void saveResources({
-                          ...resourcesDraft,
-                          [key]: { ...resource, current: resource.current + 1 },
-                        })
-                      }
-                    >
-                      <AppIcon icon={AddIcon} />
-                    </Button>
-                    <div
-                      className="resource-bar"
-                      role="progressbar"
-                      aria-label={`Уровень: ${key}`}
-                      aria-valuenow={resource.current}
-                      aria-valuemin={0}
-                      aria-valuemax={Math.max(
-                        resource.maximum ?? resource.current,
-                        resource.current,
-                      )}
-                    >
-                      <div
-                        className="resource-bar__fill resource-bar__fill--default"
-                        style={{
-                          width: `${Math.min(100, (resource.current / Math.max(1, resource.maximum ?? resource.current)) * 100)}%`,
-                        }}
-                      />
+                      >
+                        <AppIcon icon={AddIcon} /> {resource.restAmount ?? 0}
+                      </Button>
+                      <Button
+                        disabled={!editable}
+                        onClick={() => setEditingResourceKey(key)}
+                      >
+                        Настроить
+                      </Button>
                     </div>
-                    <Button
-                      disabled={
-                        !editable ||
-                        countersPending > 0 ||
-                        resource.recoverable === false ||
-                        (resource.restAmount ?? 0) <= 0 ||
-                        resource.current >=
-                          (resource.maximum ?? resource.current)
-                      }
-                      aria-label={`Восстановить ${resource.restAmount ?? 0}: ${key}`}
-                      onClick={() =>
-                        void saveResources({
-                          ...resourcesDraft,
-                          [key]: {
-                            ...resource,
-                            current: Math.min(
-                              resource.maximum ?? resource.current,
-                              resource.current + (resource.restAmount ?? 0),
-                            ),
-                          },
-                        })
-                      }
-                    >
-                      <AppIcon icon={AddIcon} /> {resource.restAmount ?? 0}
-                    </Button>
-                    <Button
-                      disabled={!editable}
-                      onClick={() => setEditingResourceKey(key)}
-                    >
-                      Настроить
-                    </Button>
-                  </div>
-                )}
-              </fieldset>
-            ))}
-          <div className="inline-fields">
-            <FormInput
-              aria-label="Название нового ресурса"
-              aria-invalid={
-                editable && newResourceKey && resourcesDraft[newResourceKey]
-                  ? true
-                  : undefined
-              }
-              aria-describedby={
-                newResourceReason ? newResourceDescriptionId : undefined
-              }
-              value={newResourceName}
-              placeholder="Новый ресурс"
-              onChange={(event) => setNewResourceName(event.target.value)}
-            />
-            <Button
-              aria-describedby={
-                newResourceReason ? newResourceDescriptionId : undefined
-              }
-              disabled={
-                !editable ||
-                !newResourceName.trim() ||
-                Boolean(resourcesDraft[newResourceName.trim()])
-              }
-              onClick={() => {
-                const key = newResourceName.trim();
-                if (!key) return;
-                setNewResourceName("");
-                setEditingResourceKey(key);
-                void saveResources({
-                  ...resourcesDraft,
-                  [key]: { current: 0, maximum: 0, recoverable: true },
-                });
-              }}
-            >
-              Добавить
-            </Button>
+                  )}
+                </fieldset>
+              ))}
+            <div className="inline-fields">
+              <FormInput
+                aria-label="Название нового ресурса"
+                aria-invalid={
+                  editable && newResourceKey && resourcesDraft[newResourceKey]
+                    ? true
+                    : undefined
+                }
+                aria-describedby={
+                  newResourceReason ? newResourceDescriptionId : undefined
+                }
+                value={newResourceName}
+                placeholder="Новый ресурс"
+                onChange={(event) => setNewResourceName(event.target.value)}
+              />
+              <Button
+                aria-describedby={
+                  newResourceReason ? newResourceDescriptionId : undefined
+                }
+                disabled={
+                  !editable ||
+                  !newResourceName.trim() ||
+                  Boolean(resourcesDraft[newResourceName.trim()])
+                }
+                onClick={() => {
+                  const key = newResourceName.trim();
+                  if (!key) return;
+                  setNewResourceName("");
+                  setEditingResourceKey(key);
+                  void saveResources({
+                    ...resourcesDraft,
+                    [key]: { current: 0, maximum: 0, recoverable: true },
+                  });
+                }}
+              >
+                Добавить
+              </Button>
+            </div>
+            {newResourceReason && (
+              <p className="muted" id={newResourceDescriptionId}>
+                {newResourceReason}
+              </p>
+            )}
           </div>
-          {newResourceReason && (
-            <p className="muted" id={newResourceDescriptionId}>
-              {newResourceReason}
-            </p>
+
+          {countersPending > 0 && <span className="muted">Сохраняем…</span>}
+          {countersError && (
+            <span className="field-error" role="alert">
+              {countersError}
+            </span>
           )}
         </div>
 
-        {countersPending > 0 && <span className="muted">Сохраняем…</span>}
-        {countersError && (
-          <span className="field-error" role="alert">
-            {countersError}
-          </span>
-        )}
-      </div>
-
-      {/* Секция 3: Инвентарь и снаряжение */}
-      <div
-        className="character-section character-section--inventory"
-        data-character-section="inventory"
-      >
-        <h3 className="character-block-heading">Инвентарь и снаряжение</h3>
-        <label className="field">
-          Инвентарь (один предмет на строку)
-          <FormTextArea
-            controlRef={inventoryRef}
-            defaultValue={character.inventory.join("\n")}
-            disabled={!editable}
-            rows={5}
-            onBlur={(event) =>
-              void runCharacterMutation(() =>
+        {/* Секция 3: Инвентарь и снаряжение */}
+        <div
+          className="character-section character-section--inventory"
+          data-character-section="inventory"
+        >
+          <h3 className="character-block-heading">Инвентарь и снаряжение</h3>
+          <label className="field">
+            Инвентарь (один предмет на строку)
+            <FormTextArea
+              controlRef={inventoryRef}
+              defaultValue={character.inventory.join("\n")}
+              disabled={!editable}
+              rows={5}
+              onBlur={(event) =>
+                void runCharacterMutation(() =>
+                  onPatch(character.id, {
+                    inventory: event.target.value
+                      .split("\n")
+                      .map((item) => item.trim())
+                      .filter(Boolean),
+                    revision: character.revision,
+                  }),
+                )
+              }
+            />
+          </label>
+          <h3 className="character-block-heading">Заметки</h3>
+          <label className="field">
+            Заметки
+            <FormTextArea
+              defaultValue={character.notes}
+              disabled={!editable}
+              rows={6}
+              onBlur={(event) =>
                 onPatch(character.id, {
-                  inventory: event.target.value
-                    .split("\n")
-                    .map((item) => item.trim())
-                    .filter(Boolean),
+                  notes: event.target.value,
                   revision: character.revision,
-                }),
-              )
-            }
-          />
-        </label>
-        <h3 className="character-block-heading">Заметки</h3>
-        <label className="field">
-          Заметки
-          <FormTextArea
-            defaultValue={character.notes}
-            disabled={!editable}
-            rows={6}
-            onBlur={(event) =>
-              onPatch(character.id, {
-                notes: event.target.value,
-                revision: character.revision,
-              })
-            }
-          />
-        </label>
-      </div>
+                })
+              }
+            />
+          </label>
+        </div>
       </div>
 
       {/* Секция 4: Личность, медиа и доступ */}

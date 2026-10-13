@@ -11,12 +11,11 @@ import {
   createDatabase,
   gameEvents,
   memberships,
-  sessions,
   spellPacks,
   spellPackVersions,
 } from "@arken/db";
 import { env } from "./env.js";
-import { hashToken } from "./security.js";
+import { seedProbeSessions } from "./pg-probe-auth.js";
 import { registerSpellAssignmentRoutes } from "./spell-assignment-routes.js";
 
 const connectionString = process.env.DATABASE_URL;
@@ -197,16 +196,18 @@ try {
       displayName: "Foreign assignment GM",
     },
   ]);
-  await db.insert(sessions).values([
+  await seedProbeSessions(db, [
     {
       membershipId: ids.gm,
-      tokenHash: hashToken(gmSecret),
-      expiresAt: new Date(Date.now() + 600_000),
+      campaignId: ids.campaign,
+      role: "GM",
+      token: gmSecret,
     },
     {
       membershipId: ids.foreignGm,
-      tokenHash: hashToken(foreignGmSecret),
-      expiresAt: new Date(Date.now() + 600_000),
+      campaignId: ids.foreignCampaign,
+      role: "GM",
+      token: foreignGmSecret,
     },
   ]);
   await db.insert(characters).values([

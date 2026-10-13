@@ -258,21 +258,44 @@ function isSoundMetadataDefault(node, file, tree) {
   if (!["🔊", "😈", "😮"].includes(value)) return false;
   if (normalized.endsWith("apps/web/src/SoundpadWorkspace.tsx")) {
     const property = ts.isPropertyAssignment(node) ? node : node.parent;
-    if (property && ts.isPropertyAssignment(property) && propertyName(property) === "icon") {
+    if (
+      property &&
+      ts.isPropertyAssignment(property) &&
+      propertyName(property) === "icon"
+    ) {
       for (let parent = property; parent; parent = parent.parent) {
-        if (ts.isVariableDeclaration(parent) && parent.name.getText(tree) === "DEFAULT_CLIPS")
+        if (
+          ts.isVariableDeclaration(parent) &&
+          parent.name.getText(tree) === "DEFAULT_CLIPS"
+        )
           return value === "😈" || value === "😮";
       }
     }
-    return value === "🔊" && ts.isCallExpression(node.parent) &&
-      node.parent.expression.getText(tree) === "addSound" && node.parent.arguments[2] === node;
+    return (
+      value === "🔊" &&
+      ts.isCallExpression(node.parent) &&
+      node.parent.expression.getText(tree) === "addSound" &&
+      node.parent.arguments[2] === node
+    );
   }
-  if (normalized.endsWith("apps/web/src/SoundClipEditor.tsx") && value === "🔊") {
-    if (ts.isCallExpression(node.parent) && node.parent.expression.getText(tree) === "useState" &&
-        ts.isVariableDeclaration(node.parent.parent) && node.parent.parent.name.getText(tree) === "[icon, setIcon]") return true;
-    return ts.isBinaryExpression(node.parent) && node.parent.operatorToken.kind === ts.SyntaxKind.BarBarToken &&
-      node.parent.left.getText(tree) === "icon.trim()" && ts.isPropertyAssignment(node.parent.parent) &&
-      propertyName(node.parent.parent) === "icon";
+  if (
+    normalized.endsWith("apps/web/src/SoundClipEditor.tsx") &&
+    value === "🔊"
+  ) {
+    if (
+      ts.isCallExpression(node.parent) &&
+      node.parent.expression.getText(tree) === "useState" &&
+      ts.isVariableDeclaration(node.parent.parent) &&
+      node.parent.parent.name.getText(tree) === "[icon, setIcon]"
+    )
+      return true;
+    return (
+      ts.isBinaryExpression(node.parent) &&
+      node.parent.operatorToken.kind === ts.SyntaxKind.BarBarToken &&
+      node.parent.left.getText(tree) === "icon.trim()" &&
+      ts.isPropertyAssignment(node.parent.parent) &&
+      propertyName(node.parent.parent) === "icon"
+    );
   }
   return false;
 }

@@ -12,7 +12,12 @@ async function snapshot(page: Page): Promise<GameSnapshot> {
 
 async function signInAsGm(page: Page, token: string) {
   await page.goto(`/gm/${token}`);
-  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+      exact: true,
+    })
+    .click();
   await expect(page).toHaveURL("/");
   await expect(page.locator("canvas").first()).toBeVisible();
 }
@@ -58,9 +63,14 @@ test("UIX-317 real player theme persists per membership and distinguishes reset 
   await expect(await page.request.post("/api/auth/logout")).toBeOK();
   await page.goto(new URL(invite.url).pathname);
   await page
-    .getByLabel("Имя", { exact: true })
+    .getByLabel(/^Имя(?: в кампании)?$/)
     .fill("Theme persistence player");
-  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+      exact: true,
+    })
+    .click();
   await expect(page).toHaveURL("/");
   expect((await snapshot(page)).me.role).toBe("PLAYER");
 
@@ -89,9 +99,14 @@ test("UIX-317 real player theme persists per membership and distinguishes reset 
   await expect(await page.request.post("/api/auth/logout")).toBeOK();
   await page.goto(new URL(invite.url).pathname);
   await page
-    .getByLabel("Имя", { exact: true })
+    .getByLabel(/^Имя(?: в кампании)?$/)
     .fill("Theme persistence player");
-  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+      exact: true,
+    })
+    .click();
   await expect(page.locator("canvas").first()).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute(
     "data-player-theme",
@@ -171,9 +186,14 @@ test("UIX-317 real player theme persists per membership and distinguishes reset 
   await expect(await page.request.post("/api/auth/logout")).toBeOK();
   await page.goto(new URL(invite.url).pathname);
   await page
-    .getByLabel("Имя", { exact: true })
+    .getByLabel(/^Имя(?: в кампании)?$/)
     .fill("Theme persistence player");
-  await page.getByRole("button", { name: "Войти в игру", exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+      exact: true,
+    })
+    .click();
   await expect(page.locator("canvas").first()).toBeVisible();
   expect((await snapshot(page)).personalTheme).toMatchObject({
     selectedThemeId: "system",

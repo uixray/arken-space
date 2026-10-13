@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
@@ -146,6 +147,7 @@ test("inventory keeps focus while typing and owns editable undo and Escape", asy
     canvasUndoRequests.push(route.request().url());
     return route.fulfill({ status: 200, body: "{}" });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const { inventory, workspace } = await openInventory(page);
   await inventory.fill("Rope\nTorch");
@@ -163,6 +165,7 @@ test("IME composition events retain inventory focus", async ({ page }) => {
   await page.route("**/api/canvas/history**", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const { inventory } = await openInventory(page);
   await inventory.focus();
@@ -199,6 +202,7 @@ test("diagnostics redact printable keys across layout variants", async ({
   await page.route("**/api/canvas/history**", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/?input-diagnostics=1");
   const { inventory } = await openInventory(page);
   await inventory.focus();
@@ -311,6 +315,7 @@ test("compact PLAYER inventory commits normalized lines and survives acknowledge
       '0{"sid":"inventory-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
     );
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const { inventory, workspace } = await openInventory(page);
   await expect(inventory).toBeEnabled();

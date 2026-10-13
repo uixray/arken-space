@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Page } from "@playwright/test";
 import { starterStatLayout } from "@arken/system";
 import { expect, test } from "./react-console-guard";
@@ -64,6 +65,7 @@ for (const width of [390, 1024]) {
   }) => {
     await page.setViewportSize({ width, height: 844 });
     const { sceneViews } = await installSnapshot(page);
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator(".map-viewport")).toBeVisible();
     const trigger = page.getByLabel("Выбрать просматриваемую сцену");
@@ -164,6 +166,7 @@ test("UIX-644 PlayerRequests custom selectors retain keyboard focus and state at
       '0{"sid":"uix644-player-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
     );
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Мои заявки");
   const dialog = page.getByRole("dialog", { name: "Мои заявки" });
@@ -204,6 +207,9 @@ test("UIX-644 PlayerRequests custom selectors retain keyboard focus and state at
     await expect(filter).toContainText(initial);
     await filter.click();
     await page.keyboard.press("Home");
+    await expect(
+      page.getByRole("option", { name: initial, exact: true }),
+    ).toBeFocused();
     const option = page.getByRole("option", { name: next, exact: true });
     await expect(option).toBeVisible();
     if (next === "Все состояния") {

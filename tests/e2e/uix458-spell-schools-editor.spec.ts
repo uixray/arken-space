@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import type { SpellProgressionGraph } from "@arken/contracts";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -131,6 +132,7 @@ for (const width of [390, 1280]) {
     });
 
     await page.setViewportSize({ width, height: 850 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator(".app-shell")).toBeVisible();
     await openWorkspaceSection(page, "Школы заклинаний");
@@ -227,6 +229,7 @@ test("UIX-458 PLAYER cannot open or preload the GM spell-school editor", async (
     return route.fulfill({ json: [] });
   });
   await page.setViewportSize({ width: 390, height: 850 });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect(page.locator(".app-shell")).toBeVisible();
   await expect(
@@ -245,7 +248,8 @@ test("UIX-458 ambiguous save keeps the actual workspace open until exact retry s
   page,
 }) => {
   const snapshot = gmSnapshot({ schemaVersion: 2 });
-  const attempts: Array<{ actionId: string; graph: SpellProgressionGraph }> = [];
+  const attempts: Array<{ actionId: string; graph: SpellProgressionGraph }> =
+    [];
   let releaseFirstSave!: () => void;
   const firstSaveGate = new Promise<void>((resolve) => {
     releaseFirstSave = resolve;
@@ -253,8 +257,7 @@ test("UIX-458 ambiguous save keeps the actual workspace open until exact retry s
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const { pathname } = new URL(request.url());
-    if (pathname === "/api/bootstrap")
-      return route.fulfill({ json: snapshot });
+    if (pathname === "/api/bootstrap") return route.fulfill({ json: snapshot });
     if (pathname === "/api/soundpad")
       return route.fulfill({
         json: { packs: [], playerPlaybackEnabled: true },
@@ -298,6 +301,7 @@ test("UIX-458 ambiguous save keeps the actual workspace open until exact retry s
   });
 
   await page.setViewportSize({ width: 390, height: 850 });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect(page.locator(".app-shell")).toBeVisible();
   await openWorkspaceSection(page, "Школы заклинаний");
@@ -307,7 +311,9 @@ test("UIX-458 ambiguous save keeps the actual workspace open until exact retry s
   await page.getByRole("button", { name: "Создать черновик школы" }).click();
   await page.getByLabel("Новый узел").fill("Свет");
   await page.getByRole("button", { name: "Добавить узел" }).click();
-  await page.getByRole("button", { name: "Проверить и сохранить черновик" }).click();
+  await page
+    .getByRole("button", { name: "Проверить и сохранить черновик" })
+    .click();
   await expect(page.getByRole("button", { name: "Проверка…" })).toBeDisabled();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeVisible();

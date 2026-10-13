@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { AssetDto, CommandAck, GameSnapshot } from "@arken/contracts";
 import { readFile, writeFile } from "node:fs/promises";
 import type { Locator, Page, TestInfo } from "@playwright/test";
@@ -31,9 +32,10 @@ function errorSnapshot(): GameSnapshot {
   snapshot.campaign.name = "Проверка сообщений об ошибках";
   snapshot.me.id = "41700000-0000-4000-8000-000000000103";
   snapshot.members = [snapshot.me];
-  // Nothing is selected or playing: the test sends SELECT through the real
+  // Nothing is selected or playing: the test sends ADD_TRACK through the real
   // menu, but rejection must not start playback or fetch/decode the audio.
   snapshot.audio.revision = 7;
+
   return snapshot;
 }
 
@@ -86,7 +88,7 @@ async function installErrorFixture(page: Page, initiallyOffline: boolean) {
       ];
       // Scene view/cursor lifecycle packets carry no authoritative mutations.
       if (["scene:view", "cursor:gone"].includes(event)) return;
-      if (event !== "audio:set") {
+      if (event !== "audio:track:set") {
         state.unexpectedSocketEvents.push(event);
         return;
       }
@@ -139,9 +141,13 @@ async function installErrorFixture(page: Page, initiallyOffline: boolean) {
         json: { error: "FORBIDDEN", message: "Доступ запрещён" },
       });
     if (
-      ["/api/player-access", "/api/stickers", "/api/world-content"].includes(
-        path,
-      )
+      [
+        "/api/player-access",
+        "/api/stickers",
+        "/api/world-content",
+        "/api/gm/sticker-packs",
+        "/api/gm/global-sticker-packs",
+      ].includes(path)
     )
       return route.fulfill({ json: [] });
     state.unexpectedReads.push(`${method} ${path}`);
@@ -334,6 +340,7 @@ function expectIsolated(
           headers: { "cache-control": "no-store" },
         });
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await expect(page.locator(".app-shell")).toBeVisible();
       await openWorkspaceSection(page, "Файлы");
@@ -410,6 +417,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     const fixture = await installErrorFixture(page, true);
     try {
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/", { waitUntil: "domcontentloaded" });
       const description = page.locator("main.loading .arken-state p");
       const retry = page.getByRole("button", {
@@ -455,6 +463,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width: 1280, height: 900 });
     const fixture = await installErrorFixture(page, false);
     try {
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/", { waitUntil: "domcontentloaded" });
       const music = page.locator("section.music-topbar");
       await expect(music).toBeVisible();
@@ -476,7 +485,7 @@ for (const width of [1280, 390]) {
       expect(fixture.acknowledgementsSent).toBe(1);
       const toast = page
         .locator(".g-toast")
-        .filter({ hasText: "Не удалось изменить музыку" });
+        .filter({ hasText: "Не удалось добавить дорожку" });
       await expect(toast).toBeVisible();
       const toastText = await toast.innerText();
       const entrances = await settleToastEntrance(toast);
@@ -498,11 +507,10 @@ for (const width of [1280, 390]) {
       expectTextFits(titleGeometry);
       expectTextFits(contentGeometry);
       expect(fixture.commands[0]).toEqual({
-        event: "audio:set",
+        event: "audio:track:set",
         command: {
-          command: "SELECT",
+          command: "ADD_TRACK",
           assetId: audioAsset.id,
-          revision: 7,
           actionId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
         },
         acknowledgementId: expect.stringMatching(/^\d+$/),
@@ -543,6 +551,7 @@ test("UIX-417 malformed bootstrap shows Russian recovery text instead of crashin
     }
     return route.fulfill({ status: 202, body: "" });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect(
     page.getByText(

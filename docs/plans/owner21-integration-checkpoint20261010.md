@@ -16,6 +16,7 @@ Revision base: 9f23464591ee6daa6f784bbfc2e091c55b287362; UI/actions working edit
 - 08:28 MSK: connected UI14files committedfad82eef; root61tests4filesPASS21.64s. Removed exact3stoppedrollbackcontainers of deletedreviewstand; volumes/images/media/backups preserved. DNS A andreykindesign.pserver.space verified80.85.154.36. Savedprojectknown_hosts verifiesSSHhosttrust; default/Arken key authdenied, passwordmethodunresolved. Root review verified newforcedentryCASrollback assertions exist; finalaction/delete testgate notrunyet. Service-v1 independentreview flagsproject/tagcollision cleanup andactualDB/mediaflow; workerfixesactive. No production proof.
 
 ## Continuation integration review
+
 - Current revision: fad82ee; parallel action/assets, standard-skills and service-v1 runner edits remain uncommitted.
 - Standard skills: worker focused gate 22/22; shared web typecheck initially found SkillCards damage type narrowing error, action owner reports correction; combined gate pending.
 - Root source review confirmed no-roll ABILITY receipt parsing and explanatory numeric-parameter copy; no runtime proof yet.
@@ -24,6 +25,7 @@ Revision base: 9f23464591ee6daa6f784bbfc2e091c55b287362; UI/actions working edit
 - Forecast for this connected integration stage: 30–45 minutes; finish time and variance still pending. No publication or goal completion claimed.
 
 ## Audit-access snapshot — not a deployment candidate
+
 - Source through 118ca7d includes standard skills (23 focused tests) and service-v1 restore source (11 pass / 1 platform skip); no real restore proof.
 - Actions/assets grouped gate: 58/62 passed. Four MediaPanel assertions were stale versus explicit audio-purpose text and optional upload argument; updated afterward, NOT rerun due owner-reported machine lag. Web typecheck passed before those assertion edits.
 - Latest migration journal now has 58 entries including 0057. Timestamp monotonicity regression: 7/7 passed. Historical migration 56->57 evidence does NOT verify new 57->58 migration.
@@ -31,6 +33,7 @@ Revision base: 9f23464591ee6daa6f784bbfc2e091c55b287362; UI/actions working edit
 - Docker has no running containers. Heavy tests/builds deferred after owner reported lag; lightweight Git export/access only.
 
 ## 2026-10-10 08:54 MSK — public audit access and low-load continuation
+
 - Authoritative source8916874; later documentation24f1b61 refreshes live273issue inventory,78open nonduplicate. Public audit branchcodex/claude-audit-20261010 verified remote b188a1dc7a8b36403f6a36111457e4401da78b47, one sanitized commit directly parented to publicmain9d441bd.1580sourceobjectIDs match; twoWOFFexcluded; onlyignore/font-policydelta. NoPR/merge/deploy.
 - Audit-access forecast10–15min; actual approximately14min (08:34–08:48MSK). Setup discovered copiedlinkedworktreeGitpointer; rebuilt independent.git repository. Authoritative source remainedclean; previouspreliminaryexport localbranch/index retainedforreview, not cleaned.
 - HeavyVitest run76379 terminal:58/62pass;4MediaPanelstaleassertionsfixed afterward, unverified. No live test handles remain; no runningDockercontainers. Do not silently promote to62PASS.
@@ -39,6 +42,7 @@ Revision base: 9f23464591ee6daa6f784bbfc2e091c55b287362; UI/actions working edit
 - Current lowloadpool: refresh fullremainingevidence throughexisting76audit+677/678; ownerPCnotloadedwithnewbuild/test/container.
 
 ## Focused failed-assertion gate closed
+
 - Actual limited run session76368 terminal exit0: MediaPanel14/14PASS, Vitest77.33s (tests2.05s, environment53.77s/import19.80s), maxWorkers1/no-file-parallelism/NODE_OPTIONS384MB, launchedBelowNormal. NoDocker/build.
 - This closes the four stale assertion failures from prior62-test run. Evidence remains two scoped runs, not a fabricated single62/62 rerun: other6files48tests passed in earlier groupedrun; updatedMediaPanel14passed now. Current application/test bytes match committedsource8916874; subsequentcommitsdocsonly.
 - Forecast2–3minutes for focusedgate; actualtestruntime1m17s plus launch/observation overhead. No browser/current58migration/realrecovery/production PASS follows.

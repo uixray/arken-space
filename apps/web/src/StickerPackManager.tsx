@@ -358,14 +358,10 @@ function StickerPackManagerSession({ snapshot }: { snapshot: GameSnapshot }) {
     for (const item of toUpload) {
       if (!sessionActive.current) break;
       if (!item.file) continue;
-      if (
-        !item.altText.trim() ||
-        !hasImportedProvenance(item)
-      ) {
+      if (!item.altText.trim() || !hasImportedProvenance(item)) {
         updateFile(item.key, {
           status: "failed",
-          error:
-            "Заполните alt-текст и обязательные сведения об источнике.",
+          error: "Заполните alt-текст и обязательные сведения об источнике.",
         });
         continue;
       }

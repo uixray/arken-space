@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { GameSnapshot, MapPing, SceneDto } from "@arken/contracts";
 import type { GameSocket } from "../realtime";
-import { useGameSocketSubscriptions, type RulerItem, type PresenceItem } from "../use-game-socket-subscriptions";
+import {
+  useGameSocketSubscriptions,
+  type RulerItem,
+  type PresenceItem,
+} from "../use-game-socket-subscriptions";
 import { Orthographic2DRenderer } from "../renderers/Orthographic2DRenderer";
 
 declare global {
@@ -12,10 +16,21 @@ declare global {
   }
 }
 const scene: SceneDto = {
-  id: "synthetic-scene", name: "Synthetic scene", projection: "ORTHOGRAPHIC_2D",
-  mapAssetId: null, width: 900, height: 600,
+  id: "synthetic-scene",
+  name: "Synthetic scene",
+  projection: "ORTHOGRAPHIC_2D",
+  mapAssetId: null,
+  width: 900,
+  height: 600,
   backgroundFrame: { x: 0, y: 0, width: 900, height: 600 },
-  grid: { enabled: false, size: 64, offsetX: 0, offsetY: 0, color: "#ffffff", opacity: 0.5 },
+  grid: {
+    enabled: false,
+    size: 64,
+    offsetX: 0,
+    offsetY: 0,
+    color: "#ffffff",
+    opacity: 0.5,
+  },
   active: true,
 };
 
@@ -25,7 +40,9 @@ function SyntheticRulerClient() {
   const [, setSnapshot] = useState<GameSnapshot | null>(null);
   const [pings, setPings] = useState<MapPing[]>([]);
   const [rulers, setRulers] = useState<RulerItem[]>([]);
-  const [cursors, setCursors] = useState<import("../renderers/cursor-presence").CursorPresence[]>([]);
+  const [cursors, setCursors] = useState<
+    import("../renderers/cursor-presence").CursorPresence[]
+  >([]);
   const [, setRollToasts] = useState<import("../toast-state").RollToast[]>([]);
   const [, setPresence] = useState<PresenceItem[]>([]);
   const [error, setError] = useState("");
@@ -51,7 +68,8 @@ function SyntheticRulerClient() {
     activeChatThreadIdRef,
     chatOpenRef,
   });
-  const socket = realtime.socket as (GameSocket & { simulateTransportReconnect?: () => void }) | null;
+  const socket = realtime.socket as
+    (GameSocket & { simulateTransportReconnect?: () => void }) | null;
 
   useEffect(() => {
     window.__rulerEvents = [];
@@ -60,24 +78,46 @@ function SyntheticRulerClient() {
       socket.disconnect();
       window.setTimeout(() => socket.simulateTransportReconnect?.(), 80);
     };
-    return () => { delete window.__simulateReconnect; };
+    return () => {
+      delete window.__simulateReconnect;
+    };
   }, [socket]);
 
   const props = {
-    scene, tokens: [], fogReveals: [], drawings: [], assets: [], role: "PLAYER" as const,
-    membershipId, socket, tool: "RULER" as const,
-    onToolSelect: () => undefined, pings, cursors, cursorSendEnabled: false,
-    cursorShared: false, rulers, onFogCreate: async () => undefined,
-    onDrawingCreate: async () => undefined, onPing: () => undefined,
+    scene,
+    tokens: [],
+    fogReveals: [],
+    drawings: [],
+    assets: [],
+    role: "PLAYER" as const,
+    membershipId,
+    socket,
+    tool: "RULER" as const,
+    onToolSelect: () => undefined,
+    pings,
+    cursors,
+    cursorSendEnabled: false,
+    cursorShared: false,
+    rulers,
+    onFogCreate: async () => undefined,
+    onDrawingCreate: async () => undefined,
+    onPing: () => undefined,
   };
-  return <main>
-    <output data-testid="client">{client}</output>
-    <output data-testid="connected">{realtime.connection}</output>
-    <output data-testid="ruler-count">{rulers.length}</output>
-    <output data-testid="error">{error}</output>
-    <button type="button" data-testid="reconnect" onClick={() => window.__simulateReconnect?.()}>Simulate transport reconnect</button>
-    <Orthographic2DRenderer {...props} />
-  </main>;
+  return (
+    <main>
+      <output data-testid="client">{client}</output>
+      <output data-testid="connected">{realtime.connection}</output>
+      <output data-testid="ruler-count">{rulers.length}</output>
+      <output data-testid="error">{error}</output>
+      <button
+        type="button"
+        data-testid="reconnect"
+        onClick={() => window.__simulateReconnect?.()}
+      >
+        Simulate transport reconnect
+      </button>
+      <Orthographic2DRenderer {...props} />
+    </main>
+  );
 }
 createRoot(document.getElementById("root")!).render(<SyntheticRulerClient />);
-

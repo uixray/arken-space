@@ -7,7 +7,10 @@ import { LandingGuide } from "./LandingGuide";
 import { capabilities, changelog, roadmapSections } from "./landing-data";
 import "./landing-public.css";
 import { AccountAuthWorkspace } from "./AccountAuthWorkspace";
-import { authenticateCampaignLink, getAccountCapabilities } from "./account-auth-client";
+import {
+  authenticateCampaignLink,
+  getAccountCapabilities,
+} from "./account-auth-client";
 
 type FeedbackStatus = "idle" | "sending" | "sent";
 type RoadmapVote = { id: string; count: number; voted: boolean };
@@ -29,16 +32,20 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [votesLoading, setVotesLoading] = useState(true);
   const [votePending, setVotePending] = useState<string | null>(null);
   const [voteError, setVoteError] = useState("");
-  const [accountCapabilities, setAccountCapabilities] = useState<AccountCapabilities | null>(null);
+  const [accountCapabilities, setAccountCapabilities] =
+    useState<AccountCapabilities | null>(null);
   const [capabilityError, setCapabilityError] = useState("");
   const [capabilityRetry, setCapabilityRetry] = useState(0);
   const parts = window.location.pathname.split("/").filter(Boolean);
   const mode = parts[0];
   const token = parts[1] ?? "";
   const isCampaignLink = mode === "gm" || mode === "join";
-  const [campaignLinkToken, setCampaignLinkToken] = useState(() => isCampaignLink ? token : "");
+  const [campaignLinkToken, setCampaignLinkToken] = useState(() =>
+    isCampaignLink ? token : "",
+  );
   const [campaignLinkName, setCampaignLinkName] = useState("");
-  const hasInvitation = mode === "gm" || mode === "join" || (mode === "play" && Boolean(token));
+  const hasInvitation =
+    mode === "gm" || mode === "join" || (mode === "play" && Boolean(token));
 
   // Link credentials are path secrets. Keep them only in component memory and
   // remove them from the address bar before any capability/API request.
@@ -48,7 +55,13 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   }, [isCampaignLink, mode, token]);
 
   useEffect(() => {
-    if (!accountCapabilities || accountCapabilities.accountAuthEnabled || !accountCapabilities.legacyDevEnabled || !isDevelopment) return;
+    if (
+      !accountCapabilities ||
+      accountCapabilities.accountAuthEnabled ||
+      !accountCapabilities.legacyDevEnabled ||
+      !isDevelopment
+    )
+      return;
     let active = true;
     api<RoadmapVoteResponse>("/api/public/roadmap-votes")
       .then(({ items }) => {
@@ -72,12 +85,19 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   useEffect(() => {
     let active = true;
     setCapabilityError("");
-    void getAccountCapabilities().then((value) => {
-      if (active) setAccountCapabilities(value);
-    }).catch(() => {
-      if (active) setCapabilityError("Не удалось определить режим входа. Для безопасности альтернативный вход не включён.");
-    });
-    return () => { active = false; };
+    void getAccountCapabilities()
+      .then((value) => {
+        if (active) setAccountCapabilities(value);
+      })
+      .catch(() => {
+        if (active)
+          setCapabilityError(
+            "Не удалось определить режим входа. Для безопасности альтернативный вход не включён.",
+          );
+      });
+    return () => {
+      active = false;
+    };
   }, [capabilityRetry]);
 
   const toggleRoadmapVote = async (id: string) => {
@@ -105,8 +125,15 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
       if (accountCapabilities?.accountAuthEnabled && isCampaignLink) {
         if (!accountCapabilities.campaignLinkAccessEnabled)
           throw new Error("Вход по этой ссылке временно недоступен.");
-        if (!campaignLinkToken) throw new Error("Ссылка уже использована или повреждена. Откройте её заново.");
-        await authenticateCampaignLink(mode as "gm" | "join", campaignLinkToken, campaignLinkName);
+        if (!campaignLinkToken)
+          throw new Error(
+            "Ссылка уже использована или повреждена. Откройте её заново.",
+          );
+        await authenticateCampaignLink(
+          mode as "gm" | "join",
+          campaignLinkToken,
+          campaignLinkName,
+        );
       } else if (mode === "gm")
         await api("/api/auth/gm", {
           method: "POST",
@@ -156,27 +183,103 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   };
 
   if (!accountCapabilities && !capabilityError)
-    return <main className="account-auth-shell" aria-busy="true"><p role="status">Проверяем режим входа…</p></main>;
+    return (
+      <main className="account-auth-shell" aria-busy="true">
+        <p role="status">Проверяем режим входа…</p>
+      </main>
+    );
   if (mode === "play" && token)
-    return <main className="account-auth-shell"><section className="account-auth-card"><h1>Эта ссылка больше не поддерживается</h1><p>Вход по публичному псевдониму отключён. Попросите мастера прислать персональную ссылку на кампанию.</p><a href="/">Перейти к аккаунту</a></section></main>;
+    return (
+      <main className="account-auth-shell">
+        <section className="account-auth-card">
+          <h1>Эта ссылка больше не поддерживается</h1>
+          <p>
+            Вход по публичному псевдониму отключён. Попросите мастера прислать
+            персональную ссылку на кампанию.
+          </p>
+          <a href="/">Перейти к аккаунту</a>
+        </section>
+      </main>
+    );
   if (accountCapabilities?.accountAuthEnabled && isCampaignLink) {
     const linkEnabled = accountCapabilities.campaignLinkAccessEnabled;
-    return <main className="account-auth-shell"><section className="account-auth-card" aria-busy={busy}>
-      <a href="/">← Аккаунт</a>
-      <h1>{mode === "gm" ? "Войти как мастер по ссылке" : "Присоединиться по ссылке"}</h1>
-      <p>{linkEnabled ? "Эта персональная ссылка подтверждает доступ к кампании. Она будет использована только для входа в игру." : "Вход по ссылкам кампании пока не включён в этом окружении. Аккаунт и кампании остаются доступны отдельно."}</p>
-      {!linkEnabled && <p role="status">Ссылка не отправлялась.</p>}
-      {mode === "join" && linkEnabled && <label>Имя в кампании<FormInput value={campaignLinkName} onChange={(event) => setCampaignLinkName(event.target.value)} maxLength={40} autoComplete="nickname" /></label>}
-      {error && <div className="error-box" role="alert">{error}</div>}
-      <form onSubmit={submit}>
-        <Button type="submit" view="action" size="l" disabled={!linkEnabled || busy || !campaignLinkToken} loading={busy}>Продолжить в игру</Button>
-      </form>
-    </section></main>;
+    return (
+      <main className="account-auth-shell">
+        <section className="account-auth-card" aria-busy={busy}>
+          <a href="/">← Аккаунт</a>
+          <h1>
+            {mode === "gm"
+              ? "Войти как мастер по ссылке"
+              : "Присоединиться по ссылке"}
+          </h1>
+          <p>
+            {linkEnabled
+              ? "Эта персональная ссылка подтверждает доступ к кампании. Она будет использована только для входа в игру."
+              : "Вход по ссылкам кампании пока не включён в этом окружении. Аккаунт и кампании остаются доступны отдельно."}
+          </p>
+          {!linkEnabled && <p role="status">Ссылка не отправлялась.</p>}
+          {mode === "join" && linkEnabled && (
+            <label>
+              Имя в кампании
+              <FormInput
+                value={campaignLinkName}
+                onChange={(event) => setCampaignLinkName(event.target.value)}
+                maxLength={40}
+                autoComplete="nickname"
+              />
+            </label>
+          )}
+          {error && (
+            <div className="error-box" role="alert">
+              {error}
+            </div>
+          )}
+          <form onSubmit={submit}>
+            <Button
+              type="submit"
+              view="action"
+              size="l"
+              disabled={!linkEnabled || busy || !campaignLinkToken}
+              loading={busy}
+            >
+              Продолжить в игру
+            </Button>
+          </form>
+        </section>
+      </main>
+    );
   }
   if (accountCapabilities?.accountAuthEnabled && mode === "account")
-    return <AccountAuthWorkspace onAuthenticated={onAuthenticated} capabilities={accountCapabilities} />;
-  if (!accountCapabilities?.accountAuthEnabled && (!accountCapabilities?.legacyDevEnabled || !isDevelopment))
-    return <main className="account-auth-shell"><section className="account-auth-card"><h1>Вход временно недоступен</h1><p role="alert">{capabilityError || "Для этого окружения не настроен поддерживаемый режим входа."}</p><Button type="button" onClick={() => { setAccountCapabilities(null); setCapabilityRetry((value) => value + 1); }}>Повторить</Button></section></main>;
+    return (
+      <AccountAuthWorkspace
+        onAuthenticated={onAuthenticated}
+        capabilities={accountCapabilities}
+      />
+    );
+  if (
+    !accountCapabilities?.accountAuthEnabled &&
+    (!accountCapabilities?.legacyDevEnabled || !isDevelopment)
+  )
+    return (
+      <main className="account-auth-shell">
+        <section className="account-auth-card">
+          <h1>Вход временно недоступен</h1>
+          <p role="alert">
+            {capabilityError ||
+              "Для этого окружения не настроен поддерживаемый режим входа."}
+          </p>
+          <Button
+            type="button"
+            onClick={() => {
+              setAccountCapabilities(null);
+              setCapabilityRetry((value) => value + 1);
+            }}
+          >
+            Повторить
+          </Button>
+        </section>
+      </main>
+    );
 
   return (
     <main className="landing-shell">
@@ -315,7 +418,10 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
               aria-label="Вход по персональной ссылке"
               aria-busy={busy}
             >
-              <p>Список постоянных игроков не публикуется. Откройте персональную ссылку, полученную от мастера.</p>
+              <p>
+                Список постоянных игроков не публикуется. Откройте персональную
+                ссылку, полученную от мастера.
+              </p>
             </nav>
           )}
         </form>

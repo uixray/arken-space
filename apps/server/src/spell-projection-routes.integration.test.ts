@@ -57,7 +57,12 @@ const ids = {
   node: { root: uuid(), target: uuid(), hidden: uuid() },
   group: uuid(),
   edge: uuid(),
-  assignment: { school: uuid(), node: uuid(), nodeOnly: uuid(), custom: uuid() },
+  assignment: {
+    school: uuid(),
+    node: uuid(),
+    nodeOnly: uuid(),
+    custom: uuid(),
+  },
   assignmentVersion: {
     school: uuid(),
     node: uuid(),
@@ -427,7 +432,12 @@ beforeAll(async () => {
       assignmentVersionId: ids.assignmentVersion.nodeOnly,
       assignmentVersion: 1,
     },
-    { kind: "NODE", schoolId: ids.school.public, nodeId: ids.node.root, rank: 1 },
+    {
+      kind: "NODE",
+      schoolId: ids.school.public,
+      nodeId: ids.node.root,
+      rank: 1,
+    },
   );
   const originalNodeSnapshot = buildSpellAssignmentSnapshot(
     { graph, packVersion: 1 },

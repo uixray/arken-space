@@ -7,5 +7,6 @@ Residuals: boundaries/antialias pinholes, differentDPR/fullreload/reconnect, lon
 Next: retain bounded implementation; address remaining explicit pixelboundary/performance/runtime AC in connected follow-up, not reuse source gate as fullacceptance.
 
 ## Follow-up boundary/DPR/runtime evidence
+
 Actual Chrome full7-test gate: moving vs solid-fallback alpha buffers exactly equal at DPR1 andDPR2 after reload/zoom/pan/resize; DPR1 fractional0, DPR2 fractional3620 identical to base. This proves no introduced alpha discrepancy, not unconditional255 for antialiased boundary pixels already fractional in base.
 Focused60-second180-op gate1/1: elapsed60031ms,715updates11.9/s, producer callbackavg0.081ms/max0.600ms, cache-canvasallocationproxy24→24. Producer callback excludesReact/Konvarender cost; allocationproxy not internalcache-callinstrumentation. Priorfull7testgate notrerun. Earlieroutputhandlelost prompted repeatedstressinvocation; finalcapturedreceipt is authoritative. Residual multi-minute/device/reconnect/humanvisual acceptance. Vite stopped; onlyownedE2Especchanged.

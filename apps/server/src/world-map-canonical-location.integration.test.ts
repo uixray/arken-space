@@ -38,13 +38,11 @@ beforeAll(async () => {
     [gmId, secrets.gm],
     [playerId, secrets.player],
   ] as const)
-    await db
-      .insert(schema.sessions)
-      .values({
-        membershipId,
-        tokenHash: hashToken(secret),
-        expiresAt: new Date(Date.now() + 60_000),
-      });
+    await db.insert(schema.sessions).values({
+      membershipId,
+      tokenHash: hashToken(secret),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
   await db
     .insert(schema.worldMaps)
     .values({ id: mapId, campaignId, name: "Map" });
@@ -123,14 +121,12 @@ describe("world map canonical LOCATION references", () => {
     const omitted = await patch({ summary: "Independent node text" });
     expect(omitted.json().canonicalLocationId).toBe(valid);
     const replacement = id();
-    await db
-      .insert(schema.worldContent)
-      .values({
-        id: replacement,
-        slug: `loc-${replacement.slice(0, 8)}`,
-        type: "LOCATION",
-        name: "Second",
-      });
+    await db.insert(schema.worldContent).values({
+      id: replacement,
+      slug: `loc-${replacement.slice(0, 8)}`,
+      type: "LOCATION",
+      name: "Second",
+    });
     const changed = await patch({ canonicalLocationId: replacement });
     expect(changed.json().canonicalLocationId).toBe(replacement);
     const cleared = await patch({ canonicalLocationId: null });
@@ -159,15 +155,13 @@ describe("world map canonical LOCATION references", () => {
 
   it("keeps references for GM while omitting draft canonical IDs from a player projection", async () => {
     const canonicalId = id();
-    await db
-      .insert(schema.worldContent)
-      .values({
-        id: canonicalId,
-        slug: `hidden-${canonicalId.slice(0, 8)}`,
-        type: "LOCATION",
-        name: "Secret place",
-        lifecycle: "DRAFT",
-      });
+    await db.insert(schema.worldContent).values({
+      id: canonicalId,
+      slug: `hidden-${canonicalId.slice(0, 8)}`,
+      type: "LOCATION",
+      name: "Secret place",
+      lifecycle: "DRAFT",
+    });
     const locationId = id();
     const publicMapId = id();
     const backgroundId = id();
@@ -191,18 +185,16 @@ describe("world map canonical LOCATION references", () => {
       backgroundAssetApprovedAt: new Date(),
       publishedAt: new Date(),
     });
-    await db
-      .insert(schema.worldMapLocations)
-      .values({
-        id: locationId,
-        campaignId,
-        mapId: publicMapId,
-        canonicalLocationId: canonicalId,
-        name: "Visible node",
-        visibility: "PUBLIC",
-        x: 0.2,
-        y: 0.6,
-      });
+    await db.insert(schema.worldMapLocations).values({
+      id: locationId,
+      campaignId,
+      mapId: publicMapId,
+      canonicalLocationId: canonicalId,
+      name: "Visible node",
+      visibility: "PUBLIC",
+      x: 0.2,
+      y: 0.6,
+    });
     const gmSnapshot = await buildWorldMapsSnapshot(db as never, {
       membershipId: gmId,
       campaignId,

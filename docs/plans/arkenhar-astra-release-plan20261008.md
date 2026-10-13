@@ -11,6 +11,7 @@ Live Linear read during this planning pass: UIX-318 In Review, UIX-473 Backlog, 
 The older handoff/readiness describe dirty Escape work. Git now contains the fix at the SHA above. Root dispatch reports frozen manager/dialog 25/25, web typecheck exit 0, Chrome/Firefox desktop/compact 4/4, web build exit 0 with chunk warning. This planner did not rerun those checks; root must attach their immutable receipts before candidate acceptance. These are not whole-service, native-popup, cross-campaign or production evidence.
 
 Historical evidence retains its original scope/revision:
+
 - Global implementation `3ed0f51966e0c547b33311387c10e52f4e42391f`: backend 16/16, web 67/67, narrow typing repair 7/7; local additive import and old 141 media ID/SHA preservation.
 - B-only send receipt at `914314995b072f827033d0f7ecf1f4dacd83918b`, SHA `928889CEADB0E4D55AC2C72AEFD0492BB6215FA81396D3E8582358184496E27A`: two actual messages, POST/WS/persistence/image checks. Not two-campaign proof. Ordinary scroll 278/278 content 200 does not erase earlier 31 real 429s.
 - Migration 0047 committed according to prior journal/FK/check/table evidence despite wrapper exit 1. Existing backup has readable TOC, NOT tested restoration. Neither is a green release gate.

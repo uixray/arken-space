@@ -38,4 +38,3 @@ Generated local `packages/db/dist` and `packages/contracts/dist` in the C checko
 ## Residuals / next action
 
 Root review and integration/commit remain. New 0055 belongs to a future candidate freeze; frozen 8c0a0f7 Gate 2 and its historical migration ledger are unchanged. No full issue acceptance claim: independent canonical-scene links, cross-navigation, discovery, import, container/mobile decisions and broader UIX-264 AC remain open. Browser API was mocked; no production/private data or runtime server test was used.
-

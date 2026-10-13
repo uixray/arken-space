@@ -28,7 +28,9 @@ const LIST = "#activity-message-list";
 
 async function signInAsGm(page: Page, token: string) {
   await page.goto(`/gm/${token}`);
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page
+    .getByRole("button", { name: /^(Войти(?: в игру)?|Продолжить в игру)$/ })
+    .click();
   await expect(page).toHaveURL("/");
 }
 
@@ -91,10 +93,14 @@ test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
 });
 
-test("лента при входе стоит у последних записей", async ({ page, gmToken }) => {
+test("лента при входе стоит у последних записей", async ({
+  page,
+  gmToken,
+  seedChatHistory,
+}) => {
   await signInAsGm(page, gmToken);
   await expect(page.locator("canvas").first()).toBeVisible();
-  await seedLog(page, 40);
+  await seedChatHistory(gmToken, 40);
 
   await page.reload();
   await page.locator(LIST).waitFor();
@@ -107,10 +113,11 @@ test("лента при входе стоит у последних записе
 test("содержимое, доехавшее после закрепления, возвращает ленту к низу", async ({
   page,
   gmToken,
+  seedChatHistory,
 }) => {
   await signInAsGm(page, gmToken);
   await expect(page.locator("canvas").first()).toBeVisible();
-  await seedLog(page, 40);
+  await seedChatHistory(gmToken, 40);
   await page.reload();
   await page.locator(LIST).waitFor();
   await expect
@@ -129,10 +136,11 @@ test("содержимое, доехавшее после закрепления
 test("ушедшего вверх читателя подгрузка не утаскивает вниз", async ({
   page,
   gmToken,
+  seedChatHistory,
 }) => {
   await signInAsGm(page, gmToken);
   await expect(page.locator("canvas").first()).toBeVisible();
-  await seedLog(page, 40);
+  await seedChatHistory(gmToken, 40);
   await page.reload();
   await page.locator(LIST).waitFor();
   await expect
@@ -173,10 +181,11 @@ test("ушедшего вверх читателя подгрузка не ут�
 test("слежение возвращается, когда читатель сам вернулся к низу", async ({
   page,
   gmToken,
+  seedChatHistory,
 }) => {
   await signInAsGm(page, gmToken);
   await expect(page.locator("canvas").first()).toBeVisible();
-  await seedLog(page, 40);
+  await seedChatHistory(gmToken, 40);
   await page.reload();
   await page.locator(LIST).waitFor();
   await expect
@@ -264,6 +273,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       browser,
       baseURL,
       gmToken,
+      seedChatHistory,
     }, testInfo) => {
       test.setTimeout(90_000);
       await page.setViewportSize(viewport);
@@ -319,7 +329,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         const initial = (await bootstrap.json()) as GameSnapshot;
         const character = initial.characters[0];
         expect(character.resources.physicalPower.current).toBe(10);
-        await seedLog(gmPage, 40);
+        await seedChatHistory(gmToken, 40);
 
         if (role === "PLAYER") {
           const response = await gmPage.request.post("/api/invites", {
@@ -334,7 +344,11 @@ for (const role of ["GM", "PLAYER"] as const) {
           const invite = (await response.json()) as { url: string };
           await page.goto(new URL(invite.url).pathname);
           await page.getByLabel("Имя").fill("Игрок UIX-475");
-          await page.getByRole("button", { name: "Войти" }).click();
+          await page
+            .getByRole("button", {
+              name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+            })
+            .click();
           await expect(page).toHaveURL("/");
         } else {
           await page.reload();
@@ -350,6 +364,18 @@ for (const role of ["GM", "PLAYER"] as const) {
           await expect(page.locator("#activity-sidebar")).toBeVisible();
         };
         await openCompactJournal();
+        const prepareOverflowingHistory = async () => {
+          // Each mount initially renders only six events. Load real history
+          // before the resource journey and again after its intentional reload.
+          // New short rolls must not replace the entire overflowing slice.
+          await page
+            .locator(LIST)
+            .getByRole("button", { name: "Показать больше", exact: true })
+            .click();
+          await page.locator(LIST).focus();
+          await page.locator(LIST).press("Control+End");
+        };
+        await prepareOverflowingHistory();
         const assertSavedResource = async (value: string) => {
           const snapshot = await page.request.get("/api/bootstrap");
           await expect(snapshot).toBeOK();
@@ -441,6 +467,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         await capture("before-reload");
         await page.reload();
         await openCompactJournal();
+        await prepareOverflowingHistory();
         await expect(toggle).toHaveAttribute("aria-expanded", "false");
         await expect(input).toHaveValue("6");
         await observeResourceFollow(page);
@@ -477,7 +504,7 @@ for (const role of ["GM", "PLAYER"] as const) {
           // A single wheel stroke did not reach the top in Firefox. Navigate
           // with bounded real input, requiring progress after every stroke;
           // do not replace the reader interaction with a scrollTop assignment.
-          for (let stroke = 0; stroke < 12; stroke += 1) {
+          for (let stroke = 0; stroke < 32; stroke += 1) {
             const previousTop = await page
               .locator(LIST)
               .evaluate((list) => list.scrollTop);

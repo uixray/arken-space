@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -111,6 +112,7 @@ for (const role of ["GM", "PLAYER"] as const) {
     }) => {
       await page.setViewportSize({ width, height: 844 });
       const mutations = await install(page, role);
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await openWorkspaceSection(page, "Токены");
       const workspace = page.getByRole("dialog", {
@@ -165,6 +167,7 @@ for (const width of [1280, 360]) {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.setViewportSize({ width, height: 800 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openWorkspaceSection(page, "Персонажи");
     const create = page.getByRole("button", {
@@ -261,6 +264,7 @@ for (const width of [1280, 360]) {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.setViewportSize({ width, height: 800 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openWorkspaceSection(page, "Подготовка");
     const popup = page.locator(".arken-form-select-popup:visible");
@@ -377,6 +381,7 @@ test("UIX-317 reduced motion preserves actual character dialog and popup lifecyc
   page.on("pageerror", (error) => errors.push(error.message));
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 1280, height: 800 });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
   const create = page.getByRole("button", {

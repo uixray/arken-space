@@ -93,7 +93,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-
 it("clears old-source analysis immediately and ignores a late aborted response after source switch", async () => {
   const replacement = {
     ...asset,
@@ -138,7 +137,11 @@ it("clears old-source analysis immediately and ignores a late aborted response a
       onClose={vi.fn()}
     />,
   );
-  expect(screen.queryByRole("img", { name: "Волновая форма, рассчитанная по исходному аудио" })).toBeNull();
+  expect(
+    screen.queryByRole("img", {
+      name: "Волновая форма, рассчитанная по исходному аудио",
+    }),
+  ).toBeNull();
   expect(screen.getByText("Источник: replacement.wav")).toBeInTheDocument();
   await screen.findByRole("img", {
     name: "Волновая форма, рассчитанная по исходному аудио",
@@ -273,7 +276,8 @@ it("stops and clears only its own preview player when the editor unmounts", asyn
 
 it("saves only the current ready candidate through the clip endpoint without repurposing the MUSIC source", async () => {
   const calls: Array<{ url: string; body?: string }> = [];
-  const onSaved = vi.fn()
+  const onSaved = vi
+    .fn()
     .mockRejectedValueOnce(new Error("catalog unavailable"))
     .mockResolvedValue(undefined);
   const onClose = vi.fn();

@@ -8,7 +8,11 @@ export type HttpRouteKey =
   | `PUT /${string}`;
 
 export type CampaignRoutePolicy =
-  "CAMPAIGN" | "WORLD_CONTENT_CANON" | "OPERATOR_FEEDBACK" | "PUBLIC_ROADMAP" | "GLOBAL_STICKER_CATALOG";
+  | "CAMPAIGN"
+  | "WORLD_CONTENT_CANON"
+  | "OPERATOR_FEEDBACK"
+  | "PUBLIC_ROADMAP"
+  | "GLOBAL_STICKER_CATALOG";
 
 export type RoutePolicyEntry = Readonly<{
   key: HttpRouteKey;
@@ -189,7 +193,10 @@ export const GLOBAL_ROUTE_EXCEPTIONS = {
 >;
 
 export const ROUTE_POLICY_REGISTRY: readonly RoutePolicyEntry[] = [
-  ...GLOBAL_STICKER_CATALOG_ROUTE_KEYS.map((key) => ({ key, policy: "GLOBAL_STICKER_CATALOG" as const })),
+  ...GLOBAL_STICKER_CATALOG_ROUTE_KEYS.map((key) => ({
+    key,
+    policy: "GLOBAL_STICKER_CATALOG" as const,
+  })),
   ...CAMPAIGN_ROUTE_KEYS.map((key) => ({ key, policy: "CAMPAIGN" as const })),
   ...WORLD_CONTENT_CANON_ROUTE_KEYS.map((key) => ({
     key,

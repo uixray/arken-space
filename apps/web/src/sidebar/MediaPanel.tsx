@@ -35,9 +35,15 @@ export function MediaPanel({
   const uploadStatusPrefix = useId();
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<AssetKind | "ALL">("ALL");
-  const [audioPurposeFilter, setAudioPurposeFilter] = useState<"ALL" | "MUSIC" | "SOUND_EFFECT">("ALL");
-  const [audioUploadPurpose, setAudioUploadPurpose] = useState<AudioPurpose | "">("");
-  const [updatingAudioPurposeId, setUpdatingAudioPurposeId] = useState<string | null>(null);
+  const [audioPurposeFilter, setAudioPurposeFilter] = useState<
+    "ALL" | "MUSIC" | "SOUND_EFFECT"
+  >("ALL");
+  const [audioUploadPurpose, setAudioUploadPurpose] = useState<
+    AudioPurpose | ""
+  >("");
+  const [updatingAudioPurposeId, setUpdatingAudioPurposeId] = useState<
+    string | null
+  >(null);
   const [replacementId, setReplacementId] = useState<string | null>(null);
   const replacement = snapshot.assets.find(
     (asset) => asset.id === replacementId,
@@ -89,7 +95,9 @@ export function MediaPanel({
       await onUpload(
         file,
         kind,
-        kind === "AUDIO" ? { audioPurpose: audioUploadPurpose as AudioPurpose } : undefined,
+        kind === "AUDIO"
+          ? { audioPurpose: audioUploadPurpose as AudioPurpose }
+          : undefined,
       );
       setDrafts((current) => ({ ...current, [kind]: undefined }));
     } catch (reason) {
@@ -100,7 +108,10 @@ export function MediaPanel({
       setUploading(null);
     }
   };
-  const changeAudioPurpose = async (assetId: string, audioPurpose: AudioPurpose) => {
+  const changeAudioPurpose = async (
+    assetId: string,
+    audioPurpose: AudioPurpose,
+  ) => {
     if (!onRefresh) return;
     setUpdatingAudioPurposeId(assetId);
     setError("");
@@ -130,15 +141,19 @@ export function MediaPanel({
   };
   const remove = async (assetId: string, assetName: string) => {
     const usage = usageByAsset[assetId];
-    const worldContentCount = usage?.usages.filter((item) =>
-      item.kind === "WORLD_CONTENT_COVER" || item.kind === "WORLD_CONTENT_MEDIA",
-    ).length ?? 0;
-    const publishedMapCount = usage?.usages.filter((item) => item.kind === "WORLD_MAP_BACKGROUND").length ?? 0;
+    const worldContentCount =
+      usage?.usages.filter(
+        (item) =>
+          item.kind === "WORLD_CONTENT_COVER" ||
+          item.kind === "WORLD_CONTENT_MEDIA",
+      ).length ?? 0;
+    const publishedMapCount =
+      usage?.usages.filter((item) => item.kind === "WORLD_MAP_BACKGROUND")
+        .length ?? 0;
     const confirmation = usage?.inUse
       ? `Отвязать ${usage.usages.length} связей и удалить файл «${assetName}» без возможности отмены? Материалы мира сохранятся; их обложки и файлы будут отвязаны.${worldContentCount ? ` Материалов мира: ${worldContentCount}.` : ""}${publishedMapCount ? ` Опубликованные карты: ${publishedMapCount} — станут черновиками.` : ""}`
       : `Удалить файл «${assetName}» без возможности отмены?`;
-    if (!window.confirm(confirmation))
-      return;
+    if (!window.confirm(confirmation)) return;
     setDeletingAssetId(assetId);
     setError("");
     try {
@@ -192,7 +207,9 @@ export function MediaPanel({
                       value={audioUploadPurpose}
                       disabled={uploading !== null}
                       onChange={(event) =>
-                        setAudioUploadPurpose(event.currentTarget.value as AudioPurpose | "")
+                        setAudioUploadPurpose(
+                          event.currentTarget.value as AudioPurpose | "",
+                        )
                       }
                     >
                       <option value="">Выберите назначение</option>
@@ -229,7 +246,11 @@ export function MediaPanel({
               </p>
               <Button
                 view="action"
-                disabled={!drafts[kind] || uploading !== null || (kind === "AUDIO" && !audioUploadPurpose)}
+                disabled={
+                  !drafts[kind] ||
+                  uploading !== null ||
+                  (kind === "AUDIO" && !audioUploadPurpose)
+                }
                 loading={uploading === kind}
                 aria-describedby={statusId}
                 onClick={() => void upload(kind)}
@@ -275,7 +296,9 @@ export function MediaPanel({
               aria-label="Фильтр аудио по назначению"
               value={audioPurposeFilter}
               onChange={(event) =>
-                setAudioPurposeFilter(event.currentTarget.value as typeof audioPurposeFilter)
+                setAudioPurposeFilter(
+                  event.currentTarget.value as typeof audioPurposeFilter,
+                )
               }
             >
               <option value="ALL">Фоновая музыка и звуковые эффекты</option>
@@ -299,154 +322,195 @@ export function MediaPanel({
               (asset) => asset.kind === kind,
             );
             if (assets.length === 0) return null;
-            const audioGroups = kind === "AUDIO"
-              ? ([
-                  { key: "MUSIC", label: "Фоновая музыка", includes: (purpose: AudioPurpose) => purpose !== "SOUND_EFFECT" },
-                  { key: "SOUND_EFFECT", label: "Звуковые эффекты", includes: (purpose: AudioPurpose) => purpose !== "MUSIC" },
-                ] as const).filter((group) => audioPurposeFilter === "ALL" || group.key === audioPurposeFilter)
-              : null;
+            const audioGroups =
+              kind === "AUDIO"
+                ? (
+                    [
+                      {
+                        key: "MUSIC",
+                        label: "Фоновая музыка",
+                        includes: (purpose: AudioPurpose) =>
+                          purpose !== "SOUND_EFFECT",
+                      },
+                      {
+                        key: "SOUND_EFFECT",
+                        label: "Звуковые эффекты",
+                        includes: (purpose: AudioPurpose) =>
+                          purpose !== "MUSIC",
+                      },
+                    ] as const
+                  ).filter(
+                    (group) =>
+                      audioPurposeFilter === "ALL" ||
+                      group.key === audioPurposeFilter,
+                  )
+                : null;
             const groups = audioGroups
               ? audioGroups.map((group) => ({
                   key: group.key,
                   label: group.label,
-                  assets: assets.filter((asset) => group.includes(asset.audioPurpose ?? "MUSIC")),
+                  assets: assets.filter((asset) =>
+                    group.includes(asset.audioPurpose ?? "MUSIC"),
+                  ),
                 }))
               : [{ key: kind, label: labels[kind], assets }];
-            return groups.map((group) => group.assets.length === 0 ? null : (
-              <section aria-label={`Файлы: ${group.label}`} key={`${kind}:${group.key}`}>
-                <h3>
-                  {group.label}{" "}
-                  <span className="revision">{group.assets.length}</span>
-                </h3>
-                {group.assets.map((asset) => {
-                  const usage = usageByAsset[asset.id];
-                  return (
-                    <div className="asset-row" key={asset.id}>
-                      {asset.kind !== "AUDIO" ? (
-                        <img
-                          className="asset-thumbnail"
-                          src={asset.url}
-                          alt={`Превью: ${asset.name}`}
-                        />
-                      ) : (
-                        <span aria-label={ASSET_KIND_LABELS.AUDIO}>
-                          {ASSET_KIND_LABELS.AUDIO}
-                        </span>
-                      )}
-                      <div>
-                        <strong>{asset.name}</strong>
-                        <small>
-                          {asset.kind === "AUDIO" ? group.label : ASSET_KIND_LABELS[asset.kind]} ·{" "}
-                          {(asset.sizeBytes / 1024 / 1024).toFixed(1)} МБ
-                        </small>
-                        {asset.kind === "AUDIO" && (
-                          <>
-                            {snapshot.me.role === "GM" && (
-                              <label>
-                                Назначение аудио
-                                <select
-                                  aria-label={`Назначение аудио: ${asset.name}`}
-                                  value={asset.audioPurpose ?? "MUSIC"}
-                                  disabled={!onRefresh || updatingAudioPurposeId !== null}
-                                  onChange={(event) =>
-                                    void changeAudioPurpose(asset.id, event.currentTarget.value as AudioPurpose)
-                                  }
-                                >
-                                  <option value="MUSIC">Фоновая музыка</option>
-                                  <option value="SOUND_EFFECT">Звуковые эффекты</option>
-                                  <option value="BOTH">Музыка и звуковые эффекты</option>
-                                </select>
-                              </label>
-                            )}
-                            <Button
-                              aria-expanded={previewId === asset.id}
-                              onClick={() =>
-                                setPreviewId(
-                                  previewId === asset.id ? null : asset.id,
-                                )
-                              }
-                            >
-                              {previewId === asset.id
-                                ? "Закрыть превью"
-                                : "Прослушать"}
-                            </Button>
-                            {previewId === asset.id && (
-                              <AssetAudioPreview
-                                key={`${snapshot.campaign.id}:${snapshot.me.id}:${asset.url}`}
-                                url={asset.url}
-                                name={asset.name}
-                              />
-                            )}
-                          </>
+            return groups.map((group) =>
+              group.assets.length === 0 ? null : (
+                <section
+                  aria-label={`Файлы: ${group.label}`}
+                  key={`${kind}:${group.key}`}
+                >
+                  <h3>
+                    {group.label}{" "}
+                    <span className="revision">{group.assets.length}</span>
+                  </h3>
+                  {group.assets.map((asset) => {
+                    const usage = usageByAsset[asset.id];
+                    return (
+                      <div className="asset-row" key={asset.id}>
+                        {asset.kind !== "AUDIO" ? (
+                          <img
+                            className="asset-thumbnail"
+                            src={asset.url}
+                            alt={`Превью: ${asset.name}`}
+                          />
+                        ) : (
+                          <span aria-label={ASSET_KIND_LABELS.AUDIO}>
+                            {ASSET_KIND_LABELS.AUDIO}
+                          </span>
                         )}
-                        {snapshot.me.role === "GM" && (
-                          <div>
-                            <Button
-                              loading={checkingAssetId === asset.id}
-                              disabled={
-                                checkingAssetId !== null ||
-                                deletingAssetId !== null
-                              }
-                              onClick={() => void checkUsage(asset.id)}
-                            >
-                              {usage
-                                ? "Обновить использование"
-                                : "Проверить использование"}
-                            </Button>
-                            {onReplace && onRefresh && (
-                              <Button
-                                disabled={
-                                  checkingAssetId !== null ||
-                                  deletingAssetId !== null ||
-                                  uploading !== null
-                                }
-                                onClick={() => setReplacementId(asset.id)}
-                              >
-                                Заменить файл
-                              </Button>
-                            )}
-                            {usage && (
-                              <div aria-live="polite">
-                                <small>
-                                  {usage.inUse
-                                    ? `Используется: ${usage.usages.length}`
-                                    : "Не используется"}
-                                </small>
-                                {usage.usages.length > 0 && (
-                                  <ul>
-                                    {usage.usages.map((item) => (
-                                      <li key={`${item.kind}:${item.entityId}`}>
-                                        {item.label} · {item.location}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                                {usage.canDelete ? (
-                                  <Button
-                                    view="flat-danger"
-                                    loading={deletingAssetId === asset.id}
-                                    disabled={deletingAssetId !== null}
-                                    onClick={() =>
-                                      void remove(asset.id, asset.name)
+                        <div>
+                          <strong>{asset.name}</strong>
+                          <small>
+                            {asset.kind === "AUDIO"
+                              ? group.label
+                              : ASSET_KIND_LABELS[asset.kind]}{" "}
+                            · {(asset.sizeBytes / 1024 / 1024).toFixed(1)} МБ
+                          </small>
+                          {asset.kind === "AUDIO" && (
+                            <>
+                              {snapshot.me.role === "GM" && (
+                                <label>
+                                  Назначение аудио
+                                  <select
+                                    aria-label={`Назначение аудио: ${asset.name}`}
+                                    value={asset.audioPurpose ?? "MUSIC"}
+                                    disabled={
+                                      !onRefresh ||
+                                      updatingAudioPurposeId !== null
+                                    }
+                                    onChange={(event) =>
+                                      void changeAudioPurpose(
+                                        asset.id,
+                                        event.currentTarget
+                                          .value as AudioPurpose,
+                                      )
                                     }
                                   >
-                                    Удалить файл
-                                  </Button>
-                                ) : (
+                                    <option value="MUSIC">
+                                      Фоновая музыка
+                                    </option>
+                                    <option value="SOUND_EFFECT">
+                                      Звуковые эффекты
+                                    </option>
+                                    <option value="BOTH">
+                                      Музыка и звуковые эффекты
+                                    </option>
+                                  </select>
+                                </label>
+                              )}
+                              <Button
+                                aria-expanded={previewId === asset.id}
+                                onClick={() =>
+                                  setPreviewId(
+                                    previewId === asset.id ? null : asset.id,
+                                  )
+                                }
+                              >
+                                {previewId === asset.id
+                                  ? "Закрыть превью"
+                                  : "Прослушать"}
+                              </Button>
+                              {previewId === asset.id && (
+                                <AssetAudioPreview
+                                  key={`${snapshot.campaign.id}:${snapshot.me.id}:${asset.url}`}
+                                  url={asset.url}
+                                  name={asset.name}
+                                />
+                              )}
+                            </>
+                          )}
+                          {snapshot.me.role === "GM" && (
+                            <div>
+                              <Button
+                                loading={checkingAssetId === asset.id}
+                                disabled={
+                                  checkingAssetId !== null ||
+                                  deletingAssetId !== null
+                                }
+                                onClick={() => void checkUsage(asset.id)}
+                              >
+                                {usage
+                                  ? "Обновить использование"
+                                  : "Проверить использование"}
+                              </Button>
+                              {onReplace && onRefresh && (
+                                <Button
+                                  disabled={
+                                    checkingAssetId !== null ||
+                                    deletingAssetId !== null ||
+                                    uploading !== null
+                                  }
+                                  onClick={() => setReplacementId(asset.id)}
+                                >
+                                  Заменить файл
+                                </Button>
+                              )}
+                              {usage && (
+                                <div aria-live="polite">
                                   <small>
-                                    Удаление заблокировано: файл используется.
+                                    {usage.inUse
+                                      ? `Используется: ${usage.usages.length}`
+                                      : "Не используется"}
                                   </small>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
+                                  {usage.usages.length > 0 && (
+                                    <ul>
+                                      {usage.usages.map((item) => (
+                                        <li
+                                          key={`${item.kind}:${item.entityId}`}
+                                        >
+                                          {item.label} · {item.location}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                  {usage.canDelete ? (
+                                    <Button
+                                      view="flat-danger"
+                                      loading={deletingAssetId === asset.id}
+                                      disabled={deletingAssetId !== null}
+                                      onClick={() =>
+                                        void remove(asset.id, asset.name)
+                                      }
+                                    >
+                                      Удалить файл
+                                    </Button>
+                                  ) : (
+                                    <small>
+                                      Удаление заблокировано: файл используется.
+                                    </small>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </section>
-            ));
+                    );
+                  })}
+                </section>
+              ),
+            );
           })
         )}
       </div>

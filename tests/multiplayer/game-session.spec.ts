@@ -644,7 +644,9 @@ test("GM and six isolated players recover authoritative state without security l
     await expect(
       pages[0]!.getByTitle("Управление временем кампании"),
     ).toHaveCount(0);
-    await pages[0]!.getByRole("button", { name: "Закрыть персонажей" }).click();
+    // The single-player layout hides its redundant close button; Escape remains supported.
+    await pages[0]!.keyboard.press("Escape");
+    await expect(pages[0]!.locator(".character-workspace")).not.toBeVisible();
     await expect(
       pages[0]!.getByRole("button", { name: "Подготовка", exact: true }),
     ).toHaveCount(0);
@@ -2078,7 +2080,7 @@ test("a shared browser handoff revokes player A before player B uses their own i
     await expect(playerASocketDisconnected).resolves.toBeUndefined();
     await expect(page).toHaveURL("/");
     await expect(
-      page.getByRole("heading", { name: "Войти в аккаунт" }),
+      page.getByRole("link", { name: "Войти в аккаунт", exact: true }),
     ).toBeVisible();
     await expect(page.locator(".app-shell")).toHaveCount(0);
     await expect

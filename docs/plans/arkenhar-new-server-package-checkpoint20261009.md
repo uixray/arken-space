@@ -52,6 +52,7 @@ Changed only this document, no commit. Verification: read accepted image manifes
 - Next: consume connected gate receipts, then complete software-only archive and config validation. No remote action, upload, push, merge or deployment.
 
 ### Assembly review follow-up
+
 - PostgreSQL cached image exported locally (exit 0), with separate archive size/SHA256 receipt. No container/network mutation.
 - Disabled-mail template fields now empty: placeholder keyring/SMTP values could otherwise fail validation even when runtime disabled.
 - Astra found remaining concrete configuration gaps: no API/WebSocket TLS gateway, internal network blocks SMTP egress, hardcoded Compose false values need explicit activation override, and operator instructions must restore verified named volumes before normal server startup. These are open package tasks, not successful deploy evidence.

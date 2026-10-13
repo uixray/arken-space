@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { WebSocketRoute } from "@playwright/test";
 import type { CharacterDto } from "@arken/contracts";
 import { expect, test } from "./react-console-guard";
@@ -76,6 +77,7 @@ for (const role of ["GM"] as const)
         );
       });
       await page.setViewportSize({ width, height: 850 });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await openWorkspaceSection(page, "Подготовка");
       const player = page.getByRole("button", { name: /Следопыт/ });

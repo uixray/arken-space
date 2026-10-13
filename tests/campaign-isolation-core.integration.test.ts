@@ -553,10 +553,22 @@ beforeAll(async () => {
   ]);
 
   await db.insert(schema.invites).values([
-    { id: ids.invite, campaignId: ids.campaign, characterId: ids.character,
-      label: "Own invite", tokenHash: hashToken("uix413-own-invite"), expiresAt: new Date(Date.now() + 60_000) },
-    { id: ids.foreignInvite, campaignId: ids.foreignCampaign, characterId: ids.foreignCharacter,
-      label: "Foreign invite", tokenHash: hashToken("uix413-foreign-invite"), expiresAt: new Date(Date.now() + 60_000) },
+    {
+      id: ids.invite,
+      campaignId: ids.campaign,
+      characterId: ids.character,
+      label: "Own invite",
+      tokenHash: hashToken("uix413-own-invite"),
+      expiresAt: new Date(Date.now() + 60_000),
+    },
+    {
+      id: ids.foreignInvite,
+      campaignId: ids.foreignCampaign,
+      characterId: ids.foreignCharacter,
+      label: "Foreign invite",
+      tokenHash: hashToken("uix413-foreign-invite"),
+      expiresAt: new Date(Date.now() + 60_000),
+    },
   ]);
   app = Fastify();
   await app.register(cookie);
@@ -1038,21 +1050,35 @@ const probes: readonly Probe[] = [
   },
   {
     key: "GET /api/gm/sticker-packs/:id",
-    request: () => ({ method: "GET", url: `/api/gm/sticker-packs/${ids.foreignActivePack}` }),
+    request: () => ({
+      method: "GET",
+      url: `/api/gm/sticker-packs/${ids.foreignActivePack}`,
+    }),
     status: 404,
     error: "STICKER_PACK_NOT_FOUND",
-    control: () => expectControl({ method: "GET", url: `/api/gm/sticker-packs/${ids.ownActivePack}` }, 200),
+    control: () =>
+      expectControl(
+        { method: "GET", url: `/api/gm/sticker-packs/${ids.ownActivePack}` },
+        200,
+      ),
   },
   {
     key: "PATCH /api/assets/:id/audio-purpose",
-    request: () => ({ method: "PATCH", url: `/api/assets/${ids.foreignAsset}/audio-purpose`,
-      payload: { actionId: actionId(), audioPurpose: "SOUND_EFFECT" } }),
+    request: () => ({
+      method: "PATCH",
+      url: `/api/assets/${ids.foreignAsset}/audio-purpose`,
+      payload: { actionId: actionId(), audioPurpose: "SOUND_EFFECT" },
+    }),
     status: 404,
     error: "ASSET_NOT_FOUND",
     // The own image reaches type validation; the foreign image must not reveal it.
     control: async () => {
-      const response = await app.inject({ method: "PATCH", url: `/api/assets/${ids.asset}/audio-purpose`,
-        headers: headers(), payload: { actionId: actionId(), audioPurpose: "SOUND_EFFECT" } });
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/assets/${ids.asset}/audio-purpose`,
+        headers: headers(),
+        payload: { actionId: actionId(), audioPurpose: "SOUND_EFFECT" },
+      });
       expect(response.statusCode).toBe(400);
       expect(response.json()).toEqual({ error: "AUDIO_ASSET_REQUIRED" });
     },
@@ -1061,10 +1087,22 @@ const probes: readonly Probe[] = [
 
 probes.push({
   key: "POST /api/invites/:id/revoke",
-  request: () => ({ method: "POST", url: `/api/invites/${ids.foreignInvite}/revoke`, payload: { actionId: actionId() } }),
+  request: () => ({
+    method: "POST",
+    url: `/api/invites/${ids.foreignInvite}/revoke`,
+    payload: { actionId: actionId() },
+  }),
   status: 404,
   error: "INVITE_NOT_FOUND",
-  control: () => expectControl({ method: "POST", url: `/api/invites/${ids.invite}/revoke`, payload: { actionId: actionId() } }, 200),
+  control: () =>
+    expectControl(
+      {
+        method: "POST",
+        url: `/api/invites/${ids.invite}/revoke`,
+        payload: { actionId: actionId() },
+      },
+      200,
+    ),
 });
 
 describe("UIX-413 core campaign isolation", () => {

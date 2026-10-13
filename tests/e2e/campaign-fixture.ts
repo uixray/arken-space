@@ -1,5 +1,6 @@
 import { test as base } from "./react-console-guard";
 import { randomUUID } from "node:crypto";
+import { insertOwnedChatHistory } from "./chat-history-fixture";
 import { createDatabase } from "../../packages/db/src/index.js";
 import { createCampaignWithGmAccess } from "../../apps/server/src/seed.js";
 
@@ -25,7 +26,14 @@ import { createCampaignWithGmAccess } from "../../apps/server/src/seed.js";
 const databaseUrl = process.env.DATABASE_URL;
 
 type Fixtures = { gmToken: string };
-type WorkerFixtures = { campaignFactory: (name: string) => Promise<string> };
+type WorkerFixtures = {
+  campaignFactory: (name: string) => Promise<string>;
+  campaignHistory: {
+    create: (name: string) => Promise<string>;
+    seed: (token: string, count: number) => Promise<void>;
+  };
+  seedChatHistory: (token: string, count: number) => Promise<void>;
+};
 
 /* Два отступления от того, как фикстуры выглядят в документации Playwright, оба
    вынужденные и оба проверены запуском:
@@ -38,7 +46,7 @@ type WorkerFixtures = { campaignFactory: (name: string) => Promise<string> };
      тестов с «First argument must use the object destructuring pattern».
      Поэтому `{}` остаётся, а `no-empty-pattern` глушится точечно. */
 export const test = base.extend<Fixtures, WorkerFixtures>({
-  campaignFactory: [
+  campaignHistory: [
     // eslint-disable-next-line no-empty-pattern
     async ({}, provide) => {
       if (!databaseUrl) {
@@ -49,16 +57,56 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         );
       }
       const { client, db } = createDatabase(databaseUrl);
-      await provide(async (name: string) => {
+      const owned = new Map<
+        string,
+        { campaignId: string; membershipId: string }
+      >();
+      const create = async (name: string) => {
         const token = `e2e-${randomUUID()}-${randomUUID()}`;
-        await createCampaignWithGmAccess(db, name, token);
+        const { campaign, gm } = await createCampaignWithGmAccess(
+          db,
+          name,
+          token,
+        );
+        owned.set(token, { campaignId: campaign.id, membershipId: gm.id });
         return token;
-      });
-      await client.end();
+      };
+      try {
+        await provide({
+          create,
+          seed: async (token, count) => {
+            const owner = owned.get(token);
+            if (!owner)
+              throw new Error(
+                "Cannot seed history outside this worker owned campaigns",
+              );
+            const host = new URL(databaseUrl).hostname;
+            if (!["localhost", "127.0.0.1", "[::1]"].includes(host))
+              throw new Error(
+                "Chat history fixture requires isolated loopback database",
+              );
+            await insertOwnedChatHistory(db, owner, count);
+          },
+        });
+      } finally {
+        await client.end();
+      }
     },
     { scope: "worker" },
   ],
 
+  campaignFactory: [
+    async ({ campaignHistory }, provide) => {
+      await provide(campaignHistory.create);
+    },
+    { scope: "worker" },
+  ],
+  seedChatHistory: [
+    async ({ campaignHistory }, provide) => {
+      await provide(campaignHistory.seed);
+    },
+    { scope: "worker" },
+  ],
   gmToken: async ({ campaignFactory }, provide, testInfo) => {
     await provide(await campaignFactory(`e2e — ${testInfo.title}`));
   },

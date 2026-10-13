@@ -2,7 +2,13 @@
 import "@testing-library/jest-dom/vitest";
 import { createRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Select } from "./Select";
 
@@ -197,5 +203,109 @@ describe("Select Component", () => {
 
     expect(ref.current).toBeInstanceOf(HTMLButtonElement);
     expect(ref.current?.getAttribute("role")).toBe("combobox");
+  });
+
+  it.each([
+    ["Home", "before notification"],
+    ["Home", "after notification"],
+    ["ArrowUp", "before notification"],
+    ["ArrowUp", "after notification"],
+  ])(
+    "preserves %s navigation %s on initial observation",
+    async (key, timing) => {
+      const observers = new Set<() => void>();
+      const notify = () => observers.forEach((callback) => callback());
+      class DeferredResizeObserver {
+        constructor(private callback: ResizeObserverCallback) {}
+        private notify = () =>
+          this.callback([], this as unknown as ResizeObserver);
+        observe() {
+          observers.add(this.notify);
+        }
+        unobserve() {}
+        disconnect() {
+          observers.delete(this.notify);
+        }
+      }
+      vi.stubGlobal("ResizeObserver", DeferredResizeObserver);
+      try {
+        const user = userEvent.setup();
+        render(
+          <Select
+            aria-label="Delayed measurement"
+            defaultValue="second"
+            options={[
+              { value: "first", label: "First" },
+              { value: "second", label: "Second" },
+            ]}
+          />,
+        );
+        const trigger = screen.getByRole("combobox", {
+          name: "Delayed measurement",
+        });
+        await user.click(trigger);
+        if (timing === "after notification") notify();
+        fireEvent.keyDown(document.activeElement!, { key });
+        const first = screen.getByRole("option", { name: "First" });
+        expect(first).toHaveFocus();
+        if (timing === "before notification") notify();
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+        expect(first).toHaveFocus();
+        await user.keyboard("{Enter}");
+        expect(trigger).toHaveTextContent("First");
+      } finally {
+        cleanup();
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  it("restores opening trigger focus before navigation and resets on reopen", async () => {
+    const observers = new Set<() => void>();
+    const notify = () => observers.forEach((callback) => callback());
+    class DeferredResizeObserver {
+      constructor(private callback: ResizeObserverCallback) {}
+      private notify = () =>
+        this.callback([], this as unknown as ResizeObserver);
+      observe() {
+        observers.add(this.notify);
+      }
+      unobserve() {}
+      disconnect() {
+        observers.delete(this.notify);
+      }
+    }
+    vi.stubGlobal("ResizeObserver", DeferredResizeObserver);
+    try {
+      const user = userEvent.setup();
+      render(
+        <Select
+          aria-label="Opening focus"
+          defaultValue="second"
+          options={[
+            { value: "first", label: "First" },
+            { value: "second", label: "Second" },
+          ]}
+        />,
+      );
+      const trigger = screen.getByRole("combobox", { name: "Opening focus" });
+      for (let opening = 0; opening < 2; opening += 1) {
+        await user.click(trigger);
+        screen.getByRole("option", { name: "Second" }).focus();
+        notify();
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+        expect(trigger).toHaveFocus();
+        await user.keyboard("{Home}");
+        expect(screen.getByRole("option", { name: "First" })).toHaveFocus();
+        await user.keyboard("{Escape}");
+      }
+    } finally {
+      cleanup();
+      vi.unstubAllGlobals();
+    }
   });
 });

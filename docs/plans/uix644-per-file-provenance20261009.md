@@ -10,12 +10,12 @@ The approved B-fixture GM session-only login and read-only inventory have run: a
 
 Reviewed exact sources and SHA-256:
 
-| File | SHA-256 |
-|---|---|
-| `apps/web/src/StickerPackManager.tsx` | `c47d19388472117b0b58635ce1b0537677513f478554e60f818fb7e114285549` |
-| `apps/web/src/sticker-pack-api.ts` | `ee098ae2c40631e6654e330865cb3b523af46cc7c7a55e88444fb7f7991fb02` |
+| File                                    | SHA-256                                                            |
+| --------------------------------------- | ------------------------------------------------------------------ |
+| `apps/web/src/StickerPackManager.tsx`   | `c47d19388472117b0b58635ce1b0537677513f478554e60f818fb7e114285549` |
+| `apps/web/src/sticker-pack-api.ts`      | `ee098ae2c40631e6654e330865cb3b523af46cc7c7a55e88444fb7f7991fb02`  |
 | `apps/server/src/sticker-pack-admin.ts` | `99da9d2ea87f2dfff4d389ca4c86870447f37119fda1417ef26ff65a0d63a96a` |
-| `apps/server/src/routes.ts` | `44117f61bc3324b32f044e4f5a3dc931756abdb3d94c97e44978373f29b4285` |
+| `apps/server/src/routes.ts`             | `44117f61bc3324b32f044e4f5a3dc931756abdb3d94c97e44978373f29b4285`  |
 
 `StickerPackManager` is GM-only. On mount it loads `GET /api/gm/sticker-packs`; each listed item’s button calls `resumePack(id)`, which issues `GET /api/gm/sticker-packs/:id` and restores uploaded stickers as `status: "uploaded"` with `file: null`. Uploaded rows are deliberately immutable/disabled. Thus resuming an existing pack is not sufficient to exercise per-file provenance editing unless it has a safe pending file state; existing uploaded files must not be altered or re-uploaded.
 

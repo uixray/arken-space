@@ -1,11 +1,15 @@
 import { isIP } from "node:net";
-import { connect as tlsConnect, type ConnectionOptions as TlsConnectionOptions } from "node:tls";
+import {
+  connect as tlsConnect,
+  type ConnectionOptions as TlsConnectionOptions,
+} from "node:tls";
 import nodemailer from "nodemailer";
 import type { MailAdapter, OutboundMail } from "./account-mail.js";
 import { unconfiguredMailAdapter } from "./account-mail.js";
 
 const EMAIL = /^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/;
-const MESSAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MESSAGE_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type AccountMailSmtpConfig = Readonly<{
   host: string;
@@ -22,19 +26,25 @@ export type AccountMailSmtpConfig = Readonly<{
   onSocketCreated?: (socket: ReturnType<typeof tlsConnect>) => void;
 }>;
 
-export type AccountMailSmtpEnvironment = Partial<Record<
-  | "ACCOUNT_MAIL_SMTP_HOST"
-  | "ACCOUNT_MAIL_SMTP_PORT"
-  | "ACCOUNT_MAIL_SMTP_USERNAME"
-  | "ACCOUNT_MAIL_SMTP_PASSWORD"
-  | "ACCOUNT_MAIL_SMTP_FROM"
-  | "ACCOUNT_MAIL_SMTP_CONNECT_TIMEOUT_MS"
-  | "ACCOUNT_MAIL_SMTP_GREETING_TIMEOUT_MS"
-  | "ACCOUNT_MAIL_SMTP_SOCKET_TIMEOUT_MS",
-  string
->>;
+export type AccountMailSmtpEnvironment = Partial<
+  Record<
+    | "ACCOUNT_MAIL_SMTP_HOST"
+    | "ACCOUNT_MAIL_SMTP_PORT"
+    | "ACCOUNT_MAIL_SMTP_USERNAME"
+    | "ACCOUNT_MAIL_SMTP_PASSWORD"
+    | "ACCOUNT_MAIL_SMTP_FROM"
+    | "ACCOUNT_MAIL_SMTP_CONNECT_TIMEOUT_MS"
+    | "ACCOUNT_MAIL_SMTP_GREETING_TIMEOUT_MS"
+    | "ACCOUNT_MAIL_SMTP_SOCKET_TIMEOUT_MS",
+    string
+  >
+>;
 
-function boundedMs(value: string | undefined, fallback: number, maximum: number) {
+function boundedMs(
+  value: string | undefined,
+  fallback: number,
+  maximum: number,
+) {
   if (value === undefined || value === "") return fallback;
   if (!/^\d+$/.test(value)) throw new Error("MAIL_SMTP_CONFIG_INVALID");
   const parsed = Number(value);
@@ -45,7 +55,9 @@ function boundedMs(value: string | undefined, fallback: number, maximum: number)
 }
 
 /** Parses only injected environment values; no secret values are included in errors. */
-export function parseAccountMailSmtpConfig(source: AccountMailSmtpEnvironment): AccountMailSmtpConfig | null {
+export function parseAccountMailSmtpConfig(
+  source: AccountMailSmtpEnvironment,
+): AccountMailSmtpConfig | null {
   const host = source.ACCOUNT_MAIL_SMTP_HOST?.trim() ?? "";
   const username = source.ACCOUNT_MAIL_SMTP_USERNAME?.trim() ?? "";
   const password = source.ACCOUNT_MAIL_SMTP_PASSWORD ?? "";
@@ -65,23 +77,72 @@ export function parseAccountMailSmtpConfig(source: AccountMailSmtpEnvironment): 
     source.ACCOUNT_MAIL_SMTP_SOCKET_TIMEOUT_MS,
   ].some((value) => Boolean(value));
   if (!anySet) return null;
-  const hostIsDns = host.length > 0 && host.length <= 253 && (isIP(host) !== 0
-    || /^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?))*\.?$/.test(host));
+  const hostIsDns =
+    host.length > 0 &&
+    host.length <= 253 &&
+    (isIP(host) !== 0 ||
+      /^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?))*\.?$/.test(
+        host,
+      ));
   const port = portText ? Number(portText) : 465;
-  if (!hostIsDns || !Number.isInteger(port) || port < 1 || port > 65535
-    || !username || username.length > 512 || (/[\r\n]/.test(username) || username.includes(String.fromCharCode(0)))
-    || !password || password.length > 4096 || (/[\r\n]/.test(password) || password.includes(String.fromCharCode(0)))
-    || !EMAIL.test(from) || from.length > 320 || (/[\r\n]/.test(from) || from.includes(String.fromCharCode(0)))) {
+  if (
+    !hostIsDns ||
+    !Number.isInteger(port) ||
+    port < 1 ||
+    port > 65535 ||
+    !username ||
+    username.length > 512 ||
+    /[\r\n]/.test(username) ||
+    username.includes(String.fromCharCode(0)) ||
+    !password ||
+    password.length > 4096 ||
+    /[\r\n]/.test(password) ||
+    password.includes(String.fromCharCode(0)) ||
+    !EMAIL.test(from) ||
+    from.length > 320 ||
+    /[\r\n]/.test(from) ||
+    from.includes(String.fromCharCode(0))
+  ) {
     throw new Error("MAIL_SMTP_CONFIG_INVALID");
   }
-  const connectTimeoutMs = boundedMs(source.ACCOUNT_MAIL_SMTP_CONNECT_TIMEOUT_MS, 2_000, 2_500);
-  const greetingTimeoutMs = boundedMs(source.ACCOUNT_MAIL_SMTP_GREETING_TIMEOUT_MS, 2_000, 2_500);
-  const socketTimeoutMs = boundedMs(source.ACCOUNT_MAIL_SMTP_SOCKET_TIMEOUT_MS, 2_500, 2_750);
-  return Object.freeze({ host, port, username, password, from, connectTimeoutMs, greetingTimeoutMs, socketTimeoutMs });
+  const connectTimeoutMs = boundedMs(
+    source.ACCOUNT_MAIL_SMTP_CONNECT_TIMEOUT_MS,
+    2_000,
+    2_500,
+  );
+  const greetingTimeoutMs = boundedMs(
+    source.ACCOUNT_MAIL_SMTP_GREETING_TIMEOUT_MS,
+    2_000,
+    2_500,
+  );
+  const socketTimeoutMs = boundedMs(
+    source.ACCOUNT_MAIL_SMTP_SOCKET_TIMEOUT_MS,
+    2_500,
+    2_750,
+  );
+  return Object.freeze({
+    host,
+    port,
+    username,
+    password,
+    from,
+    connectTimeoutMs,
+    greetingTimeoutMs,
+    socketTimeoutMs,
+  });
 }
 
 export class AccountMailSmtpError extends Error {
-  constructor(readonly category: "SMTP_CONFIG" | "SMTP_TIMEOUT" | "SMTP_TLS" | "SMTP_TRANSIENT" | "SMTP_PERMANENT" | "SMTP_ABORTED" | "SMTP_FAILED") {
+  constructor(
+    readonly category:
+      | "SMTP_CONFIG"
+      | "SMTP_TIMEOUT"
+      | "SMTP_TLS"
+      | "SMTP_TRANSIENT"
+      | "SMTP_PERMANENT"
+      | "SMTP_ABORTED"
+      | "SMTP_FAILED",
+  ) {
     super(`MAIL_${category}`);
     this.name = "AccountMailSmtpError";
   }
@@ -90,24 +151,56 @@ export class AccountMailSmtpError extends Error {
 function classify(error: unknown, signal?: AbortSignal): AccountMailSmtpError {
   if (signal?.aborted) return new AccountMailSmtpError("SMTP_ABORTED");
   if (error instanceof AccountMailSmtpError) return error;
-  const candidate = error as { code?: unknown; responseCode?: unknown; command?: unknown } | null;
+  const candidate = error as {
+    code?: unknown;
+    responseCode?: unknown;
+    command?: unknown;
+  } | null;
   const code = typeof candidate?.code === "string" ? candidate.code : "";
-  const responseCode = typeof candidate?.responseCode === "number" ? candidate.responseCode : 0;
+  const responseCode =
+    typeof candidate?.responseCode === "number" ? candidate.responseCode : 0;
   if (code === "MAIL_ABORTED") return new AccountMailSmtpError("SMTP_ABORTED");
-  if (code === "ETIMEDOUT" || code === "ESOCKETTIMEDOUT" || code === "ECONNECTIONTIMEOUT") return new AccountMailSmtpError("SMTP_TIMEOUT");
-  if (code === "ECONNECTION" || code === "ECONNRESET" || code === "EPIPE" || code === "EDNS") return new AccountMailSmtpError("SMTP_TRANSIENT");
-  if (code === "ETLS" || code === "CERT_HAS_EXPIRED" || code === "DEPTH_ZERO_SELF_SIGNED_CERT"
-    || code === "SELF_SIGNED_CERT_IN_CHAIN" || code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE"
-    || code === "ERR_TLS_CERT_ALTNAME_INVALID") return new AccountMailSmtpError("SMTP_TLS");
-  if (responseCode >= 400 && responseCode < 500) return new AccountMailSmtpError("SMTP_TRANSIENT");
+  if (
+    code === "ETIMEDOUT" ||
+    code === "ESOCKETTIMEDOUT" ||
+    code === "ECONNECTIONTIMEOUT"
+  )
+    return new AccountMailSmtpError("SMTP_TIMEOUT");
+  if (
+    code === "ECONNECTION" ||
+    code === "ECONNRESET" ||
+    code === "EPIPE" ||
+    code === "EDNS"
+  )
+    return new AccountMailSmtpError("SMTP_TRANSIENT");
+  if (
+    code === "ETLS" ||
+    code === "CERT_HAS_EXPIRED" ||
+    code === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
+    code === "SELF_SIGNED_CERT_IN_CHAIN" ||
+    code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" ||
+    code === "ERR_TLS_CERT_ALTNAME_INVALID"
+  )
+    return new AccountMailSmtpError("SMTP_TLS");
+  if (responseCode >= 400 && responseCode < 500)
+    return new AccountMailSmtpError("SMTP_TRANSIENT");
   if (responseCode >= 500) return new AccountMailSmtpError("SMTP_PERMANENT");
   return new AccountMailSmtpError("SMTP_FAILED");
 }
 
 function validateMessage(mail: OutboundMail, messageId: string, from: string) {
-  if (!MESSAGE_ID.test(messageId) || !EMAIL.test(mail.to) || mail.to.length > 320
-    || (/[\r\n]/.test(mail.to) || mail.to.includes(String.fromCharCode(0))) || (/[\r\n]/.test(mail.subject) || mail.subject.includes(String.fromCharCode(0)))
-    || mail.subject.length > 200 || mail.text.length > 8_192 || !EMAIL.test(from)) {
+  if (
+    !MESSAGE_ID.test(messageId) ||
+    !EMAIL.test(mail.to) ||
+    mail.to.length > 320 ||
+    /[\r\n]/.test(mail.to) ||
+    mail.to.includes(String.fromCharCode(0)) ||
+    /[\r\n]/.test(mail.subject) ||
+    mail.subject.includes(String.fromCharCode(0)) ||
+    mail.subject.length > 200 ||
+    mail.text.length > 8_192 ||
+    !EMAIL.test(from)
+  ) {
     throw new AccountMailSmtpError("SMTP_CONFIG");
   }
 }
@@ -117,7 +210,9 @@ function validateMessage(mail: OutboundMail, messageId: string, from: string) {
  * protocol; the socket provider only makes TLS establishment and AbortSignal
  * cancellation observable. Certificate and hostname verification are mandatory.
  */
-export function createAccountMailSmtpAdapter(config: AccountMailSmtpConfig | null): MailAdapter {
+export function createAccountMailSmtpAdapter(
+  config: AccountMailSmtpConfig | null,
+): MailAdapter {
   if (!config) return unconfiguredMailAdapter;
   const ready = true;
   return {
@@ -146,7 +241,9 @@ export function createAccountMailSmtpAdapter(config: AccountMailSmtpConfig | nul
         tls: { rejectUnauthorized: true },
         getSocket: (_transportOptions, callback) => {
           if (signal?.aborted) {
-            callback(Object.assign(new Error("aborted"), { code: "MAIL_ABORTED" }));
+            callback(
+              Object.assign(new Error("aborted"), { code: "MAIL_ABORTED" }),
+            );
             return;
           }
           const tlsOptions: TlsConnectionOptions = {
@@ -162,7 +259,9 @@ export function createAccountMailSmtpAdapter(config: AccountMailSmtpConfig | nul
           const timeout = setTimeout(() => {
             if (settled) return;
             socket?.destroy();
-            finishError(Object.assign(new Error("timeout"), { code: "ETIMEDOUT" }));
+            finishError(
+              Object.assign(new Error("timeout"), { code: "ETIMEDOUT" }),
+            );
           }, config.connectTimeoutMs);
           const finishError = (error: Error) => {
             if (settled) return;
@@ -171,7 +270,10 @@ export function createAccountMailSmtpAdapter(config: AccountMailSmtpConfig | nul
             callback(error);
           };
           signalAbort = () => {
-            if (!settled) finishError(Object.assign(new Error("aborted"), { code: "MAIL_ABORTED" }));
+            if (!settled)
+              finishError(
+                Object.assign(new Error("aborted"), { code: "MAIL_ABORTED" }),
+              );
             socket?.destroy();
           };
           signal?.addEventListener("abort", signalAbort, { once: true });
@@ -194,7 +296,8 @@ export function createAccountMailSmtpAdapter(config: AccountMailSmtpConfig | nul
           messageId: `<${messageId}@arken.invalid>`,
         });
         if (info.accepted.length !== 1 || info.rejected.length !== 0) {
-          const rejection = info.rejectedErrors?.[0] as { responseCode?: number } | undefined;
+          const rejection = info.rejectedErrors?.[0] as
+            { responseCode?: number } | undefined;
           throw rejection?.responseCode && rejection.responseCode < 500
             ? new AccountMailSmtpError("SMTP_TRANSIENT")
             : new AccountMailSmtpError("SMTP_PERMANENT");
@@ -202,7 +305,8 @@ export function createAccountMailSmtpAdapter(config: AccountMailSmtpConfig | nul
       } catch (error) {
         throw classify(error, signal);
       } finally {
-        if (signal && signalAbort) signal.removeEventListener("abort", signalAbort);
+        if (signal && signalAbort)
+          signal.removeEventListener("abort", signalAbort);
         // Nodemailer's one-shot SMTP transport closes its SMTPConnection after
         // each send. This explicit fallback covers a socket still handshaking.
         if (socket && !socket.destroyed) socket.destroy();

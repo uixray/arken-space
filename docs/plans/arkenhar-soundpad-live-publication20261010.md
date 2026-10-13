@@ -1,4 +1,5 @@
 # Soundpad live publication refresh checkpoint — 2026-10-10
+
 - Previous product HEAD f3201ac: server asset projection fixed. Exact server image00a5831c2ea76078ef31cb4db85952f3da00e6277e2f32e0e276522be6d9a476/202contextfiles independently hash-verified; OCI27members/16layers and actualarchive load PASS. Read-only live14322 GM+PLAYER bothreceive eligible sharedclipasset and mediaGET200, healthrevisionf320.
 - Second defect: asset upload snapshots precede sound association/publication; later soundpad catalogue invalidation refreshed packs only, not externally supplied snapshot.assets. Connected PLAYER therefore needed an unrelated snapshot/reload to see a new clip.
 - App now supplies existing stable snapshot load callback. Catalogue invalidation awaits metadata refresh then role-filtered pack reload; refresh rejection handled and old effect-session continuation ignored. No permission change.

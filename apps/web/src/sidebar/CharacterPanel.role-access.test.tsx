@@ -250,7 +250,10 @@ const actions: CampaignActions = {
     refreshAssets: unexpectedAction,
     generateTokenImage: unexpectedAction,
   },
-  statLayout: { onUpdateStatLayout: unexpectedAction, onUpdateCharacterStatLayout: unexpectedAction },
+  statLayout: {
+    onUpdateStatLayout: unexpectedAction,
+    onUpdateCharacterStatLayout: unexpectedAction,
+  },
   chatHistory: { onLoadThreadHistory: unexpectedAction },
   character: {
     replaceCharacterControllers: unexpectedAction,
@@ -520,9 +523,15 @@ describe("CharacterPanel identity and portrait role wiring", () => {
         controllerMembershipIds: actor === "CONTROLLER" ? [snapshot.me.id] : [],
       });
       const calls = renderPanel(snapshot, character);
-      const portraitTrigger = screen.getByRole("button", { name: /^Изменить портрет:/ });
-      expect(portraitTrigger.querySelector(".character-hero__avatar-edit")).toHaveAttribute("aria-hidden", "true");
-      expect(screen.queryAllByRole("button", { name: "Добавить строку" })).toHaveLength(actor === "CONTROLLER" ? 0 : 2);
+      const portraitTrigger = screen.getByRole("button", {
+        name: /^Изменить портрет:/,
+      });
+      expect(
+        portraitTrigger.querySelector(".character-hero__avatar-edit"),
+      ).toHaveAttribute("aria-hidden", "true");
+      expect(
+        screen.queryAllByRole("button", { name: "Добавить строку" }),
+      ).toHaveLength(actor === "CONTROLLER" ? 0 : 2);
       const user = userEvent.setup();
       await user.click(screen.getByRole("button", { name: "Переименовать" }));
       const name = screen.getByRole("textbox", { name: "Имя персонажа" });
@@ -590,8 +599,12 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     });
     expect(rename, "UIX414_IDENTITY_RENAME_DISABLED").toBeDisabled();
     expect(portraitTrigger, "UIX414_IDENTITY_PICK_DISABLED").toBeDisabled();
-    expect(portraitTrigger.querySelector(".character-hero__avatar-edit")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Добавить строку" })).toBeNull();
+    expect(
+      portraitTrigger.querySelector(".character-hero__avatar-edit"),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Добавить строку" }),
+    ).toBeNull();
     await user.click(rename);
     await user.click(portraitTrigger);
     expect(screen.queryByRole("dialog", { name: /^Портрет:/ })).toBeNull();

@@ -11,12 +11,14 @@ Production backup download is active in root process62006. Password is unknown; 
 ## Two separate deliverables (never one public archive)
 
 **A. Software-only transfer artifact**, positive allowlist:
+
 - Exact frozen server/web image archives, image IDs, archive SHA256/size, source commit/tree, lock/context hashes and builder/base identity; actual build network mode, not a false offline claim.
 - Cached required PostgreSQL/runtime image reference or archive as explicitly packaged; target host architecture/engine compatibility noted. No target `build:` or implicit latest-tag resolution.
 - Reviewed compose/runtime/gateway configuration templates containing placeholders only; exact-image pinning, volumes, health/readiness, stop grace greater than8s, startup/migration sequencing, disk/backup paths and exposure boundaries.
 - Runbook, preflight/verify commands, migration/restore/rollback instructions and safe evidence manifest. License/dependency attribution for included components. No source test fixtures, author media, DB dumps, `.env`, keyring, SMTP credentials, logs or private backup path listing.
 
 **B. Private recovery/operations bundle**, outside Git and excluded from public context/archive allowlists:
+
 - Downloaded encrypted backup repository, immutable source metadata and checksums; preserve original bytes. Separate restricted decryption credential handling—never place password/key beside a publicly shared archive or in manifest.
 - Once decryptable: exact selected snapshot identity/time, production capture scope and software/schema version if known, paired DB+media/config evidence. Restored dump/media and required retained encryption keys/session/auth configuration remain sensitive. Account/outbox data may require the original keyring for recoverability; missing key must be reported, not replaced to fabricate success.
 - Private provisioned runtime secrets delivered via an owner-approved channel; public pack only documents variable names and references. SMTP credentials and sender/domain activation are independent of backup password.
@@ -30,6 +32,7 @@ A checksum-only public receipt may reference a non-sensitive private bundle ID. 
 > Build a placeholder-only software packaging skeleton before private data is ready. After image freeze, copy only accepted software archives/config/docs into staging, verify immutable manifest and archive hashes, and generate an explicit positive member list. Mark every unknown domain/host/SMTP/backup field REQUIRED, not a guessed working value. Rendered private env belongs outside staging/Git; do not emit Docker inspect Env or expanded compose secrets. Validate structure locally without installing/pulling/running a server. Do not claim target-ready if operator choices or private recovery are unresolved. Return exact paths/hashes and the remaining-data/host checklist; no upload.
 
 Concrete software packaging checks:
+
 1. Both images resolve to the same accepted source SHA; no mutable-tag-only references or worktree overlay. Include new SMTP context/source in accepted candidate context. Verify archive digests against final image manifest.
 2. Positive archive listing contains only approved software members; reject `.env`, private synthetic fixtures, DB/media, backup repository, credentials and unreviewed nested archives. Record list/hash, not a broad directory zip.
 3. Templates use persistent named/explicit volumes, exact cached image identity, `pull_policy: never` for validated local replay, no automatic build. Production account mode enabled, legacy alias off; campaign-link policy retained as separately configured, without ownership conversion. Registration policy is open+email verification, but activation remains false until actual mail/key/provider readiness. Creation entitlement remains a separate owner decision, not default-three or unlimited storage.

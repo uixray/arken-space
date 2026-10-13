@@ -39,4 +39,3 @@ Read-only harness feasibility plan; no browser run, source edit, seed/fixture re
 - Verification: read-only review of handoff, bounded UIX-644 ledger/repro notes, `ScenePicker.tsx`, `App.tsx` scene callback, and Playwright configuration. No tests or browser activity performed.
 - Blockers: B two-scene/character-fixture presence unknown; historical RO source/trace availability and safe comparable replay are not established.
 - Next action: after Escape matrix, verify B scene count without secrets; execute scene/zoom cells only if their prerequisites hold, and escalate the RO source/fixture prerequisite before replay.
-

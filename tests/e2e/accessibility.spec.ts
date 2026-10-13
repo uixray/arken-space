@@ -55,7 +55,9 @@ async function expectAccessible(page: Page, screen: string) {
 
 async function signInAsGm(page: Page, token: string) {
   await page.goto(`/gm/${token}`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page
+    .getByRole("button", { name: /^(Войти(?: в игру)?|Продолжить в игру)$/ })
+    .click();
   await expect(page).toHaveURL("/");
 }
 
@@ -64,15 +66,12 @@ test("страница входа доступна", async ({ page }) => {
   // человек просто не попадёт.
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(
-    page.getByRole("heading", { name: "Стол и карта" }),
+    page.getByRole("heading", {
+      name: "Всё необходимое для игры — в едином пространстве",
+    }),
   ).toBeVisible();
-  // Шпаргалка раскрывается: свёрнутой её разметки на странице нет вовсе, и
-  // проверять там было бы нечего.
-  await page
-    .getByRole("button", { name: "Показать все клавиши и команды" })
-    .click();
   await expect(
-    page.getByRole("heading", { name: "Туман войны", exact: true }),
+    page.getByRole("link", { name: "Войти в аккаунт", exact: true }),
   ).toBeVisible();
   await expectAccessible(page, "страница входа");
 });

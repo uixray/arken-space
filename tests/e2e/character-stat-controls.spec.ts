@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { CharacterDto } from "@arken/contracts";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -66,6 +67,7 @@ for (const role of ["GM", "PLAYER"] as const)
         );
       });
       await page.setViewportSize({ width, height: 850 });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await openWorkspaceSection(page, "Персонажи");
       const sheet = page.getByRole("article", {
@@ -148,11 +150,13 @@ for (const role of ["GM", "PLAYER"] as const)
         await expect(confirmation).toBeHidden();
         await expect(remove).toBeFocused();
       } else {
+        // This PLAYER owns the character. The existing personal stat-layout
+        // policy permits these controls; it does not grant shared-layout access.
         await expect(
           card.getByRole("button", {
             name: /Переименовать|Переместить|Удалить|Добавить строку/,
           }),
-        ).toHaveCount(0);
+        ).toHaveCount(8);
       }
       await info.attach("stat-controls", {
         body: JSON.stringify({

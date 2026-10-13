@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Locator } from "@playwright/test";
 import {
   paintedIconContrast,
@@ -107,6 +108,7 @@ for (const role of ["GM", "PLAYER"] as const)
           '0{"sid":"icons-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
         );
       });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await expect(page.locator(".map-viewport")).toBeVisible();
       const toolbar = page.getByRole("toolbar", { name: "Инструменты карты" });
@@ -161,15 +163,16 @@ for (const role of ["GM", "PLAYER"] as const)
       expect(tokenShortcutStyle.paddingRight).toBeGreaterThan(0);
       expect(tokenShortcutStyle.background).not.toBe("rgba(0, 0, 0, 0)");
       await page.setViewportSize({ width, height: 480 });
+      await toolbar.locator(".toolbar-shortcuts").scrollIntoViewIfNeeded();
       const compactToolLayout = await toolbar.evaluate((node) => {
-        const group = node.querySelector<HTMLElement>(".toolbar-group");
+        const group = node.querySelector<HTMLElement>(".map-toolbar__scroll");
         const shortcuts = node.querySelector<HTMLElement>(".toolbar-shortcuts");
         if (!group || !shortcuts) throw new Error("Incomplete map toolbar");
         return {
           bottom: node.getBoundingClientRect().bottom,
           shortcutsBottom: shortcuts.getBoundingClientRect().bottom,
           groupScrolls: group.scrollHeight > group.clientHeight,
-          toolbarScrolls: node.scrollHeight > node.clientHeight,
+          toolbarScrolls: group.scrollHeight > group.clientHeight,
           viewportBottom: window.innerHeight,
         };
       });

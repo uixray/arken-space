@@ -43,8 +43,6 @@ Root integration: review tracked checkpoint and ignored package output; refresh 
 
 Final 14-member software receipt SHA256: `83e095dacf82d959932fa2f69eaf28df9f0b1bb577b006fb79210a0fe35067e4`. No commit. `.data/` remains ignored intentionally; root integrates checkpoint only.
 
-
-
 ## Root integration — access scope superseded
 
 Root independently rehashed all 14 listed members; final receipt SHA matches `83e095dacf82d959932fa2f69eaf28df9f0b1bb577b006fb79210a0fe35067e4`. Scoped internal gateway/config acceptance is accepted, not target TLS/network readiness. Owner subsequently approved replacement links and an additional PLAYER Илья, so waiting for raw old bearer URLs is superseded. Revised transfer-copy credential/runtime/export gate is active; original/B/M remain intact. This receipt still refers to earlier data identity until the revised tuple is accepted. No package readiness promoted; creation cap 3 approval stands.

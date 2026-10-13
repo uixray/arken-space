@@ -933,13 +933,12 @@ export function App() {
     [run],
   );
 
-  const handleRecruitFromBattleZone = useLatestCallback(
-    () =>
-      createBattleZoneRecruitHandler(
-        () => campaignViewRef.current,
-        run,
-        initiativeActions.onRecruitFromBattleZone,
-      )(),
+  const handleRecruitFromBattleZone = useLatestCallback(() =>
+    createBattleZoneRecruitHandler(
+      () => campaignViewRef.current,
+      run,
+      initiativeActions.onRecruitFromBattleZone,
+    )(),
   );
 
   /*

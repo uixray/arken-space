@@ -499,11 +499,32 @@ html[data-player-theme="light"] .brand__mark {
   overflow: auto;
 }
 
-.music-mixer-list { display: grid; gap: .75rem; }
-.music-mixer-track { display: grid; grid-template-columns: minmax(8rem, 1fr) auto minmax(8rem, 1fr) auto; align-items: center; gap: .75rem; padding: .75rem; border: 1px solid var(--border); border-radius: .75rem; }
-.music-mixer-track label { display: grid; gap: .25rem; font-size: .8rem; }
-.music-mixer-track input[type="range"] { width: 100%; }
-@media (max-width: 600px) { .music-mixer-track { grid-template-columns: 1fr auto; } }
+.music-mixer-list {
+  display: grid;
+  gap: 0.75rem;
+}
+.music-mixer-track {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) auto minmax(8rem, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+.music-mixer-track label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+}
+.music-mixer-track input[type="range"] {
+  width: 100%;
+}
+@media (max-width: 600px) {
+  .music-mixer-track {
+    grid-template-columns: 1fr auto;
+  }
+}
 .music-track {
   display: flex;
   justify-content: space-between;
@@ -1834,6 +1855,10 @@ html[data-player-theme="light"] .character-card--stats {
 .character-card--combat {
   --character-card-accent: var(--color-card-combat);
   flex-basis: 300px;
+}
+html[data-player-theme="light"] .character-card--combat {
+  /* Keep the warm accent legible on the raised light-theme card. */
+  --character-card-accent: var(--color-text-accent);
 }
 .character-card--skills {
   --character-card-accent: var(--color-card-skills);
@@ -3572,6 +3597,8 @@ html[data-player-theme="light"] .character-card--stats {
 }
 .asset-row > span {
   align-self: start;
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: 2px 4px;
   border: 1px solid var(--line);
   color: var(--muted);
@@ -6378,6 +6405,9 @@ body:has(.landing-shell) {
 }
 .initiative-panel__summary {
   display: flex;
+  min-width: 24px;
+  min-height: 24px;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
@@ -7279,6 +7309,12 @@ html[data-player-theme="classic-v1"] .asset-picker__tile:focus-visible {
 /* UIX-415: pre-login guide. Matches the landing page's existing card
    language (1px border, --surface fill, --muted body) rather than inventing a
    second visual system on the same page. */
+.landing-guide a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+}
 .guide-features {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -7758,9 +7794,6 @@ button:not([role="tab"]),
   font-size: max(12px, 0.78rem);
 }
 
-
-
-
 .message header > .roll-avatar {
   border-radius: 0;
 }
@@ -7820,8 +7853,13 @@ button:not([role="tab"]),
 .character-workspace.is-single-player-character .character-rail-toggle,
 .character-workspace.is-single-player-character .character-rail,
 .character-workspace.is-single-player-character .character-workspace__close,
-.character-workspace.is-single-player-character .character-workspace__header > div > .eyebrow,
-.character-workspace.is-single-player-character .character-workspace__header > p {
+.character-workspace.is-single-player-character
+  .character-workspace__header
+  > div
+  > .eyebrow,
+.character-workspace.is-single-player-character
+  .character-workspace__header
+  > p {
   display: none;
 }
 .character-workspace.is-single-player-character .character-workspace__header {
@@ -7829,6 +7867,8 @@ button:not([role="tab"]),
   min-height: 0;
   padding: var(--space-sm) var(--space-md);
 }
-.character-workspace.is-single-player-character .character-workspace__header h2 {
+.character-workspace.is-single-player-character
+  .character-workspace__header
+  h2 {
   margin: 0;
 }

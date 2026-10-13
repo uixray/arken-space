@@ -43,5 +43,3 @@
 - Other world-content create/lifecycle/archive/media/relation clients do not gain the exact retry envelope.
 - Route test confirms existing duplicate action handling and no duplicate audit side effects; no database production data or migration exercised.
 - Root should review lane B alongside lane A before a future candidate freeze. Do not attribute this future-wave verification to frozen `8c0a0f7`.
-
-

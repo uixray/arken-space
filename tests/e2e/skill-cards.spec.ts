@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { writeFile } from "node:fs/promises";
 import { type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
@@ -339,6 +340,7 @@ for (const width of [1280, 360]) {
     );
     await mockApp(page, () => snapshot);
 
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openCharacterWorkspace(page);
     await expect(
@@ -380,6 +382,7 @@ for (const width of [1280, 360]) {
       },
     );
 
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openCharacterWorkspace(page);
     await page.locator(".character-action-card__action button").click();
@@ -388,7 +391,8 @@ for (const width of [1280, 360]) {
       "1/2",
     );
 
-    await page.getByRole("button", { name: "Закрыть персонажей" }).click();
+    // The single-character PLAYER sheet has no close action. Desktop journal
+    // stays visible; compact openJournal selects its dedicated surface.
     await openJournal(page);
     const card = page
       .locator(".skill-chat-card")
@@ -444,6 +448,7 @@ for (const width of [960, 360]) {
       },
     );
 
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openCharacterWorkspace(page);
     await page
@@ -455,7 +460,8 @@ for (const width of [960, 360]) {
       "2/2",
     );
 
-    await page.getByRole("button", { name: "Закрыть персонажей" }).click();
+    // The single-character PLAYER sheet has no close action. Desktop journal
+    // stays visible; compact openJournal selects its dedicated surface.
     await openJournal(page);
     const card = page
       .locator(".skill-chat-card")
@@ -525,6 +531,7 @@ for (const owner of ["edit", "picker", "setup"] as const) {
       });
       await page.routeWebSocket(/\/socket\.io\//, (socket) => socket.close());
       await mockApp(page, () => current);
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await openCharacterWorkspace(page);
       if (owner === "edit") {
@@ -579,7 +586,7 @@ for (const owner of ["edit", "picker", "setup"] as const) {
           .click();
       }
       const description = form.getByRole("textbox", {
-        name: "Описание",
+        name: "Описание (необязательно)",
         exact: true,
       });
       await description.scrollIntoViewIfNeeded();
@@ -648,6 +655,9 @@ for (const owner of ["edit", "picker", "setup"] as const) {
         action.getByRole("combobox", { name: "Характеристика", exact: true }),
         "Сила",
       );
+      await form
+        .getByText("Дополнительные числовые параметры", { exact: true })
+        .click();
       await form
         .getByRole("button", { name: "Добавить значение", exact: true })
         .click();

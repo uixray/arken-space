@@ -17,10 +17,22 @@ let database: PGlite;
 let app: FastifyInstance;
 let db: ReturnType<typeof drizzle<typeof schema>>;
 let fakeSockets: Array<{
-  data: { auth: { campaignId: string; membershipId: string; role: "GM" | "PLAYER"; displayName: string }; viewedSceneId: null };
+  data: {
+    auth: {
+      campaignId: string;
+      membershipId: string;
+      role: "GM" | "PLAYER";
+      displayName: string;
+    };
+    viewedSceneId: null;
+  };
   emit: (event: string, payload: unknown) => void;
 }>;
-let snapshotEmissions: Array<{ membershipId: string; event: string; payload: unknown }>;
+let snapshotEmissions: Array<{
+  membershipId: string;
+  event: string;
+  payload: unknown;
+}>;
 const id = () => crypto.randomUUID();
 const ids = {
   campaign: id(),
@@ -45,16 +57,22 @@ const headers = (secret: string) => ({
 const campaignLayout = () => {
   const layout = structuredClone(starterStatLayout);
   const group = layout.find((item) => item.id === "characteristics")!;
-  group.rows.push({ key: "campaignOnly", label: "Campaign only", source: "STAT" });
+  group.rows.push({
+    key: "campaignOnly",
+    label: "Campaign only",
+    source: "STAT",
+  });
   return layout;
 };
 const layoutWith = (key: string) => {
   const layout = campaignLayout();
-  layout.find((item) => item.id === "characteristics")!.rows.push({
-    key,
-    label: key,
-    source: "STAT",
-  });
+  layout
+    .find((item) => item.id === "characteristics")!
+    .rows.push({
+      key,
+      label: key,
+      source: "STAT",
+    });
   return layout;
 };
 const withoutKey = (layout: ReturnType<typeof campaignLayout>, key: string) =>
@@ -74,9 +92,24 @@ beforeEach(async () => {
   ]);
   await db.insert(schema.memberships).values([
     { id: ids.gm, campaignId: ids.campaign, role: "GM", displayName: "GM" },
-    { id: ids.owner, campaignId: ids.campaign, role: "PLAYER", displayName: "Owner" },
-    { id: ids.siblingOwner, campaignId: ids.campaign, role: "PLAYER", displayName: "Sibling" },
-    { id: ids.foreignOwner, campaignId: ids.foreignCampaign, role: "PLAYER", displayName: "Foreign" },
+    {
+      id: ids.owner,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      displayName: "Owner",
+    },
+    {
+      id: ids.siblingOwner,
+      campaignId: ids.campaign,
+      role: "PLAYER",
+      displayName: "Sibling",
+    },
+    {
+      id: ids.foreignOwner,
+      campaignId: ids.foreignCampaign,
+      role: "PLAYER",
+      displayName: "Foreign",
+    },
   ]);
   for (const [membershipId, secret] of [
     [ids.gm, secrets.gm],
@@ -156,13 +189,20 @@ describe("PLAYER-owned character stat layout", () => {
   it("adds the nullable override column without rewriting an existing row", async () => {
     const legacy = new PGlite();
     try {
-      await legacy.exec('CREATE TABLE characters (id uuid PRIMARY KEY, name text NOT NULL); INSERT INTO characters (id, name) VALUES (\'00000000-0000-4000-8000-000000000001\', \'Legacy\');');
+      await legacy.exec(
+        "CREATE TABLE characters (id uuid PRIMARY KEY, name text NOT NULL); INSERT INTO characters (id, name) VALUES ('00000000-0000-4000-8000-000000000001', 'Legacy');",
+      );
       const migration = await readFile(
-        new URL("../../../packages/db/drizzle/0059_character_stat_layout.sql", import.meta.url),
+        new URL(
+          "../../../packages/db/drizzle/0059_character_stat_layout.sql",
+          import.meta.url,
+        ),
         "utf8",
       );
       await legacy.exec(migration.replaceAll("--> statement-breakpoint", ""));
-      const rows = await legacy.query<{ stat_layout: unknown }>("SELECT stat_layout FROM characters WHERE name = 'Legacy'");
+      const rows = await legacy.query<{ stat_layout: unknown }>(
+        "SELECT stat_layout FROM characters WHERE name = 'Legacy'",
+      );
       expect(rows.rows).toEqual([{ stat_layout: null }]);
     } finally {
       await legacy.close();
@@ -177,8 +217,10 @@ describe("PLAYER-owned character stat layout", () => {
     expect(legacyCharacter!.statLayout).toBeNull();
     const before = await bootstrap(secrets.owner);
     expect(before.campaign.statLayout).toEqual(campaignLayout());
-    expect(before.characters.find((row: { id: string }) => row.id === ids.character).statLayout)
-      .toEqual(before.campaign.statLayout);
+    expect(
+      before.characters.find((row: { id: string }) => row.id === ids.character)
+        .statLayout,
+    ).toEqual(before.campaign.statLayout);
     const next = layoutWith("personalOnly");
     const actionId = id();
     const first = await patch(ids.character, secrets.owner, actionId, 0, next);
@@ -187,25 +229,50 @@ describe("PLAYER-owned character stat layout", () => {
     const replay = await patch(ids.character, secrets.owner, actionId, 0, next);
     expect(replay.statusCode, replay.body).toBe(200);
     expect(replay.json()).toEqual(first.json());
-    const [receipt] = await db.select().from(schema.gameEvents).where(eq(schema.gameEvents.actionId, actionId));
-    expect(receipt?.payload).toMatchObject({ keys: expect.arrayContaining(["personalOnly"]) });
+    const [receipt] = await db
+      .select()
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.actionId, actionId));
+    expect(receipt?.payload).toMatchObject({
+      keys: expect.arrayContaining(["personalOnly"]),
+    });
     expect(receipt?.payload).not.toHaveProperty("layout");
-    expect(Object.keys(receipt?.payload as object).sort()).toEqual(["fingerprint", "keys"]);
-    const reused = await patch(ids.character, secrets.owner, actionId, 0, layoutWith("different"));
+    expect(Object.keys(receipt?.payload as object).sort()).toEqual([
+      "fingerprint",
+      "keys",
+    ]);
+    const reused = await patch(
+      ids.character,
+      secrets.owner,
+      actionId,
+      0,
+      layoutWith("different"),
+    );
     expect(reused.statusCode).toBe(409);
     expect(reused.json().error).toBe("ACTION_ID_REUSED");
 
     const ownerSnapshot = await bootstrap(secrets.owner);
     const siblingSnapshot = await bootstrap(secrets.siblingOwner);
     const foreignSnapshot = await bootstrap(secrets.foreignOwner);
-    expect(foreignSnapshot.characters.map((row: { id: string }) => row.id)).not.toContain(ids.character);
+    expect(
+      foreignSnapshot.characters.map((row: { id: string }) => row.id),
+    ).not.toContain(ids.character);
     expect(JSON.stringify(foreignSnapshot)).not.toContain("personalOnly");
     expect(ownerSnapshot.campaign.statLayout).toEqual(campaignLayout());
-    expect(ownerSnapshot.characters.find((row: { id: string }) => row.id === ids.character).statLayout)
-      .toEqual(next);
-    expect(siblingSnapshot.characters.find((row: { id: string }) => row.id === ids.siblingCharacter).statLayout)
-      .toEqual(siblingSnapshot.campaign.statLayout);
-    const [stored] = await db.select().from(schema.characters).where(eq(schema.characters.id, ids.character));
+    expect(
+      ownerSnapshot.characters.find(
+        (row: { id: string }) => row.id === ids.character,
+      ).statLayout,
+    ).toEqual(next);
+    expect(
+      siblingSnapshot.characters.find(
+        (row: { id: string }) => row.id === ids.siblingCharacter,
+      ).statLayout,
+    ).toEqual(siblingSnapshot.campaign.statLayout);
+    const [stored] = await db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
     expect(stored).toBeDefined();
     expect(stored!.statLayout).toEqual(next);
     expect(stored!.stats).toEqual({ craft: 9, campaignOnly: 4 });
@@ -215,10 +282,22 @@ describe("PLAYER-owned character stat layout", () => {
   it("does not disclose foreign campaign characters and denies same-campaign other owners", async () => {
     const actionId = id();
     const layout = layoutWith("personalOnly");
-    const otherOwner = await patch(ids.character, secrets.siblingOwner, actionId, 0, layout);
+    const otherOwner = await patch(
+      ids.character,
+      secrets.siblingOwner,
+      actionId,
+      0,
+      layout,
+    );
     expect(otherOwner.statusCode).toBe(403);
     expect(otherOwner.json().error).toBe("CHARACTER_FORBIDDEN");
-    const crossCampaign = await patch(ids.foreignCharacter, secrets.owner, actionId, 0, layout);
+    const crossCampaign = await patch(
+      ids.foreignCharacter,
+      secrets.owner,
+      actionId,
+      0,
+      layout,
+    );
     expect(crossCampaign.statusCode).toBe(404);
     expect(crossCampaign.json().error).toBe("CHARACTER_NOT_FOUND");
     const gm = await patch(ids.character, secrets.gm, actionId, 0, layout);
@@ -227,14 +306,27 @@ describe("PLAYER-owned character stat layout", () => {
   });
 
   it("uses character revision CAS and keeps the shared GM layout endpoint GM-only", async () => {
-    const stale = await patch(ids.character, secrets.owner, id(), 3, layoutWith("personalOnly"));
+    const stale = await patch(
+      ids.character,
+      secrets.owner,
+      id(),
+      3,
+      layoutWith("personalOnly"),
+    );
     expect(stale.statusCode).toBe(409);
-    expect(stale.json()).toMatchObject({ error: "CHARACTER_CONFLICT", revision: 0 });
+    expect(stale.json()).toMatchObject({
+      error: "CHARACTER_CONFLICT",
+      revision: 0,
+    });
     const shared = await app.inject({
       method: "PATCH",
       url: "/api/campaign/stat-layout",
       headers: headers(secrets.owner),
-      payload: { actionId: id(), revision: 0, layout: layoutWith("sharedAttempt") },
+      payload: {
+        actionId: id(),
+        revision: 0,
+        layout: layoutWith("sharedAttempt"),
+      },
     });
     expect(shared.statusCode).toBe(403);
     expect(shared.json().error).toBe("GM_REQUIRED");
@@ -280,8 +372,18 @@ describe("PLAYER-owned character stat layout", () => {
         payload: { fingerprint: "0".repeat(64), keys: [] },
       },
     ]);
-    for (const actionId of [actionForOtherEntity, actionForOtherMember, actionForOtherPayload]) {
-      const response = await patch(ids.character, secrets.owner, actionId, 0, layout);
+    for (const actionId of [
+      actionForOtherEntity,
+      actionForOtherMember,
+      actionForOtherPayload,
+    ]) {
+      const response = await patch(
+        ids.character,
+        secrets.owner,
+        actionId,
+        0,
+        layout,
+      );
       expect(response.statusCode).toBe(409);
       expect(response.json()).toEqual({ error: "ACTION_ID_REUSED" });
     }
@@ -295,68 +397,188 @@ describe("PLAYER-owned character stat layout", () => {
     reordered.find((group) => group.id === "characteristics")!.rows.reverse();
     const makeSocket = (membershipId: string, displayName: string) => ({
       data: {
-        auth: { campaignId: ids.campaign, membershipId, role: "PLAYER" as const, displayName },
+        auth: {
+          campaignId: ids.campaign,
+          membershipId,
+          role: "PLAYER" as const,
+          displayName,
+        },
         viewedSceneId: null,
       },
-      emit: (event: string, payload: unknown) => snapshotEmissions.push({ membershipId, event, payload }),
+      emit: (event: string, payload: unknown) =>
+        snapshotEmissions.push({ membershipId, event, payload }),
     });
-    fakeSockets = [makeSocket(ids.owner, "Owner"), makeSocket(ids.siblingOwner, "Sibling")];
-    const result = await patch(ids.character, secrets.owner, id(), 1, reordered);
+    fakeSockets = [
+      makeSocket(ids.owner, "Owner"),
+      makeSocket(ids.siblingOwner, "Sibling"),
+    ];
+    const result = await patch(
+      ids.character,
+      secrets.owner,
+      id(),
+      1,
+      reordered,
+    );
     expect(result.statusCode, result.body).toBe(200);
     expect(result.json()).toEqual({ characterId: ids.character, revision: 2 });
-    const ownerEvent = snapshotEmissions.find((item) => item.membershipId === ids.owner);
-    const siblingEvent = snapshotEmissions.find((item) => item.membershipId === ids.siblingOwner);
+    const ownerEvent = snapshotEmissions.find(
+      (item) => item.membershipId === ids.owner,
+    );
+    const siblingEvent = snapshotEmissions.find(
+      (item) => item.membershipId === ids.siblingOwner,
+    );
     expect(ownerEvent?.event).toBe("game:snapshot");
-    expect((ownerEvent?.payload as { characters: Array<{ id: string; statLayout: unknown }> }).characters.find((row) => row.id === ids.character)?.statLayout)
-      .toEqual(reordered);
+    expect(
+      (
+        ownerEvent?.payload as {
+          characters: Array<{ id: string; statLayout: unknown }>;
+        }
+      ).characters.find((row) => row.id === ids.character)?.statLayout,
+    ).toEqual(reordered);
     expect(siblingEvent?.event).toBe("game:snapshot");
-    expect((siblingEvent?.payload as { characters: Array<{ id: string; statLayout: unknown }> }).characters.find((row) => row.id === ids.siblingCharacter)?.statLayout)
-      .toEqual((siblingEvent?.payload as { campaign: { statLayout: unknown } }).campaign.statLayout);
+    expect(
+      (
+        siblingEvent?.payload as {
+          characters: Array<{ id: string; statLayout: unknown }>;
+        }
+      ).characters.find((row) => row.id === ids.siblingCharacter)?.statLayout,
+    ).toEqual(
+      (siblingEvent?.payload as { campaign: { statLayout: unknown } }).campaign
+        .statLayout,
+    );
   });
 
   it("rejects deleting a stat referenced by the character's own skill formula", async () => {
     const current = layoutWith("craft");
-    await db.update(schema.characters)
+    await db
+      .update(schema.characters)
       .set({
         statLayout: current,
-        skills: [{ key: "lockpick", name: "Lockpick", rank: 1, formula: "1d20 + craft" }],
-        spells: [{ key: "cantrip", name: "Cantrip", description: "", formula: "1d20 + craft" }],
+        skills: [
+          {
+            key: "lockpick",
+            name: "Lockpick",
+            rank: 1,
+            formula: "1d20 + craft",
+          },
+        ],
+        spells: [
+          {
+            key: "cantrip",
+            name: "Cantrip",
+            description: "",
+            formula: "1d20 + craft",
+          },
+        ],
       })
       .where(eq(schema.characters.id, ids.character));
     await db.insert(schema.characterCatalogEntries).values({
-      id: id(), characterId: ids.character, kind: "ABILITY", name: "Personal Focus",
-      data: { rollActions: [{ modifiers: [{ type: "CHARACTERISTIC", key: "craft" }] }] },
+      id: id(),
+      characterId: ids.character,
+      kind: "ABILITY",
+      name: "Personal Focus",
+      data: {
+        rollActions: [
+          { modifiers: [{ type: "CHARACTERISTIC", key: "craft" }] },
+        ],
+      },
     });
-    const response = await patch(ids.character, secrets.owner, id(), 0, withoutKey(current, "craft"));
+    const response = await patch(
+      ids.character,
+      secrets.owner,
+      id(),
+      0,
+      withoutKey(current, "craft"),
+    );
     expect(response.statusCode).toBe(409);
-    expect(response.json()).toMatchObject({ error: "STAT_ROW_REFERENCED", key: "craft" });
-    expect(response.json().references).toContainEqual({ kind: "SKILL", name: "Lockpick", owner: "Owner hero" });
-    expect(response.json().references).toContainEqual({ kind: "SPELL", name: "Cantrip", owner: "Owner hero" });
-    expect(response.json().references).toContainEqual({ kind: "CHARACTER_ENTRY", name: "Personal Focus", owner: "Owner hero" });
+    expect(response.json()).toMatchObject({
+      error: "STAT_ROW_REFERENCED",
+      key: "craft",
+    });
+    expect(response.json().references).toContainEqual({
+      kind: "SKILL",
+      name: "Lockpick",
+      owner: "Owner hero",
+    });
+    expect(response.json().references).toContainEqual({
+      kind: "SPELL",
+      name: "Cantrip",
+      owner: "Owner hero",
+    });
+    expect(response.json().references).toContainEqual({
+      kind: "CHARACTER_ENTRY",
+      name: "Personal Focus",
+      owner: "Owner hero",
+    });
   });
 
   it("rejects deleting a stat referenced by a campaign catalog modifier", async () => {
     const current = layoutWith("craft");
-    await db.update(schema.characters).set({ statLayout: current }).where(eq(schema.characters.id, ids.character));
+    await db
+      .update(schema.characters)
+      .set({ statLayout: current })
+      .where(eq(schema.characters.id, ids.character));
     await db.insert(schema.catalogEntries).values({
-      id: id(), campaignId: ids.campaign, kind: "ABILITY", name: "Focus", description: "Focus",
-      data: { rollActions: [{ modifiers: [{ type: "CHARACTERISTIC", key: "craft" }] }] },
+      id: id(),
+      campaignId: ids.campaign,
+      kind: "ABILITY",
+      name: "Focus",
+      description: "Focus",
+      data: {
+        rollActions: [
+          { modifiers: [{ type: "CHARACTERISTIC", key: "craft" }] },
+        ],
+      },
     });
-    const response = await patch(ids.character, secrets.owner, id(), 0, withoutKey(current, "craft"));
+    const response = await patch(
+      ids.character,
+      secrets.owner,
+      id(),
+      0,
+      withoutKey(current, "craft"),
+    );
     expect(response.statusCode).toBe(409);
-    expect(response.json()).toMatchObject({ error: "STAT_ROW_REFERENCED", key: "craft" });
-    expect(response.json().references).toContainEqual({ kind: "CATALOG_ENTRY", name: "Focus" });
+    expect(response.json()).toMatchObject({
+      error: "STAT_ROW_REFERENCED",
+      key: "craft",
+    });
+    expect(response.json().references).toContainEqual({
+      kind: "CATALOG_ENTRY",
+      name: "Focus",
+    });
   });
 
   it("scopes personal formula reference checks to the target character, not siblings", async () => {
     const current = layoutWith("craft");
-    await db.update(schema.characters).set({ statLayout: current }).where(eq(schema.characters.id, ids.character));
-    await db.update(schema.characters)
-      .set({ skills: [{ key: "lockpick", name: "Sibling lockpick", rank: 1, formula: "1d20 + craft" }] })
+    await db
+      .update(schema.characters)
+      .set({ statLayout: current })
+      .where(eq(schema.characters.id, ids.character));
+    await db
+      .update(schema.characters)
+      .set({
+        skills: [
+          {
+            key: "lockpick",
+            name: "Sibling lockpick",
+            rank: 1,
+            formula: "1d20 + craft",
+          },
+        ],
+      })
       .where(eq(schema.characters.id, ids.siblingCharacter));
-    const response = await patch(ids.character, secrets.owner, id(), 0, withoutKey(current, "craft"));
+    const response = await patch(
+      ids.character,
+      secrets.owner,
+      id(),
+      0,
+      withoutKey(current, "craft"),
+    );
     expect(response.statusCode).toBe(200);
-    const [stored] = await db.select().from(schema.characters).where(eq(schema.characters.id, ids.character));
+    const [stored] = await db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
     expect(stored).toBeDefined();
     expect(stored!.statLayout).not.toBeNull();
     expect(stored!.stats.craft).toBe(9);

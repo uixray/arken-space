@@ -4,15 +4,15 @@
 
 ## Exact candidate identity and immutable image artifacts
 
-| Item | Proven value / receipt |
-|---|---|
-| Candidate commit | `76fc9cccaafe5dd6795fb4f7c33344990d39eed0` |
-| Candidate tree | `9c3d53904ce32d90bb74615cc7d5218ce3dedf47` |
-| Web image | `arken-qa-web:76fc9cc`; image ID/digest `sha256:e6749f37484461a3f9960f825805f95d542e9eddcfdd0e3a2d8aac9adad4e9f1` |
-| Server image | `arken-qa-server:76fc9cc`; image ID/digest `sha256:f551e09e7ffaa31a7c5ecf05d45e2efdf166ff40d8e1ff9ea72c1796a57e9ec2` |
-| Web image archive | `.data/qa-prep/local-image-readiness-76fc9cc-20261009/images/web-76fc9cc.docker.tar`, 25,027,072 bytes, SHA-256 `6583b4b689acfb5398c95da053ebffaa9ee35d91bd037b1ce7601fd1590f1260` |
-| Server image archive | `.data/qa-prep/local-image-readiness-76fc9cc-20261009/images/server-76fc9cc.docker.tar`, 191,117,312 bytes, SHA-256 `d0a28f5351c0ae33a0d8aeb01e78596f266b3187ff11095c922604ee4efcb212` |
-| Image-save receipt | `.data/qa-prep/local-image-readiness-76fc9cc-20261009/images/docker-save-receipt.json` |
+| Item                  | Proven value / receipt                                                                                                                                                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Candidate commit      | `76fc9cccaafe5dd6795fb4f7c33344990d39eed0`                                                                                                                                                                                                  |
+| Candidate tree        | `9c3d53904ce32d90bb74615cc7d5218ce3dedf47`                                                                                                                                                                                                  |
+| Web image             | `arken-qa-web:76fc9cc`; image ID/digest `sha256:e6749f37484461a3f9960f825805f95d542e9eddcfdd0e3a2d8aac9adad4e9f1`                                                                                                                           |
+| Server image          | `arken-qa-server:76fc9cc`; image ID/digest `sha256:f551e09e7ffaa31a7c5ecf05d45e2efdf166ff40d8e1ff9ea72c1796a57e9ec2`                                                                                                                        |
+| Web image archive     | `.data/qa-prep/local-image-readiness-76fc9cc-20261009/images/web-76fc9cc.docker.tar`, 25,027,072 bytes, SHA-256 `6583b4b689acfb5398c95da053ebffaa9ee35d91bd037b1ce7601fd1590f1260`                                                          |
+| Server image archive  | `.data/qa-prep/local-image-readiness-76fc9cc-20261009/images/server-76fc9cc.docker.tar`, 191,117,312 bytes, SHA-256 `d0a28f5351c0ae33a0d8aeb01e78596f266b3187ff11095c922604ee4efcb212`                                                      |
+| Image-save receipt    | `.data/qa-prep/local-image-readiness-76fc9cc-20261009/images/docker-save-receipt.json`                                                                                                                                                      |
 | Frozen build contexts | Web: `d7051fa96d3d8b665d5ca94cefd3ae28f64e36a3e23083f9bae22b33f1ba9671`; server: `6047bcba2de7ee5cd52421a2aff76cb8bcb81e0b9a4e5ed28f0f6de0bd86bafa`; metadata: `.data/qa-prep/local-image-readiness-76fc9cc-20261009/context-metadata.json` |
 
 These IDs/tags were inspected in the local Docker daemon and match the IDs recorded in the image-save receipt. The archive hashes above identify the exact exported images; they do not prove an external copy was transferred or loaded. Candidate contexts came from the exact commit/tree and exclude `.env`, `.tmp`, `.data`, fixtures, tests and the concurrent UIX-264 work. **Do not rebuild these images from the current dirty checkout.**
@@ -245,4 +245,5 @@ rm -f /tmp/arken-public-api.json /tmp/arken-font-external.woff /tmp/arken-ws-ext
 - **Next:** by 13:55 MSK consolidate the local gate with the runtime-artifact owner. Then wait for explicit scope/GO for any remote phase and for an approved image-aware release path. Do not mark production ready or update the task as complete.
 
 ## Component candidate supersession — root acceptance
+
 The server76fc9cc archive above is retained for diagnosis, NOT the preferred update artifact after its shutdown failure. Use shutdown-fixed serveraca1436 only after target gates/authorization: image sha256:e91b854539a1dea8e929d66dcc9796e104aca0ccd4f2fc1a8b6a49333ef0f09a, saved archive .data/qa-prep/local-image-readiness-aca1436-20261009/images/server-aca1436.docker.tar (191119360B), SHA2561aa9641018759b1d26b38b132f76c58a3ccd263f5598bf38b4d8610aef4af897. Runtime health200/defaultstop0/0.56s passed. Root inspected server-shutdown-receipt.json. Web76fc9cc remains unchanged; this is an explicitly component-versioned pair, not one-SHA image set. UIX2640476865 is committed/tested but absent from web76fc9cc. External VM start failed429QuotaExceeded; no remote/deploy approval or target evidence exists. Update all revision-sensitive health checks to the selected component revision; never upload the entire QA directory or synthetic DB/env artifacts.

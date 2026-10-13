@@ -18,14 +18,15 @@ type Props = {
   isGm: boolean;
 };
 
-const schoolKey = (school: Pick<
-  AssignableSpellSchool,
-  "packId" | "packVersionId" | "schoolId"
->) => `${school.packId}:${school.packVersionId}:${school.schoolId}`;
+const schoolKey = (
+  school: Pick<AssignableSpellSchool, "packId" | "packVersionId" | "schoolId">,
+) => `${school.packId}:${school.packVersionId}:${school.schoolId}`;
 
 export function CharacterSpellBranches({ character, isGm }: Props) {
   const activeCharacterId = useRef(character.id);
-  useLayoutEffect(() => { activeCharacterId.current = character.id; }, [character.id]);
+  useLayoutEffect(() => {
+    activeCharacterId.current = character.id;
+  }, [character.id]);
   const [branches, setBranches] = useState<CharacterSpellBranch[]>([]);
   const [assignableSchools, setAssignableSchools] = useState<
     AssignableSpellSchool[]
@@ -54,11 +55,12 @@ export function CharacterSpellBranches({ character, isGm }: Props) {
       return true;
     } catch (reason) {
       if (activeCharacterId.current === requestedCharacterId)
-        setError(formatApiError(reason, "Не удалось загрузить доступные школы."));
+        setError(
+          formatApiError(reason, "Не удалось загрузить доступные школы."),
+        );
       return false;
     } finally {
-      if (activeCharacterId.current === requestedCharacterId)
-        setLoading(false);
+      if (activeCharacterId.current === requestedCharacterId) setLoading(false);
     }
   };
 
@@ -129,13 +131,16 @@ export function CharacterSpellBranches({ character, isGm }: Props) {
       const refreshed = await refreshBranches();
       if (activeCharacterId.current !== requestedCharacterId) return;
       if (refreshed) setNotice("Школа выдана персонажу.");
-      else setNotice("Выдача подтверждена, но список не обновлён. Повторите загрузку.");
+      else
+        setNotice(
+          "Выдача подтверждена, но список не обновлён. Повторите загрузку.",
+        );
     } catch (reason) {
       if (activeCharacterId.current !== requestedCharacterId) return;
       if (reason instanceof ApiError && reason.status === 409) {
         try {
           if (
-            await reconcileSchoolAssignment(requestedCharacterId, command) &&
+            (await reconcileSchoolAssignment(requestedCharacterId, command)) &&
             activeCharacterId.current === requestedCharacterId
           ) {
             setPending(null);
@@ -156,8 +161,7 @@ export function CharacterSpellBranches({ character, isGm }: Props) {
         ),
       );
     } finally {
-      if (activeCharacterId.current === requestedCharacterId)
-        setSaving(false);
+      if (activeCharacterId.current === requestedCharacterId) setSaving(false);
     }
   };
 
@@ -170,7 +174,10 @@ export function CharacterSpellBranches({ character, isGm }: Props) {
 
   if (character.lifecycle !== "ACTIVE")
     return (
-      <section className="character-spell-branches" aria-label="Ветки заклинаний">
+      <section
+        className="character-spell-branches"
+        aria-label="Ветки заклинаний"
+      >
         <h3>Доступные ветки заклинаний</h3>
         <p className="character-spell-branches__empty">
           Архивный лист не показывает доступные ветки.
@@ -191,7 +198,9 @@ export function CharacterSpellBranches({ character, isGm }: Props) {
         <p role="status">Загрузка веток…</p>
       ) : error ? (
         <div>
-          <p className="character-spell-branches__error" role="alert">{error}</p>
+          <p className="character-spell-branches__error" role="alert">
+            {error}
+          </p>
           <button type="button" onClick={() => void refreshBranches()}>
             Повторить загрузку веток
           </button>
@@ -228,7 +237,8 @@ export function CharacterSpellBranches({ character, isGm }: Props) {
               <option value="">Выберите школу</option>
               {assignableSchools.map((school) => (
                 <option key={schoolKey(school)} value={schoolKey(school)}>
-                  {school.schoolName} — {school.packTitle} · v{school.packVersion}
+                  {school.schoolName} — {school.packTitle} · v
+                  {school.packVersion}
                   {school.visibilityPolicy === "GM_ONLY"
                     ? " · только для мастера"
                     : ""}
@@ -238,7 +248,9 @@ export function CharacterSpellBranches({ character, isGm }: Props) {
           </label>
           <button
             type="button"
-            disabled={!selectedSchool || schoolLoading || saving || Boolean(pending)}
+            disabled={
+              !selectedSchool || schoolLoading || saving || Boolean(pending)
+            }
             onClick={assignSelected}
           >
             Выдать школу

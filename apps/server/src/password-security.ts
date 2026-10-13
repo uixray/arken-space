@@ -1,4 +1,8 @@
-import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import {
+  randomBytes,
+  scrypt as scryptCallback,
+  timingSafeEqual,
+} from "node:crypto";
 
 const SCRYPT_N = 131_072;
 const SCRYPT_R = 8;
@@ -7,7 +11,8 @@ const KEY_BYTES = 64;
 const SALT_BYTES = 16;
 const MAX_MEMORY_BYTES = 256 * 1024 * 1024;
 const HASH_PREFIX = "$scrypt$N=131072,r=8,p=1$";
-const HASH_PATTERN = /^\$scrypt\$N=131072,r=8,p=1\$([A-Za-z0-9_-]{22})\$([A-Za-z0-9_-]{86})$/;
+const HASH_PATTERN =
+  /^\$scrypt\$N=131072,r=8,p=1\$([A-Za-z0-9_-]{22})\$([A-Za-z0-9_-]{86})$/;
 const MAX_ACTIVE_DERIVATIONS = 1;
 const MAX_QUEUED_DERIVATIONS = 8;
 let activeDerivations = 0;
@@ -59,7 +64,9 @@ function acquireDerivation(): Promise<() => void> {
   }
   if (derivationQueue.length >= MAX_QUEUED_DERIVATIONS)
     return Promise.reject(new Error("PASSWORD_WORK_CAPACITY_EXCEEDED"));
-  return new Promise((resolve) => derivationQueue.push(() => resolve(releaseDerivation)));
+  return new Promise((resolve) =>
+    derivationQueue.push(() => resolve(releaseDerivation)),
+  );
 }
 
 function releaseDerivation(): void {

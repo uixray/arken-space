@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Route } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -71,6 +72,7 @@ for (const mode of ["close", "revoked"] as const) {
         '0{"sid":"operator-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
       );
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator(".app-shell")).toBeVisible();
     await openWorkspaceSection(page, "Обратная связь");

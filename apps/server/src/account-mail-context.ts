@@ -1,6 +1,10 @@
 import type { MailAdapter, MailKeyring } from "./account-mail.js";
 import { parseMailKeyringConfig } from "./account-mail.js";
-import { createAccountMailSmtpAdapter, parseAccountMailSmtpConfig, type AccountMailSmtpEnvironment } from "./account-mail-smtp.js";
+import {
+  createAccountMailSmtpAdapter,
+  parseAccountMailSmtpConfig,
+  type AccountMailSmtpEnvironment,
+} from "./account-mail-smtp.js";
 
 export type AccountMailContext = Readonly<{
   runtimeEnabled: boolean;
@@ -15,12 +19,22 @@ export type AccountMailContextEnvironment = AccountMailSmtpEnvironment & {
 };
 
 /** Construct one immutable adapter/keyring/readiness context for routes and scheduler. */
-export function createAccountMailContext(source: AccountMailContextEnvironment, options: { tlsCa?: string } = {}): AccountMailContext {
+export function createAccountMailContext(
+  source: AccountMailContextEnvironment,
+  options: { tlsCa?: string } = {},
+): AccountMailContext {
   const smtpConfig = parseAccountMailSmtpConfig(source);
-  const keyring = parseMailKeyringConfig(source.ACCOUNT_MAIL_ACTIVE_KEY_ID, source.ACCOUNT_MAIL_KEYRING);
+  const keyring = parseMailKeyringConfig(
+    source.ACCOUNT_MAIL_ACTIVE_KEY_ID,
+    source.ACCOUNT_MAIL_KEYRING,
+  );
   return Object.freeze({
     runtimeEnabled: source.ACCOUNT_MAIL_RUNTIME_ENABLED,
-    adapter: createAccountMailSmtpAdapter(smtpConfig && options.tlsCa ? { ...smtpConfig, tlsCa: options.tlsCa } : smtpConfig),
+    adapter: createAccountMailSmtpAdapter(
+      smtpConfig && options.tlsCa
+        ? { ...smtpConfig, tlsCa: options.tlsCa }
+        : smtpConfig,
+    ),
     keyring,
   });
 }

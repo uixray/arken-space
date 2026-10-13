@@ -418,7 +418,9 @@ describe("UIX-580 spell-pack GM API", () => {
       visibilityPolicy: "PUBLIC",
     });
     expect(discovered).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ packVersionId: draftVersionId })]),
+      expect.arrayContaining([
+        expect.objectContaining({ packVersionId: draftVersionId }),
+      ]),
     );
     expect(JSON.stringify(discovered)).not.toContain("rawSourceText");
 

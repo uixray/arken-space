@@ -19,7 +19,10 @@ for (const role of ["GM", "PLAYER"] as const) {
     await page.setViewportSize({ width: 1280, height: 850 });
     await page.goto(`/gm/${gmToken}`);
     await page
-      .getByRole("button", { name: "Войти в игру", exact: true })
+      .getByRole("button", {
+        name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+        exact: true,
+      })
       .click();
     await expect(page.locator(".app-shell")).toBeVisible();
     const snapshot = async (client: Page): Promise<GameSnapshot> => {
@@ -49,9 +52,12 @@ for (const role of ["GM", "PLAYER"] as const) {
         client.on("pageerror", (error) => errors.push(error.message));
       }
       await player.goto(new URL((await invite.json()).url).pathname);
-      await player.getByLabel("Имя", { exact: true }).fill("Игрок клавиатуры");
+      await player.getByLabel(/^Имя(?: в кампании)?$/).fill("Игрок клавиатуры");
       await player
-        .getByRole("button", { name: "Войти в игру", exact: true })
+        .getByRole("button", {
+          name: /^(Войти(?: в игру)?|Продолжить в игру)$/,
+          exact: true,
+        })
         .click();
       await expect(player.locator(".app-shell")).toBeVisible();
       const membership = (await snapshot(player)).me;

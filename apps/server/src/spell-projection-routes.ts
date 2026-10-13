@@ -277,7 +277,10 @@ export function registerSpellProjectionRoutes(
         const school = loaded.graph.schools.find(
           (candidate) => candidate.id === snapshot.schoolId,
         );
-        if (!school || (auth.role === "PLAYER" && school.visibilityPolicy === "GM_ONLY"))
+        if (
+          !school ||
+          (auth.role === "PLAYER" && school.visibilityPolicy === "GM_ONLY")
+        )
           continue;
         branches.push({
           packId: row.packId,
@@ -290,7 +293,7 @@ export function registerSpellProjectionRoutes(
       const hasMore = rows.length > 50;
       return reply.send({
         branches,
-        nextCursor: hasMore ? page.at(-1)?.assignmentId ?? null : null,
+        nextCursor: hasMore ? (page.at(-1)?.assignmentId ?? null) : null,
       });
     },
   );

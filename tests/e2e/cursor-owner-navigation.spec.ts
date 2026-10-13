@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 
@@ -55,6 +56,7 @@ for (const width of [360, 640]) {
         '0{"sid":"cursor-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
       );
     });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const trigger = page.getByRole("button", {
       name: "Настроить видимость курсоров",

@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Locator, type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
@@ -194,6 +195,7 @@ test("UIX-243: GM creates, completes and publishes a world map", async ({
 }) => {
   const state = snapshotFor("GM");
   await mockWorldMapApi(page, state);
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   const workspace = await openWorldMaps(page);
   await expect(page.locator(".map-shell")).toHaveAttribute(
@@ -285,6 +287,7 @@ test("UIX-243: PLAYER cannot enter the GM-only world-map workspace from navigati
   };
   await mockWorldMapApi(page, state);
   await page.setViewportSize({ width: 390, height: 844 });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
   await expect(
@@ -329,6 +332,7 @@ for (const width of [1280, 360]) {
     );
     await mockWorldMapApi(page, state);
     await page.setViewportSize({ width, height: 800 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     const workspace = await openWorldMaps(page);
     const receipts: { label: string; value: string }[] = [];
@@ -509,6 +513,7 @@ for (const width of [1280, 360]) {
         }),
       );
       await page.setViewportSize({ width, height: 850 });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       const workspace = await openWorldMaps(page);
       const marker = workspace.getByRole("button", {
@@ -650,6 +655,7 @@ for (const width of [1280, 360]) {
         }),
       );
       await page.setViewportSize({ width, height: 850 });
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       const workspace = await openWorldMaps(page);
       const marker = workspace.getByRole("button", {

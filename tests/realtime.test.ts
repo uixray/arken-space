@@ -2122,11 +2122,16 @@ describe("UIX-682 C20 delayed ruler ghost", () => {
     otherClient.on("ruler:updated", onPeerUpdate);
     otherClient.on("ruler:cleared", onPeerClear);
     try {
-      const cleared = new Promise<void>((resolve) => otherClient.once("ruler:cleared", () => resolve()));
+      const cleared = new Promise<void>((resolve) =>
+        otherClient.once("ruler:cleared", () => resolve()),
+      );
       for (let index = 0; index < 40; index += 1) {
         client.emit("ruler:update", {
           sceneId: ids.scene,
-          points: [{ x: 0, y: 0 }, { x: index + 1, y: 10 }],
+          points: [
+            { x: 0, y: 0 },
+            { x: index + 1, y: 10 },
+          ],
         });
       }
       client.emit("ruler:clear", { sceneId: ids.scene });

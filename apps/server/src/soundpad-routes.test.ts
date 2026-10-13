@@ -34,7 +34,12 @@ beforeEach(async () => {
   imageId = crypto.randomUUID();
   foreignAudioId = crypto.randomUUID();
   gm = { campaignId, membershipId: gmId, role: "GM", displayName: "GM" };
-  player = { campaignId, membershipId: playerId, role: "PLAYER", displayName: "Player" };
+  player = {
+    campaignId,
+    membershipId: playerId,
+    role: "PLAYER",
+    displayName: "Player",
+  };
   identity = null;
   database = await createMigratedPglite();
   db = drizzle(database, { schema });
@@ -45,16 +50,64 @@ beforeEach(async () => {
   await db.insert(schema.memberships).values([
     { id: gmId, campaignId, role: "GM", displayName: "GM" },
     { id: playerId, campaignId, role: "PLAYER", displayName: "Player" },
-    { id: foreignMembershipId, campaignId: foreignCampaignId, role: "GM", displayName: "Other GM" },
+    {
+      id: foreignMembershipId,
+      campaignId: foreignCampaignId,
+      role: "GM",
+      displayName: "Other GM",
+    },
   ]);
   await db.insert(schema.assets).values([
-    { id: audioId, campaignId, uploadedByMembershipId: gmId, kind: "AUDIO", audioPurpose: "SOUND_EFFECT", name: "clip.ogg", storageKey: "soundpad/audio.ogg", mimeType: "audio/ogg", sizeBytes: 12, durationSeconds: 2 },
-    { id: musicAudioId, campaignId, uploadedByMembershipId: gmId, kind: "AUDIO", audioPurpose: "MUSIC", name: "music.ogg", storageKey: "soundpad/music.ogg", mimeType: "audio/ogg", sizeBytes: 12, durationSeconds: 80 },
-    { id: imageId, campaignId, uploadedByMembershipId: gmId, kind: "IMAGE", name: "image.png", storageKey: "soundpad/image.png", mimeType: "image/png", sizeBytes: 12 },
-    { id: foreignAudioId, campaignId: foreignCampaignId, uploadedByMembershipId: foreignMembershipId, kind: "AUDIO", audioPurpose: "SOUND_EFFECT", name: "foreign.ogg", storageKey: "soundpad/foreign.ogg", mimeType: "audio/ogg", sizeBytes: 12, durationSeconds: 2 },
+    {
+      id: audioId,
+      campaignId,
+      uploadedByMembershipId: gmId,
+      kind: "AUDIO",
+      audioPurpose: "SOUND_EFFECT",
+      name: "clip.ogg",
+      storageKey: "soundpad/audio.ogg",
+      mimeType: "audio/ogg",
+      sizeBytes: 12,
+      durationSeconds: 2,
+    },
+    {
+      id: musicAudioId,
+      campaignId,
+      uploadedByMembershipId: gmId,
+      kind: "AUDIO",
+      audioPurpose: "MUSIC",
+      name: "music.ogg",
+      storageKey: "soundpad/music.ogg",
+      mimeType: "audio/ogg",
+      sizeBytes: 12,
+      durationSeconds: 80,
+    },
+    {
+      id: imageId,
+      campaignId,
+      uploadedByMembershipId: gmId,
+      kind: "IMAGE",
+      name: "image.png",
+      storageKey: "soundpad/image.png",
+      mimeType: "image/png",
+      sizeBytes: 12,
+    },
+    {
+      id: foreignAudioId,
+      campaignId: foreignCampaignId,
+      uploadedByMembershipId: foreignMembershipId,
+      kind: "AUDIO",
+      audioPurpose: "SOUND_EFFECT",
+      name: "foreign.ogg",
+      storageKey: "soundpad/foreign.ogg",
+      mimeType: "audio/ogg",
+      sizeBytes: 12,
+      durationSeconds: 2,
+    },
   ]);
   app = Fastify();
-  const getSession = async () => identity === "gm" ? gm : identity === "player" ? player : null;
+  const getSession = async () =>
+    identity === "gm" ? gm : identity === "player" ? player : null;
   emit = vi.fn();
   const io = { to: () => ({ emit }) } as never;
   registerSoundpadRoutes(app, db as never, io, getSession as never);
@@ -68,73 +121,229 @@ afterEach(async () => {
 describe("Soundpad routes", () => {
   it("rejects every foreign pack/sound mutation and preserves foreign rows", async () => {
     identity = "gm";
-    const foreignAsset = (await db.select().from(schema.assets)).find((asset) => asset.id === foreignAudioId)!;
-    const [foreignPack] = await db.insert(schema.campaignSoundPacks).values({ campaignId: foreignAsset.campaignId, name: "Foreign pack" }).returning();
-    const [foreignSound] = await db.insert(schema.campaignSounds).values({ campaignId: foreignAsset.campaignId,
-      packId: foreignPack!.id, assetId: foreignAudioId, label: "Foreign sound" }).returning();
+    const foreignAsset = (await db.select().from(schema.assets)).find(
+      (asset) => asset.id === foreignAudioId,
+    )!;
+    const [foreignPack] = await db
+      .insert(schema.campaignSoundPacks)
+      .values({ campaignId: foreignAsset.campaignId, name: "Foreign pack" })
+      .returning();
+    const [foreignSound] = await db
+      .insert(schema.campaignSounds)
+      .values({
+        campaignId: foreignAsset.campaignId,
+        packId: foreignPack!.id,
+        assetId: foreignAudioId,
+        label: "Foreign sound",
+      })
+      .returning();
     for (const request of [
-      { method: "PATCH" as const, url: `/api/soundpad/packs/${foreignPack!.id}`, payload: { published: true }, error: "PACK_NOT_FOUND" },
-      { method: "DELETE" as const, url: `/api/soundpad/packs/${foreignPack!.id}`, error: "PACK_NOT_FOUND" },
-      { method: "POST" as const, url: `/api/soundpad/packs/${foreignPack!.id}/sounds`, payload: { assetId: audioId, label: "Hijack" }, error: "PACK_NOT_FOUND" },
-      { method: "PATCH" as const, url: `/api/soundpad/sounds/${foreignSound!.id}`, payload: { label: "Hijack" }, error: "SOUND_NOT_FOUND" },
-      { method: "DELETE" as const, url: `/api/soundpad/sounds/${foreignSound!.id}`, error: "SOUND_NOT_FOUND" },
+      {
+        method: "PATCH" as const,
+        url: `/api/soundpad/packs/${foreignPack!.id}`,
+        payload: { published: true },
+        error: "PACK_NOT_FOUND",
+      },
+      {
+        method: "DELETE" as const,
+        url: `/api/soundpad/packs/${foreignPack!.id}`,
+        error: "PACK_NOT_FOUND",
+      },
+      {
+        method: "POST" as const,
+        url: `/api/soundpad/packs/${foreignPack!.id}/sounds`,
+        payload: { assetId: audioId, label: "Hijack" },
+        error: "PACK_NOT_FOUND",
+      },
+      {
+        method: "PATCH" as const,
+        url: `/api/soundpad/sounds/${foreignSound!.id}`,
+        payload: { label: "Hijack" },
+        error: "SOUND_NOT_FOUND",
+      },
+      {
+        method: "DELETE" as const,
+        url: `/api/soundpad/sounds/${foreignSound!.id}`,
+        error: "SOUND_NOT_FOUND",
+      },
     ]) {
       const response = await app.inject(request);
       expect(response.statusCode, request.url).toBe(404);
       expect(response.json()).toEqual({ error: request.error });
     }
-    expect(await db.select().from(schema.campaignSoundPacks)).toEqual([foreignPack]);
-    expect(await db.select().from(schema.campaignSounds)).toEqual([foreignSound]);
-    const createdPack = await app.inject({ method: "POST", url: "/api/soundpad/packs", payload: { name: "Own control" } });
+    expect(await db.select().from(schema.campaignSoundPacks)).toEqual([
+      foreignPack,
+    ]);
+    expect(await db.select().from(schema.campaignSounds)).toEqual([
+      foreignSound,
+    ]);
+    const createdPack = await app.inject({
+      method: "POST",
+      url: "/api/soundpad/packs",
+      payload: { name: "Own control" },
+    });
     const ownPackId = createdPack.json().packId;
-    expect((await app.inject({ method: "PATCH", url: `/api/soundpad/packs/${ownPackId}`, payload: { published: true } })).statusCode).toBe(200);
-    const createdSound = await app.inject({ method: "POST", url: `/api/soundpad/packs/${ownPackId}/sounds`, payload: { assetId: audioId, label: "Own control" } });
+    expect(
+      (
+        await app.inject({
+          method: "PATCH",
+          url: `/api/soundpad/packs/${ownPackId}`,
+          payload: { published: true },
+        })
+      ).statusCode,
+    ).toBe(200);
+    const createdSound = await app.inject({
+      method: "POST",
+      url: `/api/soundpad/packs/${ownPackId}/sounds`,
+      payload: { assetId: audioId, label: "Own control" },
+    });
     expect(createdSound.statusCode).toBe(201);
     const ownSoundId = createdSound.json().soundId;
-    expect((await app.inject({ method: "PATCH", url: `/api/soundpad/sounds/${ownSoundId}`, payload: { label: "Updated" } })).statusCode).toBe(200);
-    expect((await app.inject({ method: "DELETE", url: `/api/soundpad/sounds/${ownSoundId}` })).statusCode).toBe(200);
-    expect((await app.inject({ method: "DELETE", url: `/api/soundpad/packs/${ownPackId}` })).statusCode).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: "PATCH",
+          url: `/api/soundpad/sounds/${ownSoundId}`,
+          payload: { label: "Updated" },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/soundpad/sounds/${ownSoundId}`,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/soundpad/packs/${ownPackId}`,
+        })
+      ).statusCode,
+    ).toBe(200);
   });
 
   it("requires authentication and enforces GM, campaign, media type, and duration boundaries", async () => {
-    const unauthenticated = await app.inject({ method: "POST", url: "/api/soundpad/packs", payload: { name: "Pack" } });
+    const unauthenticated = await app.inject({
+      method: "POST",
+      url: "/api/soundpad/packs",
+      payload: { name: "Pack" },
+    });
     expect(unauthenticated.statusCode).toBe(401);
     identity = "player";
-    const playerMutation = await app.inject({ method: "POST", url: "/api/soundpad/packs", payload: { name: "Pack" } });
+    const playerMutation = await app.inject({
+      method: "POST",
+      url: "/api/soundpad/packs",
+      payload: { name: "Pack" },
+    });
     expect(playerMutation.statusCode).toBe(403);
     identity = "gm";
-    const pack = await app.inject({ method: "POST", url: "/api/soundpad/packs", payload: { name: "Pack" } });
+    const pack = await app.inject({
+      method: "POST",
+      url: "/api/soundpad/packs",
+      payload: { name: "Pack" },
+    });
     expect(pack.statusCode).toBe(201);
     expect(emit).toHaveBeenCalledWith("soundpad:catalog:changed");
     const packId = pack.json().packId as string;
     const body = { assetId: audioId, label: "Laugh" };
-    const sound = await app.inject({ method: "POST", url: `/api/soundpad/packs/${packId}/sounds`, payload: body });
+    const sound = await app.inject({
+      method: "POST",
+      url: `/api/soundpad/packs/${packId}/sounds`,
+      payload: body,
+    });
     expect(sound.statusCode).toBe(201);
-    const wrongPurpose = await app.inject({ method: "POST", url: `/api/soundpad/packs/${packId}/sounds`, payload: { ...body, assetId: musicAudioId } });
+    const wrongPurpose = await app.inject({
+      method: "POST",
+      url: `/api/soundpad/packs/${packId}/sounds`,
+      payload: { ...body, assetId: musicAudioId },
+    });
     expect(wrongPurpose.statusCode).toBe(400);
-    expect(wrongPurpose.json()).toEqual({ error: "SOUND_EFFECT_PURPOSE_REQUIRED" });
-    expect((await app.inject({ method: "POST", url: `/api/soundpad/packs/${packId}/sounds`, payload: { ...body, assetId: imageId } })).statusCode).toBe(400);
-    expect((await app.inject({ method: "POST", url: `/api/soundpad/packs/${packId}/sounds`, payload: { ...body, assetId: foreignAudioId } })).statusCode).toBe(400);
-    const [longAudio] = await db.insert(schema.assets).values({ campaignId, uploadedByMembershipId: gmId, kind: "AUDIO", audioPurpose: "SOUND_EFFECT", name: "long.ogg", storageKey: "soundpad/long.ogg", mimeType: "audio/ogg", sizeBytes: 12, durationSeconds: 10.1 }).returning();
+    expect(wrongPurpose.json()).toEqual({
+      error: "SOUND_EFFECT_PURPOSE_REQUIRED",
+    });
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/soundpad/packs/${packId}/sounds`,
+          payload: { ...body, assetId: imageId },
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/soundpad/packs/${packId}/sounds`,
+          payload: { ...body, assetId: foreignAudioId },
+        })
+      ).statusCode,
+    ).toBe(400);
+    const [longAudio] = await db
+      .insert(schema.assets)
+      .values({
+        campaignId,
+        uploadedByMembershipId: gmId,
+        kind: "AUDIO",
+        audioPurpose: "SOUND_EFFECT",
+        name: "long.ogg",
+        storageKey: "soundpad/long.ogg",
+        mimeType: "audio/ogg",
+        sizeBytes: 12,
+        durationSeconds: 10.1,
+      })
+      .returning();
     if (!longAudio) throw new Error("fixture asset insert failed");
-    expect((await app.inject({ method: "POST", url: `/api/soundpad/packs/${packId}/sounds`, payload: { ...body, assetId: longAudio.id } })).statusCode).toBe(400);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/soundpad/packs/${packId}/sounds`,
+          payload: { ...body, assetId: longAudio.id },
+        })
+      ).statusCode,
+    ).toBe(400);
   });
 
   it("filters unpublished and GM-only content for players and reports authorized audio detachment", async () => {
     identity = "gm";
-    const response = await app.inject({ method: "POST", url: "/api/soundpad/packs", payload: { name: "Private sounds" } });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/soundpad/packs",
+      payload: { name: "Private sounds" },
+    });
     const packId = response.json().packId as string;
-    await app.inject({ method: "POST", url: `/api/soundpad/packs/${packId}/sounds`, payload: { assetId: audioId, label: "GM laugh", audience: "GM_ONLY" } });
+    await app.inject({
+      method: "POST",
+      url: `/api/soundpad/packs/${packId}/sounds`,
+      payload: { assetId: audioId, label: "GM laugh", audience: "GM_ONLY" },
+    });
     identity = "player";
     const hidden = await app.inject({ method: "GET", url: "/api/soundpad" });
     expect(hidden.json().packs).toHaveLength(0);
     identity = "gm";
-    await app.inject({ method: "PATCH", url: `/api/soundpad/packs/${packId}`, payload: { published: true } });
+    await app.inject({
+      method: "PATCH",
+      url: `/api/soundpad/packs/${packId}`,
+      payload: { published: true },
+    });
     identity = "player";
-    const visiblePack = await app.inject({ method: "GET", url: "/api/soundpad" });
+    const visiblePack = await app.inject({
+      method: "GET",
+      url: "/api/soundpad",
+    });
     expect(visiblePack.json().packs).toHaveLength(1);
     expect(visiblePack.json().packs[0].sounds).toHaveLength(0);
     const usages = await resolveAssetUsages(db as never, campaignId, audioId);
-    expect(usages).toEqual([expect.objectContaining({ kind: "CAMPAIGN_SOUND", deletionPolicy: "DETACH" })]);
+    expect(usages).toEqual([
+      expect.objectContaining({
+        kind: "CAMPAIGN_SOUND",
+        deletionPolicy: "DETACH",
+      }),
+    ]);
   });
 });

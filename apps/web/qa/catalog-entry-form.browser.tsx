@@ -10,8 +10,11 @@ import "../src/mobile-foundation.css";
 import { CatalogEntryForm } from "../src/CatalogEntryForm";
 
 function CatalogEntryFormBrowserHarness() {
-  const attempts = useRef(0); const [attemptCount, setAttemptCount] = useState(0);
-  const [status, setStatus] = useState("READY — isolated component; no API calls");
+  const attempts = useRef(0);
+  const [attemptCount, setAttemptCount] = useState(0);
+  const [status, setStatus] = useState(
+    "READY — isolated component; no API calls",
+  );
   const [payload, setPayload] = useState("none");
   const [legacyPayload, setLegacyPayload] = useState("none");
   const legacyActivation = {
@@ -53,21 +56,31 @@ function CatalogEntryFormBrowserHarness() {
       </header>
       <section className="panel-section arken-dialog" style={{ padding: 16 }}>
         <CatalogEntryForm
-          statLabels={{ might: "Сила", reaction: "Реакция", awareness: "Внимательность" }}
+          statLabels={{
+            might: "Сила",
+            reaction: "Реакция",
+            awareness: "Внимательность",
+          }}
           resourceLabels={{ physical: "Сила тела", magic: "Сила магии" }}
           onCancel={() => setStatus("CANCEL_CALLBACK — synthetic only")}
           onSubmit={async (input) => {
-            attempts.current += 1; setAttemptCount(attempts.current);
+            attempts.current += 1;
+            setAttemptCount(attempts.current);
             setPayload(JSON.stringify(input));
             if (attempts.current === 1) {
               setStatus("SYNTHETIC_REJECTION — intentionally no API request");
               throw new Error("QA synthetic callback rejection");
             }
-            setStatus("SYNTHETIC_SUCCESS — payload captured locally; no API request");
+            setStatus(
+              "SYNTHETIC_SUCCESS — payload captured locally; no API request",
+            );
           }}
         />
       </section>
-      <section className="panel-section arken-dialog" style={{ padding: 16, marginTop: 16 }}>
+      <section
+        className="panel-section arken-dialog"
+        style={{ padding: 16, marginTop: 16 }}
+      >
         <h2>Legacy mixed-entry rename-only preservation</h2>
         <CatalogEntryForm
           existing={existingMixedEntry}
@@ -80,9 +93,16 @@ function CatalogEntryFormBrowserHarness() {
       </section>
       <aside
         aria-label="Synthetic callback results"
-        style={{ marginTop: 16, padding: 12, background: "var(--surface-2)", overflowWrap: "anywhere" }}
+        style={{
+          marginTop: 16,
+          padding: 12,
+          background: "var(--surface-2)",
+          overflowWrap: "anywhere",
+        }}
       >
-        <p data-testid="callback-status" style={{ margin: "0 0 8px" }}>{status}</p>
+        <p data-testid="callback-status" style={{ margin: "0 0 8px" }}>
+          {status}
+        </p>
         <output data-testid="callback-payload">{payload}</output>
         <output data-testid="callback-attempts">{attemptCount}</output>
       </aside>
@@ -90,4 +110,6 @@ function CatalogEntryFormBrowserHarness() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<CatalogEntryFormBrowserHarness />);
+createRoot(document.getElementById("root")!).render(
+  <CatalogEntryFormBrowserHarness />,
+);

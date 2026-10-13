@@ -26,7 +26,9 @@ import { selectViewedScene } from "./workspace-nav-helper";
  */
 async function signInAsGm(page: Page, token: string) {
   await page.goto(`/gm/${token}`);
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page
+    .getByRole("button", { name: /^(Войти(?: в игру)?|Продолжить в игру)$/ })
+    .click();
   await expect(page).toHaveURL("/");
 }
 
@@ -59,7 +61,9 @@ async function signInAsPlayer(page: Page, gmToken: string) {
   await expect(logoutResponse).toBeOK();
   await page.goto(new URL(invitation.url).pathname);
   await page.getByLabel("Имя").fill("Игрок UIX-503");
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page
+    .getByRole("button", { name: /^(Войти(?: в игру)?|Продолжить в игру)$/ })
+    .click();
   await expect(page).toHaveURL("/");
 
   const playerBootstrap = await page.request.get("/api/bootstrap");

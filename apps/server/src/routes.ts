@@ -124,7 +124,10 @@ import {
 import { createStarterCharacter, RESOURCE_REGEN_STAT } from "@arken/system";
 import { createSession, requireAuth } from "./auth.js";
 import { registerAccountAuthRoutes } from "./account-auth-routes.js";
-import { createAccountMailContext, type AccountMailContext } from "./account-mail-context.js";
+import {
+  createAccountMailContext,
+  type AccountMailContext,
+} from "./account-mail-context.js";
 import { DiceFormulaError, rollFormulaWithMode } from "./dice.js";
 import { env } from "./env.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
@@ -164,8 +167,17 @@ import { registerGlobalStickerRoutes } from "./global-sticker-catalog.js";
 import { registerAssetLifecycleRoutes } from "./asset-usage.js";
 import { registerSoundpadRoutes } from "./soundpad-routes.js";
 import { registerAudioClipRoutes } from "./audio-clip-routes.js";
-import { lockCampaignMediaQuota, releaseCampaignMediaBytes, reserveCampaignMediaBytes, requireLiveCampaignMediaReservation } from "./media-quota-reservations.js";
-import { assetContentVersion, assetDto, assetUploadActionMatches } from "./asset-lifecycle.js";
+import {
+  lockCampaignMediaQuota,
+  releaseCampaignMediaBytes,
+  reserveCampaignMediaBytes,
+  requireLiveCampaignMediaReservation,
+} from "./media-quota-reservations.js";
+import {
+  assetContentVersion,
+  assetDto,
+  assetUploadActionMatches,
+} from "./asset-lifecycle.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
 import { registerPlayerRequestRoutes } from "./player-requests.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
@@ -266,11 +278,22 @@ function historyContainsStamp(command: typeof actionJournal.$inferSelect) {
     );
   if (command.targetType !== "CANVAS_BULK") return false;
   return snapshots.some((snapshot) => {
-    if (typeof snapshot !== "object" || snapshot === null || !("drawings" in snapshot))
+    if (
+      typeof snapshot !== "object" ||
+      snapshot === null ||
+      !("drawings" in snapshot)
+    )
       return false;
     const rows = snapshot.drawings;
-    return Array.isArray(rows) && rows.some(
-      (row) => typeof row === "object" && row !== null && "kind" in row && row.kind === "STAMP",
+    return (
+      Array.isArray(rows) &&
+      rows.some(
+        (row) =>
+          typeof row === "object" &&
+          row !== null &&
+          "kind" in row &&
+          row.kind === "STAMP",
+      )
     );
   });
 }
@@ -777,7 +800,10 @@ async function collectCharacterStatReferenceSources(
         name: character.name,
         skills: character.skills,
         spells: character.spells,
-        entries: entryRows.map((entry) => ({ name: entry.name, data: entry.data })),
+        entries: entryRows.map((entry) => ({
+          name: entry.name,
+          data: entry.data,
+        })),
       },
     ],
     catalogEntries: catalogRows.map((entry) => ({
@@ -836,20 +862,30 @@ export async function claimInviteOwnership(
   displayName: string,
 ) {
   return db.transaction(async (tx) => {
-    const [lockedInvite] = await tx.select({ id: invites.id }).from(invites)
-      .where(and(eq(invites.id, invite.id), eq(invites.campaignId, invite.campaignId)))
-      .for("update").limit(1);
+    const [lockedInvite] = await tx
+      .select({ id: invites.id })
+      .from(invites)
+      .where(
+        and(
+          eq(invites.id, invite.id),
+          eq(invites.campaignId, invite.campaignId),
+        ),
+      )
+      .for("update")
+      .limit(1);
     if (!lockedInvite) throw new Error("INVITE_UNAVAILABLE");
     const [claimed] = await tx
       .update(invites)
       .set({ claimedAt: new Date() })
-      .where(and(
-        eq(invites.id, invite.id),
-        eq(invites.campaignId, invite.campaignId),
-        isNull(invites.claimedAt),
-        isNull(invites.revokedAt),
-        sql`${invites.expiresAt} > clock_timestamp()`,
-      ))
+      .where(
+        and(
+          eq(invites.id, invite.id),
+          eq(invites.campaignId, invite.campaignId),
+          isNull(invites.claimedAt),
+          isNull(invites.revokedAt),
+          sql`${invites.expiresAt} > clock_timestamp()`,
+        ),
+      )
       .returning({ id: invites.id });
     if (!claimed) throw new Error("INVITE_UNAVAILABLE");
     const membershipId = randomUUID();
@@ -882,7 +918,8 @@ export async function claimInviteOwnership(
       where d.character_id = ${invite.characterId} and d.campaign_id = ${invite.campaignId}
       and not exists (select 1 from token_controllers c where c.token_definition_id = d.id)
       on conflict do nothing`);
-    await tx.update(invites)
+    await tx
+      .update(invites)
       .set({ claimedByMembershipId: member.id })
       .where(eq(invites.id, invite.id));
     return member;
@@ -1090,7 +1127,8 @@ export function registerRoutes(
   registerAccountAuthRoutes(app, db, io, {
     enabled: env.ACCOUNT_AUTH_ENABLED,
     registrationEnabled: env.ACCOUNT_REGISTRATION_ENABLED,
-    legacyDevEnabled: env.NODE_ENV === "development" && env.LEGACY_DEV_AUTH_ENABLED,
+    legacyDevEnabled:
+      env.NODE_ENV === "development" && env.LEGACY_DEV_AUTH_ENABLED,
     campaignLinkAccessEnabled: env.CAMPAIGN_LINK_ACCESS_ENABLED,
     campaignCreationEnabled: env.ACCOUNT_CAMPAIGN_CREATION_ENABLED,
     sessionTtlDays: env.SESSION_TTL_DAYS,
@@ -1115,7 +1153,10 @@ export function registerRoutes(
     csrfCookieName: env.ACCOUNT_CSRF_COOKIE_NAME,
     webOrigin: env.WEB_ORIGIN,
   });
-  const requireCampaignLinkOrigin = async (request: FastifyRequest, reply: FastifyReply) => {
+  const requireCampaignLinkOrigin = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) => {
     if (!env.CAMPAIGN_LINK_ACCESS_ENABLED) {
       await reply.code(410).send({ error: "CAMPAIGN_LINK_ACCESS_DISABLED" });
       return false;
@@ -1129,10 +1170,16 @@ export function registerRoutes(
   const rotateCurrentGameCookieSession = async (request: FastifyRequest) => {
     const token = request.cookies[env.SESSION_COOKIE_NAME];
     if (!token) return;
-    const [old] = await db.select({ id: sessions.id }).from(sessions)
-      .where(eq(sessions.tokenHash, hashToken(token))).limit(1);
+    const [old] = await db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.tokenHash, hashToken(token)))
+      .limit(1);
     if (!old) return;
-    await db.update(sessions).set({ expiresAt: new Date(0) }).where(eq(sessions.id, old.id));
+    await db
+      .update(sessions)
+      .set({ expiresAt: new Date(0) })
+      .where(eq(sessions.id, old.id));
     io.in(sessionRoom(old.id)).disconnectSockets(true);
   };
   registerPublicRoadmapVoteRoutes(app, db);
@@ -1221,7 +1268,11 @@ export function registerRoutes(
     );
     if (!gm) return reply.code(403).send({ error: "INVALID_MASTER_TOKEN" });
     await rotateCurrentGameCookieSession(request);
-    await createSession(db, reply, gm.membershipId, { source: "GM_LINK", campaignId: gm.campaignId, credentialRevision: gm.credentialRevision });
+    await createSession(db, reply, gm.membershipId, {
+      source: "GM_LINK",
+      campaignId: gm.campaignId,
+      credentialRevision: gm.credentialRevision,
+    });
     return { ok: true };
   });
 
@@ -1230,7 +1281,12 @@ export function registerRoutes(
     const body = inviteClaimSchema.parse(request.body);
     const tokenHash = hashToken(body.token);
     const [grant] = await db
-      .select({ membershipId: playerAccessGrants.membershipId, id: playerAccessGrants.id, campaignId: playerAccessGrants.campaignId, revision: playerAccessGrants.revision })
+      .select({
+        membershipId: playerAccessGrants.membershipId,
+        id: playerAccessGrants.id,
+        campaignId: playerAccessGrants.campaignId,
+        revision: playerAccessGrants.revision,
+      })
       .from(playerAccessGrants)
       .innerJoin(
         memberships,
@@ -1250,7 +1306,11 @@ export function registerRoutes(
           .set({ displayName: body.displayName })
           .where(eq(memberships.id, grant.membershipId));
       await rotateCurrentGameCookieSession(request);
-      await createSession(db, reply, grant.membershipId, { source: "PLAYER_GRANT", grantId: grant.id, grantRevision: grant.revision });
+      await createSession(db, reply, grant.membershipId, {
+        source: "PLAYER_GRANT",
+        grantId: grant.id,
+        grantRevision: grant.revision,
+      });
       return { ok: true };
     }
 
@@ -1270,14 +1330,21 @@ export function registerRoutes(
 
     let result: Awaited<ReturnType<typeof claimInviteOwnership>>;
     try {
-      result = await claimInviteOwnership(db, invite, body.displayName ?? invite.label);
+      result = await claimInviteOwnership(
+        db,
+        invite,
+        body.displayName ?? invite.label,
+      );
     } catch (error) {
       if (errorMessage(error).includes("INVITE_UNAVAILABLE"))
         return reply.code(410).send({ error: "INVITE_EXPIRED" });
       throw error;
     }
     await rotateCurrentGameCookieSession(request);
-    await createSession(db, reply, result.id, { source: "LEGACY_INVITE", inviteId: invite.id });
+    await createSession(db, reply, result.id, {
+      source: "LEGACY_INVITE",
+      inviteId: invite.id,
+    });
     return { ok: true };
   });
 
@@ -2084,9 +2151,6 @@ export function registerRoutes(
     const characterId = z
       .object({ id: z.string().uuid() })
       .parse(request.params).id;
-    const body = assignCatalogEntrySchema.parse(request.body);
-    if (await findAction(db, auth.campaignId, body.actionId))
-      return reply.code(200).send({ duplicate: true });
     const [character] = await db
       .select()
       .from(characters)
@@ -2101,6 +2165,63 @@ export function registerRoutes(
       return reply.code(404).send({ error: "ASSIGNMENT_SOURCE_NOT_FOUND" });
     if (!(await canAccessCharacter(db, auth, character)))
       return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
+    // Personal entries live on the character, never in the shared catalog.
+    const isAssignment =
+      typeof request.body === "object" &&
+      request.body !== null &&
+      "catalogEntryId" in request.body;
+    if (!isAssignment) {
+      const parsed = catalogEntryCommandSchema.safeParse(request.body);
+      if (!parsed.success)
+        return reply.code(400).send({
+          error: "INVALID_CATALOG_ENTRY",
+          message: "Проверьте заполнение полей навыка или способности.",
+          fieldErrors: parsed.error.issues.slice(0, 20).map((issue) => ({
+            path: issue.path.map(String).join("."),
+            code: issue.code,
+          })),
+        });
+      const { actionId, ...input } = parsed.data;
+      const previous = await findAction(db, auth.campaignId, actionId);
+      if (previous) {
+        if (previous.type !== "character_catalog.created" || !previous.entityId)
+          return reply.code(409).send({ error: "ACTION_CONFLICT" });
+        const [entry] = await db
+          .select()
+          .from(characterCatalogEntries)
+          .where(
+            and(
+              eq(characterCatalogEntries.id, previous.entityId),
+              eq(characterCatalogEntries.characterId, characterId),
+            ),
+          )
+          .limit(1);
+        if (!entry) return reply.code(409).send({ error: "ACTION_CONFLICT" });
+        return reply.code(200).send(entry);
+      }
+      const created = await db.transaction(async (tx) => {
+        const [entry] = await tx
+          .insert(characterCatalogEntries)
+          .values({ characterId, sourceCatalogEntryId: null, ...input })
+          .returning();
+        if (!entry) throw new Error("CHARACTER_CATALOG_CREATE_FAILED");
+        await tx.insert(gameEvents).values({
+          campaignId: auth.campaignId,
+          actionId,
+          membershipId: auth.membershipId,
+          type: "character_catalog.created",
+          entityType: "character_catalog_entry",
+          entityId: entry.id,
+          entityRevision: 0,
+        });
+        return entry;
+      });
+      await broadcastSnapshots(io, db, auth.campaignId);
+      return reply.code(201).send(created);
+    }
+    const body = assignCatalogEntrySchema.parse(request.body);
+    if (await findAction(db, auth.campaignId, body.actionId))
+      return reply.code(200).send({ duplicate: true });
     const [source] = await db
       .select()
       .from(catalogEntries)
@@ -2335,22 +2456,35 @@ export function registerRoutes(
   app.post("/api/invites/:id/revoke", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    if (auth.role !== "GM") return reply.code(403).send({ error: "GM_REQUIRED" });
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
     const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
     const body = revokePlayerAccessSchema.parse(request.body);
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(409).send({ error: "ACTION_ALREADY_APPLIED" });
     const now = new Date();
     const revoked = await db.transaction(async (tx) => {
-      const [invite] = await tx.update(invites).set({ revokedAt: now }).where(and(
-        eq(invites.id, id),
-        eq(invites.campaignId, auth.campaignId),
-        isNull(invites.revokedAt),
-      )).returning({ id: invites.id });
+      const [invite] = await tx
+        .update(invites)
+        .set({ revokedAt: now })
+        .where(
+          and(
+            eq(invites.id, id),
+            eq(invites.campaignId, auth.campaignId),
+            isNull(invites.revokedAt),
+          ),
+        )
+        .returning({ id: invites.id });
       if (!invite) return null;
-      const stale = await tx.select({ id: sessions.id }).from(sessions).where(eq(sessions.legacyInviteId, invite.id));
+      const stale = await tx
+        .select({ id: sessions.id })
+        .from(sessions)
+        .where(eq(sessions.legacyInviteId, invite.id));
       if (stale.length)
-        await tx.update(sessions).set({ expiresAt: now }).where(eq(sessions.legacyInviteId, invite.id));
+        await tx
+          .update(sessions)
+          .set({ expiresAt: now })
+          .where(eq(sessions.legacyInviteId, invite.id));
       await tx.insert(gameEvents).values({
         campaignId: auth.campaignId,
         actionId: body.actionId,
@@ -2362,7 +2496,8 @@ export function registerRoutes(
       return { invite, sessionIds: stale.map((session) => session.id) };
     });
     if (!revoked) return reply.code(404).send({ error: "INVITE_NOT_FOUND" });
-    for (const sessionId of revoked.sessionIds) io.in(sessionRoom(sessionId)).disconnectSockets(true);
+    for (const sessionId of revoked.sessionIds)
+      io.in(sessionRoom(sessionId)).disconnectSockets(true);
     return reply.send({ ok: true });
   });
 
@@ -4161,10 +4296,19 @@ export function registerRoutes(
       .limit(1);
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
     const replay = await drawingActionReplay(
-      db, auth, body.actionId, "DRAWING_CREATE", null, scene.id,
+      db,
+      auth,
+      body.actionId,
+      "DRAWING_CREATE",
+      null,
+      scene.id,
     );
-    if (replay === "duplicate") return reply.code(200).send({ duplicate: true });
-    if (replay === "conflict" || (await findAction(db, auth.campaignId, body.actionId)))
+    if (replay === "duplicate")
+      return reply.code(200).send({ duplicate: true });
+    if (
+      replay === "conflict" ||
+      (await findAction(db, auth.campaignId, body.actionId))
+    )
       return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
     const { actionId, ...input } = body;
     const drawingInput =
@@ -4244,10 +4388,8 @@ export function registerRoutes(
     if (isStampDrawing(row.drawing)) {
       if (auth.role !== "GM")
         return reply.code(403).send({ error: "STAMP_FORBIDDEN" });
-      if (
-        body.color !== undefined ||
-        body.strokeWidth !== undefined
-      ) return reply.code(422).send({ error: "STAMP_FIELD_FORBIDDEN" });
+      if (body.color !== undefined || body.strokeWidth !== undefined)
+        return reply.code(422).send({ error: "STAMP_FIELD_FORBIDDEN" });
     } else if (
       body.size !== undefined ||
       body.rotation !== undefined ||
@@ -4262,14 +4404,29 @@ export function registerRoutes(
     )
       return reply.code(403).send({ error: "DRAWING_FORBIDDEN" });
     const replay = await drawingActionReplay(
-      db, auth, body.actionId, "DRAWING_UPDATE", id,
+      db,
+      auth,
+      body.actionId,
+      "DRAWING_UPDATE",
+      id,
     );
-    if (replay === "duplicate") return reply.code(200).send({ duplicate: true });
-    if (replay === "conflict" || (await findAction(db, auth.campaignId, body.actionId)))
+    if (replay === "duplicate")
+      return reply.code(200).send({ duplicate: true });
+    if (
+      replay === "conflict" ||
+      (await findAction(db, auth.campaignId, body.actionId))
+    )
       return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
     if (row.drawing.revision !== body.revision)
       return reply.code(409).send({ error: "DRAWING_CONFLICT" });
-    const { actionId, revision: _revision, size, rotation, layer, ...changes } = body;
+    const {
+      actionId,
+      revision: _revision,
+      size,
+      rotation,
+      layer,
+      ...changes
+    } = body;
     const changesToSave = isStampDrawing(row.drawing)
       ? {
           ...changes,
@@ -4313,7 +4470,10 @@ export function registerRoutes(
         type: "DRAWING_UPDATE",
         targetType: "DRAWING",
         targetId: id,
-        scope: isHiddenStamp(row.drawing) || isHiddenStamp(updated) ? "GM" : "PUBLIC",
+        scope:
+          isHiddenStamp(row.drawing) || isHiddenStamp(updated)
+            ? "GM"
+            : "PUBLIC",
         before: row.drawing,
         after: updated,
         beforeRevision: row.drawing.revision,
@@ -4355,7 +4515,8 @@ export function registerRoutes(
         priorCopy.type === "drawing.copied" &&
         priorCopy.entityType === "drawing" &&
         payload?.sourceDrawingId === id
-      ) return reply.code(200).send({ duplicate: true });
+      )
+        return reply.code(200).send({ duplicate: true });
       return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
     }
     if (row.drawing.revision !== body.revision)
@@ -4388,10 +4549,7 @@ export function registerRoutes(
             y: row.drawing.y + 16,
             kind: "FREEHAND" as const,
           };
-      const [copy] = await tx
-        .insert(drawings)
-        .values(copyValues)
-        .returning();
+      const [copy] = await tx.insert(drawings).values(copyValues).returning();
       if (!copy) throw new Error("DRAWING_COPY_FAILED");
       const [event] = await tx
         .insert(gameEvents)
@@ -4464,10 +4622,18 @@ export function registerRoutes(
     )
       return reply.code(403).send({ error: "DRAWING_FORBIDDEN" });
     const replay = await drawingActionReplay(
-      db, auth, body.actionId, "DRAWING_DELETE", id,
+      db,
+      auth,
+      body.actionId,
+      "DRAWING_DELETE",
+      id,
     );
-    if (replay === "duplicate") return reply.code(200).send({ duplicate: true });
-    if (replay === "conflict" || (await findAction(db, auth.campaignId, body.actionId)))
+    if (replay === "duplicate")
+      return reply.code(200).send({ duplicate: true });
+    if (
+      replay === "conflict" ||
+      (await findAction(db, auth.campaignId, body.actionId))
+    )
       return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
     if (row.drawing.revision !== body.revision)
       return reply.code(409).send({ error: "DRAWING_CONFLICT" });
@@ -6358,15 +6524,20 @@ export function registerRoutes(
         })),
       });
     }
-    const globalPacks = env.GLOBAL_STICKERS_ENABLED ? await db
-      .select()
-      .from(globalStickerPacks)
-      .where(eq(globalStickerPacks.lifecycle, "ACTIVE")) : [];
+    const globalPacks = env.GLOBAL_STICKERS_ENABLED
+      ? await db
+          .select()
+          .from(globalStickerPacks)
+          .where(eq(globalStickerPacks.lifecycle, "ACTIVE"))
+      : [];
     for (const pack of globalPacks) {
       const items = await db
         .select({ sticker: globalStickers, media: globalStickerMedia })
         .from(globalStickers)
-        .innerJoin(globalStickerMedia, eq(globalStickerMedia.id, globalStickers.mediaId))
+        .innerJoin(
+          globalStickerMedia,
+          eq(globalStickerMedia.id, globalStickers.mediaId),
+        )
         .where(eq(globalStickers.packId, pack.id));
       result.push({
         id: pack.id,
@@ -6386,7 +6557,10 @@ export function registerRoutes(
           url: `/api/global-stickers/${sticker.id}/content`,
           width: media.width,
           height: media.height,
-          attribution: { authorCredit: sticker.authorCredit, licenseNote: sticker.licenseNote },
+          attribution: {
+            authorCredit: sticker.authorCredit,
+            licenseNote: sticker.licenseNote,
+          },
         })),
       });
     }
@@ -6500,7 +6674,8 @@ export function registerRoutes(
     if (duplicate && globalRequest) {
       const payload = duplicate.payload as Record<string, unknown>;
       return duplicate.membershipId === auth.membershipId &&
-        duplicate.type === "chat.created" && payload.threadId === thread.id &&
+        duplicate.type === "chat.created" &&
+        payload.threadId === thread.id &&
         payload.globalStickerId === body.globalStickerId
         ? reply.code(200).send(duplicate.payload)
         : reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
@@ -6514,16 +6689,34 @@ export function registerRoutes(
         ? reply.code(200).send(duplicate.payload)
         : reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
     if (globalRequest) {
-      if (!env.GLOBAL_STICKERS_ENABLED) return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
+      if (!env.GLOBAL_STICKERS_ENABLED)
+        return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
       const [resolved] = await db
-        .select({ sticker: globalStickers, pack: globalStickerPacks, media: globalStickerMedia })
+        .select({
+          sticker: globalStickers,
+          pack: globalStickerPacks,
+          media: globalStickerMedia,
+        })
         .from(globalStickers)
-        .innerJoin(globalStickerPacks, eq(globalStickerPacks.id, globalStickers.packId))
-        .innerJoin(globalStickerMedia, eq(globalStickerMedia.id, globalStickers.mediaId))
-        .where(and(eq(globalStickers.id, body.globalStickerId), eq(globalStickerPacks.lifecycle, "ACTIVE")))
+        .innerJoin(
+          globalStickerPacks,
+          eq(globalStickerPacks.id, globalStickers.packId),
+        )
+        .innerJoin(
+          globalStickerMedia,
+          eq(globalStickerMedia.id, globalStickers.mediaId),
+        )
+        .where(
+          and(
+            eq(globalStickers.id, body.globalStickerId),
+            eq(globalStickerPacks.lifecycle, "ACTIVE"),
+          ),
+        )
         .limit(1);
-      if (!resolved) return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
-      const viewers = thread.type === "DIRECT" ? directThreadMemberIds(thread) : [];
+      if (!resolved)
+        return reply.code(404).send({ error: "STICKER_NOT_FOUND" });
+      const viewers =
+        thread.type === "DIRECT" ? directThreadMemberIds(thread) : [];
       const presentation = {
         name: resolved.sticker.name,
         altText: resolved.sticker.altText,
@@ -6535,14 +6728,35 @@ export function registerRoutes(
       let saved;
       try {
         saved = await db.transaction(async (tx) => {
-          const [row] = await tx.insert(chatMessages).values({
-            campaignId: auth.campaignId, membershipId: auth.membershipId, characterId: null,
-            kind: "TEXT", threadId: thread.id, visibility: "PUBLIC", body: "",
-            globalStickerId: resolved.sticker.id, stickerId: null,
-            stickerPresentation: presentation, stickerViewerMembershipIds: audienceMembershipIds,
-          }).returning();
+          const [row] = await tx
+            .insert(chatMessages)
+            .values({
+              campaignId: auth.campaignId,
+              membershipId: auth.membershipId,
+              characterId: null,
+              kind: "TEXT",
+              threadId: thread.id,
+              visibility: "PUBLIC",
+              body: "",
+              globalStickerId: resolved.sticker.id,
+              stickerId: null,
+              stickerPresentation: presentation,
+              stickerViewerMembershipIds: audienceMembershipIds,
+            })
+            .returning();
           const dto = chatMessageDto(row!, auth.displayName, thread.stream);
-          const [event] = await tx.insert(gameEvents).values({ campaignId: auth.campaignId, actionId: body.actionId, membershipId: auth.membershipId, type: "chat.created", entityType: "chat", entityId: row!.id, payload: dto }).returning();
+          const [event] = await tx
+            .insert(gameEvents)
+            .values({
+              campaignId: auth.campaignId,
+              actionId: body.actionId,
+              membershipId: auth.membershipId,
+              type: "chat.created",
+              entityType: "chat",
+              entityId: row!.id,
+              payload: dto,
+            })
+            .returning();
           return { dto, event: event! };
         });
       } catch (error) {
@@ -6551,15 +6765,24 @@ export function registerRoutes(
         const winner = await findAction(db, auth.campaignId, body.actionId);
         if (winner) {
           const payload = winner.payload as Record<string, unknown>;
-          return winner.membershipId === auth.membershipId && winner.type === "chat.created" &&
-            payload.threadId === thread.id && payload.globalStickerId === body.globalStickerId
+          return winner.membershipId === auth.membershipId &&
+            winner.type === "chat.created" &&
+            payload.threadId === thread.id &&
+            payload.globalStickerId === body.globalStickerId
             ? reply.code(200).send(winner.payload)
             : reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
         }
         throw error;
       }
-      const envelope = { sequence: Number(saved.event.sequence), actionId: body.actionId, emittedAt: saved.event.createdAt.toISOString(), data: saved.dto };
-      if (audienceMembershipIds) for (const membershipId of audienceMembershipIds) io.to(memberRoom(membershipId)).emit("chat:created", envelope);
+      const envelope = {
+        sequence: Number(saved.event.sequence),
+        actionId: body.actionId,
+        emittedAt: saved.event.createdAt.toISOString(),
+        data: saved.dto,
+      };
+      if (audienceMembershipIds)
+        for (const membershipId of audienceMembershipIds)
+          io.to(memberRoom(membershipId)).emit("chat:created", envelope);
       else io.to(campaignRoom(auth.campaignId)).emit("chat:created", envelope);
       return reply.code(201).send(saved.dto);
     }
@@ -7486,141 +7709,154 @@ export function registerRoutes(
   });
 
   /** UIX-682 C01: PLAYER-owned stat layout override for one character. */
-  app.patch("/api/characters/:characterId/stat-layout", async (request, reply) => {
-    const auth = await requireAuth(request, reply, db);
-    if (!auth) return;
-    if (auth.role !== "PLAYER")
-      return reply.code(403).send({ error: "PLAYER_REQUIRED" });
-    const { characterId } = z
-      .object({ characterId: z.string().uuid() })
-      .parse(request.params);
-    const body = updateCharacterStatLayoutSchema.parse(request.body);
-    const fingerprint = createHash("sha256")
-      .update(JSON.stringify({ revision: body.revision, layout: body.layout }))
-      .digest("hex");
-    const [character] = await db
-      .select()
-      .from(characters)
-      .where(
-        and(
-          eq(characters.id, characterId),
-          eq(characters.campaignId, auth.campaignId),
-        ),
-      )
-      .limit(1);
-    if (!character)
-      return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
-    // Check the entity owner before examining an action receipt: another
-    // player must not learn whether a private command/replay exists.
-    if (character.ownerMembershipId !== auth.membershipId)
-      return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
-
-    const replay = (action: NonNullable<Awaited<ReturnType<typeof findAction>>>) => {
-      const payload =
-        action.payload && typeof action.payload === "object"
-          ? (action.payload as { fingerprint?: unknown })
-          : null;
-      if (
-        action.membershipId !== auth.membershipId ||
-        action.type !== "character.stat-layout.updated" ||
-        action.entityType !== "character" ||
-        action.entityId !== characterId ||
-        payload?.fingerprint !== fingerprint ||
-        action.entityRevision === null
-      )
-        return reply.code(409).send({ error: "ACTION_ID_REUSED" });
-      return reply.code(200).send({
-        characterId,
-        revision: action.entityRevision,
-      });
-    };
-    const prior = await findAction(db, auth.campaignId, body.actionId);
-    if (prior) return replay(prior);
-
-    const [campaign] = await db
-      .select({ statLayout: campaigns.statLayout })
-      .from(campaigns)
-      .where(eq(campaigns.id, auth.campaignId))
-      .limit(1);
-    if (!campaign)
-      return reply.code(404).send({ error: "CAMPAIGN_NOT_FOUND" });
-    const currentLayout = resolveCharacterStatLayout(
-      character.statLayout,
-      resolveStatLayout(campaign.statLayout),
-    );
-    if (character.revision !== body.revision) {
-      const raced = await findAction(db, auth.campaignId, body.actionId);
-      if (raced) return replay(raced);
-      return reply.code(409).send({
-        error: "CHARACTER_CONFLICT",
-        revision: character.revision,
-      });
-    }
-    const removed = removedStatKeys(currentLayout, body.layout);
-    const rejection = rejectDestructiveLayoutChange(
-      currentLayout,
-      body.layout,
-      removed.length
-        ? await collectCharacterStatReferenceSources(db, auth.campaignId, character)
-        : { characters: [], catalogEntries: [] },
-    );
-    if (rejection) return reply.code(409).send(rejection);
-
-    const updated = await db.transaction(async (tx) => {
-      const [next] = await tx
-        .update(characters)
-        .set({
-          statLayout: body.layout,
-          revision: character.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(characters.id, characterId),
-            eq(characters.campaignId, auth.campaignId),
-            eq(characters.ownerMembershipId, auth.membershipId),
-            eq(characters.revision, character.revision),
-          ),
+  app.patch(
+    "/api/characters/:characterId/stat-layout",
+    async (request, reply) => {
+      const auth = await requireAuth(request, reply, db);
+      if (!auth) return;
+      if (auth.role !== "PLAYER")
+        return reply.code(403).send({ error: "PLAYER_REQUIRED" });
+      const { characterId } = z
+        .object({ characterId: z.string().uuid() })
+        .parse(request.params);
+      const body = updateCharacterStatLayoutSchema.parse(request.body);
+      const fingerprint = createHash("sha256")
+        .update(
+          JSON.stringify({ revision: body.revision, layout: body.layout }),
         )
-        .returning({ id: characters.id, revision: characters.revision });
-      if (!next) return null;
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        membershipId: auth.membershipId,
-        type: "character.stat-layout.updated",
-        entityType: "character",
-        entityId: characterId,
-        entityRevision: next.revision,
-        payload: {
-          fingerprint,
-          keys: body.layout.flatMap((group) => group.rows.map((row) => row.key)),
-        },
-      });
-      return next;
-    });
-    if (!updated) {
-      const raced = await findAction(db, auth.campaignId, body.actionId);
-      if (raced) return replay(raced);
-      const [latest] = await db
-        .select({ revision: characters.revision })
+        .digest("hex");
+      const [character] = await db
+        .select()
         .from(characters)
         .where(
           and(
             eq(characters.id, characterId),
             eq(characters.campaignId, auth.campaignId),
-            eq(characters.ownerMembershipId, auth.membershipId),
           ),
         )
         .limit(1);
-      return reply.code(409).send({
-        error: "CHARACTER_CONFLICT",
-        ...(latest ? { revision: latest.revision } : {}),
+      if (!character)
+        return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
+      // Check the entity owner before examining an action receipt: another
+      // player must not learn whether a private command/replay exists.
+      if (character.ownerMembershipId !== auth.membershipId)
+        return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
+
+      const replay = (
+        action: NonNullable<Awaited<ReturnType<typeof findAction>>>,
+      ) => {
+        const payload =
+          action.payload && typeof action.payload === "object"
+            ? (action.payload as { fingerprint?: unknown })
+            : null;
+        if (
+          action.membershipId !== auth.membershipId ||
+          action.type !== "character.stat-layout.updated" ||
+          action.entityType !== "character" ||
+          action.entityId !== characterId ||
+          payload?.fingerprint !== fingerprint ||
+          action.entityRevision === null
+        )
+          return reply.code(409).send({ error: "ACTION_ID_REUSED" });
+        return reply.code(200).send({
+          characterId,
+          revision: action.entityRevision,
+        });
+      };
+      const prior = await findAction(db, auth.campaignId, body.actionId);
+      if (prior) return replay(prior);
+
+      const [campaign] = await db
+        .select({ statLayout: campaigns.statLayout })
+        .from(campaigns)
+        .where(eq(campaigns.id, auth.campaignId))
+        .limit(1);
+      if (!campaign)
+        return reply.code(404).send({ error: "CAMPAIGN_NOT_FOUND" });
+      const currentLayout = resolveCharacterStatLayout(
+        character.statLayout,
+        resolveStatLayout(campaign.statLayout),
+      );
+      if (character.revision !== body.revision) {
+        const raced = await findAction(db, auth.campaignId, body.actionId);
+        if (raced) return replay(raced);
+        return reply.code(409).send({
+          error: "CHARACTER_CONFLICT",
+          revision: character.revision,
+        });
+      }
+      const removed = removedStatKeys(currentLayout, body.layout);
+      const rejection = rejectDestructiveLayoutChange(
+        currentLayout,
+        body.layout,
+        removed.length
+          ? await collectCharacterStatReferenceSources(
+              db,
+              auth.campaignId,
+              character,
+            )
+          : { characters: [], catalogEntries: [] },
+      );
+      if (rejection) return reply.code(409).send(rejection);
+
+      const updated = await db.transaction(async (tx) => {
+        const [next] = await tx
+          .update(characters)
+          .set({
+            statLayout: body.layout,
+            revision: character.revision + 1,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(characters.id, characterId),
+              eq(characters.campaignId, auth.campaignId),
+              eq(characters.ownerMembershipId, auth.membershipId),
+              eq(characters.revision, character.revision),
+            ),
+          )
+          .returning({ id: characters.id, revision: characters.revision });
+        if (!next) return null;
+        await tx.insert(gameEvents).values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: "character.stat-layout.updated",
+          entityType: "character",
+          entityId: characterId,
+          entityRevision: next.revision,
+          payload: {
+            fingerprint,
+            keys: body.layout.flatMap((group) =>
+              group.rows.map((row) => row.key),
+            ),
+          },
+        });
+        return next;
       });
-    }
-    await broadcastSnapshots(io, db, auth.campaignId);
-    return reply.code(200).send({ characterId, revision: updated.revision });
-  });
+      if (!updated) {
+        const raced = await findAction(db, auth.campaignId, body.actionId);
+        if (raced) return replay(raced);
+        const [latest] = await db
+          .select({ revision: characters.revision })
+          .from(characters)
+          .where(
+            and(
+              eq(characters.id, characterId),
+              eq(characters.campaignId, auth.campaignId),
+              eq(characters.ownerMembershipId, auth.membershipId),
+            ),
+          )
+          .limit(1);
+        return reply.code(409).send({
+          error: "CHARACTER_CONFLICT",
+          ...(latest ? { revision: latest.revision } : {}),
+        });
+      }
+      await broadcastSnapshots(io, db, auth.campaignId);
+      return reply.code(200).send({ characterId, revision: updated.revision });
+    },
+  );
 
   /**
    * UIX-424, шаг 5 — правка раскладки характеристик кампании.
@@ -8508,7 +8744,9 @@ export function registerRoutes(
       if (mode === "EXECUTE") {
         if (noRollActivation) {
           if (row.entry.kind !== "ABILITY")
-            return reply.code(400).send({ error: "ABILITY_ACTIVATION_NOT_CONFIGURED" });
+            return reply
+              .code(400)
+              .send({ error: "ABILITY_ACTIVATION_NOT_CONFIGURED" });
         } else {
           action = parsedData.data.rollActions?.find(
             (candidate) => candidate.id === body.rollActionId,
@@ -8516,60 +8754,66 @@ export function registerRoutes(
           if (!action)
             return reply.code(404).send({ error: "ROLL_ACTION_NOT_FOUND" });
         }
-        if (noRollActivation && activationConfig.consumeUse &&
-            (!parsedData.data.uses || parsedData.data.uses.current < 1))
+        if (
+          noRollActivation &&
+          activationConfig.consumeUse &&
+          (!parsedData.data.uses || parsedData.data.uses.current < 1)
+        )
           return reply.code(409).send({ error: "NO_ABILITY_USES" });
         if (!action) {
           // A configured no-roll activation has no dice/formula by design.
         } else {
-        const values: Record<string, number> = {};
-        const formulaParts = [action.dice];
-        for (const [index, source] of action.modifiers.entries()) {
-          if (source.type === "CONSTANT") {
-            formulaParts.push(String(source.value));
-            continue;
-          }
-          if (source.type === "FORMULA") {
-            const terms = source.formula.match(/[+-]?\d+/g);
-            if (!terms)
+          const values: Record<string, number> = {};
+          const formulaParts = [action.dice];
+          for (const [index, source] of action.modifiers.entries()) {
+            if (source.type === "CONSTANT") {
+              formulaParts.push(String(source.value));
+              continue;
+            }
+            if (source.type === "FORMULA") {
+              const terms = source.formula.match(/[+-]?\d+/g);
+              if (!terms)
+                return reply
+                  .code(400)
+                  .send({ error: "INVALID_MODIFIER_FORMULA" });
+              formulaParts.push(
+                String(terms.reduce((sum, term) => sum + Number(term), 0)),
+              );
+              continue;
+            }
+            const key = `modifier_${index}`;
+            const value =
+              source.type === "CHARACTERISTIC"
+                ? normalizeLegacyStats(row.character.stats)[source.key]
+                : parsedData.data.values?.[source.key];
+            if (value === undefined || !Number.isFinite(value))
               return reply
                 .code(400)
-                .send({ error: "INVALID_MODIFIER_FORMULA" });
-            formulaParts.push(
-              String(terms.reduce((sum, term) => sum + Number(term), 0)),
-            );
-            continue;
+                .send({ error: "MISSING_MODIFIER_SOURCE", source });
+            values[key] = value;
+            formulaParts.push(key);
           }
-          const key = `modifier_${index}`;
-          const value =
-            source.type === "CHARACTERISTIC"
-              ? normalizeLegacyStats(row.character.stats)[source.key]
-              : parsedData.data.values?.[source.key];
-          if (value === undefined || !Number.isFinite(value))
-            return reply
-              .code(400)
-              .send({ error: "MISSING_MODIFIER_SOURCE", source });
-          values[key] = value;
-          formulaParts.push(key);
-        }
-        formula = formulaParts.join(" + ");
-        result = rollFormulaWithMode(
-          formula,
-          values,
-          body.rollMode ?? (action.advantage ? "ADVANTAGE" : "NORMAL"),
-          randomInt,
-          action.label,
-        );
-        if (
-          action.consumeUse &&
-          (!parsedData.data.uses || parsedData.data.uses.current < 1)
-        )
-          return reply.code(409).send({ error: "NO_ABILITY_USES" });
+          formula = formulaParts.join(" + ");
+          result = rollFormulaWithMode(
+            formula,
+            values,
+            body.rollMode ?? (action.advantage ? "ADVANTAGE" : "NORMAL"),
+            randomInt,
+            action.label,
+          );
+          if (
+            action.consumeUse &&
+            (!parsedData.data.uses || parsedData.data.uses.current < 1)
+          )
+            return reply.code(409).send({ error: "NO_ABILITY_USES" });
         }
       }
-      const cost = mode === "EXECUTE"
-        ? (noRollActivation ? activationConfig.cost : action?.cost)
-        : undefined;
+      const cost =
+        mode === "EXECUTE"
+          ? noRollActivation
+            ? activationConfig.cost
+            : action?.cost
+          : undefined;
       const resourceKey =
         cost?.type === "physical"
           ? "physicalPower"
@@ -8598,14 +8842,11 @@ export function registerRoutes(
             }
           : resources;
       const uses = parsedData.data.uses;
-      const consumeUse = mode === "EXECUTE" &&
-        (noRollActivation
-          ? activationConfig.consumeUse
-          : action?.consumeUse);
+      const consumeUse =
+        mode === "EXECUTE" &&
+        (noRollActivation ? activationConfig.consumeUse : action?.consumeUse);
       const afterUses =
-        consumeUse && uses
-          ? { ...uses, current: uses.current - 1 }
-          : uses;
+        consumeUse && uses ? { ...uses, current: uses.current - 1 } : uses;
       const skillCard = {
         version: 1 as const,
         execution:
@@ -8646,14 +8887,15 @@ export function registerRoutes(
               recharge: uses.recharge,
             }
           : null,
-        activationCost: cost && resourceKey && resourceBefore !== null
-          ? {
-              type: cost.type,
-              amount: cost.amount,
-              before: resourceBefore,
-              after: resourceBefore - cost.amount,
-            }
-          : null,
+        activationCost:
+          cost && resourceKey && resourceBefore !== null
+            ? {
+                type: cost.type,
+                amount: cost.amount,
+                before: resourceBefore,
+                after: resourceBefore - cost.amount,
+              }
+            : null,
         visibility: body.visibility,
       };
       let saved: {
@@ -8700,10 +8942,12 @@ export function registerRoutes(
             const [updated] = await tx
               .update(characterCatalogEntries)
               .set({ revision: row.entry.revision + 1, updatedAt: new Date() })
-              .where(and(
-                eq(characterCatalogEntries.id, row.entry.id),
-                eq(characterCatalogEntries.revision, row.entry.revision),
-              ))
+              .where(
+                and(
+                  eq(characterCatalogEntries.id, row.entry.id),
+                  eq(characterCatalogEntries.revision, row.entry.revision),
+                ),
+              )
               .returning({ id: characterCatalogEntries.id });
             if (!updated) throw new Error("ENTRY_CONFLICT_TX");
           }
@@ -8985,20 +9229,34 @@ export function registerRoutes(
     try {
       const sourceBuffer = await readStoredImage(source.storageKey);
       const rendered = await renderTokenAsset(sourceBuffer, body);
-      await reserveCampaignMediaBytes(db, auth.campaignId, reservationKey, rendered.length);
+      await reserveCampaignMediaBytes(
+        db,
+        auth.campaignId,
+        reservationKey,
+        rendered.length,
+      );
       reserved = true;
       stored = await storeGeneratedToken(rendered);
       const created = await db.transaction(async (tx) => {
         await lockCampaignMediaQuota(tx, auth.campaignId);
-        await requireLiveCampaignMediaReservation(tx, auth.campaignId, reservationKey, stored!.sizeBytes);
+        await requireLiveCampaignMediaReservation(
+          tx,
+          auth.campaignId,
+          reservationKey,
+          stored!.sizeBytes,
+        );
         const [lockedUsage] = await tx
           .select({ used: sum(assets.sizeBytes) })
           .from(assets)
           .where(eq(assets.campaignId, auth.campaignId));
-        const [reservations] = await tx.select({ used: sum(campaignMediaReservations.reservedBytes) })
+        const [reservations] = await tx
+          .select({ used: sum(campaignMediaReservations.reservedBytes) })
           .from(campaignMediaReservations)
           .where(eq(campaignMediaReservations.campaignId, auth.campaignId));
-        assertStorageQuota(Number(lockedUsage?.used ?? 0) + Number(reservations?.used ?? 0), 0);
+        assertStorageQuota(
+          Number(lockedUsage?.used ?? 0) + Number(reservations?.used ?? 0),
+          0,
+        );
         const [asset] = await tx
           .insert(assets)
           .values({
@@ -9053,17 +9311,20 @@ export function registerRoutes(
       );
       return reply.code(400).send({ error: errorCode });
     } finally {
-      if (reserved) await releaseCampaignMediaBytes(db, auth.campaignId, reservationKey);
+      if (reserved)
+        await releaseCampaignMediaBytes(db, auth.campaignId, reservationKey);
     }
   });
 
   app.post("/api/assets", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    const query = z.object({
-      kind: assetKindSchema,
-      audioPurpose: audioPurposeSchema.optional(),
-    }).parse(request.query);
+    const query = z
+      .object({
+        kind: assetKindSchema,
+        audioPurpose: audioPurposeSchema.optional(),
+      })
+      .parse(request.query);
     if (query.kind !== "AUDIO" && query.audioPurpose !== undefined)
       return reply.code(400).send({ error: "AUDIO_PURPOSE_REQUIRES_AUDIO" });
     if (auth.role !== "GM" && !["TOKEN", "PORTRAIT"].includes(query.kind))
@@ -9071,8 +9332,12 @@ export function registerRoutes(
     const actionId = actionIdSchema.parse(request.headers["x-action-id"]);
     const duplicate = await findAction(db, auth.campaignId, actionId);
     if (duplicate?.entityId) {
-      const requestedPurpose = query.kind === "AUDIO" ? (query.audioPurpose ?? "MUSIC") : null;
-      const priorPayload = duplicate.payload as { kind?: string; audioPurpose?: string | null } | null;
+      const requestedPurpose =
+        query.kind === "AUDIO" ? (query.audioPurpose ?? "MUSIC") : null;
+      const priorPayload = duplicate.payload as {
+        kind?: string;
+        audioPurpose?: string | null;
+      } | null;
       if (!assetUploadActionMatches(priorPayload, query.kind, requestedPurpose))
         return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
       const [existing] = await db
@@ -9099,21 +9364,35 @@ export function registerRoutes(
     const reservationKey = `asset-upload:${actionId}`;
     let reserved = false;
     try {
-      const prepared = await prepareUpload(buffer, query.kind === "AUDIO" ? "audio" : "image");
-      await reserveCampaignMediaBytes(db, auth.campaignId, reservationKey, prepared.upload.sizeBytes);
+      const prepared = await prepareUpload(
+        buffer,
+        query.kind === "AUDIO" ? "audio" : "image",
+      );
+      await reserveCampaignMediaBytes(
+        db,
+        auth.campaignId,
+        reservationKey,
+        prepared.upload.sizeBytes,
+      );
       reserved = true;
       const stored = await storePreparedUpload(prepared);
       const asset = await db
         .transaction(async (tx) => {
           await lockCampaignMediaQuota(tx, auth.campaignId);
-          await requireLiveCampaignMediaReservation(tx, auth.campaignId, reservationKey, stored!.sizeBytes);
+          await requireLiveCampaignMediaReservation(
+            tx,
+            auth.campaignId,
+            reservationKey,
+            stored!.sizeBytes,
+          );
           const [created] = await tx
             .insert(assets)
             .values({
               campaignId: auth.campaignId,
               uploadedByMembershipId: auth.membershipId,
               kind: query.kind,
-              audioPurpose: query.kind === "AUDIO" ? (query.audioPurpose ?? "MUSIC") : null,
+              audioPurpose:
+                query.kind === "AUDIO" ? (query.audioPurpose ?? "MUSIC") : null,
               name: displayNameFromUpload(file.filename),
               ...stored,
             })
@@ -9126,7 +9405,11 @@ export function registerRoutes(
             type: "asset.created",
             entityType: "asset",
             entityId: created.id,
-            payload: { assetId: created.id, kind: created.kind, audioPurpose: created.audioPurpose },
+            payload: {
+              assetId: created.id,
+              kind: created.kind,
+              audioPurpose: created.audioPurpose,
+            },
           });
           return created;
         })
@@ -9141,7 +9424,8 @@ export function registerRoutes(
       request.log.warn({ errorCode, actionId }, "asset.upload_rejected");
       return reply.code(400).send({ error: errorCode });
     } finally {
-      if (reserved) await releaseCampaignMediaBytes(db, auth.campaignId, reservationKey);
+      if (reserved)
+        await releaseCampaignMediaBytes(db, auth.campaignId, reservationKey);
     }
   });
 
@@ -9156,14 +9440,40 @@ export function registerRoutes(
       .limit(1);
     if (!asset) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
     if (auth.role !== "GM") {
-      const [soundUse] = await db.select({ id: campaignSounds.id }).from(campaignSounds)
-        .innerJoin(campaignSoundPacks, eq(campaignSoundPacks.id, campaignSounds.packId))
-        .where(and(eq(campaignSounds.campaignId, auth.campaignId), eq(campaignSounds.assetId, asset.id))).limit(1);
+      const [soundUse] = await db
+        .select({ id: campaignSounds.id })
+        .from(campaignSounds)
+        .innerJoin(
+          campaignSoundPacks,
+          eq(campaignSoundPacks.id, campaignSounds.packId),
+        )
+        .where(
+          and(
+            eq(campaignSounds.campaignId, auth.campaignId),
+            eq(campaignSounds.assetId, asset.id),
+          ),
+        )
+        .limit(1);
       if (soundUse) {
-        const [publicSoundUse] = await db.select({ id: campaignSounds.id }).from(campaignSounds)
-          .innerJoin(campaignSoundPacks, eq(campaignSoundPacks.id, campaignSounds.packId))
-          .where(and(eq(campaignSounds.campaignId, auth.campaignId), eq(campaignSounds.assetId, asset.id), eq(campaignSounds.audience, "ALL_MEMBERS"), eq(campaignSoundPacks.published, true), eq(campaignSoundPacks.audience, "ALL_MEMBERS"))).limit(1);
-        if (!publicSoundUse) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
+        const [publicSoundUse] = await db
+          .select({ id: campaignSounds.id })
+          .from(campaignSounds)
+          .innerJoin(
+            campaignSoundPacks,
+            eq(campaignSoundPacks.id, campaignSounds.packId),
+          )
+          .where(
+            and(
+              eq(campaignSounds.campaignId, auth.campaignId),
+              eq(campaignSounds.assetId, asset.id),
+              eq(campaignSounds.audience, "ALL_MEMBERS"),
+              eq(campaignSoundPacks.published, true),
+              eq(campaignSoundPacks.audience, "ALL_MEMBERS"),
+            ),
+          )
+          .limit(1);
+        if (!publicSoundUse)
+          return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
       }
       const snapshot = await buildSnapshot(db, auth);
       if (!snapshot.assets.some((visible) => visible.id === asset.id))

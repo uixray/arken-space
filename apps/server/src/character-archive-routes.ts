@@ -124,7 +124,12 @@ export function registerCharacterArchiveRoutes(
       .where(eq(campaigns.id, auth.campaignId))
       .limit(1);
     return reply.send(
-      characterDto(outcome.character, [], [], resolveStatLayout(campaign?.statLayout)),
+      characterDto(
+        outcome.character,
+        [],
+        [],
+        resolveStatLayout(campaign?.statLayout),
+      ),
     );
   });
 

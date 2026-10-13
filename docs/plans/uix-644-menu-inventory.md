@@ -9,7 +9,6 @@ renderer terrain stamps and media-purpose selectors. Existing catalog/media
 counts updated. This is source inventory only, not browser acceptance.
 Negative drift controls remain required; historical results below unchanged.
 
-
 ## 2026-10-03 — персональная тема больше не открывает popup
 
 `PlayerThemeSettings.tsx` теперь показывает варианты радиокнопками в потоке.
@@ -1263,11 +1262,12 @@ historical snapshots and must not be silently carried forward to these sites.
 | `ui/ToolbarTooltip.tsx`      | Shared map-toolbar tooltip uses a Base UI `Tooltip.Popup` portal, hover/focus trigger, and viewport-limited 280 px content. This is a tooltip, not a select/menu.                                                                            | UIX-674 targeted toolbar tests and browser visual checks are scoped evidence; the full UIX-644 cross-overlay lifecycle is not implied.                         |
 
 ## 2026-10-08 — current inventory reconciliation
+
 - Revision917af2d: reviewed JSON before correction contained46groups/83occurrences, not stale prose43/80 or historical37/76. Actual AST guard found two missing groups: StickerPackManager six native selects (subject, character, player, audience, send policy, per-file provenance); MediaPanel one native kind filter. Both reviewed against source and added as BLOCKED runtime, not PASS.
 - Current full static index48groups/90occurrences; runtime rows27historical scopedPASS/2FAIL/19BLOCKED. Historical receipts and denominators retained, no transfer of old evidence to current revision. Live QA workers handle new manager/catalog paths; entire644 remains INCOMPLETE.
 
 ## 2026-10-08 — GlobalStickerPackManager static delta
+
 - At source revision `5815ce59a1264391fcd15e2db76e32c6fc2c2cd2`, the focused AST inventory test found two additional file-kind buckets absent from the historical `917af2d` index: `GlobalStickerPackManager.tsx::tag:details` (1) and `GlobalStickerPackManager.tsx::tag:select` (1). The full scan denominator is now **50 buckets / 92 JSX occurrences**; historical 48 / 90 and all prior evidence remain historical and unchanged.
 - Both controls are under `MediaPanel`'s GM-only conditional. The `details` disclosure is in-flow; the native `select` chooses among owned packs. Their ancestor chains and source owner are recorded in `uix-644-runtime-coverage.json`.
 - Runtime status for both new rows: **BLOCKED — pending**. Static discovery is not proof of rendering, placement, keyboard/focus, dismissal, or hit-testing. No PASS is inferred. Overall UIX-644 remains INCOMPLETE.
-

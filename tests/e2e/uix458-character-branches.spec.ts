@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type {
   CharacterDto,
   SpellProgressionGraph,
@@ -202,6 +203,7 @@ for (const width of [390, 1280]) {
     });
 
     await page.setViewportSize({ width, height: 850 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openWorkspaceSection(page, "Школы заклинаний");
     await page.getByLabel("Название набора").fill("Кастомная школа");
@@ -230,6 +232,7 @@ for (const width of [390, 1280]) {
       name: "Лист персонажа Испытатель",
       exact: true,
     });
+    await sheet.getByRole("tab", { name: "Личность", exact: true }).click();
     const selector = sheet.getByLabel("Активная школа для выдачи");
     await selector.selectOption({
       label: "Школа северного ветра — Кастомная школа · v2",
@@ -247,6 +250,9 @@ for (const width of [390, 1280]) {
       name: "Лист персонажа Испытатель",
       exact: true,
     });
+    await playerSheet
+      .getByRole("tab", { name: "Личность", exact: true })
+      .click();
     await expect(
       playerSheet.getByText("Школа северного ветра", { exact: true }),
     ).toBeVisible();
@@ -267,6 +273,9 @@ for (const width of [390, 1280]) {
       name: "Лист персонажа Без школы",
       exact: true,
     });
+    await emptySheet
+      .getByRole("tab", { name: "Личность", exact: true })
+      .click();
     await expect(
       emptySheet.getByText(/пока не выданы школы заклинаний/),
     ).toBeVisible();

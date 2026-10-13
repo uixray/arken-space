@@ -1,7 +1,11 @@
 import { and, eq, isNull, sum } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
-import { createGalleryChatShareSchema, type ClientToServerEvents, type ServerToClientEvents } from "@arken/contracts";
+import {
+  createGalleryChatShareSchema,
+  type ClientToServerEvents,
+  type ServerToClientEvents,
+} from "@arken/contracts";
 import {
   assets,
   chatAttachments,
@@ -16,7 +20,12 @@ import { requireAuth } from "./auth.js";
 import { canViewCharacterMedia } from "./character-media.js";
 import { chatMessageDto, ensureStreamThread } from "./chat.js";
 import { buildSnapshot } from "./snapshot.js";
-import { assertStorageCapacity, readStoredImage, removeStoredUpload, storeUpload } from "./storage.js";
+import {
+  assertStorageCapacity,
+  readStoredImage,
+  removeStoredUpload,
+  storeUpload,
+} from "./storage.js";
 import { publicUploadError } from "./telemetry.js";
 import { postgresErrorCode } from "./database-errors.js";
 
@@ -45,7 +54,9 @@ function actionPayload(event: { payload: unknown } | undefined) {
     : null;
 }
 
-function captionOverride(body: ReturnType<typeof createGalleryChatShareSchema.parse>) {
+function captionOverride(
+  body: ReturnType<typeof createGalleryChatShareSchema.parse>,
+) {
   return body.caption?.trim() || null;
 }
 
@@ -91,9 +102,18 @@ export function registerGalleryChatShareRoutes(
     const thread = await ensureStreamThread(db, auth.campaignId, "TABLE");
 
     const [existing] = await db
-      .select({ membershipId: gameEvents.membershipId, type: gameEvents.type, payload: gameEvents.payload })
+      .select({
+        membershipId: gameEvents.membershipId,
+        type: gameEvents.type,
+        payload: gameEvents.payload,
+      })
       .from(gameEvents)
-      .where(and(eq(gameEvents.campaignId, auth.campaignId), eq(gameEvents.actionId, body.actionId)))
+      .where(
+        and(
+          eq(gameEvents.campaignId, auth.campaignId),
+          eq(gameEvents.actionId, body.actionId),
+        ),
+      )
       .limit(1);
     if (existing) {
       if (matchesReplay(existing, auth.membershipId, thread.id, body))
@@ -114,7 +134,13 @@ export function registerGalleryChatShareRoutes(
           })
           .from(characterMedia)
           .innerJoin(characters, eq(characters.id, characterMedia.characterId))
-          .innerJoin(assets, and(eq(assets.id, characterMedia.assetId), eq(assets.campaignId, characterMedia.campaignId)))
+          .innerJoin(
+            assets,
+            and(
+              eq(assets.id, characterMedia.assetId),
+              eq(assets.campaignId, characterMedia.campaignId),
+            ),
+          )
           .where(
             and(
               eq(characterMedia.id, body.characterMediaId),
@@ -128,7 +154,10 @@ export function registerGalleryChatShareRoutes(
         if (
           !canViewCharacterMedia(
             { role: auth.role, membershipId: auth.membershipId },
-            { visibility: source.media.visibility, characterOwnerMembershipId: source.ownerMembershipId },
+            {
+              visibility: source.media.visibility,
+              characterOwnerMembershipId: source.ownerMembershipId,
+            },
           )
         )
           throw new Error("GALLERY_MEDIA_NOT_FOUND");
@@ -137,19 +166,27 @@ export function registerGalleryChatShareRoutes(
           if (!snapshot.assets.some((asset) => asset.id === source.asset.id))
             throw new Error("GALLERY_MEDIA_NOT_FOUND");
         }
-        if (source.asset.kind !== "IMAGE") throw new Error("GALLERY_IMAGE_REQUIRED");
+        if (source.asset.kind !== "IMAGE")
+          throw new Error("GALLERY_IMAGE_REQUIRED");
 
         const [assetUsage, feedbackUsage, chatUsage] = await Promise.all([
           tx.select({ used: sum(assets.sizeBytes) }).from(assets),
-          tx.select({ used: sum(feedbackAttachments.sizeBytes) }).from(feedbackAttachments),
-          tx.select({ used: sum(chatAttachmentUploads.sizeBytes) }).from(chatAttachmentUploads),
+          tx
+            .select({ used: sum(feedbackAttachments.sizeBytes) })
+            .from(feedbackAttachments),
+          tx
+            .select({ used: sum(chatAttachmentUploads.sizeBytes) })
+            .from(chatAttachmentUploads),
         ]);
         const usedBytes =
           Number(assetUsage[0]?.used ?? 0) +
           Number(feedbackUsage[0]?.used ?? 0) +
           Number(chatUsage[0]?.used ?? 0);
         await assertStorageCapacity(usedBytes, source.asset.sizeBytes);
-        stored = await storeUpload(await readStoredImage(source.asset.storageKey), "image");
+        stored = await storeUpload(
+          await readStoredImage(source.asset.storageKey),
+          "image",
+        );
 
         const caption = Object.hasOwn(body, "caption")
           ? captionOverride(body)
@@ -192,15 +229,17 @@ export function registerGalleryChatShareRoutes(
 
         const dto = {
           ...chatMessageDto(message, auth.displayName, "TABLE" as const),
-          attachments: [{
-            contentId: upload.contentId,
-            fileName: upload.fileName,
-            mimeType: upload.mimeType,
-            sizeBytes: upload.sizeBytes,
-            width: upload.width,
-            height: upload.height,
-            createdAt: upload.createdAt.toISOString(),
-          }],
+          attachments: [
+            {
+              contentId: upload.contentId,
+              fileName: upload.fileName,
+              mimeType: upload.mimeType,
+              sizeBytes: upload.sizeBytes,
+              width: upload.width,
+              height: upload.height,
+              createdAt: upload.createdAt.toISOString(),
+            },
+          ],
         };
         const [event] = await tx
           .insert(gameEvents)
@@ -227,9 +266,18 @@ export function registerGalleryChatShareRoutes(
       if (!committed && stored)
         await removeStoredUpload(stored.storageKey).catch(() => undefined);
       const [winner] = await db
-        .select({ membershipId: gameEvents.membershipId, type: gameEvents.type, payload: gameEvents.payload })
+        .select({
+          membershipId: gameEvents.membershipId,
+          type: gameEvents.type,
+          payload: gameEvents.payload,
+        })
         .from(gameEvents)
-        .where(and(eq(gameEvents.campaignId, auth.campaignId), eq(gameEvents.actionId, body.actionId)))
+        .where(
+          and(
+            eq(gameEvents.campaignId, auth.campaignId),
+            eq(gameEvents.actionId, body.actionId),
+          ),
+        )
         .limit(1);
       if (winner) {
         if (matchesReplay(winner, auth.membershipId, thread.id, body))
@@ -237,12 +285,16 @@ export function registerGalleryChatShareRoutes(
         return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
       }
       if (error instanceof Error) {
-        if (error.message === "GALLERY_MEDIA_NOT_FOUND") return reply.code(404).send({ error: error.message });
-        if (error.message === "GALLERY_IMAGE_REQUIRED") return reply.code(415).send({ error: error.message });
+        if (error.message === "GALLERY_MEDIA_NOT_FOUND")
+          return reply.code(404).send({ error: error.message });
+        if (error.message === "GALLERY_IMAGE_REQUIRED")
+          return reply.code(415).send({ error: error.message });
         const uploadError = publicUploadError(error);
-        if (uploadError !== "UPLOAD_FAILED") return reply.code(400).send({ error: uploadError });
+        if (uploadError !== "UPLOAD_FAILED")
+          return reply.code(400).send({ error: uploadError });
       }
-      if (postgresErrorCode(error) === "23505") return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
+      if (postgresErrorCode(error) === "23505")
+        return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
       throw error;
     }
 

@@ -1,6 +1,17 @@
 import { type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/account/capabilities", (route) =>
+    route.fulfill({
+      json: {
+        accountAuthEnabled: true,
+        campaignLinkAccessEnabled: true,
+        legacyDevEnabled: false,
+      },
+    }),
+  );
+});
 
 const baseSnapshot: GameSnapshot = {
   campaign: {
@@ -117,7 +128,7 @@ test("public landing explains the service and accepts a suggestion", async ({
     page.getByRole("heading", { name: "Возможности сервиса" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Ближайшие планы" }),
+    page.getByRole("heading", { name: "В разработке и в планах" }),
   ).toBeVisible();
 
   await page
@@ -136,24 +147,20 @@ test("public landing explains the service and accepts a suggestion", async ({
   });
 });
 
-test("public landing lists the six permanent beta players", async ({
+test("public landing offers account access without exposing public player aliases", async ({
   page,
 }) => {
   await page.route("**/api/bootstrap", (route) =>
     route.fulfill({ status: 401, contentType: "application/json", body: "{}" }),
   );
   await page.goto("/");
-  const players = page.getByRole("navigation", { name: "Постоянные игроки" });
-  await expect(players.getByRole("link")).toHaveCount(6);
   await expect(
-    players.getByRole("link", { name: /Эд.*archinamon/ }),
-  ).toHaveAttribute("href", "/play/archinamon");
-  await expect(
-    players.getByRole("link", { name: /Андрей.*uixray/ }),
-  ).toHaveAttribute("href", "/play/uixray");
+    page.getByRole("link", { name: "Войти в аккаунт", exact: true }),
+  ).toHaveAttribute("href", "/account");
+  await expect(page.locator('a[href^="/play/"]')).toHaveCount(0);
 });
 
-test("nickname link exchanges a public beta player session", async ({
+test("retired nickname link cannot exchange a public player session", async ({
   page,
 }) => {
   let authenticated = false;
@@ -176,11 +183,11 @@ test("nickname link exchanges a public beta player session", async ({
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
   await page.goto("/play/archinamon");
-  await page.getByRole("button", { name: "Войти" }).click();
-  await expect(page).toHaveURL("/");
   await expect(
-    page.getByRole("region", { name: "Интерактивная карта сцены" }),
+    page.getByRole("heading", { name: "Эта ссылка больше не поддерживается" }),
   ).toBeVisible();
+  expect(authenticated).toBe(false);
+  await expect(page.locator(".app-shell")).toHaveCount(0);
 });
 
 test("a player can safely hand off a shared computer to the player chooser", async ({
@@ -229,13 +236,17 @@ test("a player can safely hand off a shared computer to the player chooser", asy
   await expect.poll(() => logoutRequests).toBe(1);
   await expect(page).toHaveURL("/");
   await expect(
-    page.getByRole("heading", { name: "Выберите игрока" }),
+    page.getByRole("heading", {
+      name: "Всё необходимое для игры — в едином пространстве",
+    }),
   ).toBeVisible();
   await expect(page.getByText("Вы играете как: Игрок один")).toHaveCount(0);
 
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Выберите игрока" }),
+    page.getByRole("heading", {
+      name: "Всё необходимое для игры — в едином пространстве",
+    }),
   ).toBeVisible();
   await page.goBack();
   await expect(page.getByText("Вы играете как: Игрок один")).toHaveCount(0);
@@ -280,17 +291,23 @@ test("handoff hides the previous player when the logout response is lost", async
 
   await expect(page).toHaveURL("/");
   await expect(
-    page.getByRole("heading", { name: "Выберите игрока" }),
+    page.getByRole("heading", {
+      name: "Всё необходимое для игры — в едином пространстве",
+    }),
   ).toBeVisible();
   await expect(page.getByText("Вы играете как: Игрок один")).toHaveCount(0);
 });
 
 for (const invitation of [
-  { path: "/gm/gm-token", endpoint: "/api/auth/gm", label: "Вход мастера" },
+  {
+    path: "/gm/gm-token",
+    endpoint: "/api/auth/gm",
+    label: "Войти как мастер по ссылке",
+  },
   {
     path: "/join/player-token",
     endpoint: "/api/auth/invite",
-    label: "Вход в кампанию",
+    label: "Присоединиться по ссылке",
   },
 ]) {
   test(`${invitation.label} remains available from the landing`, async ({
@@ -321,9 +338,9 @@ for (const invitation of [
       page.getByRole("heading", { name: invitation.label }),
     ).toBeVisible();
     if (invitation.path.startsWith("/join/")) {
-      await page.getByLabel("Имя").fill("Игрок");
+      await page.getByLabel("Имя в кампании").fill("Игрок");
     }
-    await page.getByRole("button", { name: "Войти" }).click();
+    await page.getByRole("button", { name: "Продолжить в игру" }).click();
 
     await expect(page).toHaveURL("/");
     await expect(page.locator("canvas").first()).toBeVisible();

@@ -75,7 +75,9 @@ test("выше панель — больше видимых кнопок быс�
    */
   await page.setViewportSize({ width: 1440, height: 1400 });
   await page.goto(`/gm/${gmToken}`);
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page
+    .getByRole("button", { name: /^(Войти(?: в игру)?|Продолжить в игру)$/ })
+    .click();
   await expect(page).toHaveURL("/");
   await expect(page.locator(".quick-roll-panel")).toBeVisible();
 
@@ -126,7 +128,9 @@ test("прокрутка появляется только когда кнопк
    */
   await page.setViewportSize({ width: 1440, height: 1400 });
   await page.goto(`/gm/${gmToken}`);
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page
+    .getByRole("button", { name: /^(Войти(?: в игру)?|Продолжить в игру)$/ })
+    .click();
   await expect(page).toHaveURL("/");
   await expect(page.locator(".quick-roll-panel")).toBeVisible();
 

@@ -13,16 +13,17 @@ import { expect, test } from "./campaign-fixture";
  * схлопывалась в ноль. Высоту строк считает движок вёрстки — в jsdom её нет,
  * и проверять там нечего.
  *
- * UIX-621: бой удалён из UI, но сохранённые боевые данные не должны возвращать панель.
- * Поэтому legacy-бой здесь по-прежнему включается: без него раскладка сходится сама
- * собой и тест проходит даже на сломанном CSS.
+ * Initiative was intentionally restored in 94a8511c/bb03e115. A GM always sees
+ * the manual panel; legacy battle state must not duplicate it or break layout.
  */
 
 const SIDEBAR_WIDTHS = [280, 360, 600] as const;
 
 async function signInAsGm(page: Page, token: string) {
   await page.goto(`/gm/${token}`);
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page
+    .getByRole("button", { name: /^(Войти(?: в игру)?|Продолжить в игру)$/ })
+    .click();
   await expect(page).toHaveURL("/");
 }
 
@@ -121,7 +122,7 @@ test.describe("лента журнала с сохранённым legacy-сос
     await setBattle(page, "START_BATTLE");
 
     try {
-      await expect(page.locator(".initiative-panel")).toHaveCount(0);
+      await expect(page.locator(".initiative-panel")).toHaveCount(1);
       await expect(page.locator(".activity-log-toolbar")).toBeVisible();
 
       for (const width of SIDEBAR_WIDTHS) {
@@ -162,7 +163,7 @@ test.describe("лента журнала с сохранённым legacy-сос
 
     await setBattle(page, "START_BATTLE");
     try {
-      await expect(page.locator(".initiative-panel")).toHaveCount(0);
+      await expect(page.locator(".initiative-panel")).toHaveCount(1);
       const fits = await page.evaluate(() => {
         const composer = document.querySelector(".chat-compose");
         const feed = document.querySelector(".activity-feed");

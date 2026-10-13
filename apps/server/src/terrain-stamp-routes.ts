@@ -61,10 +61,14 @@ export function registerTerrainStampRoutes(app: FastifyInstance, db: Database) {
   app.get("/api/terrain-stamps/catalog", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    if (auth.role !== "GM") return reply.code(403).send({ error: "STAMP_CATALOG_FORBIDDEN" });
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "STAMP_CATALOG_FORBIDDEN" });
     return {
       packId: "builtin-terrain-v1",
-      stamps: Object.values(stampCatalog).map(({ assetKey, packId }) => ({ assetKey, packId })),
+      stamps: Object.values(stampCatalog).map(({ assetKey, packId }) => ({
+        assetKey,
+        packId,
+      })),
     };
   });
 
@@ -74,7 +78,8 @@ export function registerTerrainStampRoutes(app: FastifyInstance, db: Database) {
       const auth = await requireAuth(request, reply, db);
       if (!auth) return;
       const parsed = assetKeySchema.safeParse(request.params.assetKey);
-      if (!parsed.success) return reply.code(404).send({ error: "STAMP_ASSET_NOT_FOUND" });
+      if (!parsed.success)
+        return reply.code(404).send({ error: "STAMP_ASSET_NOT_FOUND" });
       if (!(await mayReadStampAsset(db, auth, parsed.data)))
         return reply.code(404).send({ error: "STAMP_ASSET_NOT_FOUND" });
 

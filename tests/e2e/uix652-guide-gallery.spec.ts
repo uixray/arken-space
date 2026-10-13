@@ -25,7 +25,15 @@ for (const viewport of [
         mutations.push(request.url());
       return route.fulfill({
         status: request.url().endsWith("/api/bootstrap") ? 401 : 200,
-        json: request.url().endsWith("/api/account/capabilities") ? { accountAuthEnabled: false, registrationEnabled: false, legacyDevEnabled: true, campaignLinkAccessEnabled: false, campaignCreationEnabled: false } : [],
+        json: request.url().endsWith("/api/account/capabilities")
+          ? {
+              accountAuthEnabled: false,
+              registrationEnabled: false,
+              legacyDevEnabled: true,
+              campaignLinkAccessEnabled: false,
+              campaignCreationEnabled: false,
+            }
+          : [],
       });
     });
     page.on("response", (response) => {
@@ -33,7 +41,10 @@ for (const viewport of [
         imageResponses.push(response.status());
     });
 
-    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.setViewportSize({
+      width: viewport.width,
+      height: viewport.height,
+    });
     await page.goto("/");
     const gallery = page.locator(".guide-gallery");
     await gallery.locator("summary").click();
@@ -44,16 +55,22 @@ for (const viewport of [
       await expect(image).toBeVisible();
       await expect(image).toHaveAttribute("loading", "lazy");
       await expect(image).toHaveAttribute("alt", /.+/);
-      await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+      await expect
+        .poll(() =>
+          image.evaluate(
+            (img: HTMLImageElement) => img.complete && img.naturalWidth > 0,
+          ),
+        )
+        .toBe(true);
     }
     await expect.poll(() => imageResponses.length).toBe(3);
     expect(imageResponses.every((status) => status === 200)).toBe(true);
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBeLessThanOrEqual(viewport.width);
-    expect(
-      await gallery.evaluate((el) => el.scrollWidth),
-    ).toBeLessThanOrEqual(await gallery.evaluate((el) => el.clientWidth));
+    expect(await gallery.evaluate((el) => el.scrollWidth)).toBeLessThanOrEqual(
+      await gallery.evaluate((el) => el.clientWidth),
+    );
     expect(
       await gallery.evaluate((el) => el.scrollWidth <= el.clientWidth),
     ).toBe(true);
@@ -65,5 +82,3 @@ for (const viewport of [
     });
   });
 }
-
-

@@ -27,5 +27,3 @@ Starting revision: d8e8b51b630e4c707cbe39b8e7554028c04d9b5c.
 ## Blockers and next action
 
 The scoped browser gate passed. Root should review the focused diff and coordinate the separate full-web typecheck failure with the UIX-382 owner. Full UIX-264 lifecycle, backend session/campaign integration, and real persistence remain open.
-
-

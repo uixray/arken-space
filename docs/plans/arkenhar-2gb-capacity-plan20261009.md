@@ -15,6 +15,7 @@ Load generator runs on host outside measured server budget, as real user devices
 ## Hard resource budget
 
 Reserve at least512MiB of nominal2GiB for OS/Docker/host services. Aggregate workload hard limits <=1536MiB:
+
 - PostgreSQL512MiB.
 - Server768MiB.
 - Web64MiB and gateway64MiB combined128MiB (if single edge service used, max128MiB total).
@@ -31,6 +32,7 @@ Maximum20min total after resources preflight: startup <=3min,2min warmup, **6min
 Seven concurrent authenticated real socket clients:1GM+6PLAYER, one campaign/active scene, at least24 tokens with6 controlled player tokens and GM-owned NPCs. Verify seven connections and role/campaign snapshot before timing; otherwise INVALID, not a low-load PASS.
 
 During warmup fetch map/token media and snapshot; establish normal audio range serving if supported. During6min:
+
 - Each player sends one valid token movement per second; GM one move/second; unique command IDs, actual ACK and broadcast convergence checked. Do not blindly queue overlapping commands to a token with version constraints; use correct protocol revisions.
 - Every30s, a5s burst: all7 send up to4 valid movement commands/second each, bounded inflight/backpressure; record scheduled versus issued counts. Never count locally dropped commands as successful throughput.
 - GM triggers one supported map/scene refresh event per minute; all clients fetch updated snapshot/map through protected route. Use two declared maps if scene switching supported; no invented event names. Each client performs one representative media fetch/range cycle per minute, with bytes/status/content-type validation, not HEAD-only.
@@ -43,6 +45,7 @@ Use actual contract names from frozen fixture/source once when implementing; fre
 Sample every1s with timestamp: per-container cgroup current/peak memory, OOM/oom_kill events, RSS separately where available, CPU/throttling, restart count, DB connection/activity counts only, request/socket metrics. Docker stats working-set view alone is not memory peak proof: retain cgroup high-water value to catch subsecond peaks. Aggregate simultaneous usage over time, plus sum of individual peaks conservatively. Record cgroup cache memory separately if available; do not subtract caches to manufacture budget fit.
 
 Proposed local gate thresholds (fixed before run, not prior measured SLO):
+
 - **FAIL:** any OOM, restart, unexpected container exit, swap use, missed authenticated client, unplanned socket disconnect, lost/incorrect final token state or broadcast divergence after2s, unhandled server error, HTTP5xx, ACK timeout >2s. Report intended policy4xx separately; unexplained rejection fails functional workload.
 - **Latency PASS:** steady ACK p95<=250ms/p99<=750ms; burst p95<=500ms/p99<=1500ms; broadcast convergence p95<=500ms/p99<=1500ms. Report samples/counts and monotonic timings from harness; no cross-clock subtraction. HTTP snapshot/API p95<=500ms/p99<=1500ms. Media completion thresholds depend declared file size: use <=2s for each <=5MiB loopback transfer, larger assets report throughput explicitly, not blanket PASS.
 - **Capacity PASS:** every cgroup peak <=90% of assigned hard limit, maximum observed simultaneous sum <=90% of1408MiB assigned workload limit, zero swap/OOM; no sustained memory growth >5% of assigned limit between comparable last2min windows after media warmup. Six-minute stability is not a leak soak.

@@ -20,7 +20,8 @@ export function assetUploadActionMatches(
   audioPurpose: AudioPurpose | null,
 ) {
   if (payload?.kind !== kind) return false;
-  if (kind !== "AUDIO") return payload.audioPurpose == null && audioPurpose === null;
+  if (kind !== "AUDIO")
+    return payload.audioPurpose == null && audioPurpose === null;
   return (payload.audioPurpose ?? "MUSIC") === (audioPurpose ?? "MUSIC");
 }
 

@@ -23,17 +23,18 @@ concurrency:
 
 jobs:
   browser:
-    name: e2e (${{ matrix.project }}, shard ${{ matrix.shard }}/2)
+    name: e2e (${{ matrix.project }}, shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
-    # Firefox превысил 45 минут: делим полный набор на два shard каждого браузера,
+    # Firefox превысил 45 минут: делим полный набор на три shard каждого браузера,
     # не увеличивая лимит, число Playwright workers или retries.
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 4
+      # Каждый shard имеет отдельный runner и Postgres: локальная очередь не нужна.
+      max-parallel: 6
       matrix:
         project: [chromium, firefox]
-        shard: [1, 2]
+        shard: [1, 2, 3]
         include:
           - project: chromium
             installBrowser: chrome
@@ -62,6 +63,11 @@ jobs:
       WEB_ORIGIN: http://localhost:5173
       PUBLIC_URL: http://localhost:5173
       MEDIA_ROOT: ./media
+      ACCOUNT_AUTH_ENABLED: "true"
+      CAMPAIGN_LINK_ACCESS_ENABLED: "true"
+      LEGACY_DEV_AUTH_ENABLED: "false"
+      ACCOUNT_REGISTRATION_ENABLED: "false"
+      ACCOUNT_MAIL_RUNTIME_ENABLED: "false"
 
     steps:
       - uses: actions/checkout@v4
@@ -77,9 +83,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Та же причина, что и в checks.yml: workspace-пакеты экспортируются из
-      # `dist`, и без сборки сервер не стартует.
-      - run: pnpm build
+      # Здесь web работает через Vite dev, а не apps/web/dist. Полная release
+      # сборка остаётся в checks; каждый shard собирает свежий API и его deps.
+      # Не скачиваем чужой/stale dist и не ждём отдельный artifact runner.
+      - run: pnpm --filter @arken/server... --workspace-concurrency=1 build
 
       # GM-токен генерируется на прогон. Это не про секретность — база здесь
       # одноразовая, — а про то, что seed записывает hash только в пустую базу.
@@ -108,6 +115,7 @@ jobs:
           for i in $(seq 1 40); do
             if curl -sf http://127.0.0.1:4100/healthz > /dev/null; then
               echo "server ready"
+              curl -sf http://127.0.0.1:4100/api/account/capabilities | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const c=JSON.parse(s);if(!c.accountAuthEnabled||!c.campaignLinkAccessEnabled||c.legacyDevEnabled)process.exit(1);});'
               exit 0
             fi
             sleep 3
@@ -116,7 +124,9 @@ jobs:
           tail -40 /tmp/server.log
           exit 1
 
-      - run: pnpm test:e2e --project=${{ matrix.project }} --workers=1 --fail-on-flaky-tests --shard=${{ matrix.shard }}/2 --reporter=line,json
+      - name: Verify duration planner invariants
+        run: node --test scripts/ci/balance-browser-files.test.mjs scripts/ci/verify-staged-pool.test.mjs
+      - run: node scripts/ci/run-balanced-browser.mjs ${{ matrix.project }} ${{ matrix.shard }} 3
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: e2e-report.json
 
@@ -125,7 +135,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-result-${{ matrix.project }}-${{ matrix.shard }}
-          path: e2e-report.json
+          path: |
+            e2e-report.json
+            e2e-plan-${{ matrix.project }}-${{ matrix.shard }}.json
           retention-days: 7
           if-no-files-found: error
 
@@ -187,6 +199,7 @@ jobs:
           path: |
             test-results/
             playwright-report/
+            browser-run.log
           retention-days: 7
           if-no-files-found: ignore
 
@@ -199,7 +212,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # Сохраняем имя required check: success только когда все четыре
+  # Сохраняем имя required check: success только когда все шесть
   # matrix-задания успешны; failure/cancelled/skipped не превращаются в PASS.
   e2e:
     name: e2e

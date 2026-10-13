@@ -176,38 +176,4 @@ export async function paintedIconContrast(icon: Locator) {
   return contrast;
 }
 
-/** Wait for finite CSS transitions on the control/icon chain, then two paint frames. */
-export async function settleIconState(control: Locator) {
-  await control.evaluate(async (element) => {
-    const nodes = new Set<Element>([
-      element,
-      ...element.querySelectorAll("svg,svg *"),
-    ]);
-    for (let node = element.parentElement; node; node = node.parentElement)
-      nodes.add(node);
-    let duration = 0;
-    const seconds = (value: string) =>
-      value.endsWith("ms") ? parseFloat(value) / 1000 : parseFloat(value);
-    for (const node of nodes) {
-      for (const style of [
-        getComputedStyle(node),
-        getComputedStyle(node, "::before"),
-        getComputedStyle(node, "::after"),
-      ]) {
-        const durations = style.transitionDuration.split(",").map(seconds);
-        const delays = style.transitionDelay.split(",").map(seconds);
-        duration = Math.max(
-          duration,
-          ...durations.map((d, i) => d + delays[i % delays.length]),
-        );
-      }
-    }
-    if (duration > 1)
-      throw new Error("Long transition needs explicit state acceptance");
-    if (duration > 0)
-      await new Promise((resolve) => setTimeout(resolve, duration * 1000));
-    await new Promise((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(resolve)),
-    );
-  });
-}
+export { settleActiveIconTransitions as settleIconState } from "./active-icon-transitions";

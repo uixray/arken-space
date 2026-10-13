@@ -16,6 +16,7 @@ Read-only bounded audit of `.data/qa-prep/release-gate-2c35435-20261009/`: build
 Root's separate evidence is relied on, not rerun here: `root-context-verification.json` records every508 exported file byte/hash match; `root-server-image-verification.json` records Docker image ID/size inspect; root reports both archive SHA256 checks PASS. This reviewer did not repeat full508 hashing or large archive hashing.
 
 Authoritative archive hashes from machine manifest/root receipt:
+
 - Server: `5d535d7cef294d2ba81f1ae9c11555ac3559e8a7c6975a588b65bb273ca0e757`.
 - Web: `408cc1092cd1c38ef2838244d7811f88aa4aa5dfbdb295a610ba86a795aaeb5d`.
 

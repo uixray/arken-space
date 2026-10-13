@@ -273,7 +273,11 @@ function ChatMessageBodyComponent({
         onOpen={onOpenPlayerRequests ?? (() => {})}
       />
     );
-  if (message.globalStickerId || message.stickerId || message.stickerPresentation) {
+  if (
+    message.globalStickerId ||
+    message.stickerId ||
+    message.stickerPresentation
+  ) {
     const presentation = message.stickerPresentation;
     const stickerId = message.globalStickerId ?? message.stickerId;
     if (!stickerId || !presentation)

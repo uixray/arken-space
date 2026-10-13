@@ -8,4 +8,5 @@ Workspace correction: worker initially edited D release source contrary to assig
 Next: finite actual guide browser gate with existing installed Chrome and owned loopback C Vite once available; human acceptance separate. No frozen package changes, merge, push or deployment.
 
 ## Final addressed browser follow-up — fe507a1
+
 Actual installedChrome channel viaPlaywright syntheticAPI-stubbed guidecasePASS at390x844/1280x800:4workflows4FAQ/rolelabels/sign-inreachability,1→2columnlayout/nohorizontaloverflow, keyboardEnterguideanchorhash,shortcutsearch retainsarticles,gallerycollapsed,zeroAPImutations. OwnedloopbackVite5189stopped. Addedonlytests/e2e/uix652-guide-procedures.spec.ts; formatting/diffcheckPASS. Initialambiguousheadinglocator corrected thenfinalrunpassed. No duplicatebuild/unitgate; unchangedguidesource priorreceiptretained, notnewfullproducttest. Humanreadability/realparticipant/comprehensivecoverage remainsopen.

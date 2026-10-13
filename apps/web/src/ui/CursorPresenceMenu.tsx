@@ -87,9 +87,7 @@ export function CursorPresenceMenu({
         }
       >
         <AppIcon icon={CursorPresenceIcon} />
-        <span className="map-tool__label">
-          Курсоры
-        </span>
+        <span className="map-tool__label">Курсоры</span>
       </ToolbarButton>
     );
 

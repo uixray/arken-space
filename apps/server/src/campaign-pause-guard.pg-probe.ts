@@ -2,13 +2,7 @@ import { randomUUID } from "node:crypto";
 import cookie from "@fastify/cookie";
 import Fastify, { type FastifyInstance } from "fastify";
 import { eq, sql } from "drizzle-orm";
-import {
-  campaigns,
-  createDatabase,
-  memberships,
-  scenes,
-  sessions,
-} from "@arken/db";
+import { campaigns, createDatabase, memberships, scenes } from "@arken/db";
 import {
   CampaignCanvasGuardError,
   runCampaignCanvasMutation,
@@ -17,7 +11,7 @@ import {
 } from "./campaign-pause-guard.js";
 import { registerCampaignPauseRoutes } from "./campaign-pause.js";
 import { env } from "./env.js";
-import { hashToken } from "./security.js";
+import { seedProbeSessions } from "./pg-probe-auth.js";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString)
@@ -415,11 +409,9 @@ try {
     role: "GM",
     displayName: "UIX-583 probe GM",
   });
-  await db.insert(sessions).values({
-    membershipId,
-    tokenHash: hashToken(gmSecret),
-    expiresAt: new Date(Date.now() + 600_000),
-  });
+  await seedProbeSessions(db, [
+    { membershipId, campaignId, role: "GM", token: gmSecret },
+  ]);
   await db.insert(scenes).values({
     id: sceneId,
     campaignId,

@@ -156,6 +156,18 @@ async function installBoundary(page: Page) {
     const method = request.method();
     if (method === "GET") {
       reads.push(path);
+      if (path === "/api/account/capabilities")
+        return route.fulfill({
+          json: {
+            accountAuthEnabled: false,
+            campaignLinkAccessEnabled: false,
+            legacyDevEnabled: true,
+          },
+        });
+      if (path === "/api/soundpad")
+        return route.fulfill({
+          json: { packs: [], playerPlaybackEnabled: true },
+        });
       if (path === "/api/bootstrap") return route.fulfill({ json: snapshot });
       if (path === "/api/story/posts")
         return route.fulfill({ json: { posts: [], nextCursor: null } });
@@ -308,7 +320,9 @@ const placementButton = (editor: Locator) =>
   editor.getByRole("button", { name: "Создать и поставить", exact: true });
 
 async function openEditor(page: Page) {
-  await page.locator(".token-palette > button").click();
+  await page
+    .getByRole("button", { name: "Создать токен", exact: true })
+    .click();
   const editor = editorFor(page);
   await expect(editor).toBeVisible();
   await expect(editor.locator(".token-image-generator")).toBeVisible();
@@ -563,7 +577,10 @@ test("UIX-613 delayed 403 retains derived token draft and retry 201 closes only 
     await mock.replyPlacement(1, 201);
     await expect(editor).toBeHidden();
     await page
-      .getByRole("button", { name: "Объекты карты", exact: true })
+      .getByRole("button", {
+        name: "Список объектов и токенов карты",
+        exact: true,
+      })
       .click();
     await expect(
       page

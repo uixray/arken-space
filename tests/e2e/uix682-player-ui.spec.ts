@@ -1,5 +1,6 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { CharacterDto, GameSnapshot, StatLayout } from "@arken/contracts";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
@@ -147,18 +148,29 @@ async function mockApi(
       const body = request.postDataJSON() as Record<string, unknown>;
       onLayoutWrite(path, body);
       if (foreignPlayer)
-        return route.fulfill({ status: 403, json: { error: "CHARACTER_FORBIDDEN" } });
+        return route.fulfill({
+          status: 403,
+          json: { error: "CHARACTER_FORBIDDEN" },
+        });
       if (path === `/api/characters/${characterId}/stat-layout`) {
-        const current = snapshot.characters.find((item) => item.id === characterId)!;
+        const current = snapshot.characters.find(
+          (item) => item.id === characterId,
+        )!;
         current.statLayout = body.layout as StatLayout;
         current.revision = Number(body.revision) + 1;
-        return route.fulfill({ json: { characterId, revision: current.revision } });
+        return route.fulfill({
+          json: { characterId, revision: current.revision },
+        });
       }
       if (path === "/api/campaign/stat-layout") {
         snapshot.campaign.statLayout = body.layout as StatLayout;
         snapshot.campaign.revision = Number(body.revision) + 1;
-        snapshot.characters[0]!.statLayout = structuredClone(snapshot.campaign.statLayout);
-        return route.fulfill({ json: { revision: snapshot.campaign.revision } });
+        snapshot.characters[0]!.statLayout = structuredClone(
+          snapshot.campaign.statLayout,
+        );
+        return route.fulfill({
+          json: { revision: snapshot.campaign.revision },
+        });
       }
     }
     if (request.method() === "GET" && path === "/api/bootstrap")
@@ -168,11 +180,15 @@ async function mockApi(
     if (request.method() === "GET" && path === "/api/chat/read")
       return route.fulfill({ json: { ok: true } });
     if (request.method() === "GET" && path === "/api/soundpad")
-      return route.fulfill({ json: { packs: [], playerPlaybackEnabled: true } });
-    if (request.method() === "GET" && path === "/api/operator/feedback/capability")
+      return route.fulfill({
+        json: { packs: [], playerPlaybackEnabled: true },
+      });
+    if (
+      request.method() === "GET" &&
+      path === "/api/operator/feedback/capability"
+    )
       return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-    if (request.method() === "GET")
-      return route.fulfill({ json: [] });
+    if (request.method() === "GET") return route.fulfill({ json: [] });
     return route.fulfill({ status: 405, json: { error: "UNEXPECTED_WRITE" } });
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
@@ -193,6 +209,7 @@ test("UIX-682 PLAYER owner layout CRUD/order survives reload; compact sheet is a
   await mockApi(page, snapshot, (path, body) => writes.push({ path, body }));
 
   await page.setViewportSize({ width: 1280, height: 900 });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
   const sheet = page.getByRole("article", {
@@ -200,28 +217,56 @@ test("UIX-682 PLAYER owner layout CRUD/order survives reload; compact sheet is a
     exact: true,
   });
   await expect(sheet).toBeVisible();
-  const workspace = page.locator(".character-workspace.is-single-player-character");
+  const workspace = page.locator(
+    ".character-workspace.is-single-player-character",
+  );
   await expect(workspace).toBeVisible();
-  await expect(workspace.locator(".character-workspace__body.is-single-character")).toBeVisible();
+  await expect(
+    workspace.locator(".character-workspace__body.is-single-character"),
+  ).toBeVisible();
 
   // C02: portrait action affordance is visible by keyboard focus, not hover alone.
-  const portrait = sheet.getByRole("button", { name: "Изменить портрет: Хранитель UIX682" });
+  const portrait = sheet.getByRole("button", {
+    name: "Изменить портрет: Хранитель UIX682",
+  });
   await portrait.focus();
   await page.keyboard.press("Tab");
   await page.keyboard.press("Shift+Tab");
   await expect(portrait).toBeFocused();
-  await expect(portrait.locator(".character-hero__avatar-edit")).toHaveCSS("opacity", "1");
+  await expect(portrait.locator(".character-hero__avatar-edit")).toHaveCSS(
+    "opacity",
+    "1",
+  );
 
-  // C03: skills and abilities are distinct, vertically stacked sections.
+  // C03 owner delta (11.10): wide cards put both sections on a row below
+  // characteristics; narrow cards stack them. Do not restore the old layout.
   const skills = sheet.getByRole("heading", { name: "Навыки", exact: true });
-  const abilities = sheet.getByRole("heading", { name: "Способности и заклинания", exact: true });
+  const abilities = sheet.getByRole("heading", {
+    name: "Способности и заклинания",
+    exact: true,
+  });
   await expect(skills).toBeVisible();
   await expect(abilities).toBeVisible();
-  expect((await abilities.boundingBox())!.y).toBeGreaterThan((await skills.boundingBox())!.y);
+  const skillsCard = sheet.locator(".character-card--skills");
+  const abilitiesCard = sheet.locator(".character-card--abilities");
+  const wideSkills = (await skillsCard.boundingBox())!;
+  const wideAbilities = (await abilitiesCard.boundingBox())!;
+  expect(wideAbilities.y).toBeCloseTo(wideSkills.y, 0);
+  expect(wideAbilities.x).toBeGreaterThanOrEqual(
+    wideSkills.x + wideSkills.width,
+  );
+  const characteristics = (await sheet
+    .locator(".character-card--stats")
+    .boundingBox())!;
+  expect(wideSkills.y).toBeGreaterThanOrEqual(
+    characteristics.y + characteristics.height,
+  );
 
   // C11: resource card remains a full-width, styled control on its accessible tab.
   await sheet.getByRole("tab", { name: "Инвентарь и ресурсы" }).click();
-  const resourceCard = sheet.locator(".character-section--resources .resource-card");
+  const resourceCard = sheet.locator(
+    ".character-section--resources .resource-card",
+  );
   await expect(resourceCard).toBeVisible();
   const resourceWidths = await resourceCard.evaluate((node) => ({
     card: node.getBoundingClientRect().width,
@@ -238,8 +283,16 @@ test("UIX-682 PLAYER owner layout CRUD/order survives reload; compact sheet is a
 
   // C01: owner can create, reorder, rename, and delete a character-local row.
   const statsCard = sheet.locator(".character-card--stats");
+  const openRowMenu = async (row: Locator) => {
+    const menu = row.locator(".stat-field__menu");
+    if ((await menu.getAttribute("open")) === null)
+      await menu.locator("summary").click();
+    await expect(menu).toHaveAttribute("open", "");
+  };
   await statsCard.getByRole("button", { name: "Добавить строку" }).click();
-  let dialog = page.getByRole("dialog", { name: "Новая строка — Характеристики" });
+  let dialog = page.getByRole("dialog", {
+    name: "Новая строка — Характеристики",
+  });
   await dialog.getByRole("textbox", { name: "Название" }).fill("Смекалка");
   await dialog.getByRole("button", { name: "Сохранить" }).click();
   await expect.poll(() => writes.length).toBe(1);
@@ -253,45 +306,70 @@ test("UIX-682 PLAYER owner layout CRUD/order survives reload; compact sheet is a
   ]);
   expect(writes[0]!.body.actionId).toMatch(/^[0-9a-f-]{36}$/i);
 
-  const newRow = statsCard.locator(".stat-field").filter({ hasText: "Смекалка" });
-  await newRow.locator(".stat-field__menu summary").click();
-  await newRow.getByRole("button", { name: "Переместить «Смекалка» выше" }).click();
+  const newRow = statsCard
+    .locator(".stat-field")
+    .filter({ hasText: "Смекалка" });
+  await openRowMenu(newRow);
+  await newRow
+    .getByRole("button", { name: "Переместить «Смекалка» выше" })
+    .click();
   await expect.poll(() => writes.length).toBe(2);
-  await expect(statsCard.locator(".stat-field__roll-name").nth(1)).toHaveText("Смекалка");
+  await expect(statsCard.locator(".stat-field__roll-name").nth(1)).toHaveText(
+    "Смекалка",
+  );
 
-  await newRow.locator(".stat-field__menu summary").click();
-  await newRow.getByRole("button", { name: "Переименовать «Смекалка»" }).click();
+  await openRowMenu(newRow);
+  await newRow
+    .getByRole("button", { name: "Переименовать «Смекалка»" })
+    .click();
   dialog = page.getByRole("dialog", { name: "Переименовать строку" });
-  await dialog.getByRole("textbox", { name: "Название" }).fill("Смекалка героя");
+  await dialog
+    .getByRole("textbox", { name: "Название" })
+    .fill("Смекалка героя");
   await dialog.getByRole("button", { name: "Сохранить" }).click();
   await expect.poll(() => writes.length).toBe(3);
-  await expect(statsCard.getByRole("button", { name: "Смекалка героя" })).toBeVisible();
+  await expect(
+    statsCard.getByRole("button", { name: "Смекалка героя", exact: true }),
+  ).toBeVisible();
 
-  const renamedRow = statsCard.locator(".stat-field").filter({ hasText: "Смекалка героя" });
-  await renamedRow.locator(".stat-field__menu summary").click();
-  await renamedRow.getByRole("button", { name: "Удалить «Смекалка героя»" }).click();
+  const renamedRow = statsCard
+    .locator(".stat-field")
+    .filter({ hasText: "Смекалка героя" });
+  await openRowMenu(renamedRow);
+  await renamedRow
+    .getByRole("button", { name: "Удалить «Смекалка героя»" })
+    .click();
   dialog = page.getByRole("dialog", { name: "Удалить «Смекалка героя»?" });
   await dialog.getByRole("button", { name: "Удалить" }).click();
   await expect.poll(() => writes.length).toBe(4);
-  await expect(statsCard.getByRole("button", { name: "Смекалка героя" })).toHaveCount(0);
+  await expect(
+    statsCard.getByRole("button", { name: "Смекалка героя", exact: true }),
+  ).toHaveCount(0);
 
   await page.screenshot({ path: info.outputPath("uix682-player-desktop.png") });
   await page.setViewportSize({ width: 360, height: 640 });
   await expect(page.locator("html")).toHaveJSProperty("scrollWidth", 360);
+  const narrowSkills = (await skillsCard.boundingBox())!;
+  const narrowAbilities = (await abilitiesCard.boundingBox())!;
+  expect(narrowAbilities.y).toBeGreaterThanOrEqual(
+    narrowSkills.y + narrowSkills.height,
+  );
   await page.screenshot({ path: info.outputPath("uix682-player-narrow.png") });
 
   const savedLayout = structuredClone(snapshot.characters[0]!.statLayout);
   await page.reload();
   await openWorkspaceSection(page, "Персонажи");
-  await expect(page.locator(".character-card--stats .stat-field__roll-name")).toHaveText(
-    savedLayout[0]!.rows.map((row) => row.label),
-  );
+  await expect(
+    page.locator(".character-card--stats .stat-field__roll-name"),
+  ).toHaveText(savedLayout[0]!.rows.map((row) => row.label));
 });
 
 test("UIX-682 GM keeps campaign layout controls; non-owner PLAYER receives no layout edit affordance", async ({
   browser,
 }, info) => {
-  const gmPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const gmPage = await browser.newPage({
+    viewport: { width: 1280, height: 900 },
+  });
   const gmSnapshot = snapshotFor("GM");
   const gmWrites: string[] = [];
   await mockApi(gmPage, gmSnapshot, (path) => gmWrites.push(path));
@@ -301,24 +379,41 @@ test("UIX-682 GM keeps campaign layout controls; non-owner PLAYER receives no la
     name: "Лист персонажа Хранитель UIX682",
     exact: true,
   });
-  await expect(gmSheet.locator(".character-card--stats").getByRole("button", { name: "Добавить строку" })).toBeVisible();
+  await expect(
+    gmSheet
+      .locator(".character-card--stats")
+      .getByRole("button", { name: "Добавить строку" }),
+  ).toBeVisible();
   await expect(gmPage.locator(".activity-initiative-panel")).toBeVisible();
   await gmPage.screenshot({ path: info.outputPath("uix682-gm-desktop.png") });
   await gmPage.close();
 
-  const playerPage = await browser.newPage({ viewport: { width: 360, height: 640 } });
+  const playerPage = await browser.newPage({
+    viewport: { width: 360, height: 640 },
+  });
   const foreignSnapshot = snapshotFor("PLAYER", "another-membership");
   const deniedWrites: string[] = [];
-  await mockApi(playerPage, foreignSnapshot, (path) => deniedWrites.push(path), true);
+  await mockApi(
+    playerPage,
+    foreignSnapshot,
+    (path) => deniedWrites.push(path),
+    true,
+  );
   await playerPage.goto("/");
   await openWorkspaceSection(playerPage, "Персонажи");
   const foreignSheet = playerPage.getByRole("article", {
     name: "Лист персонажа Хранитель UIX682",
     exact: true,
   });
-  await expect(foreignSheet.locator(".character-card--stats").getByRole("button", { name: "Добавить строку" })).toHaveCount(0);
+  await expect(
+    foreignSheet
+      .locator(".character-card--stats")
+      .getByRole("button", { name: "Добавить строку" }),
+  ).toHaveCount(0);
   await expect(playerPage.locator(".activity-initiative-panel")).toHaveCount(0);
-  await playerPage.screenshot({ path: info.outputPath("uix682-player-foreign-narrow.png") });
+  await playerPage.screenshot({
+    path: info.outputPath("uix682-player-foreign-narrow.png"),
+  });
   expect(deniedWrites).toEqual([]);
   expect(gmWrites).toEqual([]);
   await playerPage.close();
@@ -342,11 +437,17 @@ test("UIX-682 ability roll result is centered in the card at desktop and narrow 
       .locator(".skill-chat-card")
       .filter({ hasText: "Огненная стрела" });
     await expect(card).toBeVisible();
-    const center = await card.locator(".skill-chat-card__result .roll-total-wrap").evaluate((node) => {
-      const total = node.getBoundingClientRect();
-      const parent = node.closest(".skill-chat-card__result")!.getBoundingClientRect();
-      return Math.abs(total.left + total.width / 2 - (parent.left + parent.width / 2));
-    });
+    const center = await card
+      .locator(".skill-chat-card__result .roll-total-wrap")
+      .evaluate((node) => {
+        const total = node.getBoundingClientRect();
+        const parent = node
+          .closest(".skill-chat-card__result")!
+          .getBoundingClientRect();
+        return Math.abs(
+          total.left + total.width / 2 - (parent.left + parent.width / 2),
+        );
+      });
     expect(center).toBeLessThanOrEqual(1);
     await expect(card.getByLabel("Итог броска")).toHaveText("16");
     await page.screenshot({

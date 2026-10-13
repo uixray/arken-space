@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { CharacterDto, GameSnapshot, StatLayout } from "@arken/contracts";
 import type { Route, WebSocketRoute } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
@@ -99,6 +100,7 @@ test("canonical removal rejects queued character edit without phantom PATCH and 
     return route.abort("blockedbyclient");
   });
   try {
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openWorkspaceSection(page, "Персонажи");
     const sheet = page.getByRole("article", {

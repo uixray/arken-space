@@ -444,7 +444,10 @@ describe("backup and restore safety", () => {
             ...config.services,
             postgres: {
               ...config.services.postgres,
-              environment: { ...config.services.postgres.environment, POSTGRES_DB: "foreign" },
+              environment: {
+                ...config.services.postgres.environment,
+                POSTGRES_DB: "foreign",
+              },
             },
           },
         },

@@ -85,7 +85,10 @@ it("marks public catalog selections for the global send command", async () => {
   await openPicker();
   fireEvent.click(screen.getByRole("option", { name: "Стикер 1" }));
   await waitFor(() =>
-    expect(send).toHaveBeenCalledWith(globalPack.stickers[0]!.id, "GLOBAL_PUBLIC"),
+    expect(send).toHaveBeenCalledWith(
+      globalPack.stickers[0]!.id,
+      "GLOBAL_PUBLIC",
+    ),
   );
 });
 

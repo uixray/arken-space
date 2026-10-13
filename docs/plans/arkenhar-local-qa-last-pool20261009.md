@@ -13,6 +13,7 @@ The latest checkpoint now proves bounded fresh-B0 rollback into a new target and
 ## One pool and ownership
 
 Root assigns **one Luna QA worker**, with one frozen helper and one offline guard test file, then one independent root review and one connected execution. Suggested exclusively owned new ignored paths:
+
 - `.tmp/uix644-last-local-pool20261009.qa.mjs`
 - `.tmp/uix644-last-local-pool20261009.guard.test.mjs`
 - immutable per-attempt receipts under `.data/qa-prep/uix644-last-local-pool20261009/`
@@ -34,6 +35,7 @@ Four browser/viewport cells: Chrome desktop1360×900, Chrome compact390×844, Fi
 ### P — five previously unaccepted caller lifecycles + one focus-only supplement
 
 Target `PlayerRequestsWorkspace.tsx`, new unsent form, not editing an existing request:
+
 - form «Когда» and «Кто увидит»;
 - request-list filters «Состояние», «Срок», «Аудитория»;
 - existing «Персонаж (необязательно)» **only Home/ArrowDown intermediate-focus supplement**. Do not replay its already accepted pointer/final-selection/Escape/outside matrix.

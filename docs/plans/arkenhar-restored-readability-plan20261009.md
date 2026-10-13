@@ -28,26 +28,27 @@ Own a new ignored harness/immutable receipts under `.data/qa-prep/uix293-global-
 
 Environment must be set **before dynamic import** of `env.ts` or modules that import it (`env.ts` parses process.env on import). Use sanitized explicit allowlist plus needed OS runtime variables, not arbitrary live process-env copying. Secrets only child environment/in-memory inputs, never arguments or stdout. Required explicit settings:
 
-| Key | Value / rule |
-| --- | --- |
-| NODE_ENV | `test` (valid env enum; cookie Secure=false on local HTTP is a declared difference from production) |
-| DEV_DATABASE_DRIVER | `postgres`, never pglite |
-| DATABASE_URL | exact isolated DB, programmatic private value |
-| PORT | `14185`; explicit harness listen host `127.0.0.1` |
-| MEDIA_ROOT | absolute verified restored snapshot directory from private receipt |
-| BUILD_REVISION | actual inspected full source SHA, not inherited live build revision |
-| SCHEMA_VERSION | `2`; verify restored journal independently—health constant alone is not schema proof |
-| APP_VERSION | recorded source-compatible version; label this composition harness, not release build |
-| WEB_ORIGIN / PUBLIC_URL | `http://127.0.0.1:14185` |
-| GLOBAL_STICKERS_ENABLED | `true` |
-| GM_ACCESS_TOKEN | private explicit valid-length value only if required by reviewed composition; it is NOT used to seed or grant access. GM login checks restored gm_access_credentials hashes, not this env shortcut |
-| SESSION_COOKIE_NAME / SESSION_TTL_DAYS | source defaults `arken_session` /30 unless exact recorded test config requires another; client cookie jar isolated in memory |
-| OPERATOR_MEMBERSHIP_IDS | only restored, provenance-verified authorized synthetic operator membership IDs, loaded privately; never add a GM merely to make a denied route succeed |
-| RATE_LIMIT_MAX / OPERATOR_FEEDBACK_RATE_LIMIT_MAX | source defaults600/min and120/min, do not raise to green the test |
+| Key                                               | Value / rule                                                                                                                                                                                       |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| NODE_ENV                                          | `test` (valid env enum; cookie Secure=false on local HTTP is a declared difference from production)                                                                                                |
+| DEV_DATABASE_DRIVER                               | `postgres`, never pglite                                                                                                                                                                           |
+| DATABASE_URL                                      | exact isolated DB, programmatic private value                                                                                                                                                      |
+| PORT                                              | `14185`; explicit harness listen host `127.0.0.1`                                                                                                                                                  |
+| MEDIA_ROOT                                        | absolute verified restored snapshot directory from private receipt                                                                                                                                 |
+| BUILD_REVISION                                    | actual inspected full source SHA, not inherited live build revision                                                                                                                                |
+| SCHEMA_VERSION                                    | `2`; verify restored journal independently—health constant alone is not schema proof                                                                                                               |
+| APP_VERSION                                       | recorded source-compatible version; label this composition harness, not release build                                                                                                              |
+| WEB_ORIGIN / PUBLIC_URL                           | `http://127.0.0.1:14185`                                                                                                                                                                           |
+| GLOBAL_STICKERS_ENABLED                           | `true`                                                                                                                                                                                             |
+| GM_ACCESS_TOKEN                                   | private explicit valid-length value only if required by reviewed composition; it is NOT used to seed or grant access. GM login checks restored gm_access_credentials hashes, not this env shortcut |
+| SESSION_COOKIE_NAME / SESSION_TTL_DAYS            | source defaults `arken_session` /30 unless exact recorded test config requires another; client cookie jar isolated in memory                                                                       |
+| OPERATOR_MEMBERSHIP_IDS                           | only restored, provenance-verified authorized synthetic operator membership IDs, loaded privately; never add a GM merely to make a denied route succeed                                            |
+| RATE_LIMIT_MAX / OPERATOR_FEEDBACK_RATE_LIMIT_MAX | source defaults600/min and120/min, do not raise to green the test                                                                                                                                  |
 
 Source defaults for quota/audio/image limits can remain; record nonsecret effective numbers. No uploads are in scope. Do not claim operator ACL equivalence when the original operator allowlist is unavailable; operator arm BLOCKED.
 
 Composition parity review against `apps/server/src/index.ts`:
+
 - Fastify `trustProxy:true`, bodyLimit=`env.MAX_AUDIO_BYTES+1024`; same CORS origin/credentials, cookie, multipart attachFieldsToBody:false/files2, and rate-limit max/timeWindow registrations in source order.
 - Same onRequest request/action-ID and unsafe-method origin check; same validation/error handling including campaign-guard handling. Do not omit security merely because most requests are GET.
 - `createDatabase` uses exact locked workspace DB implementation; verify built workspace exports against source provenance or build required contracts/db/system into a separate source-export target. Do not rebuild shared active outputs while other workers run, do not use stale unverified dist.
@@ -75,6 +76,7 @@ After guard, call `/healthz`; require200/databaseok/reported revision and schema
 Authenticate one eligible GM (plus PLAYER if eligible) through official route. `GET /api/stickers` returns both campaign/global packs; select `scope===GLOBAL_PUBLIC`, require exactly intended active two packs24/115 and139 distinct global sticker IDs. Compare joins/IDs against restored DB in private evidence. Never infer global catalog by filesystem count alone.
 
 For each of139 catalog-returned `/api/global-stickers/:id/content` URLs, sequential full GET **without Range**, bounded pacing below600/min, no mocks/retries masking error:
+
 - actual HTTP200, MIME image/webp, private/no-store, Content-Length equals received buffer length and restored-media expected size;
 - SHA256 of received bytes equals the **restored stored-WebP manifest hash** for its exact DB storage-key mapping, not `global_sticker_media.sha256` source-input hash;
 - validate WebP signature and decode received buffer fully using the already-locked server Sharp into raw pixels in memory; metadata alone is not full decode. Match decoded dimensions to restored row. Never write/re-encode source/media or output pixels to public logs;
@@ -88,11 +90,11 @@ Use private restored reference manifest/SQL joins, no content dumps. Reconfirm c
 
 Probe at most one **proven authorized/reachable** representative per category initially; record remaining not-probed count. If no representative with the needed restored identity/visibility exists, mark HTTP arm BLOCKED rather than treating an anonymous/ACL404 as missing-byte proof.
 
-| Category | Actual route / source semantics |
-| --- | --- |
-| Campaign141 | `/api/stickers/:id/content`: requireAuth, campaign/pack lifecycle/consent/visibility or historical-message ACL, then file read. Missing file returns404 `STICKER_NOT_FOUND`; same404 can mean denial, so independently establish authorized DB predicates |
-| Chat31 | `/api/chat/attachments/:contentId/content`: requires joined chatAttachment/upload/thread and campaign plus uploader/DM-participant access; missing file404 `NOT_FOUND`. Unattached upload has no route reachability and remains filesystem-only missing evidence |
-| Feedback1 | `/api/operator/feedback/:id/attachments/:attachmentId`: requireOperator, exact report/attachment, MIME allowlist and safe basename; missing file404 `ATTACHMENT_NOT_FOUND`. Unsupported MIME415 or unsafe path500 is a distinct earlier gate, not file absence; do not waive it |
+| Category    | Actual route / source semantics                                                                                                                                                                                                                                                 |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Campaign141 | `/api/stickers/:id/content`: requireAuth, campaign/pack lifecycle/consent/visibility or historical-message ACL, then file read. Missing file returns404 `STICKER_NOT_FOUND`; same404 can mean denial, so independently establish authorized DB predicates                       |
+| Chat31      | `/api/chat/attachments/:contentId/content`: requires joined chatAttachment/upload/thread and campaign plus uploader/DM-participant access; missing file404 `NOT_FOUND`. Unattached upload has no route reachability and remains filesystem-only missing evidence                |
+| Feedback1   | `/api/operator/feedback/:id/attachments/:attachmentId`: requireOperator, exact report/attachment, MIME allowlist and safe basename; missing file404 `ATTACHMENT_NOT_FOUND`. Unsupported MIME415 or unsafe path500 is a distinct earlier gate, not file absence; do not waive it |
 
 Report HTTP expected-unavailable as **observed missing content**, never “recovery PASS”. Record status/error code/eligibility truth values with pseudonymous IDs; no report text, storage keys, contact data or attachment bytes. Actual500/unexpected200 requires stop/diagnosis; do not mutate records or synthesize matching files. Preserve total173 unresolved even if only3 representatives were reachable/probed.
 

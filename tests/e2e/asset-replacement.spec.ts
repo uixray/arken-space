@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { makePng } from "./helpers/generated-png";
 import type { Route } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
@@ -109,6 +110,7 @@ for (const [width, longTitle] of [
       );
     });
     await page.setViewportSize({ width, height: 850 });
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await expect(page.locator(".app-shell")).toBeVisible();
     await openWorkspaceSection(page, "Файлы");

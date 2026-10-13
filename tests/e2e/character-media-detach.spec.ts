@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Page } from "@playwright/test";
 import type { CharacterMediaDto, GameSnapshot } from "@arken/contracts";
 import { expect, test } from "./react-console-guard";
@@ -231,6 +232,17 @@ async function installMockedApp(
       body: JSON.stringify([media]),
     });
   });
+  await page.route(
+    `**/api/characters/${ids.character}/spell-branches`,
+    (route) => {
+      expect(route.request().method()).toBe("GET");
+      return route.fulfill({ json: [] });
+    },
+  );
+  await page.route("**/api/spell-assignable-schools", (route) => {
+    expect(route.request().method()).toBe("GET");
+    return route.fulfill({ json: [] });
+  });
   await page.route(`**/api/assets/${ids.asset}/content`, (route) => {
     expect(route.request().method()).toBe("GET");
     return route.fulfill({
@@ -267,8 +279,11 @@ test("an owner confirms before detaching character media from the gallery", asyn
   const unexpectedApiRequests: string[] = [];
   await installMockedApp(page, detachRequests, unexpectedApiRequests);
 
+  await mockAuthenticatedGameCapabilities(page);
+
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
+  await page.getByRole("tab", { name: "Личность", exact: true }).click();
 
   const gallery = page.locator(".character-media-gallery");
   const openDetachDialog = gallery.getByRole("button", {
@@ -332,8 +347,10 @@ for (const role of ["GM", "PLAYER"] as const) {
       const mutations: DetachRequest[] = [];
       const unexpected: string[] = [];
       await installMockedApp(page, mutations, unexpected, role);
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await openWorkspaceSection(page, "Персонажи");
+      await page.getByRole("tab", { name: "Личность", exact: true }).click();
       const gallery = page.locator(".character-media-gallery");
       const attach = gallery.locator(".character-media-gallery__attach");
       async function exercise(
@@ -446,8 +463,10 @@ test("gallery dropdown closes before the PLAYER sheet on consecutive Escape", as
   const mutations: DetachRequest[] = [];
   const unexpected: string[] = [];
   await installMockedApp(page, mutations, unexpected);
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Персонажи");
+  await page.getByRole("tab", { name: "Личность", exact: true }).click();
   const gallery = page.locator(".character-media-gallery");
   const trigger = gallery
     .locator(".character-media-gallery__attach")

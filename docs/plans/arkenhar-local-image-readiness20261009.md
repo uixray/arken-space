@@ -14,10 +14,10 @@ Inspected `Dockerfile.server`, `Dockerfile.web`, root workspace/lock metadata, s
 
 Location: `.data/qa-prep/local-image-readiness-76fc9cc-20261009/`
 
-| Context | Dockerfile | Files | Bytes | Archive SHA-256 |
-|---|---|---:|---:|---|
-| `server/` / `server-context.tar` | `Dockerfile.server` | 173 | 15,691,444 | `6047bcba2de7ee5cd52421a2aff76cb8bcb81e0b9a4e5ed28f0f6de0bd86bafa` |
-| `web/` / `web-context.tar` | `Dockerfile.web` | 309 | 4,660,032 | `d7051fa96d3d8b665d5ca94cefd3ae28f64e36a3e23083f9bae22b33f1ba9671` |
+| Context                          | Dockerfile          | Files |      Bytes | Archive SHA-256                                                    |
+| -------------------------------- | ------------------- | ----: | ---------: | ------------------------------------------------------------------ |
+| `server/` / `server-context.tar` | `Dockerfile.server` |   173 | 15,691,444 | `6047bcba2de7ee5cd52421a2aff76cb8bcb81e0b9a4e5ed28f0f6de0bd86bafa` |
+| `web/` / `web-context.tar`       | `Dockerfile.web`    |   309 |  4,660,032 | `d7051fa96d3d8b665d5ca94cefd3ae28f64e36a3e23083f9bae22b33f1ba9671` |
 
 Per-file SHA-256 manifests are beside each context (`server-context-manifest.sha256`, `web-context-manifest.sha256`); context metadata and source identity are in `context-metadata.json`. The server context includes protected terrain-stamp assets and the complete DB migration SQL/journal/snapshot set. The web context includes the local font, public UI assets and `infra/nginx/container.conf`.
 
@@ -27,10 +27,10 @@ The contexts were allowlisted from `git archive` and checked for private/test pa
 
 Both local image builds completed with exit 0 from the contexts above:
 
-| Tag | Image ID | Image size | Build wall time | Saved Docker archive / SHA-256 |
-|---|---|---:|---:|---|
-| `arken-qa-web:76fc9cc` | `sha256:e6749f37484461a3f9960f825805f95d542e9eddcfdd0e3a2d8aac9adad4e9f1` | 25,006,838 B | 80.02 s | 25,027,072 B / `6583b4b689acfb5398c95da053ebffaa9ee35d91bd037b1ce7601fd1590f1260` |
-| `arken-qa-server:76fc9cc` | `sha256:f551e09e7ffaa31a7c5ecf05d45e2efdf166ff40d8e1ff9ea72c1796a57e9ec2` | 191,092,033 B | 121.05 s | 191,117,312 B / `d0a28f5351c0ae33a0d8aeb01e78596f266b3187ff11095c922604ee4efcb212` |
+| Tag                       | Image ID                                                                  |    Image size | Build wall time | Saved Docker archive / SHA-256                                                     |
+| ------------------------- | ------------------------------------------------------------------------- | ------------: | --------------: | ---------------------------------------------------------------------------------- |
+| `arken-qa-web:76fc9cc`    | `sha256:e6749f37484461a3f9960f825805f95d542e9eddcfdd0e3a2d8aac9adad4e9f1` |  25,006,838 B |         80.02 s | 25,027,072 B / `6583b4b689acfb5398c95da053ebffaa9ee35d91bd037b1ce7601fd1590f1260`  |
+| `arken-qa-server:76fc9cc` | `sha256:f551e09e7ffaa31a7c5ecf05d45e2efdf166ff40d8e1ff9ea72c1796a57e9ec2` | 191,092,033 B |        121.05 s | 191,117,312 B / `d0a28f5351c0ae33a0d8aeb01e78596f266b3187ff11095c922604ee4efcb212` |
 
 Docker build logs are `logs-web-build.txt` and `logs-server-build.txt`; `images/docker-save-receipt.json` records IDs, archive sizes, hashes, and save durations. Images were saved locally only; no push. The web build emitted the existing Vite warning that a minified chunk exceeds 500 kB.
 

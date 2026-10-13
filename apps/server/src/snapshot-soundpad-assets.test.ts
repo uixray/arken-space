@@ -54,9 +54,7 @@ describe("snapshot soundpad asset projection", () => {
   });
 
   it("does not add soundpad-only asset access for GMs", () => {
-    expect(
-      visibleSoundpadAssetIds(authure(), [row()]),
-    ).toEqual(new Set());
+    expect(visibleSoundpadAssetIds(authure(), [row()])).toEqual(new Set());
   });
 });
 

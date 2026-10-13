@@ -146,11 +146,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function galleryElement(
-  characterId: string,
-  isGm: boolean,
-  editable = true,
-) {
+function galleryElement(characterId: string, isGm: boolean, editable = true) {
   return (
     <CharacterMediaGallery
       characterId={characterId}
@@ -202,7 +198,9 @@ describe("public chat sharing for visible character gallery media", () => {
       name: "Поделиться в общем чате",
     });
     expect(shareButton).toBeEnabled();
-    expect(screen.queryByRole("button", { name: "Убрать из галереи" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Убрать из галереи" }),
+    ).not.toBeInTheDocument();
 
     await userEvent.click(shareButton);
     const dialog = screen.getByRole("dialog", {
@@ -220,17 +218,13 @@ describe("public chat sharing for visible character gallery media", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Изображение опубликовано в общем чате.",
     );
-    expect(apiMock).toHaveBeenNthCalledWith(
-      2,
-      "/api/chat/gallery-shares",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          actionId,
-          characterMediaId: media.id,
-        }),
-      },
-    );
+    expect(apiMock).toHaveBeenNthCalledWith(2, "/api/chat/gallery-shares", {
+      method: "POST",
+      body: JSON.stringify({
+        actionId,
+        characterMediaId: media.id,
+      }),
+    });
   });
 
   it("keeps the same action id for an authorized retry and sends an edited caption", async () => {
@@ -262,7 +256,9 @@ describe("public chat sharing for visible character gallery media", () => {
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(
       "Не удалось опубликовать изображение. Проверьте доступ и повторите попытку.",
     );
-    expect(screen.queryByText("GALLERY_MEDIA_NOT_FOUND")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("GALLERY_MEDIA_NOT_FOUND"),
+    ).not.toBeInTheDocument();
     await userEvent.click(publish);
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Изображение опубликовано в общем чате.",

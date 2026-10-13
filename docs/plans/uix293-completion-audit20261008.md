@@ -2,15 +2,15 @@
 
 Revision: `ec67b2d3564505907ebbfd3f624c4c442c1c4064`.
 
-| Исходный критерий | Проверенное доказательство |
-| --- | --- |
-| Превью, имя, тип, размер, использование и места | Actual MediaPanel Chrome: preview/name/type/size, grouping/filter/empty; API integration resolves scene/token/character/world/audio usage. Story library separately exposes current/historical revision locations without private chat identifiers. |
-| Удаление неиспользуемого | Actual generic and story UI cleanup; API removes metadata/blob and handles audit/replay. |
-| Блокировка используемого | Actual story UI disables deletion, DELETE409; generic HTTP integration returns409 and retains referenced bytes. |
-| Замена без разрушения ссылок | Actual generic UI stable ID, changed URL version and downloaded SHA; HTTP integration preserves MAP/TOKEN/PORTRAIT/IMAGE/AUDIO relation rows. Actual published story A→B keeps A historical and B current; integration preserves both revision media bytes. |
-| ACL usage/replace/delete/direct content | Current HTTP integration covers GM, PLAYER, foreign campaign, published/draft world content; story campaign/uploader boundary and PLAYER403. |
-| Журналирование и API/integration tests | Audit insert rollback, immutable replay/conflict, cleanup retry, duplicate deletion and both completed serial chat-claim/delete orders tested. Not a simultaneous race-stress claim. |
-| Все названные зависимости | Generic integration includes scenes, token definitions/placements, characters/resources, world-content and audio; separate story lifecycle was explicitly added, not replaced by world-content coverage. |
+| Исходный критерий                               | Проверенное доказательство                                                                                                                                                                                                                                  |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Превью, имя, тип, размер, использование и места | Actual MediaPanel Chrome: preview/name/type/size, grouping/filter/empty; API integration resolves scene/token/character/world/audio usage. Story library separately exposes current/historical revision locations without private chat identifiers.         |
+| Удаление неиспользуемого                        | Actual generic and story UI cleanup; API removes metadata/blob and handles audit/replay.                                                                                                                                                                    |
+| Блокировка используемого                        | Actual story UI disables deletion, DELETE409; generic HTTP integration returns409 and retains referenced bytes.                                                                                                                                             |
+| Замена без разрушения ссылок                    | Actual generic UI stable ID, changed URL version and downloaded SHA; HTTP integration preserves MAP/TOKEN/PORTRAIT/IMAGE/AUDIO relation rows. Actual published story A→B keeps A historical and B current; integration preserves both revision media bytes. |
+| ACL usage/replace/delete/direct content         | Current HTTP integration covers GM, PLAYER, foreign campaign, published/draft world content; story campaign/uploader boundary and PLAYER403.                                                                                                                |
+| Журналирование и API/integration tests          | Audit insert rollback, immutable replay/conflict, cleanup retry, duplicate deletion and both completed serial chat-claim/delete orders tested. Not a simultaneous race-stress claim.                                                                        |
+| Все названные зависимости                       | Generic integration includes scenes, token definitions/placements, characters/resources, world-content and audio; separate story lifecycle was explicitly added, not replaced by world-content coverage.                                                    |
 
 ## Связанный финальный gate
 

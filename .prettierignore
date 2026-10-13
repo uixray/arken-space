@@ -5,6 +5,8 @@ playwright-report
 test-results
 .worktrees
 packages/db/drizzle/meta
+# Historical migration bytes are bound to the database migration ledger.
+packages/db/drizzle/**/*.sql
 pnpm-lock.yaml
 .agent
 .agents

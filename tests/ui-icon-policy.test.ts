@@ -20,13 +20,29 @@ describe("UIX-645 icon source policy", () => {
   it("keeps sound metadata defaults distinct from control glyphs", () => {
     const workspace = "apps/web/src/SoundpadWorkspace.tsx";
     const editor = "apps/web/src/SoundClipEditor.tsx";
-    expect(scanUiSource('const DEFAULT_CLIPS = [{ icon: "😈" }, { icon: "😮" }];', workspace)).toEqual([]);
-    expect(scanUiSource('const [icon, setIcon] = useState("🔊");', editor)).toEqual([]);
-    for (const source of ['const view = <button>🔊</button>;', 'const toolbar = {icon: "😈"};', 'const other = useState("🔊");']) {
+    expect(
+      scanUiSource(
+        'const DEFAULT_CLIPS = [{ icon: "😈" }, { icon: "😮" }];',
+        workspace,
+      ),
+    ).toEqual([]);
+    expect(
+      scanUiSource('const [icon, setIcon] = useState("🔊");', editor),
+    ).toEqual([]);
+    for (const source of [
+      "const view = <button>🔊</button>;",
+      'const toolbar = {icon: "😈"};',
+      'const other = useState("🔊");',
+    ]) {
       expect(scanUiSource(source, workspace).length).toBeGreaterThan(0);
       expect(scanUiSource(source, editor).length).toBeGreaterThan(0);
     }
-    expect(scanUiSource('const DEFAULT_CLIPS = [{ icon: "😈" }];', "another-screen.tsx").length).toBeGreaterThan(0);
+    expect(
+      scanUiSource(
+        'const DEFAULT_CLIPS = [{ icon: "😈" }];',
+        "another-screen.tsx",
+      ).length,
+    ).toBeGreaterThan(0);
   });
   it("retains migration previews and guards the reachable product UI", () => {
     expect(protectedSourceFiles).toEqual([
@@ -71,9 +87,7 @@ describe("UIX-645 icon source policy", () => {
       ]),
     );
     // Initiative is now reachable through ChatPanels -> ActivityInitiativePanel.
-    expect(closure.files).toContain(
-      "apps/web/src/sidebar/InitiativePanel.tsx",
-    );
+    expect(closure.files).toContain("apps/web/src/sidebar/InitiativePanel.tsx");
     expect(closure.files).toContain("apps/web/src/App.tsx");
     expect(scanProtectedSources()).toEqual([]);
   });
@@ -85,8 +99,15 @@ describe("UIX-645 icon source policy", () => {
     expect(scanUiSource(`const view = ${prose};`, file)).toEqual([]);
     const cost = prose.replaceAll("card.uses", "card.activationCost");
     expect(scanUiSource(`const view = ${cost};`, file)).toEqual([]);
-    expect(scanUiSource(`const view = <button>${cost}</button>;`, file).join("\n")).toContain("text glyph");
-    expect(scanUiSource(`const view = ${cost.replace("card.activationCost.before", "different.before")};`, file).join("\n")).toContain("text glyph");
+    expect(
+      scanUiSource(`const view = <button>${cost}</button>;`, file).join("\n"),
+    ).toContain("text glyph");
+    expect(
+      scanUiSource(
+        `const view = ${cost.replace("card.activationCost.before", "different.before")};`,
+        file,
+      ).join("\n"),
+    ).toContain("text glyph");
     expect(
       scanUiSource(readFileSync(path.join(process.cwd(), file), "utf8"), file),
     ).toEqual([]);

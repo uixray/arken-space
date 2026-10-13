@@ -15,6 +15,7 @@ Live issue AC: concurrent authorized assets; independent GM mix and local-only p
 Already implemented per completed audit: DB migration/track state, authoritative four-track limit, independent transport, authorization, CAS/idempotency, single-track migration tests. Do not recreate these.
 
 Narrow current source confirms the actual integration gap:
+
 - `packages/contracts/src/index.ts`: `GameSnapshot.audioTracks`, `AudioTrackDto`, `audio:track:state`, `audio:track:removed` and command `audio:track:set` exist. `audio` is the legacy singular compatibility field.
 - `AudioTrackDto`: id, assetId, mixVolume, playing, positionSeconds, loop, startedAt, slotOrder, revision, updatedAt.
 - Commands: ADD_TRACK(assetId); REMOVE_TRACK(trackId/revision); SELECT(trackId/revision/assetId); PLAY/PAUSE/END; SEEK; SET_LOOP; SET_MIX_VOLUME. Each includes actionId; all except ADD carry track revision. Use exported types/schema, not new protocol strings.
@@ -55,6 +56,7 @@ Planning range: 8–16 focused hours for the full bounded client slice, not a pr
 Live 264 AC explicitly requires item quantity and condition and excludes pricing. The first delivered editor `0476865` intentionally shipped only name/state/GM notes. The owner's current request resumes remaining task implementation. A nullable integer count and arbitrary condition text change no inventory/economy/ownership rules. Do **not** add owner/container/location/media/discovered/delete fields or imply that this completes the whole item/inventory AC.
 
 Current source:
+
 - `WorldContentInstancesPanel.tsx`: draft/editableFields/draftValues only displayNameOverride, currentState, gmNotes. canonical prop currently `{ id, name }`.
 - `world-content-instances-client.ts`: fields Pick currently only those three.
 - `WorldContentWorkspace.tsx`: passes selected id/name to panel. Add only the existing selected canonical type to that prop so the extra controls show for ITEM.

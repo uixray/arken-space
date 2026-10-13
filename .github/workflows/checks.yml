@@ -62,8 +62,8 @@ jobs:
 
       - run: pnpm lint
 
-      # Гейт включён после разовой правки 13 файлов. Держать красную проверку,
-      # которую все игнорируют, хуже, чем не иметь её вовсе.
+      # UIX-686: owner-approved one-time formatting; enforce normal Prettier.
+      # Historical raw migrations are excluded; deployment LF rules remain.
       - run: pnpm format:check
 
       - run: pnpm test

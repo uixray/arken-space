@@ -109,7 +109,9 @@ describe("ActivityPanel initiative integration", () => {
     mount(snapshot, { onRecruitFromBattleZone: recruit });
     expect(screen.getByText("Очередь ходов")).toBeInTheDocument();
     expect(
-      screen.getByText("Обведите зону боя на карте или выделите рамкой тех, кто вступает в бой."),
+      screen.getByText(
+        "Обведите зону боя на карте или выделите рамкой тех, кто вступает в бой.",
+      ),
     ).toBeInTheDocument();
     screen.getByRole("button", { name: "Обновить по зоне" }).click();
     await waitFor(() => expect(recruit).toHaveBeenCalledTimes(1));

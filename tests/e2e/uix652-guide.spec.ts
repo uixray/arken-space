@@ -6,6 +6,15 @@ test("UIX-652 guide search, deep links and history stay usable without API write
   const mutations: string[] = [];
   await page.route("**/api/**", (route) => {
     const request = route.request();
+    if (new URL(request.url()).pathname === "/api/account/capabilities") {
+      return route.fulfill({
+        json: {
+          accountAuthEnabled: false,
+          campaignLinkAccessEnabled: false,
+          legacyDevEnabled: true,
+        },
+      });
+    }
     if (
       request.method() !== "GET" &&
       !request.url().endsWith("/api/client-logs")

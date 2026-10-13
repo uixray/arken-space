@@ -1,3 +1,4 @@
+import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import type { Locator, Page, Route, WebSocketRoute } from "@playwright/test";
 import type {
@@ -46,9 +47,12 @@ async function settleFiniteAnimations(owner: Locator) {
 test("UIX-589 narrow frame targets are at least 44px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockBootstrap(page, "GM");
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Токены");
-  await page.locator(".token-palette > button").click();
+  await page
+    .getByRole("button", { name: "Создать токен", exact: true })
+    .click();
   const editor = page.locator(".g-modal").last();
   await expect(editor.locator(".token-image-generator")).toBeVisible();
   await editor.evaluate(async (node) => {
@@ -398,9 +402,12 @@ for (const size of [
     await page.route(`**${sourceAsset.url}`, (route) =>
       route.fulfill({ contentType: "image/png", body: source }),
     );
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openWorkspaceSection(page, "Токены");
-    await page.locator(".token-palette > button").click();
+    await page
+      .getByRole("button", { name: "Создать токен", exact: true })
+      .click();
     const editor = page.getByRole("dialog", {
       name: "Новый токен",
       exact: true,
@@ -549,9 +556,13 @@ test("UIX-589 GM saves crop and definition with one confirmation", async ({
     await route.fulfill({ status: 201, json: definition });
   });
 
+  await mockAuthenticatedGameCapabilities(page);
+
   await page.goto("/");
   await openWorkspaceSection(page, "Токены");
-  await page.locator(".token-palette > button").click();
+  await page
+    .getByRole("button", { name: "Создать токен", exact: true })
+    .click();
   const editor = page.locator(".g-modal").last();
   await expect(editor.locator(".token-image-generator")).toBeVisible();
   await chooseEmbeddedSource(editor);
@@ -611,10 +622,13 @@ test("UIX-255 player palette does not expose GM token generator controls", async
   page,
 }) => {
   await mockBootstrap(page, "PLAYER");
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Токены");
   await expect(page.locator(".token-image-generator")).toHaveCount(0);
-  await expect(page.locator(".token-palette > button")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Создать токен", exact: true }),
+  ).toHaveCount(0);
 });
 
 for (const viewport of [
@@ -647,9 +661,13 @@ for (const viewport of [
       }),
     );
 
+    await mockAuthenticatedGameCapabilities(page);
+
     await page.goto("/");
     await openWorkspaceSection(page, "Токены");
-    await page.locator(".token-palette > button").click();
+    await page
+      .getByRole("button", { name: "Создать токен", exact: true })
+      .click();
 
     const editor = page.getByRole("dialog", { name: "Новый токен" });
     // The image field is the real inline AssetPicker, not a second popup.
@@ -983,10 +1001,13 @@ test("UIX-613 GM creates and places token on active scene in one action", async 
       socket.send(`42${JSON.stringify(["game:snapshot", fixture])}`);
     await route.fulfill({ status: 201, json: placed });
   });
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect.poll(() => sockets.size).toBeGreaterThan(0);
   await openWorkspaceSection(page, "Токены");
-  await page.locator(".token-palette > button").click();
+  await page
+    .getByRole("button", { name: "Создать токен", exact: true })
+    .click();
   const editor = page.getByRole("dialog", { name: "Новый токен", exact: true });
   await expect(
     editor.getByRole("button", { name: "Без изображения", exact: true }),
@@ -1100,9 +1121,12 @@ for (const outcome of ["failure", "cancel"] as const) {
       });
     }
     try {
+      await mockAuthenticatedGameCapabilities(page);
       await page.goto("/");
       await openWorkspaceSection(page, "Токены");
-      await page.locator(".token-palette > button").click();
+      await page
+        .getByRole("button", { name: "Создать токен", exact: true })
+        .click();
       const editor = page.getByRole("dialog", {
         name: "Новый токен",
         exact: true,
@@ -1132,7 +1156,9 @@ for (const outcome of ["failure", "cancel"] as const) {
       if (outcome === "cancel") {
         await page.keyboard.press("Escape");
         await expect(editor).toHaveCount(0);
-        await page.locator(".token-palette > button").click();
+        await page
+          .getByRole("button", { name: "Создать токен", exact: true })
+          .click();
         await editor
           .getByLabel("Название", { exact: true })
           .fill("New draft B");
@@ -1229,9 +1255,12 @@ for (const size of [
     await page.route(`**${sourceAsset.url}`, (route) =>
       route.fulfill({ contentType: "image/png", body: source }),
     );
+    await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openWorkspaceSection(page, "Токены");
-    await page.locator(".token-palette > button").click();
+    await page
+      .getByRole("button", { name: "Создать токен", exact: true })
+      .click();
     const editor = page.getByRole("dialog", {
       name: "Новый токен",
       exact: true,
@@ -1274,9 +1303,12 @@ async function openCropEditor(page: Page, width: number, height: number) {
   await page.route(`**${sourceAsset.url}`, (route) =>
     route.fulfill({ contentType: "image/png", body: source }),
   );
+  await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await openWorkspaceSection(page, "Токены");
-  await page.locator(".token-palette > button").click();
+  await page
+    .getByRole("button", { name: "Создать токен", exact: true })
+    .click();
   const editor = page.getByRole("dialog", { name: "Новый токен", exact: true });
   await chooseEmbeddedSource(editor);
   const preview = editor.locator(".token-image-preview");

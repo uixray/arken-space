@@ -24,13 +24,13 @@ Source review baseline HEAD `6a53cd2a65d4cc444e2897c2ded62dea47f6be3f` in `D:\AI
 
 Alternatives to evaluate, not silently adopt:
 
-| Candidate | Potential benefit | Additional proof/cost |
-|---|---|---|
-| Native launcher + bundled Node/PGlite | Existing server reused, no DB service, browser player UI | New launcher/IPC/install stack; embedded DB promotion and Windows crash tests |
-| Electron wrapper with same backend | Bundled UI engine and JS-oriented shell | New dependency/toolchain and larger patch surface; secure renderer/IPC; still must solve DB/lifecycle/install |
-| Tauri/WebView wrapper + Node sidecar | Native shell around existing UI | New Rust/webview prerequisites, offline runtime availability and sidecar verification; not automatically simpler |
-| Native launcher + bundled PostgreSQL | Closer to production DB semantics | New binary distribution, process/port/credential/migration/backup ownership, heavier installer; no system DB reuse |
-| Node single executable packaging | Fewer visible runtime files potentially | ESM/workspace/native sharp/WASM/migration resource extraction compatibility must be demonstrated; not first critical path |
+| Candidate                             | Potential benefit                                        | Additional proof/cost                                                                                                     |
+| ------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Native launcher + bundled Node/PGlite | Existing server reused, no DB service, browser player UI | New launcher/IPC/install stack; embedded DB promotion and Windows crash tests                                             |
+| Electron wrapper with same backend    | Bundled UI engine and JS-oriented shell                  | New dependency/toolchain and larger patch surface; secure renderer/IPC; still must solve DB/lifecycle/install             |
+| Tauri/WebView wrapper + Node sidecar  | Native shell around existing UI                          | New Rust/webview prerequisites, offline runtime availability and sidecar verification; not automatically simpler          |
+| Native launcher + bundled PostgreSQL  | Closer to production DB semantics                        | New binary distribution, process/port/credential/migration/backup ownership, heavier installer; no system DB reuse        |
+| Node single executable packaging      | Fewer visible runtime files potentially                  | ESM/workspace/native sharp/WASM/migration resource extraction compatibility must be demonstrated; not first critical path |
 
 Do not rewrite server/DB in native language or switch to SQLite to get an .exe. Do not label a portable zip or Docker archive as full issue completion. If PGlite fails the spike, stop and price bundled PostgreSQL rather than relaxing correctness.
 
