@@ -31,6 +31,8 @@ export default defineConfig({
       url: e2eBaseUrl,
       reuseExistingServer: true,
       timeout: 60_000,
+      stdout: process.env.CI ? "pipe" : "ignore",
+      stderr: "pipe",
     },
     // This standalone prototype is in testDir but is not the campaign app.
     // Keep its regression in both browser gates against its own entry point.
@@ -40,6 +42,8 @@ export default defineConfig({
       url: "http://127.0.0.1:14244",
       reuseExistingServer: true,
       timeout: 60_000,
+      stdout: process.env.CI ? "pipe" : "ignore",
+      stderr: "pipe",
     },
   ],
   use: {

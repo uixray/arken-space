@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
+import { runLogged } from "./run-logged.mjs";
 import { planDiscoveredTests } from "./balance-browser-files.mjs";
 const require = createRequire(import.meta.url);
 const cli = require.resolve("@playwright/test/cli");
@@ -106,7 +107,7 @@ if (mode === "plan") {
   );
   process.exit(0);
 }
-const result = spawnSync(
+const status = await runLogged(
   process.execPath,
   [
     cli,
@@ -119,7 +120,7 @@ const result = spawnSync(
     "--fail-on-flaky-tests",
     "--reporter=line,json",
   ],
-  { stdio: "inherit" },
+  "browser-run.log",
+  { gracefulSignal: "SIGINT" },
 );
-if (result.error) throw result.error;
-process.exit(result.status ?? 1);
+process.exit(status);
