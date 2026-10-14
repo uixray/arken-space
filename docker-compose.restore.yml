@@ -30,7 +30,9 @@ services:
       ACCOUNT_MAIL_RUNTIME_ENABLED: "false"
       APP_VERSION: 0.2.0-restore
       BUILD_REVISION: ${RESTORE_BUILD_REVISION:?Set RESTORE_BUILD_REVISION}
-      SCHEMA_VERSION: 2
+      # service-v1 restores the captured runtime contract (manifest schema);
+      # the legacy flow keeps the historical value.
+      SCHEMA_VERSION: ${RESTORE_SCHEMA_VERSION:-2}
       PORT: 4100
       WEB_ORIGIN: http://restore.invalid
       PUBLIC_URL: http://restore.invalid
