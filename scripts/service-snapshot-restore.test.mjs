@@ -327,6 +327,125 @@ test("service-v1 candidate requires same declared 40-character source revision i
   }
 });
 
+test("legacy capture receipt without sourceRevision needs explicit baseline acceptance", async () => {
+  const snapshotId = "a".repeat(64);
+  const legacyReceipt = {
+    format: "arken-service-capture-receipt-v1",
+    snapshotId,
+    manifestSha256: "b".repeat(64),
+    buildRevision: "c".repeat(40),
+    schemaVersion: 2,
+    imageIds: {
+      server: "sha256:" + "1".repeat(64),
+      postgres: "sha256:" + "2".repeat(64),
+    },
+  };
+  const temp = mkdtempSync(path.join(os.tmpdir(), "arken-legacy-receipt-"));
+  const receiptPath = path.join(temp, "receipt.json");
+  const write = (receipt) => {
+    const text = JSON.stringify(receipt);
+    writeFileSync(receiptPath, text);
+    return sha(text);
+  };
+  const base = {
+    RESTORE_FORMAT: "service-v1",
+    ARKEN_ISOLATED_ONLY: "true",
+    SNAPSHOT_ID: snapshotId,
+    RESTORE_CAPTURE_RECEIPT_PATH: receiptPath,
+    RESTORE_EXPECTED_SOURCE_REVISION: "null",
+    RESTORE_REPORT_PATH: path.join(os.tmpdir(), "private-report.json"),
+    RESTORE_ACCEPT_LEGACY_RECEIPT_WITHOUT_SOURCE_REVISION: "accept",
+  };
+  try {
+    const digest = write(legacyReceipt);
+    const accepted = resolveRestoreMode({
+      ...base,
+      RESTORE_CAPTURE_RECEIPT_SHA256: digest,
+    });
+    assert.equal(accepted.legacyReceiptWithoutSourceRevision, true);
+    assert.equal(accepted.expectedSourceRevision, null);
+    // Without the acknowledgement the missing field is still refused.
+    assert.throws(
+      () =>
+        resolveRestoreMode({
+          ...base,
+          RESTORE_CAPTURE_RECEIPT_SHA256: digest,
+          RESTORE_ACCEPT_LEGACY_RECEIPT_WITHOUT_SOURCE_REVISION: undefined,
+        }),
+      /Declared baseline requires an explicit null/,
+    );
+    for (const value of ["", "yes", "ACCEPT", "true"])
+      assert.throws(
+        () =>
+          resolveRestoreMode({
+            ...base,
+            RESTORE_CAPTURE_RECEIPT_SHA256: digest,
+            RESTORE_ACCEPT_LEGACY_RECEIPT_WITHOUT_SOURCE_REVISION: value,
+          }),
+        /must be exactly accept/,
+      );
+    assert.throws(
+      () =>
+        resolveRestoreMode({
+          ...base,
+          RESTORE_CAPTURE_RECEIPT_SHA256: digest,
+          RESTORE_EXPECTED_SOURCE_REVISION: "d".repeat(40),
+        }),
+      /only for a declared null baseline/,
+    );
+    for (const sourceRevision of [null, "unknown", "d".repeat(40)])
+      assert.throws(
+        () =>
+          resolveRestoreMode({
+            ...base,
+            RESTORE_CAPTURE_RECEIPT_SHA256: write({
+              ...legacyReceipt,
+              sourceRevision,
+            }),
+          }),
+        /without a sourceRevision field/,
+      );
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+
+  const sample = fixture();
+  try {
+    const manifestPath = path.join(sample.root, "capture-manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    // Legacy capture cores write no sourceRevision key at all.
+    const receipt = {
+      buildRevision: manifest.buildRevision,
+      schemaVersion: manifest.schemaVersion,
+      imageIds: manifest.images,
+    };
+    const request = {
+      format: "service-v1",
+      snapshotId: "c".repeat(64),
+      manifestSha256: sample.digest,
+      expectedSourceRevision: null,
+      legacyReceiptWithoutSourceRevision: true,
+      receipt,
+    };
+    const snapshotRoot = path.dirname(path.dirname(sample.root));
+    const resolved = await resolveServiceSnapshot(snapshotRoot, request);
+    assert.equal(resolved.sourceRevision, null);
+    // The flag never turns a non-baseline manifest into a baseline restore.
+    manifest.sourceRevision = "f".repeat(40);
+    writeFileSync(manifestPath, JSON.stringify(manifest) + "\n");
+    await assert.rejects(
+      () =>
+        resolveServiceSnapshot(snapshotRoot, {
+          ...request,
+          manifestSha256: sha(readFileSync(manifestPath)),
+        }),
+      /Baseline source revision must be unknown/,
+    );
+  } finally {
+    rmSync(sample.temp, { recursive: true, force: true });
+  }
+});
+
 test("service image override rejects incompatible media mount and malformed image references", () => {
   assert.throws(() =>
     serviceImageOverride({

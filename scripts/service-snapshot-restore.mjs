@@ -58,7 +58,28 @@ export function resolveRestoreMode(env) {
   } catch {
     throw new Error("service-v1 capture receipt is invalid JSON");
   }
-  if (expectedSourceRevision === null) {
+  // Capture cores deployed before the sourceRevision field existed write no key
+  // at all. Absence is never read as a baseline claim by itself: the operator
+  // must acknowledge it explicitly, and only for a null (baseline) restore.
+  const legacyReceiptWithoutSourceRevision =
+    env.RESTORE_ACCEPT_LEGACY_RECEIPT_WITHOUT_SOURCE_REVISION === "accept";
+  if (
+    env.RESTORE_ACCEPT_LEGACY_RECEIPT_WITHOUT_SOURCE_REVISION !== undefined &&
+    !legacyReceiptWithoutSourceRevision
+  )
+    throw new Error(
+      "RESTORE_ACCEPT_LEGACY_RECEIPT_WITHOUT_SOURCE_REVISION must be exactly accept",
+    );
+  if (legacyReceiptWithoutSourceRevision) {
+    if (expectedSourceRevision !== null)
+      throw new Error(
+        "A legacy receipt without sourceRevision is accepted only for a declared null baseline",
+      );
+    if (Object.hasOwn(receipt ?? {}, "sourceRevision"))
+      throw new Error(
+        "Legacy acceptance applies only to a capture receipt without a sourceRevision field",
+      );
+  } else if (expectedSourceRevision === null) {
     if (receipt.sourceRevision !== null)
       throw new Error(
         "Declared baseline requires an explicit null sourceRevision in the capture receipt",
@@ -121,6 +142,7 @@ export function resolveRestoreMode(env) {
     receiptPath: path.resolve(env.RESTORE_CAPTURE_RECEIPT_PATH),
     receipt,
     expectedSourceRevision,
+    legacyReceiptWithoutSourceRevision,
     reportPath: path.resolve(env.RESTORE_REPORT_PATH),
   };
 }
@@ -148,10 +170,10 @@ export async function resolveServiceSnapshot(snapshotRoot, request) {
     throw new Error("Service capture manifest lacks build/schema evidence");
   const sourceRevision = manifest.sourceRevision;
   if (request.expectedSourceRevision === null) {
-    if (
-      sourceRevision !== "unknown" ||
-      request.receipt?.sourceRevision !== null
-    )
+    const receiptDeclaresBaseline = request.legacyReceiptWithoutSourceRevision
+      ? !Object.hasOwn(request.receipt ?? {}, "sourceRevision")
+      : request.receipt?.sourceRevision === null;
+    if (sourceRevision !== "unknown" || !receiptDeclaresBaseline)
       throw new Error(
         "Baseline source revision must be unknown in the manifest and explicitly null in the capture receipt",
       );
