@@ -1011,6 +1011,7 @@ export function CharacterPanel({
     character.ownerMembershipId === snapshot.me.id,
   );
   const canEditLayout = snapshot.me.role === "GM" || canEditCharacterLayout;
+  const hasPersonalLayout = Boolean(character?.statLayout);
   const statLayoutPendingRef = useRef(false);
   const saveLayout = async (next: typeof layout) => {
     if (!character) return;
@@ -1018,12 +1019,14 @@ export function CharacterPanel({
       throw new Error("Дождитесь сохранения предыдущей правки.");
     statLayoutPendingRef.current = true;
     try {
-      if (snapshot.me.role === "GM") {
+      // UIX-707: on a sheet with its own layout the GM edits that personal
+      // layout, never the campaign template behind it.
+      if (snapshot.me.role === "GM" && !hasPersonalLayout) {
         await statLayoutActions.onUpdateStatLayout(
           next,
           snapshot.campaign.revision,
         );
-      } else if (canEditCharacterLayout) {
+      } else if (snapshot.me.role === "GM" || canEditCharacterLayout) {
         await statLayoutActions.onUpdateCharacterStatLayout(
           character.id,
           next,
@@ -1741,6 +1744,12 @@ export function CharacterPanel({
             className="character-section character-section--stats"
             data-character-section="stats"
           >
+            {snapshot.me.role === "GM" && hasPersonalLayout && (
+              <p className="muted character-layout-note">
+                У персонажа своя раскладка: правки строк меняют только этот
+                лист, не шаблон кампании.
+              </p>
+            )}
             <div className="character-card-row">
               <StatLayoutCard
                 title="Характеристики"

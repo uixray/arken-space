@@ -7272,14 +7272,19 @@ export function registerRoutes(
     return updated;
   });
 
-  /** UIX-682 C01: PLAYER-owned stat layout override for one character. */
+  /**
+   * UIX-682 C01: personal stat layout override for one character. Its owner
+   * (PLAYER) edits it; UIX-707: the GM may edit it too for any character of
+   * the campaign, so GM edits on such a sheet stay out of the campaign layout.
+   */
   app.patch(
     "/api/characters/:characterId/stat-layout",
     async (request, reply) => {
       const auth = await requireAuth(request, reply, db);
       if (!auth) return;
-      if (auth.role !== "PLAYER")
+      if (auth.role !== "PLAYER" && auth.role !== "GM")
         return reply.code(403).send({ error: "PLAYER_REQUIRED" });
+      const isGm = auth.role === "GM";
       const { characterId } = z
         .object({ characterId: z.string().uuid() })
         .parse(request.params);
@@ -7303,8 +7308,13 @@ export function registerRoutes(
         return reply.code(404).send({ error: "CHARACTER_NOT_FOUND" });
       // Check the entity owner before examining an action receipt: another
       // player must not learn whether a private command/replay exists.
-      if (character.ownerMembershipId !== auth.membershipId)
+      if (!isGm && character.ownerMembershipId !== auth.membershipId)
         return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
+      // A PLAYER's writes stay pinned to characters it owns; the GM's to the
+      // campaign (already part of every predicate below).
+      const ownerGuard = isGm
+        ? []
+        : [eq(characters.ownerMembershipId, auth.membershipId)];
 
       const replay = (
         action: NonNullable<Awaited<ReturnType<typeof findAction>>>,
@@ -7375,7 +7385,7 @@ export function registerRoutes(
             and(
               eq(characters.id, characterId),
               eq(characters.campaignId, auth.campaignId),
-              eq(characters.ownerMembershipId, auth.membershipId),
+              ...ownerGuard,
               eq(characters.revision, character.revision),
             ),
           )
@@ -7408,7 +7418,7 @@ export function registerRoutes(
             and(
               eq(characters.id, characterId),
               eq(characters.campaignId, auth.campaignId),
-              eq(characters.ownerMembershipId, auth.membershipId),
+              ...ownerGuard,
             ),
           )
           .limit(1);
