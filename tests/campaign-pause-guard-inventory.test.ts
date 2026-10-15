@@ -4,9 +4,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 let routes = "";
 let realtime = "";
 let encounters = "";
+let drawingRoutes = "";
 
 beforeAll(async () => {
-  [routes, realtime, encounters] = await Promise.all([
+  [routes, realtime, encounters, drawingRoutes] = await Promise.all([
     readFile(new URL("../apps/server/src/routes.ts", import.meta.url), "utf8"),
     readFile(
       new URL("../apps/server/src/realtime.ts", import.meta.url),
@@ -14,6 +15,10 @@ beforeAll(async () => {
     ),
     readFile(
       new URL("../apps/server/src/encounters.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../apps/server/src/drawing-routes.ts", import.meta.url),
       "utf8",
     ),
   ]);
@@ -63,11 +68,7 @@ describe("UIX-583 Canvas guard inventory", () => {
       'app.post("/api/fog-reveals",',
     ],
     ['app.post("/api/fog-reveals",', 'app.delete("/api/fog-reveals/latest",'],
-    ['app.patch("/api/tokens/:id/layer",', 'app.post("/api/drawings",'],
-    ['app.post("/api/drawings",', 'app.patch("/api/drawings/:id",'],
-    ['app.patch("/api/drawings/:id",', 'app.post("/api/drawings/:id/copy",'],
-    ['app.post("/api/drawings/:id/copy",', 'app.delete("/api/drawings/:id",'],
-    ['app.delete("/api/drawings/:id",', 'app.post("/api/canvas/bulk",'],
+    ['app.patch("/api/tokens/:id/layer",', "registerDrawingRoutes(app, db, {"],
     ['app.post("/api/canvas/bulk",', 'app.get("/api/canvas/history",'],
     [
       'for (const direction of ["undo", "redo"] as const)',
@@ -76,6 +77,23 @@ describe("UIX-583 Canvas guard inventory", () => {
     ['app.patch("/api/scenes/:id/canvas",', "const stickerPackInputSchema"],
   ])("keeps %s inside the common durable guard", (start, end) => {
     expect(between(routes, start, end)).toContain("canvasTx(");
+  });
+
+  // Drawing routes live in drawing-routes.ts and receive the same canvasTx.
+  it.each([
+    ['app.post("/api/drawings",', 'app.patch("/api/drawings/:id",'],
+    ['app.patch("/api/drawings/:id",', 'app.post("/api/drawings/:id/copy",'],
+    ['app.post("/api/drawings/:id/copy",', 'app.delete("/api/drawings/:id",'],
+    ['app.delete("/api/drawings/:id",', "\n}\n"],
+  ])("keeps drawing route %s inside the common durable guard", (start, end) => {
+    expect(between(drawingRoutes, start, end)).toContain("canvasTx(");
+  });
+
+  it("hands drawing routes the shared campaign canvas guard", () => {
+    expect(
+      between(routes, "registerDrawingRoutes(app, db, {", "});"),
+    ).toContain("canvasTx,");
+    expect(routes).toContain("campaignCanvasDatabase(db, campaignId)");
   });
 
   it.each([

@@ -434,7 +434,7 @@ const ALL_ICONS: IconItem[] = [
     original: "Settings",
     icon: SettingsIcon,
     category: "navigation",
-    locations: "GravityFoundationPreview / Настройки",
+    locations: "ChatPanels / настройки журнала",
   },
 
   // Статусы и маркеры

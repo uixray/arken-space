@@ -151,9 +151,6 @@ importers:
       '@base-ui/react':
         specifier: 1.8.0
         version: 1.8.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@gravity-ui/icons':
-        specifier: 2.20.0
-        version: 2.20.0(react@19.2.8)
       '@gravity-ui/uikit':
         specifier: 7.43.0
         version: 7.43.0(@babel/runtime@7.29.7)(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)

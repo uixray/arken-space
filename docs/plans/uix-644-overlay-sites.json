@@ -293,24 +293,9 @@
       "count": 1
     },
     {
-      "file": "apps/web/src/ui/FuturePoolDialogs.tsx",
-      "kind": "tag:Select",
-      "count": 1
-    },
-    {
       "file": "apps/web/src/ui/GravityFormControls.tsx",
       "kind": "tag:Select",
       "count": 1
-    },
-    {
-      "file": "apps/web/src/ui/GravityFoundationPreview.tsx",
-      "kind": "tag:Popup",
-      "count": 1
-    },
-    {
-      "file": "apps/web/src/ui/GravityFoundationPreview.tsx",
-      "kind": "tag:Select",
-      "count": 2
     },
     {
       "file": "apps/web/src/ui/SceneManagerDialog.tsx",

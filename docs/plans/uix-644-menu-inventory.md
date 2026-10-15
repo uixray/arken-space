@@ -1276,3 +1276,8 @@ historical snapshots and must not be silently carried forward to these sites.
 
 - `Orthographic2DRenderer.tsx::tag:select` grows from 1 to 2 occurrences: the selected-drawing panel gains a «Слой выбранной текстуры» native select for TEXTURE strokes, beside the existing stamp layer select. Same panel, same GM-only `onDrawingUpdate` path; no new overlay owner. The full scan denominator is now **64 buckets / 122 JSX occurrences**.
 - Runtime status for the new occurrence: **BLOCKED — pending**, like its stamp sibling. The UIX-706 e2e scenario changes this select's value, which is scoped evidence, not overlay acceptance. Overall UIX-644 remains INCOMPLETE.
+
+## 2026-10-15 — UIX-706 legacy pool: preview chain removed
+
+- With the owner's approval (15.10) the never-wired preview chain was deleted: `ui/GravityFoundationPreview.tsx`, `ui/FuturePoolDialogs.tsx` and `ui/FoundationPreviewRoute.tsx`. No production entry or router referenced them; their buckets were preview-only / NOT_APPLICABLE_CURRENT_PRODUCT.
+- Removed buckets: `FuturePoolDialogs.tsx::tag:Select` (1), `GravityFoundationPreview.tsx::tag:Popup` (1), `GravityFoundationPreview.tsx::tag:Select` (2). The full scan denominator is now **61 buckets / 118 JSX occurrences**. `gravity-foundation.css` stays: the live app imports it.
