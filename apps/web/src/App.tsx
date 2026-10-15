@@ -245,6 +245,7 @@ export function App() {
   >([]);
   const [tool, setTool] = useState<MapTool>("PAN");
   const [stampSettings, setStampSettings] = useState<TerrainStampSettings>({
+    packId: "builtin-terrain-v1",
     assetKey: "forest",
     size: 160,
     rotation: 0,
@@ -1180,16 +1181,9 @@ export function App() {
   );
 
   const handleStampCreate = useCallback(
-    async (stamp: {
-      kind: "STAMP";
-      assetKey: "forest" | "mountains" | "clouds";
-      packId: "builtin-terrain-v1";
-      size: number;
-      rotation: number;
-      layer: "PUBLIC" | "GM";
-      x: number;
-      y: number;
-    }) => {
+    async (
+      stamp: TerrainStampSettings & { kind: "STAMP"; x: number; y: number },
+    ) => {
       if (!activeScene || snapshot?.me.role !== "GM") return undefined;
       const requestedSceneId = activeScene.id;
       const requestedCampaignId = snapshot.campaign.id;
@@ -1638,6 +1632,10 @@ export function App() {
       assetActions.uploadAsset(file, kind, options),
     [assetActions],
   );
+  const handleUploadStampImage = useCallback(
+    (file: File) => assetActions.uploadAsset(file, "IMAGE"),
+    [assetActions],
+  );
 
   const loadAfterHome = () => {
     window.history.replaceState(null, "", "/");
@@ -1862,6 +1860,7 @@ export function App() {
                   gmGridVisible={gmGridVisible}
                   stampSettings={stampSettings}
                   onStampSettingsChange={setStampSettings}
+                  onUploadStampImage={handleUploadStampImage}
                   onGmGridVisibleChange={(visible) => {
                     setGmGridVisible(visible);
                     localStorage.setItem(

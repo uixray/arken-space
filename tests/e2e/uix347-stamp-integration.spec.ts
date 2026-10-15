@@ -145,9 +145,15 @@ async function installMocks(
       return route.fulfill({
         json: {
           packId: "builtin-terrain-v1",
-          stamps: ["forest", "mountains", "clouds"].map((assetKey) => ({
+          // UIX-706: titles come from the server catalog manifest.
+          stamps: [
+            ["forest", "Лес"],
+            ["mountains", "Горы"],
+            ["clouds", "Облака"],
+          ].map(([assetKey, title]) => ({
             assetKey,
             packId: "builtin-terrain-v1",
+            title,
           })),
         },
       });

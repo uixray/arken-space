@@ -1,21 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { api } from "../api";
+import type { AssetDto, StampPackId } from "@arken/contracts";
+import { api, formatApiError } from "../api";
+import { stampImageUrl } from "./stamp-image-url";
 import "./TerrainStampControls.css";
 
-export type TerrainStampKey = "forest" | "mountains" | "clouds";
 export type TerrainStampSettings = {
-  assetKey: TerrainStampKey;
+  packId: StampPackId;
+  assetKey: string;
   size: number;
   rotation: number;
   layer: "PUBLIC" | "GM";
 };
 
-const titles: Record<TerrainStampKey, string> = {
-  forest: "Лес",
-  mountains: "Горы",
-  clouds: "Облака",
-};
+type StampImage = Pick<AssetDto, "id" | "name">;
 
 export function TerrainStampControls({
   id,
@@ -24,6 +22,8 @@ export function TerrainStampControls({
   onChange,
   onClose,
   onDismissOutside,
+  images = [],
+  onUploadImage,
 }: {
   id: string;
   triggerRef: { current: HTMLButtonElement | null };
@@ -31,9 +31,30 @@ export function TerrainStampControls({
   onChange: (value: TerrainStampSettings) => void;
   onClose: (restoreFocus?: boolean) => void;
   onDismissOutside: () => void;
+  /** Campaign IMAGE assets the GM may use as their own stamps. */
+  images?: StampImage[];
+  onUploadImage?: (file: File) => Promise<StampImage>;
 }) {
-  const [catalog, setCatalog] = useState<TerrainStampKey[]>([]);
+  const [catalog, setCatalog] = useState<
+    Array<{ assetKey: string; title: string }>
+  >([]);
   const [error, setError] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const uploadImage = async (file: File) => {
+    if (!onUploadImage) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const asset = await onUploadImage(file);
+      onChange({ ...value, packId: "campaign-image", assetKey: asset.id });
+    } catch (cause) {
+      setUploadError(formatApiError(cause));
+    } finally {
+      setUploading(false);
+    }
+  };
   const panelRef = useRef<HTMLElement | null>(null);
 
   useLayoutEffect(() => {
@@ -101,11 +122,13 @@ export function TerrainStampControls({
   }, [onClose, onDismissOutside, triggerRef]);
   useEffect(() => {
     let active = true;
-    void api<{ stamps: Array<{ assetKey: TerrainStampKey }> }>(
+    void api<{ stamps: Array<{ assetKey: string; title: string }> }>(
       "/api/terrain-stamps/catalog",
     )
       .then((result) => {
-        if (active) setCatalog(result.stamps.map((stamp) => stamp.assetKey));
+        if (!active) return;
+        if (Array.isArray(result?.stamps)) setCatalog(result.stamps);
+        else setError(true);
       })
       .catch(() => {
         if (active) setError(true);
@@ -125,20 +148,72 @@ export function TerrainStampControls({
       aria-modal="false"
     >
       <div role="group" aria-label="Выбрать штамп">
-        {catalog.map((assetKey) => (
+        {catalog.map(({ assetKey, title }) => (
           <button
             key={assetKey}
             type="button"
-            aria-pressed={value.assetKey === assetKey}
-            aria-label={titles[assetKey]}
-            onClick={() => onChange({ ...value, assetKey })}
+            aria-pressed={
+              value.packId === "builtin-terrain-v1" &&
+              value.assetKey === assetKey
+            }
+            aria-label={title}
+            onClick={() =>
+              onChange({ ...value, packId: "builtin-terrain-v1", assetKey })
+            }
           >
-            <img alt="" src={`/api/terrain-stamps/assets/${assetKey}`} />
-            {titles[assetKey]}
+            <img alt="" src={stampImageUrl("builtin-terrain-v1", assetKey)} />
+            {title}
           </button>
         ))}
       </div>
       {error && <span role="status">Не удалось загрузить каталог штампов</span>}
+      <h3 className="terrain-stamp-controls__heading">Свои картинки</h3>
+      {images.length > 0 && (
+        <div
+          role="group"
+          aria-label="Свои штампы"
+          className="terrain-stamp-controls__custom"
+        >
+          {images.map((image) => (
+            <button
+              key={image.id}
+              type="button"
+              aria-pressed={
+                value.packId === "campaign-image" && value.assetKey === image.id
+              }
+              aria-label={image.name}
+              title={image.name}
+              onClick={() =>
+                onChange({
+                  ...value,
+                  packId: "campaign-image",
+                  assetKey: image.id,
+                })
+              }
+            >
+              <img alt="" src={stampImageUrl("campaign-image", image.id)} />
+              <span className="terrain-stamp-controls__name">{image.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {onUploadImage && (
+        <label className="terrain-stamp-controls__upload">
+          {uploading ? "Загрузка…" : "Загрузить картинку (PNG, WebP, JPEG)"}
+          <input
+            aria-label="Загрузить картинку для штампа"
+            type="file"
+            accept="image/png,image/webp,image/jpeg"
+            disabled={uploading}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = "";
+              if (file) void uploadImage(file);
+            }}
+          />
+        </label>
+      )}
+      {uploadError && <span role="alert">{uploadError}</span>}
       <label>
         Размер{" "}
         <input

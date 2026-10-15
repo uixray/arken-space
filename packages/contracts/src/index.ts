@@ -1354,6 +1354,13 @@ export const drawingPointsSchema = z
   .min(4)
   .max(4096)
   .refine((points) => points.length % 2 === 0, "points must be x/y pairs");
+/** UIX-706: built-in template keys (catalog manifest) — matches the DB check. */
+export const STAMP_TEMPLATE_KEY_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;
+export const stampPackIdSchema = z.enum([
+  "builtin-terrain-v1",
+  "campaign-image",
+]);
+export type StampPackId = z.infer<typeof stampPackIdSchema>;
 export const createDrawingSchema = z
   .object({
     actionId: actionIdSchema,
@@ -1366,18 +1373,31 @@ export const createDrawingSchema = z
     y: z.number().finite().default(0),
   })
   .or(
-    z.object({
-      actionId: actionIdSchema,
-      sceneId: z.string().uuid(),
-      kind: z.literal("STAMP"),
-      assetKey: z.enum(["forest", "mountains", "clouds"]),
-      packId: z.literal("builtin-terrain-v1"),
-      size: z.number().finite().min(16).max(1024),
-      rotation: z.number().finite().min(-360).max(360),
-      layer: z.enum(["PUBLIC", "GM"]),
-      x: z.number().finite().min(-32768).max(32768),
-      y: z.number().finite().min(-32768).max(32768),
-    }),
+    z
+      .object({
+        actionId: actionIdSchema,
+        sceneId: z.string().uuid(),
+        kind: z.literal("STAMP"),
+        /**
+         * UIX-706: a built-in template key from the server catalog manifest,
+         * or — for `campaign-image` — the id of a campaign IMAGE asset. The
+         * server resolves both; clients never supply paths or URLs.
+         */
+        assetKey: z.string().min(1).max(40),
+        packId: stampPackIdSchema,
+        size: z.number().finite().min(16).max(1024),
+        rotation: z.number().finite().min(-360).max(360),
+        layer: z.enum(["PUBLIC", "GM"]),
+        x: z.number().finite().min(-32768).max(32768),
+        y: z.number().finite().min(-32768).max(32768),
+      })
+      .refine(
+        (stamp) =>
+          stamp.packId === "campaign-image"
+            ? z.string().uuid().safeParse(stamp.assetKey).success
+            : STAMP_TEMPLATE_KEY_PATTERN.test(stamp.assetKey),
+        { path: ["assetKey"], message: "invalid stamp source" },
+      ),
   );
 export const updateDrawingSchema = z.object({
   actionId: actionIdSchema,
@@ -2313,6 +2333,7 @@ export const assetUsageKindSchema = z.enum([
   "WORLD_CONTENT_MEDIA",
   "WORLD_CONTENT_INSTANCE_PORTRAIT",
   "GENERATED_TOKEN_SOURCE",
+  "MAP_STAMP",
 ]);
 export type AssetUsageKind = z.infer<typeof assetUsageKindSchema>;
 
@@ -2526,8 +2547,9 @@ export interface DrawingDto {
   y: number;
   revision: number;
   kind?: "FREEHAND" | "STAMP";
-  assetKey?: "forest" | "mountains" | "clouds";
-  packId?: "builtin-terrain-v1";
+  /** Template key, or the campaign asset id when packId is campaign-image. */
+  assetKey?: string;
+  packId?: StampPackId;
   size?: number;
   rotation?: number;
   layer?: "PUBLIC" | "GM";

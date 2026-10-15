@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { and, desc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../packages/db/src/schema.js";
+import { createDrawingSchema } from "../packages/contracts/src/index.js";
 import { registerRoutes } from "../apps/server/src/routes.js";
 import { hashToken } from "../apps/server/src/security.js";
 import { env } from "../apps/server/src/env.js";
@@ -1413,6 +1414,137 @@ describe("Pool B HTTP boundaries", () => {
         kind: "STAMP",
       } as never),
     ).rejects.toThrow();
+  });
+
+  it("UIX-706 accepts GM campaign images as stamps, scopes them and removes them with the image", async () => {
+    const publicImage = crypto.randomUUID();
+    const hiddenImage = crypto.randomUUID();
+    await db.insert(schema.assets).values(
+      [publicImage, hiddenImage].map((id, index) => ({
+        id,
+        campaignId: ids.campaign,
+        uploadedByMembershipId: ids.gm,
+        kind: "IMAGE" as const,
+        name: `Stamp ${index}`,
+        storageKey: crypto.randomUUID(),
+        mimeType: "image/webp",
+        sizeBytes: 1,
+      })),
+    );
+    const makeStamp = (
+      assetKey: string,
+      packId: string,
+      layer: "PUBLIC" | "GM" = "PUBLIC",
+    ) =>
+      app.inject({
+        method: "POST",
+        url: "/api/drawings",
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: crypto.randomUUID(),
+          sceneId: ids.scene,
+          kind: "STAMP",
+          assetKey,
+          packId,
+          x: 10,
+          y: 20,
+          size: 96,
+          rotation: 0,
+          layer,
+        },
+      });
+
+    const visible = await makeStamp(publicImage, "campaign-image");
+    expect(visible.statusCode, visible.body).toBe(201);
+    expect(visible.json()).toMatchObject({
+      kind: "STAMP",
+      assetKey: publicImage,
+      packId: "campaign-image",
+    });
+    const hidden = await makeStamp(hiddenImage, "campaign-image", "GM");
+    expect(hidden.statusCode, hidden.body).toBe(201);
+
+    // Only IMAGE assets of this campaign qualify; templates must be catalogued.
+    expect((await makeStamp(ids.tokenAsset, "campaign-image")).json()).toEqual(
+      expect.objectContaining({ error: "STAMP_IMAGE_NOT_FOUND" }),
+    );
+    expect(
+      (await makeStamp(ids.foreignAsset, "campaign-image")).statusCode,
+    ).toBe(404);
+    // Shape errors are ZodErrors (400 via the production error handler; this
+    // harness has none), so assert the contract and that nothing is written.
+    const stampShape = {
+      sceneId: ids.scene,
+      kind: "STAMP",
+      x: 0,
+      y: 0,
+      size: 96,
+      rotation: 0,
+      layer: "PUBLIC",
+    };
+    expect(
+      createDrawingSchema.safeParse({
+        ...stampShape,
+        packId: "campaign-image",
+        assetKey: "forest",
+      }).success,
+    ).toBe(false);
+    expect(
+      createDrawingSchema.safeParse({
+        ...stampShape,
+        packId: "builtin-terrain-v1",
+        assetKey: "../x",
+      }).success,
+    ).toBe(false);
+    expect(
+      (await makeStamp("forest", "campaign-image")).statusCode,
+    ).toBeGreaterThanOrEqual(400);
+    const unknownTemplate = await makeStamp("dark-cloud", "builtin-terrain-v1");
+    expect(unknownTemplate.statusCode).toBe(400);
+    expect(unknownTemplate.json()).toMatchObject({
+      error: "STAMP_TEMPLATE_UNKNOWN",
+    });
+    expect(
+      (await makeStamp("../x", "builtin-terrain-v1")).statusCode,
+    ).toBeGreaterThanOrEqual(400);
+    expect(await db.select().from(schema.drawings)).toHaveLength(2);
+
+    const playerSnapshot = (
+      await app.inject({
+        method: "GET",
+        url: "/api/bootstrap",
+        headers: headers(secrets.player),
+      })
+    ).json();
+    const playerAssetIds = playerSnapshot.assets.map(
+      (asset: { id: string }) => asset.id,
+    );
+    expect(playerAssetIds).toContain(publicImage);
+    expect(playerAssetIds).not.toContain(hiddenImage);
+
+    const usage = await app.inject({
+      method: "GET",
+      url: `/api/assets/${publicImage}/usage`,
+      headers: headers(secrets.gm),
+    });
+    expect(usage.statusCode, usage.body).toBe(200);
+    expect(usage.json().usages).toEqual([
+      expect.objectContaining({
+        kind: "MAP_STAMP",
+        entityId: visible.json().id,
+        visibility: "PUBLIC",
+        deletionPolicy: "DETACH",
+      }),
+    ]);
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/assets/${publicImage}`,
+      headers: headers(secrets.gm),
+    });
+    expect(deleted.statusCode, deleted.body).toBe(200);
+    const remaining = await db.select().from(schema.drawings);
+    expect(remaining.map((drawing) => drawing.id)).toEqual([hidden.json().id]);
   });
 
   it("serializes placement against destructive definition deletion", async () => {

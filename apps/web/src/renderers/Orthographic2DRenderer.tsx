@@ -92,7 +92,8 @@ import {
 } from "./token-drag-event";
 import { mapWorldPointFromDrop } from "../token-placement";
 import { getTokenImageMask } from "./token-image-mask";
-import type { TerrainStampKey } from "./TerrainStampControls";
+import { stampImageUrl } from "./stamp-image-url";
+import type { StampPackId } from "@arken/contracts";
 import { proportionalTokenSize } from "./token-resize";
 import {
   createTokenImageState,
@@ -102,15 +103,17 @@ import {
 import { resolveResizeHandleDataAttributes } from "./resize-handle";
 
 function TerrainStampImage({
+  packId,
   assetKey,
   size,
   listening,
 }: {
-  assetKey: TerrainStampKey;
+  packId: StampPackId;
+  assetKey: string;
   size: number;
   listening: boolean;
 }) {
-  const [image] = useImage(`/api/terrain-stamps/assets/${assetKey}`);
+  const [image] = useImage(stampImageUrl(packId, assetKey));
   return image ? (
     <Image
       image={image}
@@ -174,7 +177,12 @@ function StampDrawingNode({
         strokeWidth={selected ? 2 / scale : 0}
         listening={listening}
       />
-      <TerrainStampImage assetKey={key} size={size} listening={listening} />
+      <TerrainStampImage
+        packId={drawing.packId ?? "builtin-terrain-v1"}
+        assetKey={key}
+        size={size}
+        listening={listening}
+      />
     </Group>
   );
 }
@@ -2040,7 +2048,6 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       void stampCreateRef
         .current({
           kind: "STAMP",
-          packId: "builtin-terrain-v1",
           ...settings,
           x: point.x,
           y: point.y,
@@ -3498,6 +3505,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                 listening={false}
               >
                 <TerrainStampImage
+                  packId={props.stampTool.packId}
                   assetKey={props.stampTool.assetKey}
                   size={props.stampTool.size}
                   listening={false}

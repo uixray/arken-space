@@ -34,3 +34,26 @@
 .terrain-stamp-controls input[type="range"] {
   max-width: 10rem;
 }
+.terrain-stamp-controls [role="group"] {
+  flex-wrap: wrap;
+}
+.terrain-stamp-controls__heading {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+}
+.terrain-stamp-controls__custom {
+  max-height: 9.5rem;
+  overflow-y: auto;
+}
+.terrain-stamp-controls__name {
+  max-width: 4.5rem;
+  overflow: hidden;
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.terrain-stamp-controls label.terrain-stamp-controls__upload {
+  display: grid;
+  justify-content: stretch;
+  gap: 0.25rem;
+}

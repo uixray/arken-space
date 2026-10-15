@@ -80,6 +80,7 @@ import {
   updateSceneMetadataSchema,
   type ClientToServerEvents,
   type ServerToClientEvents,
+  type StampPackId,
 } from "@arken/contracts";
 import {
   assets,
@@ -184,7 +185,11 @@ import { registerPlayerRequestRoutes } from "./player-requests.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
 import { registerGalleryChatShareRoutes } from "./gallery-chat-share.js";
 import { registerChatAttachmentContentRoute } from "./chat-attachment-content.js";
-import { registerTerrainStampRoutes } from "./terrain-stamp-routes.js";
+import {
+  CAMPAIGN_IMAGE_STAMP_PACK_ID,
+  registerTerrainStampRoutes,
+  stampCatalog,
+} from "./terrain-stamp-routes.js";
 import { registerCharacterArchiveRoutes } from "./character-archive-routes.js";
 import { registerEncounterRoutes } from "./encounters.js";
 import { defaultThemeForMembership } from "./player-themes.js";
@@ -317,8 +322,8 @@ function drawingDto(drawing: typeof drawings.$inferSelect) {
   return {
     ...common,
     kind: "STAMP" as const,
-    assetKey: drawing.stampAssetKey as "forest" | "mountains" | "clouds",
-    packId: drawing.stampPackId as "builtin-terrain-v1",
+    assetKey: drawing.stampAssetKey!,
+    packId: drawing.stampPackId as StampPackId,
     size: drawing.stampSize!,
     rotation: drawing.stampRotation!,
     layer: drawing.stampLayer as "PUBLIC" | "GM",
@@ -4285,6 +4290,26 @@ export function registerRoutes(
     const body = createDrawingSchema.parse(request.body);
     if (body.kind === "STAMP" && auth.role !== "GM")
       return reply.code(403).send({ error: "STAMP_FORBIDDEN" });
+    // UIX-706: a stamp source is either a catalog template or an IMAGE asset
+    // of this campaign; anything else is refused before any write.
+    if (body.kind === "STAMP") {
+      if (body.packId === CAMPAIGN_IMAGE_STAMP_PACK_ID) {
+        const [image] = await db
+          .select({ id: assets.id })
+          .from(assets)
+          .where(
+            and(
+              eq(assets.id, body.assetKey),
+              eq(assets.campaignId, auth.campaignId),
+              eq(assets.kind, "IMAGE"),
+            ),
+          )
+          .limit(1);
+        if (!image)
+          return reply.code(404).send({ error: "STAMP_IMAGE_NOT_FOUND" });
+      } else if (!stampCatalog().has(body.assetKey))
+        return reply.code(400).send({ error: "STAMP_TEMPLATE_UNKNOWN" });
+    }
     const [scene] = await db
       .select({ id: scenes.id })
       .from(scenes)

@@ -1761,7 +1761,10 @@ export const drawings = pgTable(
     check("drawings_kind_check", sql`${table.kind} in ('FREEHAND', 'STAMP')`),
     check(
       "drawings_stamp_fields_check",
-      sql`(${table.kind} = 'FREEHAND' and ${table.stampAssetKey} is null and ${table.stampPackId} is null and ${table.stampSize} is null and ${table.stampRotation} is null and ${table.stampLayer} is null) or (${table.kind} = 'STAMP' and ${table.stampAssetKey} is not null and ${table.stampAssetKey} in ('forest', 'mountains', 'clouds') and ${table.stampPackId} is not null and ${table.stampPackId} = 'builtin-terrain-v1' and ${table.stampSize} is not null and ${table.stampSize} between 16 and 1024 and ${table.stampRotation} is not null and ${table.stampRotation} between -360 and 360 and ${table.stampLayer} is not null and ${table.stampLayer} in ('PUBLIC', 'GM'))`,
+      // UIX-706: built-in templates come from the server catalog manifest
+      // (key pattern only here, so new templates need no migration); a
+      // campaign image stamp stores the campaign asset id as its key.
+      sql`(${table.kind} = 'FREEHAND' and ${table.stampAssetKey} is null and ${table.stampPackId} is null and ${table.stampSize} is null and ${table.stampRotation} is null and ${table.stampLayer} is null) or (${table.kind} = 'STAMP' and ${table.stampAssetKey} is not null and ((${table.stampPackId} = 'builtin-terrain-v1' and ${table.stampAssetKey} ~ '^[a-z][a-z0-9-]{0,39}$') or (${table.stampPackId} = 'campaign-image' and ${table.stampAssetKey} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')) and ${table.stampSize} is not null and ${table.stampSize} between 16 and 1024 and ${table.stampRotation} is not null and ${table.stampRotation} between -360 and 360 and ${table.stampLayer} is not null and ${table.stampLayer} in ('PUBLIC', 'GM'))`,
     ),
   ],
 );
