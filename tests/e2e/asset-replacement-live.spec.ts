@@ -492,8 +492,20 @@ for (const kind of [
         .getByRole("group", { name: "Изображение ресурса Заря", exact: true })
         .getByRole("button", { name: asset.name, exact: true });
       const resourceImage = resourceTile.locator("img");
+      // Since the 10.10 tab reorganisation the sheet shows resources and the
+      // gallery on their own tabs.
       const openResource = async () => {
         await openWorkspaceSection(player, "Персонажи");
+        await player
+          .getByRole("tab", { name: "Инвентарь и ресурсы", exact: true })
+          .click();
+        // Since 09.10 the resource image picker shows in its settings view.
+        await player
+          .locator("fieldset", {
+            has: player.getByText("Заря", { exact: true }),
+          })
+          .getByRole("button", { name: "Настроить", exact: true })
+          .click();
         await expect(resourceTile).toHaveAttribute("aria-pressed", "true");
         await resourceImage.scrollIntoViewIfNeeded();
         await expect(resourceImage).toBeVisible();
@@ -513,6 +525,9 @@ for (const kind of [
       };
       const openGallery = async () => {
         await openWorkspaceSection(player, "Персонажи");
+        await player
+          .getByRole("tab", { name: "Личность", exact: true })
+          .click();
         await player
           .getByRole("button", {
             name: "Открыть в полном размере: Проверка галереи",

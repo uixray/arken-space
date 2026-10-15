@@ -3071,6 +3071,8 @@ html[data-player-theme="light"] .character-card--combat {
   background: rgb(0 0 0 / 42%);
   opacity: 0;
   transition: opacity 140ms ease;
+  /* Decorative hover hint: the avatar button owns the click and hit-testing. */
+  pointer-events: none;
 }
 .character-hero__avatar:hover:not(:disabled) .character-hero__avatar-edit,
 .character-hero__avatar:focus-visible .character-hero__avatar-edit {
