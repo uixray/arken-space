@@ -698,27 +698,45 @@ const makeTextureStroke = (
   layer,
 });
 
-/** RGBA of all map layers composited, in DOM order, at the viewport centre. */
-async function centreComposite(page: Page) {
-  return page.locator(".map-viewport canvas").evaluateAll((canvases) => {
-    const layers = canvases as HTMLCanvasElement[];
-    const first = layers[0];
-    if (!first) return [];
+/**
+ * Composites every map canvas at its on-screen rectangle (as the asset
+ * replacement pixel tests do) and counts olive/green pixels (G >= R, G > B + 12): the
+ * test texture is the forest raster; the empty dark scene has none.
+ */
+async function greenMapPixels(page: Page) {
+  return page.locator(".map-viewport").evaluate((viewport) => {
+    const bounds = viewport.getBoundingClientRect();
     const composite = document.createElement("canvas");
-    composite.width = first.width;
-    composite.height = first.height;
+    composite.width = Math.ceil(bounds.width);
+    composite.height = Math.ceil(bounds.height);
     const context = composite.getContext("2d")!;
-    for (const layer of layers)
-      if (layer.width === first.width && layer.height === first.height)
-        context.drawImage(layer, 0, 0);
-    return [
-      ...context.getImageData(
-        Math.floor(first.width / 2),
-        Math.floor(first.height / 2),
-        1,
-        1,
-      ).data,
-    ];
+    for (const canvas of viewport.querySelectorAll("canvas")) {
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+      context.drawImage(
+        canvas,
+        rect.x - bounds.x,
+        rect.y - bounds.y,
+        rect.width,
+        rect.height,
+      );
+    }
+    const data = context.getImageData(
+      0,
+      0,
+      composite.width,
+      composite.height,
+    ).data;
+    let green = 0;
+    for (let index = 0; index < data.length; index += 4) {
+      const [red, greenChannel, blue] = [
+        data[index]!,
+        data[index + 1]!,
+        data[index + 2]!,
+      ];
+      if (greenChannel >= red && greenChannel > blue + 12) green++;
+    }
+    return { green, total: data.length / 4 };
   });
 }
 
@@ -825,8 +843,7 @@ test("UIX-706 PLAYER sees a public texture zone painted, without the GM catalog"
     "data-terrain-texture-count",
     "0",
   );
-  const baseline = await centreComposite(emptyPage);
-  expect(baseline).toHaveLength(4);
+  const baseline = await greenMapPixels(emptyPage);
   await emptyPage.close();
 
   const snapshot = revealedPlayerSnapshot([
@@ -840,8 +857,14 @@ test("UIX-706 PLAYER sees a public texture zone painted, without the GM catalog"
   await expect
     .poll(() => assetRequests)
     .toEqual(["/api/terrain-stamps/textures/dug-soil"]);
-  // The texture changes what the player actually sees at the zone's centre.
-  await expect.poll(() => centreComposite(page)).not.toEqual(baseline);
+  // The player actually sees the texture: a large share of the visible map
+  // turns green, which the empty scene does not have.
+  await expect
+    .poll(async () => {
+      const { green, total } = await greenMapPixels(page);
+      return (green - baseline.green) / total;
+    })
+    .toBeGreaterThan(0.05);
   await expect(page.getByRole("button", { name: "Штамп рельефа" })).toHaveCount(
     0,
   );
