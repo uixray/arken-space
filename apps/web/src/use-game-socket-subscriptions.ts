@@ -1,3 +1,4 @@
+import { shareStructure } from "./structural-sharing";
 import {
   useEffect,
   useRef,
@@ -164,7 +165,12 @@ export function useGameSocketSubscriptions({
     next.io.on("reconnect_failed", () => setConnection("OFFLINE"));
     next.on("game:snapshot", (nextSnapshot) => {
       setSnapshot((current) => {
-        const reconciled = reconcileGameSnapshot(current, nextSnapshot);
+        // Unchanged slices keep their identity, so a chat-only broadcast
+        // does not re-render the map (see structural-sharing.ts).
+        const reconciled = shareStructure(
+          current,
+          reconcileGameSnapshot(current, nextSnapshot),
+        );
         if (reconciled.campaign.id !== campaignId) return reconciled;
         if (nextSnapshot.snapshotVersion >= canonicalAudioFloor)
           canonicalAudioFloor = nextSnapshot.snapshotVersion;

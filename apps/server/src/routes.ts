@@ -192,6 +192,7 @@ import {
   textureCatalog,
 } from "./terrain-stamp-routes.js";
 import { registerCharacterArchiveRoutes } from "./character-archive-routes.js";
+import { createBroadcastCoalescer } from "./broadcast-coalescer.js";
 import { registerEncounterRoutes } from "./encounters.js";
 import { defaultThemeForMembership } from "./player-themes.js";
 import { registerPlayerThemeRoutes } from "./player-theme-routes.js";
@@ -355,7 +356,30 @@ function canvasSceneVisibleTo(
   return data.auth?.role === "GM" && data.viewedSceneId === sceneId;
 }
 
-async function broadcastSnapshots(
+const snapshotCoalescers = new WeakMap<
+  RealtimeServer,
+  ReturnType<typeof createBroadcastCoalescer>
+>();
+
+/**
+ * Sends every campaign socket its snapshot. Bursts of writes share one
+ * rebuild (see broadcast-coalescer.ts); each caller still resolves only after
+ * a snapshot that includes its own committed change.
+ */
+function broadcastSnapshots(
+  io: RealtimeServer,
+  db: Database,
+  campaignId: string,
+) {
+  let coalesce = snapshotCoalescers.get(io);
+  if (!coalesce) {
+    coalesce = createBroadcastCoalescer();
+    snapshotCoalescers.set(io, coalesce);
+  }
+  return coalesce(campaignId, () => emitCampaignSnapshots(io, db, campaignId));
+}
+
+async function emitCampaignSnapshots(
   io: RealtimeServer,
   db: Database,
   campaignId: string,

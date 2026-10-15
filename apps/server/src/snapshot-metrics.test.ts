@@ -69,7 +69,7 @@ describe("измерение снапшота", () => {
       new URL("./routes.ts", import.meta.url),
       "utf8",
     );
-    const start = source.indexOf("async function broadcastSnapshots(");
+    const start = source.indexOf("async function emitCampaignSnapshots(");
     const end = source.indexOf("\nfunction errorMessage", start);
     const body = source.slice(start, end);
     const emptyRoomGuard = body.indexOf("targetSockets.length === 0");

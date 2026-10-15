@@ -111,6 +111,7 @@ import { usePlayerThemeRuntime } from "./design-system/player-theme-runtime-cont
 import { usePlayerThemePreference } from "./design-system/usePlayerThemePreference";
 import { patchPersonalThemePreference } from "./design-system/personal-theme-api";
 import { useCharacterActions } from "./use-character-actions";
+const NO_ENCOUNTERS: never[] = [];
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
     default: module.Orthographic2DRenderer,
@@ -1180,8 +1181,37 @@ export function App() {
     [activeScene?.id, run],
   );
 
+  // Stable renderer props: the map renderer is memoised, and an inline
+  // callback would re-render the whole scene on every App render.
+  const handleObjectListToggle = useCallback(
+    () => setMapObjectsOpen((open) => !open),
+    [],
+  );
+  const handleObjectListClose = useCallback(() => setMapObjectsOpen(false), []);
+  const activeSceneIdForPlacement = activeSceneValue?.id;
+  const handlePlaceTokenDefinition = useCallback(
+    async (definitionId: string, point?: { x: number; y: number }) => {
+      if (!activeSceneIdForPlacement) return;
+      void placeOptimistically({
+        path: `/api/token-definitions/${definitionId}/placements`,
+        body: {
+          actionId: crypto.randomUUID(),
+          definitionId,
+          sceneId: activeSceneIdForPlacement,
+          ...point,
+        },
+      });
+    },
+    [activeSceneIdForPlacement, placeOptimistically],
+  );
+
   const handleStampCreate = useCallback(
     async (stamp: StampCreatePayload) => {
+      // Read live state at call time (user event): depending on `snapshot`
+      // would give this prop a new identity on every broadcast and re-render
+      // the memoised map.
+      const snapshot = snapshotRef.current;
+      const activeScene = activeSceneRef.current;
       if (!activeScene || snapshot?.me.role !== "GM") return undefined;
       const requestedSceneId = activeScene.id;
       const requestedCampaignId = snapshot.campaign.id;
@@ -1228,14 +1258,7 @@ export function App() {
       }
       return created;
     },
-    [
-      activeScene,
-      activeSceneRef,
-      run,
-      snapshot?.campaign.id,
-      snapshot?.me.role,
-      snapshot?.snapshotVersion,
-    ],
+    [activeSceneRef, run, snapshotRef],
   );
 
   const handlePing = useCallback(
@@ -1876,10 +1899,8 @@ export function App() {
                     key={`${activeScene.id}:${snapshot.campaign.paused}`}
                     paused={snapshot.campaign.paused}
                     externalObjectListOpen={mapObjectsOpen}
-                    onObjectListToggle={() =>
-                      setMapObjectsOpen((open) => !open)
-                    }
-                    onObjectListClose={() => setMapObjectsOpen(false)}
+                    onObjectListToggle={handleObjectListToggle}
+                    onObjectListClose={handleObjectListClose}
                     scene={
                       gridPreview
                         ? { ...activeScene, grid: gridPreview }
@@ -1909,7 +1930,7 @@ export function App() {
                     gmFogVisible={gmFogVisible}
                     gmGridVisible={gmGridVisible}
                     fogBrushRadius={fogBrushRadius}
-                    encounters={[]}
+                    encounters={NO_ENCOUNTERS}
                     canvasEditMode={canvasEditMode}
                     onCanvasEditCancel={handleCanvasEditCancel}
                     onCanvasPatch={handleCanvasPatch}
@@ -1920,17 +1941,7 @@ export function App() {
                     }
                     stampTool={stampSettings}
                     onPing={handlePing}
-                    onPlaceTokenDefinition={async (definitionId, point) => {
-                      void placeOptimistically({
-                        path: `/api/token-definitions/${definitionId}/placements`,
-                        body: {
-                          actionId: crypto.randomUUID(),
-                          definitionId,
-                          sceneId: activeScene.id,
-                          ...point,
-                        },
-                      });
-                    }}
+                    onPlaceTokenDefinition={handlePlaceTokenDefinition}
                     onTokenLayerChange={handleTokenLayerChange}
                     onTokenConditionsChange={handleTokenConditionsChange}
                     onTokenDelete={handleTokenDelete}

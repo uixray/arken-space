@@ -1,4 +1,12 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import type {
   ChatStream,
@@ -16,12 +24,6 @@ import { SceneManagerDialog } from "./ui/SceneManagerDialog";
 import { StoryChannel } from "./StoryChannel";
 import { StoryAttachmentLibrary } from "./StoryAttachmentLibrary";
 import { useThreadHistory } from "./use-thread-history";
-import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
-import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
-import { WorldContentWorkspace } from "./WorldContentWorkspace";
-import { SpellSchoolsWorkspace } from "./SpellSchoolsWorkspace";
-import { WorldEncyclopediaWorkspace } from "./WorldEncyclopediaWorkspace";
-import { PlayerRequestsWorkspace } from "./PlayerRequestsWorkspace";
 import {
   CHAT_STREAM_LABEL,
   messagesForStream,
@@ -47,6 +49,41 @@ import { PalettePanel } from "./sidebar/TokenPalette";
 import { SetupPanel } from "./sidebar/SetupPanel";
 import { MediaPanel } from "./sidebar/MediaPanel";
 import { CampaignStatLabelsProvider } from "./campaign-stat-labels-context";
+
+/**
+ * Rarely opened, mostly GM-only workspaces load on first open instead of with
+ * the main bundle; the chat, character sheet and map stay eager.
+ */
+const WorldMapsWorkspace = lazy(() =>
+  import("./WorldMapsWorkspace").then((module) => ({
+    default: module.WorldMapsWorkspace,
+  })),
+);
+const OperatorFeedbackWorkspace = lazy(() =>
+  import("./OperatorFeedbackWorkspace").then((module) => ({
+    default: module.OperatorFeedbackWorkspace,
+  })),
+);
+const WorldContentWorkspace = lazy(() =>
+  import("./WorldContentWorkspace").then((module) => ({
+    default: module.WorldContentWorkspace,
+  })),
+);
+const SpellSchoolsWorkspace = lazy(() =>
+  import("./SpellSchoolsWorkspace").then((module) => ({
+    default: module.SpellSchoolsWorkspace,
+  })),
+);
+const WorldEncyclopediaWorkspace = lazy(() =>
+  import("./WorldEncyclopediaWorkspace").then((module) => ({
+    default: module.WorldEncyclopediaWorkspace,
+  })),
+);
+const PlayerRequestsWorkspace = lazy(() =>
+  import("./PlayerRequestsWorkspace").then((module) => ({
+    default: module.PlayerRequestsWorkspace,
+  })),
+);
 
 type SidebarFeed = "ACTIVITY" | ChatStream;
 
@@ -521,75 +558,81 @@ function SidebarContent(props: Props) {
             onUpload={assetActions.uploadAsset}
           />
         )}
-        {props.workspace === "operator-feedback" &&
-          props.operatorFeedbackAllowed && (
-            <OperatorFeedbackWorkspace open onClose={closeWorkspace} />
-          )}
-        {props.workspace === "player-requests" && (
-          <PlayerRequestsWorkspace
-            open
-            snapshot={props.snapshot}
-            onClose={() => onWorkspaceChange(null)}
-            onCreate={playerRequestActions.onCreatePlayerRequest}
-            onUpdate={playerRequestActions.onUpdatePlayerRequest}
-            onAction={playerRequestActions.onPlayerRequestAction}
-          />
-        )}
-        {props.workspace === "world-maps" && (
-          <WorldMapsWorkspace
-            open
-            snapshot={props.snapshot}
-            onClose={() => onWorkspaceChange(null)}
-            onOpenScene={(sceneId) => {
-              sceneActions.onViewScene(sceneId);
-              onWorkspaceChange(null);
-            }}
-            onCreateMap={worldMapActions.onCreateWorldMap}
-            onSetDraftBackground={worldMapActions.onSetWorldMapDraftBackground}
-            onApproveBackground={worldMapActions.onApproveWorldMapBackground}
-            onPublishMap={worldMapActions.onPublishWorldMap}
-            onArchiveMap={worldMapActions.onArchiveWorldMap}
-            onCreateLocation={worldMapActions.onCreateWorldMapLocation}
-            onUpdateLocation={worldMapActions.onUpdateWorldMapLocation}
-            onLinkLocationScene={worldMapActions.onLinkWorldMapLocationScene}
-            onUnlinkLocationScene={
-              worldMapActions.onUnlinkWorldMapLocationScene
-            }
-            onSetPartyPosition={worldMapActions.onSetWorldMapPartyPosition}
-            onClearPartyPosition={worldMapActions.onClearWorldMapPartyPosition}
-          />
-        )}
-        {props.workspace === "world-encyclopedia" && isGm && (
-          <WorldContentWorkspace
-            open
-            assets={props.snapshot.assets}
-            members={props.snapshot.members}
-            worldMaps={props.snapshot.worldMaps}
-            onUpload={assetActions.uploadAsset}
-            onClose={closeWorkspace}
-          />
-        )}
-        {props.workspace === "spell-schools" && isGm && (
-          <ArkenDialog
-            open
-            footer={false}
-            title="Школы заклинаний"
-            variant="workspace"
-            onClose={closeSpellWorkspace}
-          >
-            <SpellSchoolsWorkspace
-              onClose={closeSpellWorkspace}
-              onPendingChange={setSpellSavePending}
+        <Suspense fallback={null}>
+          {props.workspace === "operator-feedback" &&
+            props.operatorFeedbackAllowed && (
+              <OperatorFeedbackWorkspace open onClose={closeWorkspace} />
+            )}
+          {props.workspace === "player-requests" && (
+            <PlayerRequestsWorkspace
+              open
+              snapshot={props.snapshot}
+              onClose={() => onWorkspaceChange(null)}
+              onCreate={playerRequestActions.onCreatePlayerRequest}
+              onUpdate={playerRequestActions.onUpdatePlayerRequest}
+              onAction={playerRequestActions.onPlayerRequestAction}
             />
-          </ArkenDialog>
-        )}
-        {props.workspace === "world-codex" && (
-          <WorldEncyclopediaWorkspace
-            open
-            assets={props.snapshot.assets}
-            onClose={closeWorkspace}
-          />
-        )}
+          )}
+          {props.workspace === "world-maps" && (
+            <WorldMapsWorkspace
+              open
+              snapshot={props.snapshot}
+              onClose={() => onWorkspaceChange(null)}
+              onOpenScene={(sceneId) => {
+                sceneActions.onViewScene(sceneId);
+                onWorkspaceChange(null);
+              }}
+              onCreateMap={worldMapActions.onCreateWorldMap}
+              onSetDraftBackground={
+                worldMapActions.onSetWorldMapDraftBackground
+              }
+              onApproveBackground={worldMapActions.onApproveWorldMapBackground}
+              onPublishMap={worldMapActions.onPublishWorldMap}
+              onArchiveMap={worldMapActions.onArchiveWorldMap}
+              onCreateLocation={worldMapActions.onCreateWorldMapLocation}
+              onUpdateLocation={worldMapActions.onUpdateWorldMapLocation}
+              onLinkLocationScene={worldMapActions.onLinkWorldMapLocationScene}
+              onUnlinkLocationScene={
+                worldMapActions.onUnlinkWorldMapLocationScene
+              }
+              onSetPartyPosition={worldMapActions.onSetWorldMapPartyPosition}
+              onClearPartyPosition={
+                worldMapActions.onClearWorldMapPartyPosition
+              }
+            />
+          )}
+          {props.workspace === "world-encyclopedia" && isGm && (
+            <WorldContentWorkspace
+              open
+              assets={props.snapshot.assets}
+              members={props.snapshot.members}
+              worldMaps={props.snapshot.worldMaps}
+              onUpload={assetActions.uploadAsset}
+              onClose={closeWorkspace}
+            />
+          )}
+          {props.workspace === "spell-schools" && isGm && (
+            <ArkenDialog
+              open
+              footer={false}
+              title="Школы заклинаний"
+              variant="workspace"
+              onClose={closeSpellWorkspace}
+            >
+              <SpellSchoolsWorkspace
+                onClose={closeSpellWorkspace}
+                onPendingChange={setSpellSavePending}
+              />
+            </ArkenDialog>
+          )}
+          {props.workspace === "world-codex" && (
+            <WorldEncyclopediaWorkspace
+              open
+              assets={props.snapshot.assets}
+              onClose={closeWorkspace}
+            />
+          )}
+        </Suspense>
         {props.workspace === "media" && (
           <ArkenDialog
             open

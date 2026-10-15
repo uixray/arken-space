@@ -240,15 +240,20 @@ function renderEditorRoute(snapshot: GameSnapshot) {
 }
 
 describe("Sidebar editor role routing", () => {
-  it("opens the editor route for a GM snapshot", () => {
+  // The workspace is lazy-loaded: wait for it rather than query synchronously.
+  it("opens the editor route for a GM snapshot", async () => {
     renderEditorRoute(gmSnapshot());
     expect(
-      screen.getByRole("region", { name: "World content editor route" }),
+      await screen.findByRole("region", { name: "World content editor route" }),
     ).toBeInTheDocument();
   });
 
-  it("rejects the editor route for a PLAYER snapshot", () => {
+  it("rejects the editor route for a PLAYER snapshot", async () => {
+    // Load the lazy module first, so absence proves the role gate rather
+    // than a chunk that has not arrived yet.
+    await import("./WorldContentWorkspace");
     renderEditorRoute(playerSnapshot());
+    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(
       screen.queryByRole("region", { name: "World content editor route" }),
     ).not.toBeInTheDocument();
