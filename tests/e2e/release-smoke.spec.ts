@@ -7,7 +7,7 @@ import { openWorkspaceSection } from "./workspace-nav-helper";
  * UIX-695: a short smoke against the production frontend build.
  *
  * Every other browser test runs on the Vite dev server, which never exercises
- * the bundle that ships: hashed chunks, lazy workspace chunks, the preview
+ * the bundle that ships: hashed chunks, the renderer's lazy chunk, the preview
  * proxy. This one runs only in the release gate
  * (.github/workflows/release-smoke.yml), with a real API and a disposable
  * database; the campaign fixture creates and owns its synthetic campaign.
@@ -45,7 +45,7 @@ async function enter(client: Page) {
   await expect(client.locator(".app-shell")).toBeVisible();
 }
 
-test("UIX-695 production build: GM, lazy workspace, player join and chat", async ({
+test("UIX-695 production build: GM, workspace, player join and chat", async ({
   page,
   browser,
   gmToken,
@@ -64,7 +64,7 @@ test("UIX-695 production build: GM, lazy workspace, player join and chat", async
   await enter(page);
   await expect(page.locator(".map-viewport")).toBeVisible();
 
-  // Lazy workspace chunk loads from the production build and renders.
+  // A workspace dialog renders from the production bundle.
   await openWorkspaceSection(page, "Карты мира");
   const worldMaps = page.getByRole("dialog", { name: "Карты мира" });
   await expect(worldMaps).toBeVisible();
