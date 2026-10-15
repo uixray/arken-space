@@ -307,6 +307,30 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     expect(props.onToolSelect).toHaveBeenLastCalledWith("STAMP");
   });
 
+  it("UIX-706: Escape outside the map returns from the stamp tool to PAN", () => {
+    const props = createDefaultProps({ tool: "STAMP" });
+    renderComponent(
+      <>
+        <MapToolbar {...props} />
+        <input aria-label="Поле" />
+        <div role="dialog" aria-label="Диалог">
+          <button type="button">Внутри</button>
+        </div>
+      </>,
+    );
+    const press = (target: Element) =>
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+
+    press(screen.getByRole("textbox", { name: "Поле" }));
+    press(screen.getByRole("button", { name: "Внутри" }));
+    expect(props.onToolSelect).not.toHaveBeenCalled();
+
+    press(document.body);
+    expect(props.onToolSelect).toHaveBeenLastCalledWith("PAN");
+  });
+
   it("рендерит инструменты GM без отключённого боя (UIX-621)", () => {
     const props = createDefaultProps();
     renderComponent(<MapToolbar {...props} />);

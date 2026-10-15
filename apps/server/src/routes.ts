@@ -150,6 +150,7 @@ import {
 } from "./snapshot-metrics.js";
 import {
   characterDto,
+  characterRollStats,
   normalizeCharacterResources,
   normalizeCharacterWallet,
   resolveCharacterStatLayout,
@@ -8765,6 +8766,14 @@ export function registerRoutes(
         } else {
           const values: Record<string, number> = {};
           const formulaParts = [action.dice];
+          const characterStats = action.modifiers.some(
+            (source) => source.type === "CHARACTERISTIC",
+          )
+            ? characterRollStats(
+                row.character,
+                await campaignDefaultStatLayout(db, auth.campaignId),
+              )
+            : {};
           for (const [index, source] of action.modifiers.entries()) {
             if (source.type === "CONSTANT") {
               formulaParts.push(String(source.value));
@@ -8784,7 +8793,7 @@ export function registerRoutes(
             const key = `modifier_${index}`;
             const value =
               source.type === "CHARACTERISTIC"
-                ? normalizeLegacyStats(row.character.stats)[source.key]
+                ? characterStats[source.key]
                 : parsedData.data.values?.[source.key];
             if (value === undefined || !Number.isFinite(value))
               return reply
@@ -9104,7 +9113,12 @@ export function registerRoutes(
       const rollLabel = `${body.label ?? body.formula}${modeLabel ? ` · ${modeLabel}` : ""}`;
       const result = rollFormulaWithMode(
         normalizedFormula,
-        normalizeLegacyStats(character?.stats),
+        character
+          ? characterRollStats(
+              character,
+              await campaignDefaultStatLayout(db, auth.campaignId),
+            )
+          : normalizeLegacyStats(undefined),
         body.rollMode ?? "NORMAL",
         randomInt,
         rollLabel,

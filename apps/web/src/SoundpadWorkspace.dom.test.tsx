@@ -254,6 +254,55 @@ it("marks starter-pack uploads explicitly as sound effects", async () => {
   });
 });
 
+it("UIX-706: uploads a new effect file from the soundpad into the selected pack", async () => {
+  const upload = vi.fn().mockResolvedValue({ ...asset, id: "new-asset" });
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/soundpad")
+        return {
+          ok: true,
+          json: async () => ({ packs: [pack], playerPlaybackEnabled: true }),
+        };
+      return { ok: true, json: async () => ({}) };
+    },
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  renderInTheme(
+    <SoundpadWorkspace
+      campaignId={pack.campaignId}
+      membershipId="55555555-5555-4555-8555-555555555555"
+      role="GM"
+      assets={[asset]}
+      socket={null}
+      onUpload={upload}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Саундпад" }));
+  fireEvent.click(await screen.findByText("Управление паками"));
+  const input = screen.getByLabelText("Загрузить аудиофайл (до 10 секунд)");
+  fireEvent.change(input, {
+    target: {
+      files: [new File(["x"], "Драконий рык.ogg", { type: "audio/ogg" })],
+    },
+  });
+  await waitFor(() =>
+    expect(upload).toHaveBeenCalledWith(expect.any(File), "AUDIO", {
+      audioPurpose: "SOUND_EFFECT",
+    }),
+  );
+  await waitFor(() =>
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url) === `/api/soundpad/packs/${pack.id}/sounds` &&
+          JSON.parse(String(init?.body)).assetId === "new-asset" &&
+          JSON.parse(String(init?.body)).label === "Драконий рык",
+      ),
+    ).toBe(true),
+  );
+});
+
 it("renders real sound buttons and sends one authorized trigger intent without local double-play", async () => {
   const callbacks = new Map<string, (event: unknown) => void>();
   const emit = vi.fn();

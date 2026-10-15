@@ -2278,7 +2278,9 @@ html[data-player-theme="light"] .character-card--combat {
 .roll-details__math-right small {
   padding-left: 0;
 }
-.roll-details__math small:last-child {
+/* UIX-706 п.4: формула без бонуса — единственный элемент строки; она всегда
+ * слева, вправо уходит только второй элемент. */
+.roll-details__math small:last-child:not(:first-child) {
   margin-left: auto;
   text-align: right;
 }
@@ -5806,6 +5808,29 @@ body:has(.landing-shell) {
 .token-image-generator__frame-option:has(input:checked) {
   border-color: var(--accent);
   color: var(--text);
+}
+/* UIX-706 п.2: мини-превью рамки рядом с названием. */
+.token-image-generator__frame-swatch {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--surface-3, var(--surface-2));
+}
+.token-image-generator__frame-swatch--none {
+  border: 1px dashed var(--muted);
+}
+.token-image-generator__frame-swatch-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+/* At 28px the 512-unit rings are ~1px; thicken them so the material reads. */
+.token-image-generator__frame-swatch-ring circle {
+  stroke-width: 64px;
 }
 .token-image-generator__zoom {
   display: grid;

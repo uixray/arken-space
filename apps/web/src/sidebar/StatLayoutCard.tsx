@@ -1,5 +1,5 @@
 import "./roll-controls.css";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Button } from "../design-system/Button";
 import { isSystemRegenStatKey, STAT_VALUE_RANGE } from "@arken/system";
 import { ApiError, formatApiError } from "../api";
@@ -192,7 +192,10 @@ export function StatLayoutCard({
   onReorderRow,
   layoutOnly = false,
   showAddRow = true,
+  children,
 }: {
+  /** UIX-706: дополнительное содержимое карточки под строками (старые навыки). */
+  children?: ReactNode;
   layoutOnly?: boolean;
   showAddRow?: boolean;
   title: string;
@@ -528,6 +531,7 @@ export function StatLayoutCard({
             <AppIcon icon={AddIcon} /> Добавить строку
           </Button>
         )}
+        {children}
       </div>
       <TextPromptDialog
         open={editing !== null}

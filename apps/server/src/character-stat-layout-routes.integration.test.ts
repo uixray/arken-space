@@ -279,6 +279,51 @@ describe("PLAYER-owned character stat layout", () => {
     expect(stored!.resources).toEqual({ stamina: { current: 3, maximum: 5 } });
   });
 
+  it("UIX-706: rolls a freshly added own row as 0 without writing a value", async () => {
+    const next = layoutWith("bytObsosom");
+    const added = await patch(ids.character, secrets.owner, id(), 0, next);
+    expect(added.statusCode, added.body).toBe(200);
+    const snapshot = await bootstrap(secrets.owner);
+    expect(
+      snapshot.characters.find(
+        (row: { id: string }) => row.id === ids.character,
+      ).stats.bytObsosom,
+    ).toBe(0);
+    const roll = await app.inject({
+      method: "POST",
+      url: "/api/dice",
+      headers: headers(secrets.owner),
+      payload: {
+        actionId: id(),
+        characterId: ids.character,
+        formula: "1d20 + bytObsosom",
+        label: "быть обсосом",
+      },
+    });
+    expect(roll.statusCode, roll.body).toBe(201);
+    expect(roll.json().dice.modifiers).toEqual([
+      { source: "bytObsosom", value: 0 },
+    ]);
+    // A key outside the effective layout is still an error, not a silent 0.
+    const unknown = await app.inject({
+      method: "POST",
+      url: "/api/dice",
+      headers: headers(secrets.owner),
+      payload: {
+        actionId: id(),
+        characterId: ids.character,
+        formula: "1d20 + notOnTheSheet",
+      },
+    });
+    expect(unknown.statusCode).toBe(400);
+    expect(unknown.json().error).toBe("INVALID_DICE_FORMULA");
+    const [stored] = await db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    expect(stored!.stats).toEqual({ craft: 9, campaignOnly: 4 });
+  });
+
   it("does not disclose foreign campaign characters and denies same-campaign other owners", async () => {
     const actionId = id();
     const layout = layoutWith("personalOnly");

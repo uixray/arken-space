@@ -9,6 +9,7 @@ import {
 import type { GameSnapshot, SceneDto } from "@arken/contracts";
 import type { MapTool } from "./renderers/map-interaction";
 import { shortcutLabel } from "./renderers/map-tool-shortcuts";
+import { shouldIgnoreGlobalShortcut } from "./input-diagnostics";
 import {
   readToolbarCollapsed,
   writeToolbarCollapsed,
@@ -129,6 +130,22 @@ export function MapToolbar({
   useEffect(() => {
     if (tool !== "STAMP") setStampPopoverOpen(false);
   }, [tool]);
+
+  // UIX-706 п.10: Esc обрабатывала только карта в фокусе. После клика мимо
+  // карты штамп оставался выбранным. Пока поповер закрыт (его Esc свой),
+  // Esc в любом месте, кроме полей ввода и диалогов, возвращает «Перемещение».
+  useEffect(() => {
+    if (tool !== "STAMP" || stampPopoverOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (shouldIgnoreGlobalShortcut(event)) return;
+      if ((event.target as Element | null)?.closest?.('[role="dialog"]'))
+        return;
+      onToolSelect("PAN");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [tool, stampPopoverOpen, onToolSelect]);
 
   useEffect(() => {
     if (!snapshot) return;

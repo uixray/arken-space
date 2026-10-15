@@ -531,7 +531,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
       ).toHaveAttribute("aria-hidden", "true");
       expect(
         screen.queryAllByRole("button", { name: "Добавить строку" }),
-      ).toHaveLength(actor === "CONTROLLER" ? 0 : 2);
+      ).toHaveLength(actor === "CONTROLLER" ? 0 : 3);
       const user = userEvent.setup();
       await user.click(screen.getByRole("button", { name: "Переименовать" }));
       const name = screen.getByRole("textbox", { name: "Имя персонажа" });
@@ -847,9 +847,16 @@ describe("CharacterPanel identity and portrait role wiring", () => {
 
     await user.click(screen.getByRole("tab", { name: "Показатели" }));
 
+    // UIX-706: the owner adds skills as rows (name + bonus) in the skills card.
+    const skillsCard = document.querySelector(".character-card--skills")!;
     expect(
-      screen.getByRole("button", { name: "+ Добавить навык…" }),
+      within(skillsCard as HTMLElement).getByRole("button", {
+        name: "Добавить строку",
+      }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "+ Навык из каталога…" }),
+    ).toBeNull();
     expect(
       screen.getByRole("button", { name: "+ Добавить способность…" }),
     ).toBeInTheDocument();
@@ -889,8 +896,10 @@ describe("CharacterPanel identity and portrait role wiring", () => {
       .setup()
       .click(screen.getByRole("tab", { name: "Показатели" }));
 
+    // UIX-706: a delegated player cannot edit the owner's layout rows, so
+    // skills still come from the catalog for them.
     expect(
-      screen.getByRole("button", { name: "+ Добавить навык…" }),
+      screen.getByRole("button", { name: "+ Навык из каталога…" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "+ Добавить способность…" }),
