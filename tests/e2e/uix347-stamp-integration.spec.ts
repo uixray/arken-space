@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
 import type { DrawingDto, GameSnapshot } from "@arken/contracts";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const png = (key: "forest" | "mountains" | "clouds") =>
   readFileSync(
@@ -274,7 +275,7 @@ async function installMocks(
         json: { ...original, ...body, revision: (original?.revision ?? 1) + 1 },
       });
     }
-    if (request.method() === "GET") return route.fulfill({ json: [] });
+    if (route.request().method() === "GET") return fulfillUnmocked(route, path);
     if (path === "/api/client-logs")
       return route.fulfill({ status: 204, body: "" });
     throw new Error(
