@@ -847,7 +847,8 @@ describe("CharacterPanel identity and portrait role wiring", () => {
 
     await user.click(screen.getByRole("tab", { name: "Показатели" }));
 
-    // UIX-706: the owner adds skills as rows (name + bonus) in the skills card.
+    // UIX-706: the owner adds simple skills as rows (name + bonus) and keeps
+    // the personal catalog entry flow for skills with a description/formula.
     const skillsCard = document.querySelector(".character-card--skills")!;
     expect(
       within(skillsCard as HTMLElement).getByRole("button", {
@@ -855,8 +856,10 @@ describe("CharacterPanel identity and portrait role wiring", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "+ Навык из каталога…" }),
-    ).toBeNull();
+      within(skillsCard as HTMLElement).getByRole("button", {
+        name: "+ Добавить навык…",
+      }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "+ Добавить способность…" }),
     ).toBeInTheDocument();
@@ -899,7 +902,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
     // UIX-706: a delegated player cannot edit the owner's layout rows, so
     // skills still come from the catalog for them.
     expect(
-      screen.getByRole("button", { name: "+ Навык из каталога…" }),
+      screen.getByRole("button", { name: "+ Добавить навык…" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "+ Добавить способность…" }),

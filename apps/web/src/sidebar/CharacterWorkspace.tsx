@@ -1925,16 +1925,16 @@ export function CharacterPanel({
                     <p className="muted">Навыки ещё не добавлены.</p>
                   ) : null}
                 </div>
-                {/* Владелец добавляет навыки строками; мастер и делегированный
-                 * игрок (раскладку правит только владелец) — из каталога. */}
-                {editable &&
-                  (snapshot.me.role === "GM" || !canEditCharacterLayout) && (
-                    <div className="character-card__add">
-                      <Button onClick={() => setCatalogPicker("SKILL")}>
-                        + Навык из каталога…
-                      </Button>
-                    </div>
-                  )}
+                {/* Простой навык — строкой «название + бонус» (владелец);
+                 * навык с описанием и формулой — личной записью через каталог,
+                 * доступной всем, кто правит лист. */}
+                {editable && (
+                  <div className="character-card__add">
+                    <Button onClick={() => setCatalogPicker("SKILL")}>
+                      + Добавить навык…
+                    </Button>
+                  </div>
+                )}
               </StatLayoutCard>
               <div className="character-card character-card--abilities">
                 <h3 className="character-card__header">
