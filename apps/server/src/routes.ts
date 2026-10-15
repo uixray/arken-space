@@ -80,7 +80,7 @@ import {
   updateSceneMetadataSchema,
   type ClientToServerEvents,
   type ServerToClientEvents,
-  type StampPackId,
+  type DrawingPackId,
 } from "@arken/contracts";
 import {
   assets,
@@ -189,6 +189,7 @@ import {
   CAMPAIGN_IMAGE_STAMP_PACK_ID,
   registerTerrainStampRoutes,
   stampCatalog,
+  textureCatalog,
 } from "./terrain-stamp-routes.js";
 import { registerCharacterArchiveRoutes } from "./character-archive-routes.js";
 import { registerEncounterRoutes } from "./encounters.js";
@@ -267,8 +268,10 @@ const gmRoom = (id: string) => `campaign:${id}:gm`;
 const memberRoom = (id: string) => `member:${id}`;
 const sessionRoom = (id: string) => `session:${id}`;
 
+/** STAMP and TEXTURE (UIX-706 pool 3) drawings are GM-only, layered objects. */
+const LAYERED_DRAWING_KINDS: readonly unknown[] = ["STAMP", "TEXTURE"];
 const isStampDrawing = (drawing: typeof drawings.$inferSelect) =>
-  drawing.kind === "STAMP";
+  LAYERED_DRAWING_KINDS.includes(drawing.kind);
 const isHiddenStamp = (drawing: typeof drawings.$inferSelect) =>
   isStampDrawing(drawing) && drawing.stampLayer === "GM";
 
@@ -280,7 +283,7 @@ function historyContainsStamp(command: typeof actionJournal.$inferSelect) {
         typeof snapshot === "object" &&
         snapshot !== null &&
         "kind" in snapshot &&
-        snapshot.kind === "STAMP",
+        LAYERED_DRAWING_KINDS.includes(snapshot.kind),
     );
   if (command.targetType !== "CANVAS_BULK") return false;
   return snapshots.some((snapshot) => {
@@ -298,7 +301,7 @@ function historyContainsStamp(command: typeof actionJournal.$inferSelect) {
           typeof row === "object" &&
           row !== null &&
           "kind" in row &&
-          row.kind === "STAMP",
+          LAYERED_DRAWING_KINDS.includes(row.kind),
       )
     );
   });
@@ -318,12 +321,12 @@ function drawingDto(drawing: typeof drawings.$inferSelect) {
     createdAt: drawing.createdAt,
     updatedAt: drawing.updatedAt,
   };
-  if (drawing.kind !== "STAMP") return { ...common, kind: "FREEHAND" as const };
+  if (!isStampDrawing(drawing)) return { ...common, kind: "FREEHAND" as const };
   return {
     ...common,
-    kind: "STAMP" as const,
+    kind: drawing.kind as "STAMP" | "TEXTURE",
     assetKey: drawing.stampAssetKey!,
-    packId: drawing.stampPackId as StampPackId,
+    packId: drawing.stampPackId as DrawingPackId,
     size: drawing.stampSize!,
     rotation: drawing.stampRotation!,
     layer: drawing.stampLayer as "PUBLIC" | "GM",
@@ -4288,11 +4291,14 @@ export function registerRoutes(
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     const body = createDrawingSchema.parse(request.body);
-    if (body.kind === "STAMP" && auth.role !== "GM")
+    if (
+      (body.kind === "STAMP" || body.kind === "TEXTURE") &&
+      auth.role !== "GM"
+    )
       return reply.code(403).send({ error: "STAMP_FORBIDDEN" });
-    // UIX-706: a stamp source is either a catalog template or an IMAGE asset
-    // of this campaign; anything else is refused before any write.
-    if (body.kind === "STAMP") {
+    // UIX-706: a stamp or texture source is either a catalog entry or an
+    // IMAGE asset of this campaign; anything else is refused before any write.
+    if (body.kind === "STAMP" || body.kind === "TEXTURE") {
       if (body.packId === CAMPAIGN_IMAGE_STAMP_PACK_ID) {
         const [image] = await db
           .select({ id: assets.id })
@@ -4307,7 +4313,11 @@ export function registerRoutes(
           .limit(1);
         if (!image)
           return reply.code(404).send({ error: "STAMP_IMAGE_NOT_FOUND" });
-      } else if (!stampCatalog().has(body.assetKey))
+      } else if (
+        !(body.kind === "STAMP" ? stampCatalog() : textureCatalog()).has(
+          body.assetKey,
+        )
+      )
         return reply.code(400).send({ error: "STAMP_TEMPLATE_UNKNOWN" });
     }
     const [scene] = await db
@@ -4354,11 +4364,27 @@ export function registerRoutes(
             stampRotation: input.rotation,
             stampLayer: input.layer,
           }
-        : {
-            ...input,
-            authorMembershipId: auth.membershipId,
-            kind: "FREEHAND" as const,
-          };
+        : input.kind === "TEXTURE"
+          ? {
+              sceneId: input.sceneId,
+              authorMembershipId: auth.membershipId,
+              points: input.points,
+              color: "#ffffff",
+              strokeWidth: input.brushWidth,
+              x: input.x,
+              y: input.y,
+              kind: "TEXTURE",
+              stampAssetKey: input.assetKey,
+              stampPackId: input.packId,
+              stampSize: input.size,
+              stampRotation: 0,
+              stampLayer: input.layer,
+            }
+          : {
+              ...input,
+              authorMembershipId: auth.membershipId,
+              kind: "FREEHAND" as const,
+            };
     const saved = await canvasTx(auth.campaignId).transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, scene.id);
       const [drawing] = await tx
@@ -4558,7 +4584,7 @@ export function registerRoutes(
             strokeWidth: row.drawing.strokeWidth,
             x: row.drawing.x + 16,
             y: row.drawing.y + 16,
-            kind: "STAMP" as const,
+            kind: row.drawing.kind,
             stampAssetKey: row.drawing.stampAssetKey,
             stampPackId: row.drawing.stampPackId,
             stampSize: row.drawing.stampSize,
@@ -5286,6 +5312,7 @@ export function registerRoutes(
                     authorMembershipId: drawing.authorMembershipId,
                     points: drawing.points,
                     color: drawing.color,
+                    strokeWidth: drawing.strokeWidth ?? 3,
                     x: drawing.x,
                     y: drawing.y,
                     kind: drawing.kind ?? "FREEHAND",
@@ -5316,6 +5343,7 @@ export function registerRoutes(
                     authorMembershipId: drawing.authorMembershipId,
                     points: drawing.points,
                     color: drawing.color,
+                    strokeWidth: drawing.strokeWidth ?? 3,
                     x: drawing.x,
                     y: drawing.y,
                     kind: drawing.kind ?? "FREEHAND",
@@ -5377,6 +5405,7 @@ export function registerRoutes(
                   .set({
                     points: drawing.points,
                     color: drawing.color,
+                    strokeWidth: drawing.strokeWidth ?? 3,
                     x: drawing.x,
                     y: drawing.y,
                     kind: drawing.kind ?? "FREEHAND",
@@ -5407,6 +5436,7 @@ export function registerRoutes(
                     authorMembershipId: drawing.authorMembershipId,
                     points: drawing.points,
                     color: drawing.color,
+                    strokeWidth: drawing.strokeWidth ?? 3,
                     x: drawing.x,
                     y: drawing.y,
                     kind: drawing.kind ?? "FREEHAND",

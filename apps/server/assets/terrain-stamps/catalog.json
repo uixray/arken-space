@@ -4,5 +4,6 @@
     { "key": "forest", "title": "Лес", "file": "forest.png" },
     { "key": "mountains", "title": "Горы", "file": "mountains.png" },
     { "key": "clouds", "title": "Облака", "file": "clouds.png" }
-  ]
+  ],
+  "textures": []
 }

@@ -200,7 +200,7 @@
     {
       "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
       "kind": "tag:select",
-      "count": 1
+      "count": 2
     },
     {
       "file": "apps/web/src/renderers/TerrainStampControls.tsx",

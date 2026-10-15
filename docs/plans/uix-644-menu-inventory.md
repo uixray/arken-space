@@ -1271,3 +1271,8 @@ historical snapshots and must not be silently carried forward to these sites.
 - At source revision `5815ce59a1264391fcd15e2db76e32c6fc2c2cd2`, the focused AST inventory test found two additional file-kind buckets absent from the historical `917af2d` index: `GlobalStickerPackManager.tsx::tag:details` (1) and `GlobalStickerPackManager.tsx::tag:select` (1). The full scan denominator is now **50 buckets / 92 JSX occurrences**; historical 48 / 90 and all prior evidence remain historical and unchanged.
 - Both controls are under `MediaPanel`'s GM-only conditional. The `details` disclosure is in-flow; the native `select` chooses among owned packs. Their ancestor chains and source owner are recorded in `uix-644-runtime-coverage.json`.
 - Runtime status for both new rows: **BLOCKED — pending**. Static discovery is not proof of rendering, placement, keyboard/focus, dismissal, or hit-testing. No PASS is inferred. Overall UIX-644 remains INCOMPLETE.
+
+## 2026-10-15 — UIX-706 pool 3 static delta
+
+- `Orthographic2DRenderer.tsx::tag:select` grows from 1 to 2 occurrences: the selected-drawing panel gains a «Слой выбранной текстуры» native select for TEXTURE strokes, beside the existing stamp layer select. Same panel, same GM-only `onDrawingUpdate` path; no new overlay owner. The full scan denominator is now **64 buckets / 122 JSX occurrences**.
+- Runtime status for the new occurrence: **BLOCKED — pending**, like its stamp sibling. The UIX-706 e2e scenario changes this select's value, which is scoped evidence, not overlay acceptance. Overall UIX-644 remains INCOMPLETE.

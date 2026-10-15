@@ -806,10 +806,10 @@
     {
       "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
       "kind": "tag:select",
-      "count": 1,
+      "count": 2,
       "status": "BLOCKED",
       "classification": "current-source-runtime-evidence-pending",
-      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; UIX-706 pool 3 adds the texture layer select in the same panel; no current browser acceptance claimed.",
       "evidence": [],
       "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
     },

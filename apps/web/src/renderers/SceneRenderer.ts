@@ -14,7 +14,10 @@ import type { CursorPresence } from "./cursor-presence";
 import type { GameSocket } from "../realtime";
 import type { MapMoveAck, MapMoveTarget } from "./map-move-queue";
 import type { MapTool } from "./map-interaction";
-import type { TerrainStampSettings } from "./TerrainStampControls";
+import type {
+  StampCreatePayload,
+  TerrainStampSettings,
+} from "./TerrainStampControls";
 
 export interface SceneRendererProps {
   paused?: boolean;
@@ -109,9 +112,7 @@ export interface SceneRendererProps {
     color: string;
     strokeWidth?: number;
   }) => Promise<DrawingDto | void>;
-  onStampCreate?: (
-    stamp: TerrainStampSettings & { kind: "STAMP"; x: number; y: number },
-  ) => Promise<DrawingDto | void>;
+  onStampCreate?: (stamp: StampCreatePayload) => Promise<DrawingDto | void>;
   stampTool?: TerrainStampSettings;
   onPing: (point: { x: number; y: number }) => void;
   onPlaceTokenDefinition?: (

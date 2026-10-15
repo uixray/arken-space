@@ -97,12 +97,16 @@ export function drawingBounds(drawing: DrawingDto): MapObjectBounds | null {
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
+  // A texture stroke covers half its brush width beyond its centre line.
+  const brushWidth =
+    drawing.kind === "TEXTURE" ? (drawing.strokeWidth ?? 0) : 0;
+  const pad = isFiniteNumber(brushWidth) ? brushWidth / 2 : 0;
   return {
-    x: drawing.x + minX,
-    y: drawing.y + minY,
+    x: drawing.x + minX - pad,
+    y: drawing.y + minY - pad,
     // A straight horizontal or vertical stroke still has a hittable area.
-    width: Math.max(1, maxX - minX),
-    height: Math.max(1, maxY - minY),
+    width: Math.max(1, maxX - minX + pad * 2),
+    height: Math.max(1, maxY - minY + pad * 2),
   };
 }
 

@@ -5,6 +5,7 @@ import {
   TerrainStampControls,
   type TerrainStampSettings,
 } from "./TerrainStampControls";
+import { DEFAULT_TERRAIN_STAMP_SETTINGS } from "./terrain-stamp-settings";
 import { stampImageUrl } from "./stamp-image-url";
 
 vi.mock("../api", () => ({
@@ -13,19 +14,14 @@ vi.mock("../api", () => ({
       { assetKey: "forest", title: "Лес" },
       { assetKey: "fallen-tree", title: "Поваленное дерево" },
     ],
+    textures: [{ assetKey: "dug-soil", title: "Перекопанная почва" }],
   }),
   formatApiError: (reason: unknown) =>
     reason instanceof Error ? reason.message : "Операция не выполнена",
 }));
 
 const imageId = "11111111-1111-4111-8111-111111111111";
-const base: TerrainStampSettings = {
-  packId: "builtin-terrain-v1",
-  assetKey: "forest",
-  size: 160,
-  rotation: 0,
-  layer: "PUBLIC",
-};
+const base: TerrainStampSettings = DEFAULT_TERRAIN_STAMP_SETTINGS;
 
 function renderControls(
   props: Partial<Parameters<typeof TerrainStampControls>[0]> = {},
@@ -103,7 +99,58 @@ describe("TerrainStampControls (UIX-706)", () => {
     );
   });
 
+  it("switches to the texture brush and picks a catalog texture (pool 3)", async () => {
+    const { onChange } = renderControls();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Кисть текстуры" }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith({ ...base, mode: "BRUSH" });
+  });
+
+  it("paints with catalog textures or campaign images in brush mode", async () => {
+    const brush: TerrainStampSettings = { ...base, mode: "BRUSH" };
+    const onUploadImage = vi
+      .fn()
+      .mockResolvedValue({ id: imageId, name: "Мох" });
+    const { onChange } = renderControls({
+      value: brush,
+      images: [{ id: imageId, name: "Мох" }],
+      onUploadImage,
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Выберите текстуру");
+    expect(
+      screen.queryByRole("button", { name: "Поваленное дерево" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Перекопанная почва" }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...brush,
+      texture: { packId: "builtin-texture-v1", assetKey: "dug-soil" },
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Мох" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...brush,
+      texture: { packId: "campaign-image", assetKey: imageId },
+    });
+    await userEvent.upload(
+      screen.getByLabelText("Загрузить картинку для штампа"),
+      new File(["x"], "moss.png", { type: "image/png" }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...brush,
+      texture: { packId: "campaign-image", assetKey: imageId },
+    });
+    // The stamp's own size/rotation stay untouched; the brush has its own.
+    expect(screen.queryByLabelText("Поворот штампа")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Ширина кисти")).toHaveValue("96");
+    expect(screen.getByLabelText("Размер плитки текстуры")).toHaveValue("128");
+  });
+
   it("routes each pack to its own ACL-checked image endpoint", () => {
+    expect(stampImageUrl("builtin-texture-v1", "dug-soil")).toBe(
+      "/api/terrain-stamps/textures/dug-soil",
+    );
     expect(stampImageUrl("builtin-terrain-v1", "forest")).toBe(
       "/api/terrain-stamps/assets/forest",
     );

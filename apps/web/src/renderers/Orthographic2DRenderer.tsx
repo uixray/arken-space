@@ -93,7 +93,8 @@ import {
 import { mapWorldPointFromDrop } from "../token-placement";
 import { getTokenImageMask } from "./token-image-mask";
 import { stampImageUrl } from "./stamp-image-url";
-import type { StampPackId } from "@arken/contracts";
+import type { DrawingPackId } from "@arken/contracts";
+import { nextTextureStrokePoints } from "./texture-stroke";
 import { proportionalTokenSize } from "./token-resize";
 import {
   createTokenImageState,
@@ -108,7 +109,7 @@ function TerrainStampImage({
   size,
   listening,
 }: {
-  packId: StampPackId;
+  packId: DrawingPackId;
   assetKey: string;
   size: number;
   listening: boolean;
@@ -133,6 +134,124 @@ function TerrainStampImage({
       stroke="#668866"
       listening={listening}
     />
+  );
+}
+
+function traceStroke(
+  context: CanvasRenderingContext2D | Konva.Context,
+  points: number[],
+) {
+  context.beginPath();
+  context.moveTo(points[0] ?? 0, points[1] ?? 0);
+  for (let index = 2; index + 1 < points.length; index += 2)
+    context.lineTo(points[index]!, points[index + 1]!);
+}
+
+/**
+ * UIX-706 pool 3: a brush polyline painted with a tileable texture. One native
+ * stroke with a repeating pattern keeps large zones cheap to draw; the tile is
+ * anchored to the drawing, so moving the zone moves its texture with it.
+ */
+function TextureStrokeShape({
+  packId,
+  assetKey,
+  points,
+  brushWidth,
+  tileSize,
+  listening,
+  selected = false,
+  scale = 1,
+}: {
+  packId: DrawingPackId;
+  assetKey: string;
+  points: number[];
+  brushWidth: number;
+  tileSize: number;
+  listening: boolean;
+  selected?: boolean;
+  scale?: number;
+}) {
+  const [image] = useImage(stampImageUrl(packId, assetKey));
+  return (
+    <Shape
+      stroke="#000"
+      strokeWidth={brushWidth}
+      lineCap="round"
+      lineJoin="round"
+      listening={listening}
+      sceneFunc={(context) => {
+        const native = context._context;
+        native.lineCap = "round";
+        native.lineJoin = "round";
+        if (selected) {
+          traceStroke(native, points);
+          native.lineWidth = brushWidth + 6 / scale;
+          native.strokeStyle = visual.color.selection;
+          native.stroke();
+        }
+        traceStroke(native, points);
+        native.lineWidth = brushWidth;
+        const pattern =
+          image && image.width > 0 && image.height > 0
+            ? native.createPattern(image, "repeat")
+            : null;
+        if (pattern && typeof DOMMatrix !== "undefined")
+          pattern.setTransform(
+            new DOMMatrix().scaleSelf(
+              tileSize / image!.width,
+              tileSize / image!.height,
+            ),
+          );
+        native.strokeStyle = pattern ?? "rgba(120,150,100,.35)";
+        native.stroke();
+      }}
+      hitFunc={(context, shape) => {
+        traceStroke(context, points);
+        context.strokeShape(shape);
+      }}
+    />
+  );
+}
+
+function TextureDrawingNode({
+  drawing,
+  listening,
+  selected,
+  draggable,
+  scale,
+  onSelect,
+  onDragEnd,
+}: {
+  drawing: DrawingDto;
+  listening: boolean;
+  selected: boolean;
+  draggable: boolean;
+  scale: number;
+  onSelect: (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
+  onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => void;
+}) {
+  return (
+    <Group
+      name={`terrain-texture ${drawing.id}`}
+      x={drawing.x}
+      y={drawing.y}
+      listening={listening}
+      draggable={draggable}
+      onClick={onSelect}
+      onTap={onSelect}
+      onDragEnd={onDragEnd}
+    >
+      <TextureStrokeShape
+        packId={drawing.packId ?? "campaign-image"}
+        assetKey={drawing.assetKey ?? ""}
+        points={drawing.points}
+        brushWidth={drawing.strokeWidth ?? 32}
+        tileSize={drawing.size ?? 128}
+        listening={listening}
+        selected={selected}
+        scale={scale}
+      />
+    </Group>
   );
 }
 
@@ -187,6 +306,14 @@ function StampDrawingNode({
   );
 }
 
+/** Texture zones are terrain: they lie under stamps and freehand lines. */
+function texturesFirst(drawings: DrawingDto[]) {
+  return [
+    ...drawings.filter((drawing) => drawing.kind === "TEXTURE"),
+    ...drawings.filter((drawing) => drawing.kind !== "TEXTURE"),
+  ];
+}
+
 function drawingBounds(drawing: DrawingDto) {
   if (drawing.kind === "STAMP") {
     const half =
@@ -205,11 +332,12 @@ function drawingBounds(drawing: DrawingDto) {
   const ys = drawing.points.filter((_, index) => index % 2 === 1);
   const minX = Math.min(...xs),
     minY = Math.min(...ys);
+  const pad = drawing.kind === "TEXTURE" ? (drawing.strokeWidth ?? 0) / 2 : 0;
   return {
-    x: drawing.x + minX,
-    y: drawing.y + minY,
-    width: Math.max(...xs) - minX,
-    height: Math.max(...ys) - minY,
+    x: drawing.x + minX - pad,
+    y: drawing.y + minY - pad,
+    width: Math.max(...xs) - minX + pad * 2,
+    height: Math.max(...ys) - minY + pad * 2,
   };
 }
 import {
@@ -632,10 +760,77 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   const stampCreateRef = useLatestRef(props.onStampCreate);
   const stampSettingsRef = useLatestRef(props.stampTool);
   const finishStampRef = useRef<(commit: boolean) => void>(() => undefined);
+  // UIX-706 pool 3: the texture brush stroke being painted (absolute points).
+  const textureDraftRef = useRef<number[] | null>(null);
+  const [textureDraftPoints, setTextureDraftPoints] = useState<number[] | null>(
+    null,
+  );
+  const [pendingTextures, setPendingTextures] = useState<
+    {
+      tempId: string;
+      points: number[];
+      packId: DrawingPackId;
+      assetKey: string;
+      brushWidth: number;
+      tileSize: number;
+    }[]
+  >([]);
+  const brushMode =
+    props.tool === "STAMP" &&
+    props.role === "GM" &&
+    props.stampTool?.mode === "BRUSH";
+  const clearTextureDraft = () => {
+    textureDraftRef.current = null;
+    setTextureDraftPoints(null);
+  };
+  const commitTextureStroke = (points: number[]) => {
+    const settings = stampSettingsRef.current;
+    const create = stampCreateRef.current;
+    if (
+      props.role !== "GM" ||
+      settings?.mode !== "BRUSH" ||
+      !settings.texture ||
+      !create ||
+      points.length < 4
+    )
+      return;
+    const texture = settings.texture;
+    const tempId = crypto.randomUUID();
+    setPendingTextures((current) => [
+      ...current,
+      {
+        tempId,
+        points,
+        packId: texture.packId,
+        assetKey: texture.assetKey,
+        brushWidth: settings.brushWidth,
+        tileSize: settings.tileSize,
+      },
+    ]);
+    void create({
+      kind: "TEXTURE",
+      packId: texture.packId,
+      assetKey: texture.assetKey,
+      points,
+      brushWidth: settings.brushWidth,
+      size: settings.tileSize,
+      layer: settings.layer,
+      x: 0,
+      y: 0,
+    })
+      .catch(() => undefined)
+      .finally(() =>
+        setPendingTextures((current) =>
+          current.filter((pending) => pending.tempId !== tempId),
+        ),
+      );
+  };
   useEffect(() => {
     if (props.tool === "STAMP" && props.role === "GM") return;
     stampDraftRef.current = null;
     setStampPreviewPoint(null);
+    textureDraftRef.current = null;
+    setTextureDraftPoints(null);
   }, [props.tool, props.role, props.scene.id]);
   const [pendingDrawings, setPendingDrawings] = useState<
     { tempId: string; points: number[]; color: string; strokeWidth: number }[]
@@ -1402,6 +1597,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       setSelectedDrawingId(null);
       stampDraftRef.current = null;
       setStampPreviewPoint(null);
+      clearTextureDraft();
       dispatchInteraction({ type: "clear-selection" });
       setTokenMenu(null);
       cancelPolygonDraft();
@@ -1763,6 +1959,22 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       return;
     }
     if (event.evt.button === 0 && event.evt.ctrlKey) return;
+    if (event.evt.button === 0 && brushMode) {
+      const point = pointerInWorld();
+      if (point && props.stampTool?.texture && props.onStampCreate) {
+        const bounded = clampToWorld(point);
+        const draft = nextTextureStrokePoints(
+          [],
+          bounded,
+          props.stampTool.brushWidth,
+        ).points;
+        textureDraftRef.current = draft;
+        setTextureDraftPoints(draft);
+      }
+      event.evt.preventDefault();
+      event.cancelBubble = true;
+      return;
+    }
     if (
       event.evt.button === 0 &&
       props.tool === "STAMP" &&
@@ -1843,6 +2055,21 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   const handlePointerMove = (
     event?: Konva.KonvaEventObject<MouseEvent | PointerEvent>,
   ) => {
+    if (brushMode && textureDraftRef.current && props.stampTool) {
+      const point = pointerInWorld();
+      if (point) {
+        const next = nextTextureStrokePoints(
+          textureDraftRef.current,
+          clampToWorld(point),
+          props.stampTool.brushWidth,
+        );
+        if (next.commit) commitTextureStroke(next.commit);
+        if (next.points !== textureDraftRef.current) {
+          textureDraftRef.current = next.points;
+          setTextureDraftPoints(next.points);
+        }
+      }
+    }
     if (
       props.tool === "STAMP" &&
       props.role === "GM" &&
@@ -2033,6 +2260,11 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   useEffect(() => {
     finishDrawingRef.current = () => void handlePointerUp();
     finishStampRef.current = (commit) => {
+      const stroke = textureDraftRef.current;
+      if (stroke) {
+        clearTextureDraft();
+        if (commit) commitTextureStroke(stroke);
+      }
       const point = stampDraftRef.current;
       const settings = stampSettingsRef.current;
       stampDraftRef.current = null;
@@ -2055,7 +2287,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
         .catch(() => undefined);
     };
     trackDrawingRef.current = (event) => {
-      if (!drawingActiveRef.current) return;
+      if (!drawingActiveRef.current && !textureDraftRef.current) return;
       stageRef.current?.setPointersPositions(event);
       handlePointerMove();
     };
@@ -2775,6 +3007,9 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       data-terrain-stamp-count={
         props.drawings.filter((drawing) => drawing.kind === "STAMP").length
       }
+      data-terrain-texture-count={
+        props.drawings.filter((drawing) => drawing.kind === "TEXTURE").length
+      }
       data-token-image-states={tokenImageStateAttribute}
       {...(resizeHandleData ?? {})}
       ref={containerRef}
@@ -3374,14 +3609,18 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
         </Layer>
 
         <Layer {...playerClip}>
-          {props.drawings.map((drawing) => {
+          {texturesFirst(props.drawings).map((drawing) => {
             const currentStrokeWidth = drawing.strokeWidth ?? 3;
             const revealed =
               props.role === "GM" || revealedDrawingIds.has(drawing.id);
-            if (drawing.kind === "STAMP") {
+            if (drawing.kind === "STAMP" || drawing.kind === "TEXTURE") {
               const listening = props.role === "GM" && revealed;
+              const LayeredNode =
+                drawing.kind === "STAMP"
+                  ? StampDrawingNode
+                  : TextureDrawingNode;
               return (
-                <StampDrawingNode
+                <LayeredNode
                   key={drawing.id}
                   drawing={drawing}
                   listening={listening}
@@ -3493,9 +3732,55 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
               </Group>
             );
           })}
+          {pendingTextures
+            .filter(
+              (pending) =>
+                !props.drawings.some(
+                  (drawing) =>
+                    drawing.kind === "TEXTURE" &&
+                    drawing.points.length === pending.points.length &&
+                    drawing.points.every(
+                      (value, index) => value === pending.points[index],
+                    ),
+                ),
+            )
+            .map((pending) => (
+              <TextureStrokeShape
+                key={pending.tempId}
+                packId={pending.packId}
+                assetKey={pending.assetKey}
+                points={pending.points}
+                brushWidth={pending.brushWidth}
+                tileSize={pending.tileSize}
+                listening={false}
+              />
+            ))}
+          {textureDraftPoints && brushMode && props.stampTool?.texture && (
+            <TextureStrokeShape
+              packId={props.stampTool.texture.packId}
+              assetKey={props.stampTool.texture.assetKey}
+              points={textureDraftPoints}
+              brushWidth={props.stampTool.brushWidth}
+              tileSize={props.stampTool.tileSize}
+              listening={false}
+            />
+          )}
+          {stampPreviewPoint && brushMode && props.stampTool && (
+            <Circle
+              name="texture-brush-cursor"
+              x={stampPreviewPoint.x}
+              y={stampPreviewPoint.y}
+              radius={props.stampTool.brushWidth / 2}
+              stroke={visual.color.selection}
+              strokeWidth={1.5 / scale}
+              dash={[6 / scale, 4 / scale]}
+              listening={false}
+            />
+          )}
           {stampPreviewPoint &&
             props.tool === "STAMP" &&
             props.role === "GM" &&
+            props.stampTool?.mode !== "BRUSH" &&
             props.stampTool && (
               <Group
                 x={stampPreviewPoint.x}
@@ -4053,6 +4338,44 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                     Слой
                     <select
                       aria-label="Слой выбранного штампа"
+                      value={drawing.layer ?? "PUBLIC"}
+                      onChange={(event) =>
+                        void props.onDrawingUpdate?.(
+                          drawing.id,
+                          drawing.revision,
+                          { layer: event.target.value as "PUBLIC" | "GM" },
+                        )
+                      }
+                    >
+                      <option value="PUBLIC">Игрокам</option>
+                      <option value="GM">Только мастеру</option>
+                    </select>
+                  </label>
+                </span>
+              ) : drawing?.kind === "TEXTURE" ? (
+                <span className="drawing-control-group">
+                  <label className="drawing-control-label">
+                    Размер плитки
+                    <input
+                      aria-label="Размер плитки выбранной текстуры"
+                      type="range"
+                      min={16}
+                      max={1024}
+                      step={16}
+                      value={drawing.size ?? 128}
+                      onChange={(event) =>
+                        void props.onDrawingUpdate?.(
+                          drawing.id,
+                          drawing.revision,
+                          { size: Number(event.target.value) },
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="drawing-control-label">
+                    Слой
+                    <select
+                      aria-label="Слой выбранной текстуры"
                       value={drawing.layer ?? "PUBLIC"}
                       onChange={(event) =>
                         void props.onDrawingUpdate?.(

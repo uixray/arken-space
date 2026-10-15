@@ -1361,6 +1361,24 @@ export const stampPackIdSchema = z.enum([
   "campaign-image",
 ]);
 export type StampPackId = z.infer<typeof stampPackIdSchema>;
+/**
+ * UIX-706 pool 3: a TEXTURE stroke fills a brush polyline with a tileable
+ * texture — a built-in catalog texture or a campaign IMAGE asset.
+ */
+export const texturePackIdSchema = z.enum([
+  "builtin-texture-v1",
+  "campaign-image",
+]);
+export type TexturePackId = z.infer<typeof texturePackIdSchema>;
+export type DrawingPackId = StampPackId | TexturePackId;
+export const TEXTURE_BRUSH_WIDTH = { min: 8, max: 400 } as const;
+const isValidDrawingSource = (source: {
+  packId: DrawingPackId;
+  assetKey: string;
+}) =>
+  source.packId === "campaign-image"
+    ? z.string().uuid().safeParse(source.assetKey).success
+    : STAMP_TEMPLATE_KEY_PATTERN.test(source.assetKey);
 export const createDrawingSchema = z
   .object({
     actionId: actionIdSchema,
@@ -1391,13 +1409,36 @@ export const createDrawingSchema = z
         x: z.number().finite().min(-32768).max(32768),
         y: z.number().finite().min(-32768).max(32768),
       })
-      .refine(
-        (stamp) =>
-          stamp.packId === "campaign-image"
-            ? z.string().uuid().safeParse(stamp.assetKey).success
-            : STAMP_TEMPLATE_KEY_PATTERN.test(stamp.assetKey),
-        { path: ["assetKey"], message: "invalid stamp source" },
-      ),
+      .refine(isValidDrawingSource, {
+        path: ["assetKey"],
+        message: "invalid stamp source",
+      }),
+  )
+  .or(
+    z
+      .object({
+        actionId: actionIdSchema,
+        sceneId: z.string().uuid(),
+        kind: z.literal("TEXTURE"),
+        /** Brush polyline, relative to x/y like a freehand drawing. */
+        points: drawingPointsSchema,
+        brushWidth: z
+          .number()
+          .finite()
+          .min(TEXTURE_BRUSH_WIDTH.min)
+          .max(TEXTURE_BRUSH_WIDTH.max),
+        assetKey: z.string().min(1).max(40),
+        packId: texturePackIdSchema,
+        /** Edge length of one texture tile in scene units. */
+        size: z.number().finite().min(16).max(1024),
+        layer: z.enum(["PUBLIC", "GM"]),
+        x: z.number().finite().min(-32768).max(32768),
+        y: z.number().finite().min(-32768).max(32768),
+      })
+      .refine(isValidDrawingSource, {
+        path: ["assetKey"],
+        message: "invalid texture source",
+      }),
   );
 export const updateDrawingSchema = z.object({
   actionId: actionIdSchema,
@@ -2546,10 +2587,10 @@ export interface DrawingDto {
   x: number;
   y: number;
   revision: number;
-  kind?: "FREEHAND" | "STAMP";
-  /** Template key, or the campaign asset id when packId is campaign-image. */
+  kind?: "FREEHAND" | "STAMP" | "TEXTURE";
+  /** Template/texture key, or the campaign asset id for campaign-image. */
   assetKey?: string;
-  packId?: StampPackId;
+  packId?: DrawingPackId;
   size?: number;
   rotation?: number;
   layer?: "PUBLIC" | "GM";

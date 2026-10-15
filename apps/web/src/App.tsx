@@ -79,7 +79,11 @@ import {
   type CompactSurface,
 } from "./ui/useCompactNavigation";
 import { MapToolbar } from "./MapToolbar";
-import { type TerrainStampSettings } from "./renderers/TerrainStampControls";
+import {
+  type StampCreatePayload,
+  type TerrainStampSettings,
+} from "./renderers/TerrainStampControls";
+import { DEFAULT_TERRAIN_STAMP_SETTINGS } from "./renderers/terrain-stamp-settings";
 import { GamePauseOverlay } from "./GamePauseOverlay";
 import { useChatHistoryActions } from "./use-chat-history-actions";
 import { useStoryActions } from "./use-story-actions";
@@ -244,13 +248,9 @@ export function App() {
     Array<{ membershipId: string; online: boolean }>
   >([]);
   const [tool, setTool] = useState<MapTool>("PAN");
-  const [stampSettings, setStampSettings] = useState<TerrainStampSettings>({
-    packId: "builtin-terrain-v1",
-    assetKey: "forest",
-    size: 160,
-    rotation: 0,
-    layer: "PUBLIC",
-  });
+  const [stampSettings, setStampSettings] = useState<TerrainStampSettings>(
+    DEFAULT_TERRAIN_STAMP_SETTINGS,
+  );
   // UIX-313: shared brush radius (world units) for the circular fog brush,
   // reused for both FOG_BRUSH and COVER_BRUSH.
   const [fogBrushRadius, setFogBrushRadius] = useState(40);
@@ -1181,9 +1181,7 @@ export function App() {
   );
 
   const handleStampCreate = useCallback(
-    async (
-      stamp: TerrainStampSettings & { kind: "STAMP"; x: number; y: number },
-    ) => {
+    async (stamp: StampCreatePayload) => {
       if (!activeScene || snapshot?.me.role !== "GM") return undefined;
       const requestedSceneId = activeScene.id;
       const requestedCampaignId = snapshot.campaign.id;

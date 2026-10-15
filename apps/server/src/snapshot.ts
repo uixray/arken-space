@@ -15,7 +15,7 @@ import { starterStatLayout } from "@arken/system";
 import {
   fogHiddenTokenIds,
   statLayoutSchema,
-  type StampPackId,
+  type DrawingPackId,
   type StatLayout,
 } from "@arken/contracts";
 import {
@@ -884,11 +884,11 @@ export async function buildSnapshot(
     ))
       visibleAssetIds.add(assetId);
   }
-  // UIX-706: a campaign-image stamp exposes its picture exactly where the
-  // stamp itself is projected below — public layer on a visible scene.
+  // UIX-706: a campaign-image stamp or texture stroke exposes its picture
+  // exactly where it is projected below — public layer on a visible scene.
   for (const { drawing } of drawingRows)
     if (
-      drawing.kind === "STAMP" &&
+      (drawing.kind === "STAMP" || drawing.kind === "TEXTURE") &&
       drawing.stampPackId === "campaign-image" &&
       drawing.stampAssetKey &&
       visibleSceneIds.has(drawing.sceneId) &&
@@ -1098,7 +1098,7 @@ export async function buildSnapshot(
         ({ drawing }) =>
           visibleSceneIds.has(drawing.sceneId) &&
           (auth.role === "GM" ||
-            drawing.kind !== "STAMP" ||
+            drawing.kind === "FREEHAND" ||
             drawing.stampLayer === "PUBLIC"),
       )
       .map(({ drawing }) => ({
@@ -1111,11 +1111,11 @@ export async function buildSnapshot(
         x: drawing.x,
         y: drawing.y,
         revision: drawing.revision,
-        kind: drawing.kind as "FREEHAND" | "STAMP",
-        ...(drawing.kind === "STAMP"
+        kind: drawing.kind as "FREEHAND" | "STAMP" | "TEXTURE",
+        ...(drawing.kind === "STAMP" || drawing.kind === "TEXTURE"
           ? {
               assetKey: drawing.stampAssetKey!,
-              packId: drawing.stampPackId as StampPackId,
+              packId: drawing.stampPackId as DrawingPackId,
               size: drawing.stampSize!,
               rotation: drawing.stampRotation!,
               layer: drawing.stampLayer as "PUBLIC" | "GM",
