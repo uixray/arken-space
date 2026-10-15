@@ -187,6 +187,11 @@ import { createBroadcastCoalescer } from "./broadcast-coalescer.js";
 import { findAction } from "./action-lookup.js";
 import { isStampDrawing, LAYERED_DRAWING_KINDS } from "./drawing-kinds.js";
 import { registerDrawingRoutes } from "./drawing-routes.js";
+import {
+  canvasSceneVisibleTo,
+  emitDrawingChange,
+  type DrawingChange,
+} from "./drawing-events.js";
 import { registerEncounterRoutes } from "./encounters.js";
 import { defaultThemeForMembership } from "./player-themes.js";
 import { registerPlayerThemeRoutes } from "./player-theme-routes.js";
@@ -295,26 +300,9 @@ function historyContainsStamp(command: typeof actionJournal.$inferSelect) {
   });
 }
 
-/**
- * UIX-408 — видна ли этому сокету сцена, к которой относится канвас.
- *
- * Игроку видима ровно транслируемая сцена; мастеру — она же плюс та, которую
- * он рассматривает (`scene:view`). Та же выборка, что у снапшота, — иначе
- * событие и снапшот разошлись бы, а расхождение здесь означает туман сцены,
- * которой в снапшоте нет.
- */
 /** Рассматриваемая сцена сокета, если она есть, — в виде списка для снапшота. */
 function viewedScenes(data: { viewedSceneId?: string | null }): string[] {
   return data.viewedSceneId ? [data.viewedSceneId] : [];
-}
-
-function canvasSceneVisibleTo(
-  data: { auth?: { role: string }; viewedSceneId?: string | null },
-  campaign: { activeSceneId: string | null },
-  sceneId: string,
-) {
-  if (sceneId === campaign.activeSceneId) return true;
-  return data.auth?.role === "GM" && data.viewedSceneId === sceneId;
 }
 
 const snapshotCoalescers = new WeakMap<
@@ -338,6 +326,34 @@ function broadcastSnapshots(
     snapshotCoalescers.set(io, coalesce);
   }
   return coalesce(campaignId, () => emitCampaignSnapshots(io, db, campaignId));
+}
+
+/**
+ * UIX-412: a drawing change reaches each socket as one point event instead of
+ * a full snapshot rebuild. It is sent only after the snapshot broadcast that
+ * may be running settles: that snapshot can predate the commit, and arriving
+ * after the event it would erase the drawing again. Snapshots started later
+ * already read the committed row.
+ */
+async function publishDrawingChange(
+  io: RealtimeServer,
+  db: Database,
+  campaignId: string,
+  change: DrawingChange,
+) {
+  const coalesce = snapshotCoalescers.get(io);
+  await coalesce?.settled(campaignId);
+  const [campaign] = await db
+    .select({ activeSceneId: campaigns.activeSceneId })
+    .from(campaigns)
+    .where(eq(campaigns.id, campaignId))
+    .limit(1);
+  if (!campaign) return;
+  const sockets = (await io.in(campaignRoom(campaignId)).fetchSockets()).filter(
+    (socket) => socket.data.auth?.campaignId === campaignId,
+  );
+  const fallback = emitDrawingChange(sockets, campaign, change);
+  if (fallback === "snapshot") await broadcastSnapshots(io, db, campaignId);
 }
 
 async function emitCampaignSnapshots(
@@ -4231,7 +4247,8 @@ export function registerRoutes(
 
   registerDrawingRoutes(app, db, {
     canvasTx,
-    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId),
+    publish: (campaignId, change) =>
+      publishDrawingChange(io, db, campaignId, change),
   });
 
   app.post("/api/canvas/bulk", async (request, reply) => {

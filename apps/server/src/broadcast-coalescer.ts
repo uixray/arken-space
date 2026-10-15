@@ -23,7 +23,7 @@ export function createBroadcastCoalescer() {
     return running;
   };
 
-  return function coalesce(key: string, run: () => Promise<void>) {
+  function coalesce(key: string, run: () => Promise<void>) {
     const slot = slots.get(key);
     if (!slot) {
       const running = start(key, run);
@@ -40,5 +40,15 @@ export function createBroadcastCoalescer() {
       });
     slot.queued = queued;
     return queued;
-  };
+  }
+
+  /**
+   * Resolves once the broadcast running for this key, if any, has emitted.
+   * A queued follow-up is not awaited: it starts after this point and reads
+   * whatever was committed before the caller asked.
+   */
+  coalesce.settled = (key: string): Promise<void> =>
+    slots.get(key)?.running.catch(() => undefined) ?? Promise.resolve();
+
+  return coalesce;
 }

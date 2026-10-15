@@ -64,4 +64,34 @@ describe("broadcast coalescer", () => {
     });
     expect(later).toBe(1);
   });
+
+  it("settles after the running broadcast emits, not after the queued one", async () => {
+    const coalesce = createBroadcastCoalescer();
+    await expect(coalesce.settled("idle")).resolves.toBeUndefined();
+    const order: string[] = [];
+    const running = deferred();
+    const queued = deferred();
+    void coalesce("c", async () => {
+      await running.promise;
+      order.push("running emitted");
+    });
+    void coalesce("c", async () => {
+      await queued.promise;
+      order.push("queued emitted");
+    });
+    const settled = coalesce.settled("c").then(() => order.push("settled"));
+    await Promise.resolve();
+    expect(order).toEqual([]);
+    running.resolve();
+    await settled;
+    expect(order).toEqual(["running emitted", "settled"]);
+    queued.resolve();
+  });
+
+  it("settles even when the running broadcast fails", async () => {
+    const coalesce = createBroadcastCoalescer();
+    const failing = coalesce("c", () => Promise.reject(new Error("db down")));
+    await expect(coalesce.settled("c")).resolves.toBeUndefined();
+    await expect(failing).rejects.toThrow("db down");
+  });
 });

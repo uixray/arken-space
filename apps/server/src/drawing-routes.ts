@@ -11,6 +11,7 @@ import { requireAuth } from "./auth.js";
 import { findAction } from "./action-lookup.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
 import { drawingDto, isHiddenStamp, isStampDrawing } from "./drawing-kinds.js";
+import type { DrawingChange } from "./drawing-events.js";
 import {
   CAMPAIGN_IMAGE_STAMP_PACK_ID,
   stampCatalog,
@@ -61,10 +62,11 @@ export function registerDrawingRoutes(
   db: Database,
   {
     canvasTx,
-    broadcast,
+    publish,
   }: {
     canvasTx: (campaignId: string) => CanvasDatabase;
-    broadcast: (campaignId: string) => Promise<void>;
+    /** UIX-412: sends the change to the campaign (see drawing-events.ts). */
+    publish: (campaignId: string, change: DrawingChange) => Promise<void>;
   },
 ) {
   app.post("/api/drawings", async (request, reply) => {
@@ -185,6 +187,7 @@ export function registerDrawingRoutes(
           payload: drawing,
         })
         .returning();
+      if (!event) throw new Error("EVENT_RECORD_FAILED");
       await tx.insert(actionJournal).values({
         campaignId: auth.campaignId,
         sceneId: scene.id,
@@ -201,7 +204,13 @@ export function registerDrawingRoutes(
       });
       return { drawing, event };
     });
-    await broadcast(auth.campaignId);
+    await publish(auth.campaignId, {
+      before: null,
+      after: saved.drawing,
+      sequence: Number(saved.event.sequence),
+      actionId,
+      emittedAt: saved.event.createdAt.toISOString(),
+    });
     return reply.code(201).send(drawingDto(saved.drawing));
   });
 
@@ -294,6 +303,7 @@ export function registerDrawingRoutes(
           payload: updated,
         })
         .returning();
+      if (!event) throw new Error("EVENT_RECORD_FAILED");
       await tx.insert(actionJournal).values({
         campaignId: auth.campaignId,
         sceneId: updated.sceneId,
@@ -315,7 +325,13 @@ export function registerDrawingRoutes(
       return { updated, event };
     });
     if (!saved) return reply.code(409).send({ error: "DRAWING_CONFLICT" });
-    await broadcast(auth.campaignId);
+    await publish(auth.campaignId, {
+      before: row.drawing,
+      after: saved.updated,
+      sequence: Number(saved.event.sequence),
+      actionId,
+      emittedAt: saved.event.createdAt.toISOString(),
+    });
     return drawingDto(saved.updated);
   });
 
@@ -396,6 +412,7 @@ export function registerDrawingRoutes(
           payload: { copy, sourceDrawingId: id },
         })
         .returning();
+      if (!event) throw new Error("EVENT_RECORD_FAILED");
       await tx.insert(actionJournal).values({
         campaignId: auth.campaignId,
         sceneId: copy.sceneId,
@@ -412,7 +429,13 @@ export function registerDrawingRoutes(
       });
       return { copy, event };
     });
-    await broadcast(auth.campaignId);
+    await publish(auth.campaignId, {
+      before: null,
+      after: saved.copy,
+      sequence: Number(saved.event.sequence),
+      actionId: body.actionId,
+      emittedAt: saved.event.createdAt.toISOString(),
+    });
     return reply.code(201).send(drawingDto(saved.copy));
   });
 
@@ -469,7 +492,7 @@ export function registerDrawingRoutes(
       return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
     if (row.drawing.revision !== body.revision)
       return reply.code(409).send({ error: "DRAWING_CONFLICT" });
-    await canvasTx(auth.campaignId).transaction(async (tx) => {
+    const event = await canvasTx(auth.campaignId).transaction(async (tx) => {
       await invalidateRedoBranch(tx, auth, row.drawing.sceneId);
       const [deleted] = await tx
         .delete(drawings)
@@ -478,15 +501,19 @@ export function registerDrawingRoutes(
         )
         .returning();
       if (!deleted) throw new Error("DRAWING_CONFLICT");
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        membershipId: auth.membershipId,
-        type: "drawing.deleted",
-        entityType: "drawing",
-        entityId: id,
-        entityRevision: row.drawing.revision,
-      });
+      const [event] = await tx
+        .insert(gameEvents)
+        .values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: "drawing.deleted",
+          entityType: "drawing",
+          entityId: id,
+          entityRevision: row.drawing.revision,
+        })
+        .returning();
+      if (!event) throw new Error("EVENT_RECORD_FAILED");
       await tx.insert(actionJournal).values({
         campaignId: auth.campaignId,
         sceneId: row.drawing.sceneId,
@@ -501,8 +528,15 @@ export function registerDrawingRoutes(
         beforeRevision: row.drawing.revision,
         currentRevision: row.drawing.revision,
       });
+      return event;
     });
-    await broadcast(auth.campaignId);
+    await publish(auth.campaignId, {
+      before: row.drawing,
+      after: null,
+      sequence: Number(event.sequence),
+      actionId: body.actionId,
+      emittedAt: event.createdAt.toISOString(),
+    });
     return reply.code(204).send();
   });
 }

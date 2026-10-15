@@ -15,9 +15,9 @@ import { starterStatLayout } from "@arken/system";
 import {
   fogHiddenTokenIds,
   statLayoutSchema,
-  type DrawingPackId,
   type StatLayout,
 } from "@arken/contracts";
+import { drawingSnapshotDto } from "./drawing-events.js";
 import {
   assets,
   campaignSoundPacks,
@@ -1101,27 +1101,7 @@ export async function buildSnapshot(
             drawing.kind === "FREEHAND" ||
             drawing.stampLayer === "PUBLIC"),
       )
-      .map(({ drawing }) => ({
-        id: drawing.id,
-        sceneId: drawing.sceneId,
-        authorMembershipId: drawing.authorMembershipId,
-        points: drawing.points,
-        color: drawing.color,
-        strokeWidth: drawing.strokeWidth,
-        x: drawing.x,
-        y: drawing.y,
-        revision: drawing.revision,
-        kind: drawing.kind as "FREEHAND" | "STAMP" | "TEXTURE",
-        ...(drawing.kind === "STAMP" || drawing.kind === "TEXTURE"
-          ? {
-              assetKey: drawing.stampAssetKey!,
-              packId: drawing.stampPackId as DrawingPackId,
-              size: drawing.stampSize!,
-              rotation: drawing.stampRotation!,
-              layer: drawing.stampLayer as "PUBLIC" | "GM",
-            }
-          : {}),
-      })),
+      .map(({ drawing }) => drawingSnapshotDto(drawing)),
     worldMaps: worldMapProjection.snapshot,
     playerRequests: playerRequestRows,
     encounters: encounterRows,

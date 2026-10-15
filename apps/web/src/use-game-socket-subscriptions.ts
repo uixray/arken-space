@@ -1,5 +1,9 @@
 import { shareStructure } from "./structural-sharing";
 import {
+  applyDrawingRemoved,
+  applyDrawingUpserted,
+} from "./drawing-point-events";
+import {
   useEffect,
   useRef,
   useState,
@@ -262,6 +266,16 @@ export function useGameSocketSubscriptions({
               ),
             }
           : current,
+      ),
+    );
+    next.on("drawing:upserted", (event) =>
+      setSnapshot((current) =>
+        current ? applyDrawingUpserted(current, event) : current,
+      ),
+    );
+    next.on("drawing:removed", (event) =>
+      setSnapshot((current) =>
+        current ? applyDrawingRemoved(current, event) : current,
       ),
     );
     next.on("map:ping", (ping) => {

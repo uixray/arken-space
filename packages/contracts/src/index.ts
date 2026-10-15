@@ -3122,6 +3122,12 @@ export interface ServerToClientEvents {
   "fog:removed": (
     event: EventEnvelope<{ fogRevealId: string; sceneId: string }>,
   ) => void;
+  /** UIX-412: a drawing the socket sees was created or changed. */
+  "drawing:upserted": (event: EventEnvelope<DrawingDto>) => void;
+  /** UIX-412: a drawing the socket saw was deleted or hidden from it. */
+  "drawing:removed": (
+    event: EventEnvelope<{ drawingId: string; sceneId: string }>,
+  ) => void;
   "chat:created": (event: EventEnvelope<ChatMessageDto>) => void;
   "story:changed": (event: StoryChangedEvent) => void;
   "player-request:changed": (request: PlayerRequestDto) => void;
