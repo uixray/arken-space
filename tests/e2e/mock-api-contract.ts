@@ -22,7 +22,26 @@ export const EMPTY_COLLECTION_GETS = [
   "/api/player-access",
   "/api/stickers",
   "/api/world-content",
+  "/api/world-content-instances",
+  "/api/world-content/:id/media",
+  "/api/world-content/:id/relations",
 ] as const;
+
+/**
+ * Reads whose empty answer is an object, not a list. Specs used to get `[]`
+ * here too, a shape the server never sends; the client then took its error
+ * path instead of the empty state.
+ */
+export const EMPTY_OBJECT_GETS: Record<string, unknown> = {
+  "/api/account/campaigns": { campaigns: [] },
+  "/api/characters/:characterId/spell-branches": {
+    branches: [],
+    nextCursor: null,
+  },
+  "/api/public/roadmap-votes": { items: [], anonymousCookieLimit: "" },
+  "/api/spell-assignable-schools": { schools: [], nextCursor: null },
+  "/api/story/posts": { posts: [], nextCursor: null },
+};
 
 /** Capability probes: the server's answer for a non-privileged member. */
 export const DENIED_CAPABILITY_GETS: Record<
@@ -65,6 +84,10 @@ export function unmockedResponse(method: string, path: string) {
       )
     )
       return { status: 200, json: [] as unknown };
+    const emptyObject = Object.entries(EMPTY_OBJECT_GETS).find(([template]) =>
+      routeTemplateMatches(template, path),
+    );
+    if (emptyObject) return { status: 200, json: emptyObject[1] };
     const denied = DENIED_CAPABILITY_GETS[path];
     if (denied)
       return {

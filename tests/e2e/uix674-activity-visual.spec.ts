@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
 import { PLAYER_THEMES } from "../../apps/web/src/design-system/player-themes";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const characterName =
   "Александра Невероятно-Длинная, Хранительница Семнадцати Королевств";
@@ -125,7 +126,7 @@ async function mockReadOnlyApp(page: Page, snapshot: GameSnapshot) {
         status: 403,
         json: { error: "OPERATOR_REQUIRED" },
       });
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, path);
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {

@@ -3,6 +3,7 @@ import type { CharacterDto, StatLayout } from "@arken/contracts";
 import type { Route } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { playerSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { fulfillUnmocked } from "./mock-api-contract";
 const characteristicsLayout: StatLayout = [
   {
     id: "characteristics",
@@ -65,7 +66,7 @@ test("UIX-624 PLAYER sheet targets and pending backstory survive journal and rot
       return route.fulfill({ json: { posts: [], nextCursor: null } });
     if (path === "/api/operator/feedback/capability")
       return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, path);
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {

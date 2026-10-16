@@ -2,6 +2,7 @@ import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const canonical = {
   id: "world-content-test-1",
@@ -215,7 +216,7 @@ for (const width of [390, 1280]) {
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
       if (path === "/api/client-logs")
         return route.fulfill({ json: { ok: true } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await page.setViewportSize({ width, height: 850 });
     await mockAuthenticatedGameCapabilities(page);
@@ -395,7 +396,10 @@ test("UIX-264 PLAYER bootstrap does not preload campaign instances", async ({
     const path = new URL(route.request().url()).pathname;
     requested.push(path);
     if (path === "/api/bootstrap") return route.fulfill({ json: snapshot });
-    return route.fulfill({ json: [] });
+    // Portrait bytes are irrelevant here; only the preload set is asserted.
+    if (/^\/api\/assets\/[^/]+\/content$/.test(path))
+      return route.fulfill({ contentType: "image/png", body: "" });
+    return fulfillUnmocked(route, path);
   });
   await page.setViewportSize({ width: 390, height: 850 });
   await mockAuthenticatedGameCapabilities(page);

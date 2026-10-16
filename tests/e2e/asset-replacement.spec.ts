@@ -8,6 +8,7 @@ import {
   paintedIconContrast,
   settleIconState,
 } from "./helpers/painted-icon-contrast";
+import { fulfillUnmocked } from "./mock-api-contract";
 const originalPng = makePng(1, 1, [30, 60, 90]);
 const png = makePng(1, 1, [180, 80, 40]);
 for (const [width, longTitle] of [
@@ -55,7 +56,7 @@ for (const [width, longTitle] of [
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       if (path === "/api/operator/feedback/capability")
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await page.route("**/api/bootstrap", (route) =>
       route.fulfill({ json: current }),

@@ -4,6 +4,7 @@ import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { PLAYER_THEMES } from "../../apps/web/src/design-system/player-themes";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 async function preferenceFixture(page: Page, role: "GM" | "PLAYER") {
   const snapshot = buildGameSnapshot(role);
@@ -93,7 +94,7 @@ async function preferenceFixture(page: Page, role: "GM" | "PLAYER") {
       return route.fulfill({ json: { posts: [], nextCursor: null } });
     if (path === "/api/operator/feedback/capability")
       return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, path);
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {

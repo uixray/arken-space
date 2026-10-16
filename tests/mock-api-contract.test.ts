@@ -1,8 +1,10 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { accountCampaignListSchema } from "../packages/contracts/src/account-auth";
 import {
   DENIED_CAPABILITY_GETS,
   EMPTY_COLLECTION_GETS,
+  EMPTY_OBJECT_GETS,
   UnmockedApiRequestError,
   unmockedResponse,
 } from "./e2e/mock-api-contract";
@@ -25,6 +27,7 @@ describe("e2e mock API contract (UIX-693)", () => {
     expect(serverGets.size).toBeGreaterThan(50);
     const unknown = [
       ...EMPTY_COLLECTION_GETS,
+      ...Object.keys(EMPTY_OBJECT_GETS),
       ...Object.keys(DENIED_CAPABILITY_GETS),
     ].filter((path) => !serverGets.has(path));
     expect(unknown).toEqual([]);
@@ -35,6 +38,21 @@ describe("e2e mock API contract (UIX-693)", () => {
       status: 200,
       json: [],
     });
+  });
+
+  it("answers an object-shaped read with its empty object, not a list", () => {
+    expect(unmockedResponse("GET", "/api/story/posts")).toEqual({
+      status: 200,
+      json: { posts: [], nextCursor: null },
+    });
+    expect(
+      unmockedResponse("GET", "/api/characters/c-1/spell-branches"),
+    ).toEqual({ status: 200, json: { branches: [], nextCursor: null } });
+    expect(() =>
+      accountCampaignListSchema.parse(
+        EMPTY_OBJECT_GETS["/api/account/campaigns"],
+      ),
+    ).not.toThrow();
   });
 
   it("matches route templates one segment per parameter", () => {

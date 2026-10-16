@@ -3,6 +3,7 @@ import type { WorldContentInstanceDto } from "@arken/contracts";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const canonical = {
   id: "world-content-delete-test",
@@ -95,7 +96,7 @@ for (const width of [390, 1280]) {
         rows = rows.filter((row) => row.id !== target.id);
         return route.fulfill({ status: 204, body: "" });
       }
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, pathname);
     });
 
     await page.setViewportSize({ width, height: 850 });

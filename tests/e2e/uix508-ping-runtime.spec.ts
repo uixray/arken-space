@@ -1,6 +1,7 @@
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const sceneId = "uix508-ping-scene";
 const membershipId = "uix508-sender";
@@ -57,7 +58,7 @@ for (const reducedMotion of [false, true]) {
       if (path === "/api/story/posts" || path === "/api/canvas/history")
         return route.fulfill({ json: [] });
       return route.request().method() === "GET"
-        ? route.fulfill({ json: [] })
+        ? fulfillUnmocked(route, path)
         : route.fulfill({ status: 204, body: "" });
     });
     let delivered = 0;
