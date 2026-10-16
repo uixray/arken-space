@@ -18,7 +18,7 @@
 ## Размер и горячие точки
 
 - Около 110 тыс. строк TS/TSX без тестов, 526 тестовых файлов, 119 e2e-спецификаций.
-- Крупнейшие модули: `apps/server/src/routes.ts` около 9.1 тыс. строк (было 9.6 тыс.; маршруты рисунков вынесены в `drawing-routes.ts`), `Orthographic2DRenderer.tsx` около 4.5 тыс., `packages/contracts/src/index.ts` около 3.6 тыс., `CharacterWorkspace.tsx` около 2.9 тыс., `App.tsx` около 2.1 тыс.
+- Крупнейшие модули: `Orthographic2DRenderer.tsx` около 4.5 тыс., `packages/contracts/src/index.ts` около 3.6 тыс., `CharacterWorkspace.tsx` около 2.9 тыс., `App.tsx` около 2.1 тыс. `apps/server/src/routes.ts` разобран 16.10: было 9.6 тыс. строк, стало около 760 (сборка модулей, рассылка снапшотов, общие помощники).
 - Документация: 366 файлов / 47 тыс. строк, большая часть — датированные чекпойнты.
 
 ## Производительность — сделано 15.10
@@ -35,7 +35,8 @@
 ## Легаси
 
 - Сделано 15.10: удалены неиспользуемая зависимость `@gravity-ui/icons` и никуда не подключённая цепочка превью (`GravityFoundationPreview`, `FuturePoolDialogs`, `FoundationPreviewRoute`); маршруты рисунков вынесены из `routes.ts`.
-- Открыто: две UI-библиотеки (Gravity UI и Base UI, по 7 файлов) — нужно решение, на чём остаёмся; дальнейший разбор `routes.ts` по доменам; архивирование датированных чекпойнтов в `docs/`.
+- Сделано 16.10: `routes.ts` разобран по доменам без изменения кода маршрутов — `sticker-routes`, `chat-routes`, `token-routes`, `character-routes`, `campaign-routes`, `character-play-routes`, `asset-routes`, `access-routes`, `session-routes`, `scene-routes`, `canvas-routes` (плюс `rooms`, `character-access`, `character-rules`, `error-message`). Инвентарь паузы кампании читает новые модули, негативный контроль на каждом. Датированные чекпойнты до 2026-10-01 перенесены в `docs/archive/` (PR #100).
+- Решено 16.10: остаёмся на Base UI, Gravity UI убрать — UIX-709.
 
 ## Надёжность тестов
 

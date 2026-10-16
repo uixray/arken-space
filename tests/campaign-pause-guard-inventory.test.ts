@@ -6,31 +6,45 @@ let realtime = "";
 let encounters = "";
 let drawingRoutes = "";
 let tokenRoutes = "";
+let sceneRoutes = "";
+let canvasRoutes = "";
 
 beforeAll(async () => {
-  [routes, realtime, encounters, drawingRoutes, tokenRoutes] =
-    await Promise.all([
-      readFile(
-        new URL("../apps/server/src/routes.ts", import.meta.url),
-        "utf8",
-      ),
-      readFile(
-        new URL("../apps/server/src/realtime.ts", import.meta.url),
-        "utf8",
-      ),
-      readFile(
-        new URL("../apps/server/src/encounters.ts", import.meta.url),
-        "utf8",
-      ),
-      readFile(
-        new URL("../apps/server/src/drawing-routes.ts", import.meta.url),
-        "utf8",
-      ),
-      readFile(
-        new URL("../apps/server/src/token-routes.ts", import.meta.url),
-        "utf8",
-      ),
-    ]);
+  [
+    routes,
+    realtime,
+    encounters,
+    drawingRoutes,
+    tokenRoutes,
+    sceneRoutes,
+    canvasRoutes,
+  ] = await Promise.all([
+    readFile(new URL("../apps/server/src/routes.ts", import.meta.url), "utf8"),
+    readFile(
+      new URL("../apps/server/src/realtime.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../apps/server/src/encounters.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../apps/server/src/drawing-routes.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../apps/server/src/token-routes.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../apps/server/src/scene-routes.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../apps/server/src/canvas-routes.ts", import.meta.url),
+      "utf8",
+    ),
+  ]);
 });
 
 function between(source: string, start: string, end: string) {
@@ -44,18 +58,32 @@ function between(source: string, start: string, end: string) {
 }
 
 describe("UIX-583 Canvas guard inventory", () => {
+  // Scene and fog routes live in scene-routes.ts, canvas operations in
+  // canvas-routes.ts; both receive the same canvasTx from routes.ts.
   it.each([
     ['app.patch("/api/scenes/:id",', 'app.post("/api/scenes/activate",'],
-    ['app.post("/api/scenes/activate",', "registerTokenRoutes(app, db, {"],
+    ['app.post("/api/scenes/activate",', 'app.post("/api/fog-reveals",'],
     ['app.post("/api/fog-reveals",', 'app.delete("/api/fog-reveals/latest",'],
+  ])("keeps scene route %s inside the common durable guard", (start, end) => {
+    expect(between(sceneRoutes, start, end)).toContain("canvasTx(");
+  });
+
+  it.each([
     ['app.post("/api/canvas/bulk",', 'app.get("/api/canvas/history",'],
     [
       'for (const direction of ["undo", "redo"] as const)',
       'app.patch("/api/scenes/:id/canvas",',
     ],
-    ['app.patch("/api/scenes/:id/canvas",', "registerStickerRoutes(app, db, {"],
-  ])("keeps %s inside the common durable guard", (start, end) => {
-    expect(between(routes, start, end)).toContain("canvasTx(");
+    ['app.patch("/api/scenes/:id/canvas",', "\n}\n"],
+  ])("keeps canvas route %s inside the common durable guard", (start, end) => {
+    expect(between(canvasRoutes, start, end)).toContain("canvasTx(");
+  });
+
+  it.each([
+    "registerSceneRoutes(app, db, io, {",
+    "registerCanvasRoutes(app, db, {",
+  ])("hands %s the shared campaign canvas guard", (start) => {
+    expect(between(routes, start, "});")).toContain("canvasTx,");
   });
 
   // Token routes live in token-routes.ts and receive the same canvasTx.
@@ -191,7 +219,7 @@ describe("UIX-583 Canvas guard inventory", () => {
   it("keeps explicit non-Canvas preparation outside the pause guard", () => {
     expect(
       between(
-        routes,
+        sceneRoutes,
         'app.post("/api/scenes",',
         'app.patch("/api/scenes/:id",',
       ),
