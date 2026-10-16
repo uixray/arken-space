@@ -74,7 +74,7 @@ describe("UIX-583 Canvas guard inventory", () => {
       'for (const direction of ["undo", "redo"] as const)',
       'app.patch("/api/scenes/:id/canvas",',
     ],
-    ['app.patch("/api/scenes/:id/canvas",', "const stickerPackInputSchema"],
+    ['app.patch("/api/scenes/:id/canvas",', "registerStickerRoutes(app, db, {"],
   ])("keeps %s inside the common durable guard", (start, end) => {
     expect(between(routes, start, end)).toContain("canvasTx(");
   });
