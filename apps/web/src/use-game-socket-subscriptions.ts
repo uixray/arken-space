@@ -357,12 +357,17 @@ export function useGameSocketSubscriptions({
         });
       }
     });
+    // UIX-412: like drawing events, ordered by the server after any snapshot
+    // already in flight; the merge itself refuses an older revision.
     next.on("character:updated", (event) =>
       setSnapshot((current) =>
-        current && event.sequence > current.snapshotVersion
+        current
           ? {
               ...current,
-              snapshotVersion: event.sequence,
+              snapshotVersion: Math.max(
+                current.snapshotVersion,
+                event.sequence,
+              ),
               characters: current.characters.map((item) => {
                 if (item.id !== event.data.id) return item;
                 return mergeCharacterMutationResponse(item, event.data) ?? item;

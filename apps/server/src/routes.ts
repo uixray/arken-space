@@ -77,6 +77,8 @@ import {
   updateSceneMetadataSchema,
   type ClientToServerEvents,
   type ServerToClientEvents,
+  type CharacterDto,
+  type ChatMessageDto,
 } from "@arken/contracts";
 import {
   assets,
@@ -187,6 +189,7 @@ import { createBroadcastCoalescer } from "./broadcast-coalescer.js";
 import { findAction } from "./action-lookup.js";
 import { isStampDrawing, LAYERED_DRAWING_KINDS } from "./drawing-kinds.js";
 import { registerDrawingRoutes } from "./drawing-routes.js";
+import { emitCharacterUpdated } from "./character-events.js";
 import {
   canvasSceneVisibleTo,
   emitDrawingChange,
@@ -326,6 +329,42 @@ function broadcastSnapshots(
     snapshotCoalescers.set(io, coalesce);
   }
   return coalesce(campaignId, () => emitCampaignSnapshots(io, db, campaignId));
+}
+
+/**
+ * UIX-412: a character change (with its public table line, if any) reaches
+ * the GM, owner and controllers as `character:updated` and the campaign as
+ * `chat:created`, instead of a full snapshot rebuild. Ordered after any
+ * running snapshot broadcast for the same reason as drawings below.
+ */
+async function publishCharacterChange(
+  io: RealtimeServer,
+  campaignId: string,
+  change: {
+    character: { ownerMembershipId: string | null };
+    controllerIds: string[];
+    project: (visibleControllerIds: string[]) => CharacterDto;
+    message: ChatMessageDto | null;
+    envelope: { sequence: number; actionId: string; emittedAt: string };
+  },
+) {
+  await snapshotCoalescers.get(io)?.settled(campaignId);
+  const sockets = (await io.in(campaignRoom(campaignId)).fetchSockets()).filter(
+    (socket) => socket.data.auth?.campaignId === campaignId,
+  );
+  emitCharacterUpdated(
+    sockets,
+    change.character,
+    change.controllerIds,
+    change.project,
+    change.envelope,
+  );
+  if (change.message) {
+    const envelope = { ...change.envelope, data: change.message };
+    if (chatBroadcastAudience(change.message.visibility) === "CAMPAIGN")
+      io.to(campaignRoom(campaignId)).emit("chat:created", envelope);
+    else io.to(gmRoom(campaignId)).emit("chat:created", envelope);
+  }
 }
 
 /**
@@ -8123,21 +8162,27 @@ export function registerRoutes(
                   systemData: walletData,
                 })
                 .returning();
-        await tx.insert(gameEvents).values({
-          campaignId: auth.campaignId,
-          actionId: body.actionId,
-          membershipId: auth.membershipId,
-          type: "character.counters",
-          entityType: "character",
-          entityId: id,
-          entityRevision: updated.revision,
-          payload: {
-            wallet: body.wallet,
-            resources: nextResources,
-            rest: body.rest,
-          },
-        });
-        return { updated, message };
+        const [event] = await tx
+          .insert(gameEvents)
+          .values({
+            campaignId: auth.campaignId,
+            actionId: body.actionId,
+            membershipId: auth.membershipId,
+            type: "character.counters",
+            entityType: "character",
+            entityId: id,
+            entityRevision: updated.revision,
+            payload: {
+              wallet: body.wallet,
+              resources: nextResources,
+              rest: body.rest,
+            },
+          })
+          .returning();
+        if (!event || !message) throw new Error("EVENT_RECORD_FAILED");
+        // An aggregated wallet line rewrites an existing message; there is
+        // no point event for that, so it keeps the full broadcast.
+        return { updated, message, event, aggregated: Boolean(aggregateData) };
       })
       .catch((error: unknown) => {
         if (error instanceof Error && error.message === "NO_COUNTER_CHANGES")
@@ -8151,16 +8196,40 @@ export function registerRoutes(
       if (racedAction) return sendReplay(racedAction);
       return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
     }
-    await broadcastSnapshots(io, db, auth.campaignId);
     const assignedEntries = await db
       .select()
       .from(characterCatalogEntries)
       .where(eq(characterCatalogEntries.characterId, id));
+    const controllerIds = await characterControllerIds(db, id);
+    const statLayout = await campaignDefaultStatLayout(db, auth.campaignId);
+    if (result.aggregated) await broadcastSnapshots(io, db, auth.campaignId);
+    else
+      await publishCharacterChange(io, auth.campaignId, {
+        character: result.updated,
+        controllerIds,
+        project: (visibleControllerIds) =>
+          characterDto(
+            result.updated,
+            assignedEntries,
+            visibleControllerIds,
+            statLayout,
+          ),
+        message: chatMessageDto(
+          result.message,
+          auth.displayName,
+          tableThread.stream,
+        ),
+        envelope: {
+          sequence: Number(result.event.sequence),
+          actionId: body.actionId,
+          emittedAt: result.event.createdAt.toISOString(),
+        },
+      });
     return characterDto(
       result.updated,
       assignedEntries,
-      await characterControllerIds(db, id),
-      await campaignDefaultStatLayout(db, auth.campaignId),
+      controllerIds,
+      statLayout,
     );
   });
 
