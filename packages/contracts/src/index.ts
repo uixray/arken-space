@@ -3118,6 +3118,8 @@ export interface ServerToClientEvents {
   "scene:activated": (event: EventEnvelope<string>) => void;
   "token:moving": (movement: z.infer<typeof moveTokenSchema>) => void;
   "token:moved": (event: EventEnvelope<TokenDto>) => void;
+  /** UIX-412: conditions or colours of a token the socket sees changed. */
+  "token:updated": (event: EventEnvelope<TokenDto>) => void;
   "fog:created": (event: EventEnvelope<FogRevealDto>) => void;
   "fog:removed": (
     event: EventEnvelope<{ fogRevealId: string; sceneId: string }>,

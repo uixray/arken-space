@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Server } from "socket.io";
 import {
   and,
+  asc,
   desc,
   eq,
   gt,
@@ -206,7 +207,9 @@ import {
 } from "./campaign-clock.js";
 import { campaignCanvasDatabase } from "./campaign-pause-guard.js";
 import { registerCampaignPauseRoutes } from "./campaign-pause.js";
-import { clearCampaignCanvasEphemera } from "./realtime.js";
+import { clearCampaignCanvasEphemera, projectedToken } from "./realtime.js";
+import { emitTokenUpdated } from "./token-events.js";
+import { normalizeTokenConditions } from "./token-conditions.js";
 import { registerWorldContentRoutes } from "./world-content-routes.js";
 import { registerWorldContentInstanceRoutes } from "./world-content-instances.js";
 import { registerSpellPackRoutes } from "./spell-pack-routes.js";
@@ -329,6 +332,46 @@ function broadcastSnapshots(
     snapshotCoalescers.set(io, coalesce);
   }
   return coalesce(campaignId, () => emitCampaignSnapshots(io, db, campaignId));
+}
+
+/**
+ * UIX-412: a token change that keeps its visibility (conditions, colours)
+ * reaches the sockets that see the token as `token:updated`, instead of a
+ * full snapshot rebuild. Ordered after any running snapshot broadcast.
+ */
+async function publishTokenChange(
+  io: RealtimeServer,
+  db: Database,
+  campaignId: string,
+  tokenId: string,
+  envelope: { sequence: number; actionId: string; emittedAt: string },
+) {
+  await snapshotCoalescers.get(io)?.settled(campaignId);
+  const projection = await projectedToken(db, campaignId, tokenId);
+  if (!projection) return;
+  const { token, activeSceneId } = projection;
+  const reveals = await db
+    .select()
+    .from(fogReveals)
+    .where(eq(fogReveals.sceneId, token.sceneId))
+    .orderBy(asc(fogReveals.sequence));
+  const sockets = (await io.in(campaignRoom(campaignId)).fetchSockets()).filter(
+    (socket) => socket.data.auth?.campaignId === campaignId,
+  );
+  const { updatedAt: _updatedAt, ...dto } = token;
+  emitTokenUpdated(
+    sockets,
+    { activeSceneId },
+    token,
+    token.controllerMembershipIds,
+    reveals,
+    (controllerMembershipIds) => ({
+      ...dto,
+      conditions: normalizeTokenConditions(dto.conditions),
+      controllerMembershipIds,
+    }),
+    envelope,
+  );
 }
 
 /**
@@ -3505,16 +3548,20 @@ export function registerRoutes(
         .where(and(eq(tokens.id, id), eq(tokens.revision, body.revision)))
         .returning();
       if (!saved) return null;
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        membershipId: auth.membershipId,
-        type: "TOKEN_APPEARANCE_UPDATED",
-        entityType: "TOKEN",
-        entityId: id,
-        entityRevision: saved.revision,
-        payload: { baseColor: saved.baseColor, frameColor: saved.frameColor },
-      });
+      const [event] = await tx
+        .insert(gameEvents)
+        .values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: "TOKEN_APPEARANCE_UPDATED",
+          entityType: "TOKEN",
+          entityId: id,
+          entityRevision: saved.revision,
+          payload: { baseColor: saved.baseColor, frameColor: saved.frameColor },
+        })
+        .returning();
+      if (!event) throw new Error("EVENT_RECORD_FAILED");
       await tx.insert(actionJournal).values({
         campaignId: auth.campaignId,
         sceneId: saved.sceneId,
@@ -3533,11 +3580,15 @@ export function registerRoutes(
         afterRevision: saved.revision,
         currentRevision: saved.revision,
       });
-      return saved;
+      return { saved, event };
     });
     if (!updated) return reply.code(409).send({ error: "TOKEN_CONFLICT" });
-    await broadcastSnapshots(io, db, auth.campaignId);
-    return updated;
+    await publishTokenChange(io, db, auth.campaignId, id, {
+      sequence: Number(updated.event.sequence),
+      actionId: body.actionId,
+      emittedAt: updated.event.createdAt.toISOString(),
+    });
+    return updated.saved;
   });
 
   /**
@@ -3599,16 +3650,20 @@ export function registerRoutes(
         .where(and(eq(tokens.id, id), eq(tokens.revision, body.revision)))
         .returning();
       if (!saved) return null;
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        membershipId: auth.membershipId,
-        type: "TOKEN_CONDITIONS_UPDATED",
-        entityType: "TOKEN",
-        entityId: id,
-        entityRevision: saved.revision,
-        payload: { conditions: saved.conditions },
-      });
+      const [event] = await tx
+        .insert(gameEvents)
+        .values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          membershipId: auth.membershipId,
+          type: "TOKEN_CONDITIONS_UPDATED",
+          entityType: "TOKEN",
+          entityId: id,
+          entityRevision: saved.revision,
+          payload: { conditions: saved.conditions },
+        })
+        .returning();
+      if (!event) throw new Error("EVENT_RECORD_FAILED");
       await tx.insert(actionJournal).values({
         campaignId: auth.campaignId,
         sceneId: saved.sceneId,
@@ -3624,11 +3679,15 @@ export function registerRoutes(
         afterRevision: saved.revision,
         currentRevision: saved.revision,
       });
-      return saved;
+      return { saved, event };
     });
     if (!updated) return reply.code(409).send({ error: "TOKEN_CONFLICT" });
-    await broadcastSnapshots(io, db, auth.campaignId);
-    return updated;
+    await publishTokenChange(io, db, auth.campaignId, id, {
+      sequence: Number(updated.event.sequence),
+      actionId: body.actionId,
+      emittedAt: updated.event.createdAt.toISOString(),
+    });
+    return updated.saved;
   });
 
   app.delete("/api/tokens/:id", async (request, reply) => {

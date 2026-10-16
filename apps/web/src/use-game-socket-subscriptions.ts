@@ -268,6 +268,27 @@ export function useGameSocketSubscriptions({
           : current,
       ),
     );
+    // UIX-412: ordered by the server after any snapshot in flight, so there
+    // is no snapshotVersion gate; an older revision never replaces a newer.
+    next.on("token:updated", (event) =>
+      setSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              snapshotVersion: Math.max(
+                current.snapshotVersion,
+                event.sequence,
+              ),
+              tokens: current.tokens.map((token) =>
+                token.id === event.data.id &&
+                event.data.revision >= token.revision
+                  ? event.data
+                  : token,
+              ),
+            }
+          : current,
+      ),
+    );
     next.on("drawing:upserted", (event) =>
       setSnapshot((current) =>
         current ? applyDrawingUpserted(current, event) : current,
