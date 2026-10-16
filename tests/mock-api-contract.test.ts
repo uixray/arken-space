@@ -97,4 +97,35 @@ describe("e2e mock API contract (UIX-693)", () => {
       );
     expect(offenders).toEqual([]);
   });
+
+  it("keeps the unconditional `[]` fallback out of e2e API routers", () => {
+    // A `**/api/**` handler whose last statement answers `[]` to whatever
+    // reached it (UIX-693 stage 2). Endpoint-specific mocks may still do so.
+    const catchAllHandlers = (source: string) =>
+      [
+        ...source.matchAll(/^( *)(?:await )?\w+\.route\("\*\*\/api\/\*\*",/gm),
+      ].map((match) => {
+        const line = source.slice(
+          match.index,
+          source.indexOf("\n", match.index),
+        );
+        if (line.trimEnd().endsWith(");")) return line;
+        return source.slice(
+          match.index,
+          source.indexOf(`\n${match[1]}});`, match.index),
+        );
+      });
+    const e2eDir = new URL("./e2e/", import.meta.url);
+    const offenders = readdirSync(e2eDir)
+      .filter((name) => name.endsWith(".ts"))
+      .filter((name) =>
+        catchAllHandlers(readFileSync(new URL(name, e2eDir), "utf8")).some(
+          (handler) =>
+            /route\.fulfill\(\{ json: \[\] \}\)\)?;?\s*$/.test(
+              handler.trimEnd(),
+            ),
+        ),
+      );
+    expect(offenders).toEqual([]);
+  });
 });
