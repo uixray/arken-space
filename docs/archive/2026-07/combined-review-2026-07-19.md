@@ -13,8 +13,8 @@
 ## Changed files in this review
 
 - tests/e2e/concept.spec.ts
-- docs/release-candidate-2026-07-19.md
-- docs/combined-review-2026-07-19.md
+- docs/archive/2026-07/release-candidate-2026-07-19.md
+- docs/archive/2026-07/combined-review-2026-07-19.md
 - removed superseded docs/release-candidate-2026-07-18.md
 
 ## Verification

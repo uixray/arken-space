@@ -143,8 +143,8 @@ Arken Space находится в закрытой beta. Основная игр
 сценариев и упрощению интерфейса. Новые направления проходят discovery и могут
 меняться по результатам beta-тестирования.
 
-Публичная дорожная карта: [ROADMAP.md](../ROADMAP.md). Конкурентное исследование:
-[competitive-feature-research-2026-07-20.md](./competitive-feature-research-2026-07-20.md).
+Публичная дорожная карта: [ROADMAP.md](../../../ROADMAP.md). Конкурентное исследование:
+[competitive-feature-research-2026-07-20.md](competitive-feature-research-2026-07-20.md).
 
 ## Внутренние ограничения публикации
 

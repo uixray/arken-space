@@ -16,7 +16,7 @@
 - `apps/web/src/App.tsx`
 - `apps/web/src/styles.css`
 - `tests/e2e/concept.spec.ts`
-- `docs/uix-226-uix-227-stabilization-checkpoint-2026-08-02.md`
+- `docs/archive/2026-08/uix-226-uix-227-stabilization-checkpoint-2026-08-02.md`
 
 ## Verification
 
