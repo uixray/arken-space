@@ -70,7 +70,10 @@ describe("измерение снапшота", () => {
       "utf8",
     );
     const start = source.indexOf("async function emitCampaignSnapshots(");
-    const end = source.indexOf("\nfunction errorMessage", start);
+    const end = source.indexOf(
+      "\nexport async function broadcastCampaignPauseSnapshot",
+      start,
+    );
     const body = source.slice(start, end);
     const emptyRoomGuard = body.indexOf("targetSockets.length === 0");
     const windowStart = body.indexOf("queryCountAtStart = readQueryCount()");
