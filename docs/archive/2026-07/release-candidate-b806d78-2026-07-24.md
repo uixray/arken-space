@@ -12,10 +12,10 @@
 
 The following files are historical snapshots, not statements about the current host, deployed revision, backup freshness, or readiness. Do not use their production observations as a release gate for this RC:
 
-- [`release-candidate-2026-07-19.md`](./release-candidate-2026-07-19.md)
-- [`production-work-report-2026-07-19.md`](./production-work-report-2026-07-19.md)
-- [`publish-readiness-2026-07-19.md`](./publish-readiness-2026-07-19.md)
-- dated operational notes in [`operations.md`](./operations.md)
+- [`release-candidate-2026-07-19.md`](release-candidate-2026-07-19.md)
+- [`production-work-report-2026-07-19.md`](production-work-report-2026-07-19.md)
+- [`publish-readiness-2026-07-19.md`](publish-readiness-2026-07-19.md)
+- dated operational notes in [`operations.md`](../../operations.md)
 
 ## Release invariants
 
@@ -131,6 +131,6 @@ Rollback is mandatory when migration, readiness, health, authentication, realtim
 
 ## Final gate � explicit Production GO
 
-**Production deployment is prohibited until a named release owner writes `Production GO` after all boxes in [`release-preflight-checklist-b806d78-2026-07-24.md`](./release-preflight-checklist-b806d78-2026-07-24.md) are checked.**
+**Production deployment is prohibited until a named release owner writes `Production GO` after all boxes in [`release-preflight-checklist-b806d78-2026-07-24.md`](release-preflight-checklist-b806d78-2026-07-24.md) are checked.**
 
 The GO record must include: candidate SHA, `PREVIOUS_SHA`, exact snapshot ID, restore-report path/result, before/after image digests (or IDs where no digest exists), readiness response, human rehearsal result, timestamp, and release-owner name. Silence, a PR merge, or this document is not GO.

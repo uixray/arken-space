@@ -130,4 +130,4 @@
 
 - Server routes: `apps/server/src/routes.ts`, `story.ts`, `world-map-routes.ts`; realtime: `apps/server/src/realtime.ts`.
 - UI: `apps/web/src/App.tsx`, `Sidebar.tsx`, `WorldMapsWorkspace.tsx`, `StoryChannel.tsx`, `TokenImageGenerator.tsx`, `MusicBar.tsx`, `FeedbackReporter.tsx`.
-- Checkpoints: `docs/release-candidate-checkpoint-2026-07-24.md`, `uix-224/244/255-checkpoint-2026-07-24.md`, `uix-246-checkpoint-2026-07-24.md`, `uix-261-checkpoint-2026-07-23.md`, `uix-266/267/268-checkpoint-2026-07-22.md`.
+- Checkpoints: `docs/archive/2026-07/release-candidate-checkpoint-2026-07-24.md`, `uix-224/244/255-checkpoint-2026-07-24.md`, `uix-246-checkpoint-2026-07-24.md`, `uix-261-checkpoint-2026-07-23.md`, `uix-266/267/268-checkpoint-2026-07-22.md`.

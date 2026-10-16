@@ -24,7 +24,7 @@ Base: `def3d0a`.
 - `packages/db/drizzle/0024_feedback_operator.sql`
 - `packages/db/drizzle/meta/_journal.json`
 - `tests/feedback-operator.test.ts`
-- `docs/uix-318-operator-feedback-backend-checkpoint-2026-08-02.md`
+- `docs/archive/2026-08/uix-318-operator-feedback-backend-checkpoint-2026-08-02.md`
 
 ## Verification
 
@@ -71,7 +71,7 @@ Base: `3937647`.
 - `apps/web/src/OperatorFeedbackWorkspace.css`
 - `apps/web/src/App.tsx`
 - `apps/web/src/Sidebar.tsx`
-- `docs/uix-318-operator-feedback-backend-checkpoint-2026-08-02.md`
+- `docs/archive/2026-08/uix-318-operator-feedback-backend-checkpoint-2026-08-02.md`
 
 ### Verification
 

@@ -12,7 +12,7 @@
 
 Production отстаёт от `main` на всю работу с 20 по 25 августа. Развёртывание
 не выполнялось и в эту сессию не входило: релиз идёт вручную по
-[production-release-checklist.md](./production-release-checklist.md), где перед
+[production-release-checklist.md](../../production-release-checklist.md), где перед
 выкладкой обязательны restic-бэкап и репетиция восстановления.
 
 Рабочее дерево чистое. Untracked `apps/web/src/assets/` и `docs/stickers/`
@@ -51,7 +51,7 @@ Production отстаёт от `main` на всю работу с 20 по 25 а�
 Ключевой результат — измерения UIX-408/409/450 на копии дампа 15.08: байт на
 рассылку **2 580 КБ → 868.2 КБ (−66.3%)**, запросов 239 → 167, снапшот ГМ
 692.9 → 292.5 КБ. Требование «не меньше чем вдвое» выполнено. Подробности и
-оговорки — в [measurement-runbook-2026-08-24.md](./measurement-runbook-2026-08-24.md).
+оговорки — в [measurement-runbook-2026-08-24.md](../../measurement-runbook-2026-08-24.md).
 
 ## Что осталось до разработки только в облаке
 

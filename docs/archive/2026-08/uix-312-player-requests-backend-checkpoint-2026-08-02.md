@@ -28,7 +28,7 @@ Base: `20efcc4`.
 - `apps/server/src/routes.ts`
 - `apps/server/src/snapshot.ts`
 - `tests/migration.test.ts`
-- `docs/uix-312-player-requests-backend-checkpoint-2026-08-02.md`
+- `docs/archive/2026-08/uix-312-player-requests-backend-checkpoint-2026-08-02.md`
 
 ## Verification
 
@@ -75,7 +75,7 @@ Base: `3498930`.
 - `apps/web/src/player-request-realtime.test.ts`
 - `apps/web/src/character-mutation.ts`
 - `apps/web/src/App.tsx`
-- `docs/uix-312-player-requests-backend-checkpoint-2026-08-02.md`
+- `docs/archive/2026-08/uix-312-player-requests-backend-checkpoint-2026-08-02.md`
 
 ### Verification
 
@@ -118,7 +118,7 @@ Base: `07507a5`.
 - `apps/web/src/player-request-ui.test.ts`
 - `apps/web/src/App.tsx`
 - `apps/web/src/Sidebar.tsx`
-- `docs/uix-312-player-requests-backend-checkpoint-2026-08-02.md`
+- `docs/archive/2026-08/uix-312-player-requests-backend-checkpoint-2026-08-02.md`
 
 ### Verification
 
@@ -153,7 +153,7 @@ Base: `c95cd3c`.
 - `apps/web/src/player-request-ui.ts`
 - `apps/web/src/player-request-ui.test.ts`
 - `apps/web/src/PlayerRequestsWorkspace.tsx`
-- `docs/uix-312-player-requests-backend-checkpoint-2026-08-02.md`
+- `docs/archive/2026-08/uix-312-player-requests-backend-checkpoint-2026-08-02.md`
 
 ### Verification
 

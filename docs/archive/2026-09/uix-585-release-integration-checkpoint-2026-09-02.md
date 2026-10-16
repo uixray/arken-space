@@ -29,7 +29,7 @@
 - `tests/migration.test.ts`;
 - `tests/reset-cli.test.ts`;
 - `tests/e2e/character-media-detach.spec.ts`;
-- `docs/uix-582-campaign-pause-authority-checkpoint-2026-09-02.md`.
+- `docs/archive/2026-09/uix-582-campaign-pause-authority-checkpoint-2026-09-02.md`.
 
 ## Проверка
 

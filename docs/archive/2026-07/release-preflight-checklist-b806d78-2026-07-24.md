@@ -1,6 +1,6 @@
 # RC production preflight checklist - feature base `b806d78` - 2026-07-24
 
-Use with [`release-candidate-b806d78-2026-07-24.md`](./release-candidate-b806d78-2026-07-24.md). This checklist does not claim anything about production until an operator records the evidence.
+Use with [`release-candidate-b806d78-2026-07-24.md`](release-candidate-b806d78-2026-07-24.md). This checklist does not claim anything about production until an operator records the evidence.
 
 ## Identity and rollback
 

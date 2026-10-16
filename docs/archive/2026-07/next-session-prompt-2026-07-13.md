@@ -15,7 +15,7 @@
 - Реализованы PostgreSQL, migrations, nginx/HTTPS, Socket.IO, GM/player sessions, invitations, 2D map, tokens, fog, character sheets, chat/dice, assets/music, health и diagnostics.
 - Исправлен P0 authorization: один игрок может владеть несколькими токенами; чужие токены ему недоступны; ownerless enemy/NPC tokens управляются только мастером.
 - Изолированный Docker/Playwright smoke test прошёл для GM + 2 игроков: invitations, own/foreign/enemy token permissions, concurrent chat/dice, scene switch и reconnect.
-- Отчёт: `docs/multiplayer-smoke-2026-07-13.md`.
+- Отчёт: `docs/archive/2026-07/multiplayer-smoke-2026-07-13.md`.
 
 ## Обязательный порядок работы
 
@@ -23,7 +23,7 @@
    - `tasks.md`;
    - `docs/roadmap.md`;
    - `docs/playtest-feedback-2026-07-13.md`;
-   - `docs/multiplayer-smoke-2026-07-13.md`;
+   - `docs/archive/2026-07/multiplayer-smoke-2026-07-13.md`;
    - `docs/operations.md`;
    - `docker-compose.e2e.yml`;
    - `scripts/run-multiplayer-e2e.mjs`;

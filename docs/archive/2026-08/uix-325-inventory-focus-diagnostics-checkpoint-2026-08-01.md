@@ -65,7 +65,7 @@ Base: `c4b7ca8`.
 - `apps/web/src/renderers/Orthographic2DRenderer.tsx`
 - `playwright.config.ts`
 - `tests/e2e/inventory-input.spec.ts`
-- `docs/uix-325-inventory-focus-diagnostics-checkpoint-2026-08-01.md`
+- `docs/archive/2026-08/uix-325-inventory-focus-diagnostics-checkpoint-2026-08-01.md`
 
 ### Verification
 

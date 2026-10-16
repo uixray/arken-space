@@ -15,7 +15,7 @@
 - `apps/web/src/Sidebar.tsx`
 - `apps/web/src/StoryChannel.tsx`
 - `tests/e2e/story-channel.spec.ts`
-- `docs/uix-322-checkpoint-2026-08-01.md`
+- `docs/archive/2026-08/uix-322-checkpoint-2026-08-01.md`
 
 ## Verification
 

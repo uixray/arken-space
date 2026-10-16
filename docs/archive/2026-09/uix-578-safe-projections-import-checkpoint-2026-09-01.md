@@ -74,7 +74,7 @@
 - `docs/content/README.md`
 - `docs/plans/uix-262-spell-progression-graphs.md`
 - `docs/plans/uix-578-safe-projections-import.md`
-- `docs/uix-578-safe-projections-import-checkpoint-2026-09-01.md`
+- `docs/archive/2026-09/uix-578-safe-projections-import-checkpoint-2026-09-01.md`
 
 Hot frontend-файлы `apps/web/src/styles.css`, `apps/web/src/App.tsx` и
 `apps/web/src/sidebar/ChatPanels.tsx` не менялись.

@@ -15,8 +15,8 @@
 
 ## Release package
 
-- Release evidence: `docs/release-candidate-2026-07-19.md`.
-- GM+6 gate evidence: `docs/test-output/uix-201-uix-217-gate-2026-07-19.md`.
+- Release evidence: `docs/archive/2026-07/release-candidate-2026-07-19.md`.
+- GM+6 gate evidence: `docs/archive/2026-07/uix-201-uix-217-gate-2026-07-19.md`.
 - Deployment and rollback procedure: `docs/deployment.md`.
 
 ## Required before production GO
