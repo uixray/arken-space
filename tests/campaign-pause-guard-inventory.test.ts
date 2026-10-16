@@ -5,23 +5,32 @@ let routes = "";
 let realtime = "";
 let encounters = "";
 let drawingRoutes = "";
+let tokenRoutes = "";
 
 beforeAll(async () => {
-  [routes, realtime, encounters, drawingRoutes] = await Promise.all([
-    readFile(new URL("../apps/server/src/routes.ts", import.meta.url), "utf8"),
-    readFile(
-      new URL("../apps/server/src/realtime.ts", import.meta.url),
-      "utf8",
-    ),
-    readFile(
-      new URL("../apps/server/src/encounters.ts", import.meta.url),
-      "utf8",
-    ),
-    readFile(
-      new URL("../apps/server/src/drawing-routes.ts", import.meta.url),
-      "utf8",
-    ),
-  ]);
+  [routes, realtime, encounters, drawingRoutes, tokenRoutes] =
+    await Promise.all([
+      readFile(
+        new URL("../apps/server/src/routes.ts", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../apps/server/src/realtime.ts", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../apps/server/src/encounters.ts", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../apps/server/src/drawing-routes.ts", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../apps/server/src/token-routes.ts", import.meta.url),
+        "utf8",
+      ),
+    ]);
 });
 
 function between(source: string, start: string, end: string) {
@@ -37,7 +46,20 @@ function between(source: string, start: string, end: string) {
 describe("UIX-583 Canvas guard inventory", () => {
   it.each([
     ['app.patch("/api/scenes/:id",', 'app.post("/api/scenes/activate",'],
-    ['app.post("/api/scenes/activate",', 'app.post("/api/tokens",'],
+    ['app.post("/api/scenes/activate",', "registerTokenRoutes(app, db, {"],
+    ['app.post("/api/fog-reveals",', 'app.delete("/api/fog-reveals/latest",'],
+    ['app.post("/api/canvas/bulk",', 'app.get("/api/canvas/history",'],
+    [
+      'for (const direction of ["undo", "redo"] as const)',
+      'app.patch("/api/scenes/:id/canvas",',
+    ],
+    ['app.patch("/api/scenes/:id/canvas",', "registerStickerRoutes(app, db, {"],
+  ])("keeps %s inside the common durable guard", (start, end) => {
+    expect(between(routes, start, end)).toContain("canvasTx(");
+  });
+
+  // Token routes live in token-routes.ts and receive the same canvasTx.
+  it.each([
     ['app.post("/api/tokens",', 'app.post("/api/token-definitions",'],
     [
       'app.post("/api/token-definitions/:id/placements",',
@@ -65,18 +87,17 @@ describe("UIX-583 Canvas guard inventory", () => {
     ],
     [
       'app.delete("/api/token-definitions/:id",',
-      'app.post("/api/fog-reveals",',
+      'app.patch("/api/tokens/:id/layer",',
     ],
-    ['app.post("/api/fog-reveals",', 'app.delete("/api/fog-reveals/latest",'],
-    ['app.patch("/api/tokens/:id/layer",', "registerDrawingRoutes(app, db, {"],
-    ['app.post("/api/canvas/bulk",', 'app.get("/api/canvas/history",'],
-    [
-      'for (const direction of ["undo", "redo"] as const)',
-      'app.patch("/api/scenes/:id/canvas",',
-    ],
-    ['app.patch("/api/scenes/:id/canvas",', "registerStickerRoutes(app, db, {"],
-  ])("keeps %s inside the common durable guard", (start, end) => {
-    expect(between(routes, start, end)).toContain("canvasTx(");
+    ['app.patch("/api/tokens/:id/layer",', "\n}\n"],
+  ])("keeps token route %s inside the common durable guard", (start, end) => {
+    expect(between(tokenRoutes, start, end)).toContain("canvasTx(");
+  });
+
+  it("hands token routes the shared campaign canvas guard", () => {
+    expect(between(routes, "registerTokenRoutes(app, db, {", "});")).toContain(
+      "canvasTx,",
+    );
   });
 
   // Drawing routes live in drawing-routes.ts and receive the same canvasTx.
@@ -177,14 +198,14 @@ describe("UIX-583 Canvas guard inventory", () => {
     ).not.toContain("canvasTx(");
     expect(
       between(
-        routes,
+        tokenRoutes,
         'app.post("/api/token-definitions",',
         'app.post("/api/token-definitions/:id/placements",',
       ),
     ).not.toContain("canvasTx(");
     expect(
       between(
-        routes,
+        tokenRoutes,
         'app.put("/api/token-definitions/:id/controllers",',
         'app.patch("/api/token-definitions/:id",',
       ),
