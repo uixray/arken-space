@@ -374,6 +374,27 @@ async function publishTokenChange(
   );
 }
 
+/** The resource images of a character, as a set of asset ids. */
+function resourceImageIds(resources: unknown) {
+  const ids = new Set<string>();
+  if (resources && typeof resources === "object")
+    for (const resource of Object.values(resources))
+      if (
+        resource &&
+        typeof resource === "object" &&
+        typeof (resource as { imageAssetId?: unknown }).imageAssetId ===
+          "string"
+      )
+        ids.add((resource as { imageAssetId: string }).imageAssetId);
+  return ids;
+}
+
+function sameResourceImages(before: unknown, after: unknown) {
+  const a = resourceImageIds(before);
+  const b = resourceImageIds(after);
+  return a.size === b.size && [...a].every((id) => b.has(id));
+}
+
 /**
  * UIX-412: a character change (with its public table line, if any) reaches
  * the GM, owner and controllers as `character:updated` and the campaign as
@@ -2002,23 +2023,60 @@ export function registerRoutes(
         )
         .returning();
       if (!next) return null;
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId,
-        membershipId: auth.membershipId,
-        type: "character.updated",
-        entityType: "character",
-        entityId: next.id,
-        entityRevision: next.revision,
-        payload: { characterId: next.id },
-      });
-      return next;
+      const [event] = await tx
+        .insert(gameEvents)
+        .values({
+          campaignId: auth.campaignId,
+          actionId,
+          membershipId: auth.membershipId,
+          type: "character.updated",
+          entityType: "character",
+          entityId: next.id,
+          entityRevision: next.revision,
+          payload: { characterId: next.id },
+        })
+        .returning();
+      if (!event) throw new Error("EVENT_RECORD_FAILED");
+      return { next, event };
     });
     if (!updated) return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
-    if (updated) {
+    /**
+     * UIX-412: the name and portrait reach everyone (identities, token
+     * labels) and a resource image enters snapshot.assets; those keep the
+     * full broadcast. Every other field is seen only by those who see the
+     * character, so a point event carries it.
+     */
+    if (
+      "name" in updates ||
+      "portraitAssetId" in updates ||
+      !sameResourceImages(current.resources, updated.next.resources)
+    )
       await broadcastSnapshots(io, db, auth.campaignId);
+    else {
+      const assignedEntries = await db
+        .select()
+        .from(characterCatalogEntries)
+        .where(eq(characterCatalogEntries.characterId, id));
+      const statLayout = await campaignDefaultStatLayout(db, auth.campaignId);
+      await publishCharacterChange(io, auth.campaignId, {
+        character: updated.next,
+        controllerIds: await characterControllerIds(db, id),
+        project: (visibleControllerIds) =>
+          characterDto(
+            updated.next,
+            assignedEntries,
+            visibleControllerIds,
+            statLayout,
+          ),
+        message: null,
+        envelope: {
+          sequence: Number(updated.event.sequence),
+          actionId,
+          emittedAt: updated.event.createdAt.toISOString(),
+        },
+      });
     }
-    return updated;
+    return updated.next;
   });
 
   app.post("/api/catalog", async (request, reply) => {
@@ -8261,7 +8319,12 @@ export function registerRoutes(
       .where(eq(characterCatalogEntries.characterId, id));
     const controllerIds = await characterControllerIds(db, id);
     const statLayout = await campaignDefaultStatLayout(db, auth.campaignId);
-    if (result.aggregated) await broadcastSnapshots(io, db, auth.campaignId);
+    // A changed resource image must enter snapshot.assets: full broadcast.
+    if (
+      result.aggregated ||
+      !sameResourceImages(character!.resources, result.updated.resources)
+    )
+      await broadcastSnapshots(io, db, auth.campaignId);
     else
       await publishCharacterChange(io, auth.campaignId, {
         character: result.updated,

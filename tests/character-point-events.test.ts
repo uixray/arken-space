@@ -205,4 +205,61 @@ describe("UIX-412 character counter point events", () => {
       expect(socket.sent).toEqual([]);
     expect(roomEmits).toEqual([]);
   });
+
+  it("keeps the full snapshot when a counter change swaps a resource image", async () => {
+    const response = await counters({
+      revision: 0,
+      resources: {
+        physicalPower: {
+          current: 3,
+          maximum: 8,
+          imageAssetId: crypto.randomUUID(),
+        },
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    for (const socket of Object.values(sockets)) {
+      expect(events(socket, "character:updated")).toEqual([]);
+      expect(events(socket, "game:snapshot")).toHaveLength(1);
+    }
+  });
+});
+
+describe("UIX-412 character edit point events", () => {
+  const edit = (payload: Record<string, unknown>) =>
+    app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}`,
+      headers: headers(secrets.owner),
+      payload: { actionId: crypto.randomUUID(), revision: 0, ...payload },
+    });
+
+  it("sends notes and stats to GM, owner and controller only, with no snapshot", async () => {
+    const response = await edit({
+      notes: "Тайник под мостом",
+      stats: { strength: 2 },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    for (const key of ["gm", "owner", "controller"] as const)
+      expect(
+        events(sockets[key], "character:updated")[0]?.payload.data,
+      ).toMatchObject({
+        id: ids.character,
+        revision: 1,
+        notes: "Тайник под мостом",
+        stats: expect.objectContaining({ strength: 2 }),
+      });
+    expect(sockets.stranger.sent).toEqual([]);
+    for (const socket of Object.values(sockets))
+      expect(events(socket, "game:snapshot")).toEqual([]);
+  });
+
+  it("keeps the full snapshot for a rename, which everyone sees", async () => {
+    const response = await edit({ name: "Hero the Second" });
+    expect(response.statusCode, response.body).toBe(200);
+    for (const socket of Object.values(sockets)) {
+      expect(events(socket, "character:updated")).toEqual([]);
+      expect(events(socket, "game:snapshot")).toHaveLength(1);
+    }
+  });
 });
