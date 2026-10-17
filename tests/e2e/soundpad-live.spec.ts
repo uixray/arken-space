@@ -210,13 +210,16 @@ for (const width of [1280, 390] as const)
         .getByLabel("Кому доступен Таверна")
         .selectOption("ALL_MEMBERS");
       await expect(playerSound).toBeEnabled();
-      await gmPad
-        .getByLabel("Игрокам можно запускать звуки", { exact: true })
-        .uncheck();
+      // The policy checkbox is controlled by the server's answer, so it flips
+      // after the round trip, not on click: wait for the state, not `uncheck`.
+      const policy = gmPad.getByLabel("Игрокам можно запускать звуки", {
+        exact: true,
+      });
+      await policy.click();
+      await expect(policy).not.toBeChecked();
       await expect(playerSound).toBeDisabled();
-      await gmPad
-        .getByLabel("Игрокам можно запускать звуки", { exact: true })
-        .check();
+      await policy.click();
+      await expect(policy).toBeChecked();
       await expect(playerSound).toBeEnabled();
 
       // Local mute silences only this player and survives a reload.
