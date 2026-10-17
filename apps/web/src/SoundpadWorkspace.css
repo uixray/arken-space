@@ -4,10 +4,10 @@
 .soundpad__dialog {
   width: min(68rem, calc(100vw - 2rem));
 }
-.soundpad__dialog .g-modal__content {
+.soundpad__dialog .arken-modal__content {
   max-height: min(88dvh, 56rem);
 }
-.soundpad__dialog .g-modal__body {
+.soundpad__dialog .arken-modal__body {
   overflow: auto;
 }
 .soundpad {

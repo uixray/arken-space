@@ -512,7 +512,9 @@ for (const role of ["GM", "PLAYER"] as const) {
           await targetGeometry(compose, "chat-compose");
           await targetGeometry(
             page
-              .locator("#activity-sidebar .activity-quick-rolls > .g-button")
+              .locator(
+                "#activity-sidebar .activity-quick-rolls > .arken-button",
+              )
               .first(),
             "journal-quick-roll",
           );

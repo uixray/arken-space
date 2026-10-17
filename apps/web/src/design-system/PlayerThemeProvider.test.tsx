@@ -33,7 +33,7 @@ function provider(themeId: string | null): ReactElement {
 }
 
 function gravityRoot(): HTMLElement {
-  const root = screen.getByTestId("themed-content").closest(".g-root");
+  const root = screen.getByTestId("themed-content").closest(".arken-root");
   expect(root).not.toBeNull();
   return root as HTMLElement;
 }
@@ -44,21 +44,21 @@ it("keeps the document attribute and actual Gravity color scheme in sync", () =>
     "data-player-theme",
     "light",
   );
-  expect(gravityRoot()).toHaveClass("g-root_theme_light");
+  expect(gravityRoot()).toHaveClass("arken-root--theme-light");
 
   rerender(provider("classic-v1"));
   expect(document.documentElement).toHaveAttribute(
     "data-player-theme",
     "classic-v1",
   );
-  expect(gravityRoot()).toHaveClass("g-root_theme_dark");
+  expect(gravityRoot()).toHaveClass("arken-root--theme-dark");
 
   rerender(provider("forest"));
   expect(document.documentElement).toHaveAttribute(
     "data-player-theme",
     "forest",
   );
-  expect(gravityRoot()).toHaveClass("g-root_theme_dark");
+  expect(gravityRoot()).toHaveClass("arken-root--theme-dark");
 });
 
 it.each(["system", null, "not-published"] as const)(
@@ -67,7 +67,7 @@ it.each(["system", null, "not-published"] as const)(
     document.documentElement.setAttribute("data-player-theme", "fire");
     renderComponent(provider(themeId));
     expect(document.documentElement).not.toHaveAttribute("data-player-theme");
-    expect(gravityRoot()).toHaveClass("g-root_theme_dark");
+    expect(gravityRoot()).toHaveClass("arken-root--theme-dark");
   },
 );
 
@@ -83,7 +83,7 @@ it("does not leak the attribute through StrictMode effect replay", () => {
     <StrictMode>{provider("ice")}</StrictMode>,
   );
   expect(document.documentElement).toHaveAttribute("data-player-theme", "ice");
-  expect(gravityRoot()).toHaveClass("g-root_theme_dark");
+  expect(gravityRoot()).toHaveClass("arken-root--theme-dark");
   unmount();
   expect(document.documentElement).not.toHaveAttribute("data-player-theme");
 });

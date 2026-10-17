@@ -179,7 +179,7 @@ for (const role of ["GM", "PLAYER"] as const) {
           expect(clipping.overflow).toBe("ellipsis");
           expect(clipping.whiteSpace).toBe("nowrap");
         } else {
-          const control = picker.locator(".g-select");
+          const control = picker.locator(".arken-select");
           const value = control.locator(".arken-select__value");
           await expect(value).toHaveText(characterName);
           const clipping = await value.evaluate((node) => ({

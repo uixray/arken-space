@@ -156,15 +156,19 @@ for (const [width, longTitle] of [
     };
     try {
       await open();
-      const caption = dialog.locator(".g-dialog-header__caption");
-      const close = dialog.locator(".g-dialog-btn-close button");
+      const caption = dialog.locator(".arken-modal-dialog-header__caption");
+      const close = dialog.locator(".arken-modal-dialog-btn-close button");
       await expect(caption).toHaveText(`Заменить файл «${asset.name}»`);
       await expect(close).toHaveAccessibleName("Закрыть диалоговое окно");
       await expect(close).toBeVisible();
       await settleIconState(close);
       const headerGeometry = await dialog.evaluate((node) => {
-        const title = node.querySelector(".g-dialog-header__caption")!;
-        const button = node.querySelector(".g-dialog-btn-close button")!;
+        const title = node.querySelector(
+          ".arken-modal-dialog-header__caption",
+        )!;
+        const button = node.querySelector(
+          ".arken-modal-dialog-btn-close button",
+        )!;
         const box = title.getBoundingClientRect(),
           target = button.getBoundingClientRect();
         const range = document.createRange();

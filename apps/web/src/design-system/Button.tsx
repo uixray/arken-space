@@ -105,10 +105,13 @@ function isSvg(element: ReactElement) {
 function icon(child: ReactElement, side?: "start" | "end") {
   return (
     <span
-      className={cx("g-button__icon", side && `g-button__icon_side_${side}`)}
+      className={cx(
+        "arken-button__icon",
+        side && `arken-button__icon--side-${side}`,
+      )}
       aria-hidden="true"
     >
-      <span className="g-button__icon-inner">{child}</span>
+      <span className="arken-button__icon-inner">{child}</span>
     </span>
   );
 }
@@ -116,10 +119,10 @@ function icon(child: ReactElement, side?: "start" | "end") {
 function loadingIndicator() {
   return (
     <span
-      className="g-button__icon g-button__icon_side_start"
+      className="arken-button__icon arken-button__icon--side-start"
       aria-hidden="true"
     >
-      <span className="g-button__icon-inner">
+      <span className="arken-button__icon-inner">
         <span className="arken-button__spinner" />
       </span>
     </span>
@@ -131,10 +134,10 @@ function prepareChildren(children: ReactNode) {
   const items = Children.toArray(children);
   if (items.length === 1) {
     const child = items[0];
-    if (isValidElement(child) && hasClass(child, "g-button__icon"))
+    if (isValidElement(child) && hasClass(child, "arken-button__icon"))
       return child;
     if (isValidElement(child) && isSvg(child)) return icon(child);
-    return <span className="g-button__text">{child}</span>;
+    return <span className="arken-button__text">{child}</span>;
   }
 
   const content = [...items];
@@ -151,7 +154,7 @@ function prepareChildren(children: ReactNode) {
       {start}
       {end}
       {content.length ? (
-        <span className="g-button__text">{content}</span>
+        <span className="arken-button__text">{content}</span>
       ) : null}
     </>
   );
@@ -176,14 +179,14 @@ const ButtonRoot = forwardRef<HTMLElement, ButtonProps>(function Button(
 ) {
   const interactionDisabled = disabled || loading;
   const rootClassName = cx(
-    "g-button",
-    `g-button_view_${view}`,
-    `g-button_size_${size}`,
-    `g-button_pin_${pin}`,
-    selected && "g-button_selected",
-    interactionDisabled && "g-button_disabled",
-    loading && "g-button_loading",
-    width && `g-button_width_${width}`,
+    "arken-button",
+    `arken-button--view-${view}`,
+    `arken-button--size-${size}`,
+    `arken-button--pin-${pin}`,
+    selected && "arken-button--selected",
+    interactionDisabled && "arken-button--disabled",
+    loading && "arken-button--loading",
+    width && `arken-button--width-${width}`,
     className,
   );
   const content = prepareChildren(children);

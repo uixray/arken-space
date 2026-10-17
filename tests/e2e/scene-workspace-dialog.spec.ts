@@ -133,7 +133,7 @@ test("scene editor stays above the workspace and restores its interaction", asyn
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const modal = document.querySelector<HTMLElement>(".g-modal");
+        const modal = document.querySelector<HTMLElement>(".arken-modal");
         const workspace = document.querySelector<HTMLElement>(
           ".arken-workspace-window",
         );
@@ -394,7 +394,7 @@ test("UIX-621 select portal receives pointer above token workspace", async ({
   await page.goto("/");
   await openWorkspaceSection(page, "Токены");
   const workspace = page.getByRole("dialog", { name: "Токены" });
-  const select = workspace.locator(".g-select").first();
+  const select = workspace.locator(".arken-select").first();
   const option = page.getByRole("option").first();
 
   for (const phase of ["normal", "saturated"] as const) {
@@ -525,7 +525,7 @@ test("UIX-621 raw Gravity select receives pointer above feedback modal", async (
   const dialog = page.getByRole("dialog", {
     name: "Сообщить о проблеме или идее",
   });
-  await dialog.locator(".g-select").click();
+  await dialog.locator(".arken-select").click();
   const option = page.getByRole("option", { name: "Идея", exact: true });
   await expect(option).toBeVisible();
   await expect
@@ -542,7 +542,7 @@ test("UIX-621 raw Gravity select receives pointer above feedback modal", async (
     )
     .toBe(true);
   await option.click();
-  await expect(dialog.locator(".g-select")).toContainText("Идея");
+  await expect(dialog.locator(".arken-select")).toContainText("Идея");
 });
 
 for (const role of ["GM", "PLAYER"] as const) {

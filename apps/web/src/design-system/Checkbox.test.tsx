@@ -24,7 +24,7 @@ describe("Checkbox", () => {
     expect(input).toHaveAttribute("name", "agree");
     expect(input).toHaveAttribute("value", "yes");
     expect(input.closest(".arken-checkbox")).toBeInTheDocument();
-    expect(input.closest(".g-checkbox")).toBeInTheDocument();
+    expect(input.closest(".arken-checkbox")).toBeInTheDocument();
   });
 
   it("forwards controlRef directly to the native checkbox element", () => {

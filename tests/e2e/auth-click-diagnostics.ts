@@ -14,7 +14,7 @@ export async function captureAuthClickDiagnostics(button: Locator) {
           // Only known static login/UIKit classes; no user-derived class names.
           classes: Array.from(node.classList)
             .filter((name) =>
-              /^(?:g-button(?:__[a-z-]+|_[a-z-]+)?|landing-(?:shell|header|hero|intro|kicker|note|badge)|auth-panel|wordmark|error-box)$/.test(
+              /^(?:arken-button(?:__[a-z-]+|_[a-z-]+)?|landing-(?:shell|header|hero|intro|kicker|note|badge)|auth-panel|wordmark|error-box)$/.test(
                 name,
               ),
             )

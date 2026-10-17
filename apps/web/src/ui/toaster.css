@@ -1,7 +1,7 @@
 /* UIX-709: toaster styles carried over from @gravity-ui/uikit 7.43 (MIT)
  * with the same class names, so the toast looks and animates as before.
  * The mobile variant is dropped: the app never enabled it. */
-.g-toaster {
+.arken-toaster {
   --_--width: 312px;
   position: fixed;
   inset-block-end: 0;
@@ -13,7 +13,7 @@
   align-items: flex-end;
 }
 
-.g-toast {
+.arken-toast {
   --_--item-gap: 10px;
   --_--item-padding: 16px;
   --_--background-color: var(--g-color-base-background);
@@ -30,33 +30,33 @@
   overflow: hidden;
   z-index: 0;
 }
-.g-toast_theme_normal {
+.arken-toast--theme-normal {
   --_--background-color: var(--g-color-base-float);
 }
-.g-toast_theme_info {
+.arken-toast--theme-info {
   --_--container-background-color: var(--g-color-base-info-light);
   --_--icon-color: var(--g-color-text-info-heavy);
 }
-.g-toast_theme_success {
+.arken-toast--theme-success {
   --_--container-background-color: var(--g-color-base-positive-light);
   --_--icon-color: var(--g-color-text-positive-heavy);
 }
-.g-toast_theme_warning {
+.arken-toast--theme-warning {
   --_--container-background-color: var(--g-color-base-warning-light);
   --_--icon-color: var(--g-color-text-warning-heavy);
 }
-.g-toast_theme_danger {
+.arken-toast--theme-danger {
   --_--container-background-color: var(--g-color-base-danger-light);
   --_--icon-color: var(--g-color-text-danger-heavy);
 }
-.g-toast__container {
+.arken-toast__container {
   flex: 1 1 auto;
   display: flex;
   flex-flow: column nowrap;
   min-height: var(--g-text-body-2-line-height);
   min-width: 0;
 }
-.g-toast__container:before {
+.arken-toast__container:before {
   content: "";
   position: absolute;
   inset-block-start: 0;
@@ -67,14 +67,14 @@
   z-index: -1;
   background-color: var(--_--container-background-color);
 }
-.g-toast__icon-container {
+.arken-toast__icon-container {
   flex: 0 0 auto;
   padding-inline-end: 8px;
   padding-block-start: 2px;
   color: var(--_--icon-color);
   min-width: 0;
 }
-.g-toast__title {
+.arken-toast__title {
   font-family: var(--g-text-subheader-font-family);
   font-weight: var(--g-text-subheader-font-weight);
   font-size: var(--g-text-subheader-3-font-size);
@@ -82,47 +82,47 @@
   margin: 0;
   padding-inline-end: 32px;
 }
-.g-toast__content {
+.arken-toast__content {
   margin-block-start: var(--g-spacing-2);
 }
-.g-toast__content_without-title {
+.arken-toast__content--without-title {
   margin-block-start: 0;
   padding-inline-end: 32px;
 }
-.g-toast__actions {
+.arken-toast__actions {
   margin-block-start: var(--g-spacing-3);
   display: flex;
   flex-flow: row wrap;
   gap: var(--g-spacing-2);
 }
-.g-toast .g-toast__btn-close {
+.arken-toast .arken-toast__btn-close {
   position: absolute;
   inset-block-start: 16px;
   inset-inline-end: 16px;
 }
-.g-toast-animation-desktop_enter {
+.arken-toast-animation-desktop--enter {
   opacity: 0;
   position: absolute;
 }
-.g-toast-animation-desktop_enter_active {
-  animation: g-toast-enter-desktop 0.6s ease-out forwards;
+.arken-toast-animation-desktop--enter-active {
+  animation: arken-toast-enter-desktop 0.6s ease-out forwards;
   position: relative;
 }
 @media (prefers-reduced-motion: reduce) {
-  .g-toast-animation-desktop_enter_active {
-    animation-name: g-toast-enter-reduced-motion;
+  .arken-toast-animation-desktop--enter-active {
+    animation-name: arken-toast-enter-reduced-motion;
   }
 }
-.g-toast-animation-desktop_exit_active {
-  animation: g-toast-exit-desktop 0.6s ease-in forwards;
+.arken-toast-animation-desktop--exit-active {
+  animation: arken-toast-exit-desktop 0.6s ease-in forwards;
 }
 @media (prefers-reduced-motion: reduce) {
-  .g-toast-animation-desktop_exit_active {
-    animation-name: g-toast-exit-reduced-motion;
+  .arken-toast-animation-desktop--exit-active {
+    animation-name: arken-toast-exit-reduced-motion;
   }
 }
 
-@keyframes g-toast-enter-desktop {
+@keyframes arken-toast-enter-desktop {
   0% {
     margin-block-end: 0;
     padding: 0;
@@ -145,7 +145,7 @@
     transform: translateX(0);
   }
 }
-@keyframes g-toast-exit-desktop {
+@keyframes arken-toast-exit-desktop {
   0% {
     margin-block-end: var(--g-toaster-item-gap, var(--_--item-gap));
     padding: var(--g-toaster-item-padding, var(--_--item-padding));
@@ -168,7 +168,7 @@
     transform: translateX(calc(var(--g-flow-direction) * 10px));
   }
 }
-@keyframes g-toast-enter-reduced-motion {
+@keyframes arken-toast-enter-reduced-motion {
   0% {
     opacity: 0;
   }
@@ -176,7 +176,7 @@
     opacity: 1;
   }
 }
-@keyframes g-toast-exit-reduced-motion {
+@keyframes arken-toast-exit-reduced-motion {
   0% {
     opacity: 1;
   }

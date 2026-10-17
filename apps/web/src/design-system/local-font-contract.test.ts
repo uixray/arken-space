@@ -35,7 +35,7 @@ describe("local Pragmatica Next font contract", () => {
     expect(styles).toMatch(
       /src:\s*url\("\/assets\/pragmatica-next_vf\.woff"\)/,
     );
-    expect(styles).toContain(".g-root {");
+    expect(styles).toContain(".arken-root {");
     expect(styles).toContain(
       "--g-text-body-font-family: var(--font-family-sans)",
     );

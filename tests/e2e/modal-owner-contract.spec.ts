@@ -54,7 +54,7 @@ async function screenshot(page: Page, testInfo: TestInfo, name: string) {
 
 async function overlayLayers(page: Page) {
   return page
-    .locator(".g-modal, .arken-form-select-popup")
+    .locator(".arken-modal, .arken-form-select-popup")
     .evaluateAll((nodes) =>
       nodes.map((node) => {
         const chain: Array<Record<string, unknown>> = [];
@@ -308,7 +308,7 @@ for (const topology of ["sibling", "nested"] as const) {
             throw new Error("B trigger must own one semantic listbox");
           const listbox = matches[0];
           const popup = listbox?.closest(".arken-select__positioner");
-          const modalWrapper = element.closest(".g-modal__content-wrapper");
+          const modalWrapper = element.closest(".arken-modal__content-wrapper");
           if (!popup || !modalWrapper)
             throw new Error("B popup focus owner missing");
           const violations: string[] = [];
@@ -360,7 +360,7 @@ for (const topology of ["sibling", "nested"] as const) {
         const bPopupNode = await finalBPopup.wrapper.elementHandle();
         const bGuards = await b.evaluateHandle((element) =>
           Array.from(
-            element.closest(".g-modal__content-wrapper")!.children,
+            element.closest(".arken-modal__content-wrapper")!.children,
           ).filter((child) => child.matches("[data-base-ui-focus-guard]")),
         );
         await page.keyboard.press("Escape");

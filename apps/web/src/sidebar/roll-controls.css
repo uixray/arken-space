@@ -33,7 +33,7 @@
   height: auto;
   text-align: left;
 }
-.stat-field__roll-name .g-button__text {
+.stat-field__roll-name .arken-button__text {
   white-space: normal;
   overflow-wrap: anywhere;
 }
@@ -55,16 +55,16 @@
 .stat-field .stat-field__value > button:last-child {
   grid-column: 3;
 }
-.stat-field .stat-field__value .g-text-input {
+.stat-field .stat-field__value .arken-text-input {
   grid-row: 1;
   grid-column: 2;
   width: 56px;
   padding-inline: 0;
 }
-.stat-field .stat-field__value .g-text-input__content {
+.stat-field .stat-field__value .arken-text-input__content {
   padding-inline: 0;
 }
-.stat-field .stat-field__value input.g-text-input__control {
+.stat-field .stat-field__value input.arken-text-input__control {
   padding-inline: 0;
   text-align: center;
   appearance: textfield;

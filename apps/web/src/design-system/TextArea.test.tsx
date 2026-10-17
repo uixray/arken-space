@@ -22,7 +22,7 @@ describe("TextArea", () => {
     const textarea = screen.getByPlaceholderText("Описание...");
     expect(ref.current).toBe(textarea);
     expect(textarea).toHaveValue("Жил-был дракон...");
-    expect(textarea.closest(".g-text-area")).toBeInTheDocument();
+    expect(textarea.closest(".arken-text-area")).toBeInTheDocument();
     expect(textarea.closest(".arken-text-area")).toBeInTheDocument();
     expect(textarea.closest("[data-qa='char-bio']")).toBeInTheDocument();
   });

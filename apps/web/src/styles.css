@@ -49,10 +49,10 @@
   background: var(--color-canvas);
 }
 
-/* Gravity UI defines its typography on each .g-root, shadowing inherited
+/* Gravity UI defines its typography on each .arken-root, shadowing inherited
    :root values. Override that component scope so portals and controls use the
    same local variable font as the app shell. */
-.g-root {
+.arken-root {
   --g-font-family-sans: var(--font-family-sans);
   --g-text-body-font-family: var(--font-family-sans);
   --g-text-caption-font-family: var(--font-family-sans);
@@ -1483,7 +1483,7 @@ html[data-player-theme="light"] .brand__mark {
   overflow-wrap: break-word;
   word-break: break-word;
 }
-.stat-field .g-text-input {
+.stat-field .arken-text-input {
   /* Gravity's TextInput wrapper defaults to width: 100%, which would
    * otherwise fight the fixed numeric grid track above. Its default 8px
    * inline padding on each side leaves only 33px for a three-character
@@ -1494,13 +1494,13 @@ html[data-player-theme="light"] .brand__mark {
 /* UIX-489: селектор с классом контрола, а не просто `input`.
 
    `.stat-field input` — это (0,1,1), а собственное правило uikit
-   `.g-text-input_size_m .g-text-input__control` — (0,2,0), и оно выигрывало.
+   `.arken-text-input--size-m .arken-text-input__control` — (0,2,0), и оно выигрывало.
    Замер показал цену: вместо задуманных 1.15rem/700 значение рисовалось
    13px/400, а разделительная черта между подписью и значением не рисовалась
    вовсе (`border-left` оставался нулевым). То есть блок ниже был написан, но
    почти целиком не применялся — из него доезжало только выравнивание, которого
    uikit не трогает. */
-.stat-field input.g-text-input__control {
+.stat-field input.arken-text-input__control {
   min-width: 0;
   /* Стиль рамки задан явно: uikit объявляет контролу `border: none`, а `none`
      — это стиль. Одной ширины мало, при стиле `none` она считается нулевой, и
@@ -1705,7 +1705,7 @@ html[data-player-theme="light"] .brand__mark {
   display: block;
   padding-block: 8px;
 }
-.resource-counters__item .g-button.resource-counters__btn,
+.resource-counters__item .arken-button.resource-counters__btn,
 .resource-counters__btn {
   width: 24px;
   height: 24px;
@@ -1721,11 +1721,12 @@ html[data-player-theme="light"] .brand__mark {
   color: var(--foreground) !important;
   cursor: pointer;
 }
-.resource-counters__item .g-button.resource-counters__btn:hover:not(:disabled),
+.resource-counters__item
+  .arken-button.resource-counters__btn:hover:not(:disabled),
 .resource-counters__btn:hover:not(:disabled) {
   background: var(--surface-hover, rgba(255, 255, 255, 0.12)) !important;
 }
-.resource-counters__item .g-button.resource-counters__btn:disabled,
+.resource-counters__item .arken-button.resource-counters__btn:disabled,
 .resource-counters__btn:disabled {
   opacity: 0.3 !important;
   cursor: not-allowed;
@@ -1928,7 +1929,7 @@ html[data-player-theme="light"] .character-card--combat {
   overflow-wrap: break-word;
   word-break: break-word;
 }
-.roll-button .g-button__text {
+.roll-button .arken-button__text {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -2374,16 +2375,16 @@ html[data-player-theme="light"] .character-card--combat {
 }
 /* UIX-388: room for sticker + slash + send icon buttons stacked in the
    bottom-right corner of the textarea (see .chat-composer-actions below). */
-/* UIX-419: селектор обязан быть специфичнее, чем `.g-text-area_size_m
-   .g-text-area__control` из uikit — иначе отступ не применяется вовсе. Так и
+/* UIX-419: селектор обязан быть специфичнее, чем `.arken-text-area--size-m
+   .arken-text-area__control` из uikit — иначе отступ не применяется вовсе. Так и
    было: место под значки не резервировалось, и на любой ширине панели текст
    уходил под кнопку отправки. Правило выглядело работающим, потому что
    `.chat-composer-input textarea` читается как более точное, а весит меньше
    двух классов uikit. */
-.chat-composer-input textarea.g-text-area__control {
+.chat-composer-input textarea.arken-text-area__control {
   padding-right: 108px;
 }
-.chat-composer-input textarea.g-text-area__control:focus-visible {
+.chat-composer-input textarea.arken-text-area__control:focus-visible {
   outline: none;
   box-shadow: none;
 }
@@ -2528,38 +2529,38 @@ html[data-player-theme="light"] .character-card--combat {
   padding: 0;
   border-top: 0;
 }
-.chat-compose--single .chat-composer-input textarea.g-text-area__control {
+.chat-compose--single .chat-composer-input textarea.arken-text-area__control {
   border: 0;
   border-radius: 0;
   background: var(--surface);
   box-shadow: none;
 }
-.chat-compose--single .chat-composer-input .g-text-area,
-.chat-compose--single .chat-composer-input .g-text-area__content {
+.chat-compose--single .chat-composer-input .arken-text-area,
+.chat-compose--single .chat-composer-input .arken-text-area__content {
   border: 0;
   border-radius: 0;
   box-shadow: none;
 }
-.chat-compose--single .chat-composer-input .g-text-area__content {
+.chat-compose--single .chat-composer-input .arken-text-area__content {
   padding: 8px 12px;
   background: var(--surface);
 }
 .chat-compose--single
   .chat-composer-input
-  textarea.g-text-area__control:focus-visible {
+  textarea.arken-text-area__control:focus-visible {
   outline: none;
   box-shadow: none;
 }
-.chat-compose--single .chat-composer-input .g-text-area:focus-within,
-.chat-compose--single .chat-composer-input .g-text-area:focus-visible {
+.chat-compose--single .chat-composer-input .arken-text-area:focus-within,
+.chat-compose--single .chat-composer-input .arken-text-area:focus-visible {
   outline: none;
   box-shadow: none;
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
 }
 .chat-compose--single
   .chat-composer-input
-  .g-text-area:focus-within
-  :is(.g-text-area__content, textarea.g-text-area__control) {
+  .arken-text-area:focus-within
+  :is(.arken-text-area__content, textarea.arken-text-area__control) {
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
 }
 .chat-compose textarea {
@@ -3124,7 +3125,7 @@ html[data-player-theme="light"] .character-card--combat {
 .character-hero__backstory summary {
   cursor: pointer;
 }
-.character-hero__backstory .g-text-area {
+.character-hero__backstory .arken-text-area {
   width: 100%;
   margin-top: 6px;
 }
@@ -3259,11 +3260,11 @@ html[data-player-theme="light"] .character-card--combat {
   align-items: center;
   gap: var(--space-xs);
 }
-.character-wallet__coin .g-button {
+.character-wallet__coin .arken-button {
   min-width: 24px;
   padding-inline: 4px;
 }
-.character-wallet__coin .g-text-input {
+.character-wallet__coin .arken-text-input {
   width: 52px;
 }
 .character-wallet__coin input {
@@ -3291,7 +3292,7 @@ html[data-player-theme="light"] .character-card--combat {
   align-items: center;
   gap: 4px;
 }
-.character-vital-chip__controls .g-button {
+.character-vital-chip__controls .arken-button {
   min-width: 28px;
   min-height: 28px;
   padding: 2px 6px;
@@ -3304,7 +3305,7 @@ html[data-player-theme="light"] .character-card--combat {
   min-width: 0;
   color: var(--muted);
 }
-.character-vital-chip__regen .g-text-input {
+.character-vital-chip__regen .arken-text-input {
   width: 70px;
 }
 .character-vital-chip__resource-values {
@@ -3321,7 +3322,7 @@ html[data-player-theme="light"] .character-card--combat {
   color: var(--muted);
   font-size: 12px;
 }
-.character-vital-chip__resource-values .g-text-input,
+.character-vital-chip__resource-values .arken-text-input,
 .character-vital-chip__resource-values input {
   width: 70px;
   min-width: 0;
@@ -3452,12 +3453,12 @@ html[data-player-theme="light"] .character-card--combat {
   min-width: 0;
   font-size: max(12px, 0.82rem);
 }
-.character-wallet__row .g-button {
+.character-wallet__row .arken-button {
   min-width: 0;
   width: 32px;
   padding: 0;
 }
-.character-wallet__row .g-text-input {
+.character-wallet__row .arken-text-input {
   min-width: 0;
   width: 100%;
 }
@@ -4477,7 +4478,7 @@ body:has(.landing-shell) {
   gap: var(--space-sm);
   margin-top: var(--space-md);
 }
-.stack-list > .g-button,
+.stack-list > .arken-button,
 .stack-list > button {
   display: flex;
   align-items: center;
@@ -4489,7 +4490,7 @@ body:has(.landing-shell) {
   align-items: center;
   gap: var(--space-sm);
 }
-.player-presence-list > .g-button {
+.player-presence-list > .arken-button {
   flex: 0 0 auto;
 }
 
@@ -4683,7 +4684,7 @@ body:has(.landing-shell) {
     align-items: stretch;
   }
   .entity-form > .dialog-actions > button,
-  .entity-form > .dialog-actions > .g-button {
+  .entity-form > .dialog-actions > .arken-button {
     width: 100%;
     min-height: 44px;
     justify-content: center;
@@ -5850,7 +5851,7 @@ body:has(.landing-shell) {
   font-size: max(12px, 0.8rem);
 }
 .token-image-generator__zoom-controls > button,
-.token-image-generator__zoom-controls > .g-button,
+.token-image-generator__zoom-controls > .arken-button,
 .token-image-generator__zoom input[type="number"] {
   min-height: 44px;
   min-width: 44px;
@@ -5875,7 +5876,7 @@ body:has(.landing-shell) {
     width: min(100%, 216px);
   }
   .token-image-generator__actions > button,
-  .token-image-generator__actions > .g-button {
+  .token-image-generator__actions > .arken-button {
     flex: 1 1 100%;
     min-height: 44px;
     justify-content: center;
@@ -5890,7 +5891,7 @@ body:has(.landing-shell) {
     min-height: 44px;
   }
   .token-image-generator__actions > button,
-  .token-image-generator__actions > .g-button {
+  .token-image-generator__actions > .arken-button {
     min-height: 44px;
   }
 }
@@ -5975,7 +5976,7 @@ body:has(.landing-shell) {
   box-shadow: 0 12px 28px #0009;
 }
 .account-menu__content > button,
-.account-menu__content .g-button {
+.account-menu__content .arken-button {
   justify-content: flex-start;
   width: 100%;
   text-align: left;
@@ -6038,7 +6039,7 @@ body:has(.landing-shell) {
   margin: 0;
   accent-color: var(--accent);
 }
-.player-presence-button .g-button__text {
+.player-presence-button .arken-button__text {
   gap: 6px;
 }
 .music-volume-popover button,
@@ -6407,7 +6408,7 @@ body:has(.landing-shell) {
   align-items: center;
   gap: var(--space-xs);
 }
-.activity-roll-controls__heading > .g-select {
+.activity-roll-controls__heading > .arken-select {
   min-width: 150px;
   flex: 1 1 180px;
 }
@@ -7623,7 +7624,7 @@ html[data-player-theme="classic-v1"] .asset-picker__tile:focus-visible {
 
 /* Auto-growing catalog fields must start at a usable height even when the
  * dialog was measured while its setup section was hidden. Keep growth enabled. */
-.catalog-entry-form .g-text-area__control {
+.catalog-entry-form .arken-text-area__control {
   min-height: var(--size-control-height);
 }
 
@@ -7708,14 +7709,13 @@ html[data-player-theme="classic-v1"] .asset-picker__tile:focus-visible {
 /* QA visual pass: hierarchy is carried by surface tone, not a stroke around
    every control. Focus outlines and intentional section dividers stay visible. */
 button:not([role="tab"]),
-.g-button,
 .arken-button,
 [class*="badge"] {
   border-color: transparent !important;
 }
-.g-button_view_outlined,
+.arken-button--view-outlined,
 .arken-button--outlined,
-.g-button_view_raised,
+.arken-button--view-raised,
 .arken-button--raised,
 .activity-quick-rolls button,
 .roadmap-vote-button {
@@ -7778,7 +7778,7 @@ button:not([role="tab"]),
   align-items: center;
   gap: var(--space-sm);
 }
-.token-palette__heading-actions .g-button {
+.token-palette__heading-actions .arken-button {
   min-height: 36px;
   white-space: nowrap;
 }
@@ -7807,7 +7807,7 @@ button:not([role="tab"]),
   text-align: left;
   white-space: normal;
 }
-.stat-field__menu-items > .stat-field__rename .g-button__text {
+.stat-field__menu-items > .stat-field__rename .arken-button__text {
   display: flex;
   align-items: center;
   gap: var(--space-sm);

@@ -19,7 +19,7 @@ function setup() {
 }
 
 const toastByTitle = (title: string) =>
-  screen.queryByText(title)?.closest(".g-toast") ?? null;
+  screen.queryByText(title)?.closest(".arken-toast") ?? null;
 
 it("renders title, message and theme, and replaces a toast with the same name", () => {
   const toaster = setup();
@@ -32,9 +32,11 @@ it("renders title, message and theme, and replaces a toast with the same name", 
     }),
   );
   const toast = toastByTitle("Не удалось сохранить");
-  expect(toast).toHaveClass("g-toast_theme_danger");
-  expect(screen.getByText("Сервер недоступен")).toHaveClass("g-toast__content");
-  expect(toast?.closest(".g-toaster")).toHaveAttribute(
+  expect(toast).toHaveClass("arken-toast--theme-danger");
+  expect(screen.getByText("Сервер недоступен")).toHaveClass(
+    "arken-toast__content",
+  );
+  expect(toast?.closest(".arken-toaster")).toHaveAttribute(
     "aria-live",
     "assertive",
   );
@@ -43,7 +45,7 @@ it("renders title, message and theme, and replaces a toast with the same name", 
     toaster.add({ name: "save", title: "Сохранено", theme: "success" }),
   );
   expect(toaster.getSnapshot()).toHaveLength(1);
-  expect(toastByTitle("Сохранено")).toHaveClass("g-toast_theme_success");
+  expect(toastByTitle("Сохранено")).toHaveClass("arken-toast--theme-success");
 });
 
 it("hides itself after the timeout, but not while hovered", () => {

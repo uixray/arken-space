@@ -78,7 +78,7 @@
    fonts/styles, затем `gravity-foundation.css`, затем `styles.css`. Поздние
    локальные правила могут осознанно перекрывать библиотеку.
 5. **Порталы и слои.** Использовать текущую шкалу: canvas `10`, panel `100`,
-   popup `1000`, dialog `2000`, toast `3000`. `.g-modal` уже выведен на слой
+   popup `1000`, dialog `2000`, toast `3000`. `.arken-modal` уже выведен на слой
    dialog, чтобы подтверждение было выше workspace-window. Не вводить
    произвольный `z-index: 99999`.
 6. **Тёмная тема.** `ThemeProvider theme="dark"` установлен в `main.tsx`.
@@ -111,7 +111,7 @@
 }
 ```
 
-Не заменяйте этот подход селектором вида `.g-text-input__control { … }`.
+Не заменяйте этот подход селектором вида `.arken-text-input__control { … }`.
 
 ## DOM и Konva — это два разных слоя
 

@@ -2,7 +2,7 @@
  * with the same class names, so ArkenDialog keeps its look without the
  * library. Behaviour (focus trap, Escape, scroll lock) comes from Base UI. */
 
-.g-modal {
+.arken-modal {
   position: fixed;
   inset: 0;
   z-index: 1000;
@@ -12,17 +12,17 @@
   -webkit-overflow-scrolling: touch;
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
 }
-.g-modal__content-aligner {
+.arken-modal__content-aligner {
   min-width: 100%;
   min-height: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
-.g-modal__content-wrapper {
+.arken-modal__content-wrapper {
   margin: var(--g-modal-margin, 20px);
 }
-.g-modal__content {
+.arken-modal__content {
   height: var(--g-modal-height, auto);
   width: var(--g-modal-width, auto);
   background-color: var(--g-color-base-modal);
@@ -31,13 +31,13 @@
   outline: none;
   transition: height 350ms ease-in-out;
 }
-.g-modal__content_has-scroll {
+.arken-modal__content--has-scroll {
   overflow: auto;
   max-width: calc(100vw - var(--g-modal-margin, 20px) * 2);
   max-height: calc(100vh - var(--g-modal-margin, 20px) * 2);
 }
 
-.g-dialog {
+.arken-modal-dialog {
   --_--side-padding: 32px;
   --_--close-button-space: 0px;
   position: relative;
@@ -45,31 +45,31 @@
   flex-direction: column;
   width: var(--g-dialog-width, var(--_--width));
 }
-.g-dialog_has-scroll {
+.arken-modal-dialog--has-scroll {
   overflow-y: auto;
   max-height: calc(100vh - var(--g-modal-margin, 20px) * 2);
 }
-.g-dialog_size_s {
+.arken-modal-dialog--size-s {
   --_--width: 480px;
 }
-.g-dialog_size_m {
+.arken-modal-dialog--size-m {
   --_--width: 720px;
 }
-.g-dialog_size_l {
+.arken-modal-dialog--size-l {
   --_--width: 900px;
 }
-.g-dialog_has-close {
+.arken-modal-dialog--has-close {
   --_--close-button-space: 24px;
 }
 
-.g-dialog-btn-close {
+.arken-modal-dialog-btn-close {
   position: absolute;
   inset-block-start: 14px;
   inset-inline-end: 14px;
   z-index: 1;
 }
 
-.g-dialog-header {
+.arken-modal-dialog-header {
   padding-block: 20px 10px;
   padding-inline: var(--_--side-padding)
     calc(
@@ -84,53 +84,53 @@
   color: var(--g-color-text-primary);
 }
 
-.g-dialog-header__caption {
+.arken-modal-dialog-header__caption {
   font-family: var(--g-text-subheader-font-family);
   font-weight: var(--g-text-subheader-font-weight);
   font-size: var(--g-text-subheader-3-font-size);
   line-height: var(--g-text-subheader-3-line-height);
 }
 
-.g-dialog-body {
+.arken-modal-dialog-body {
   padding: 10px var(--_--side-padding);
   flex: 1 1 auto;
   transition: height 0.35s ease-in-out;
 }
-.g-dialog-body_has-borders {
+.arken-modal-dialog-body--has-borders {
   border-block-start: 1px solid var(--g-color-line-generic);
   border-block-end: 1px solid var(--g-color-line-generic);
 }
-.g-dialog_has-scroll .g-dialog-body {
+.arken-modal-dialog--has-scroll .arken-modal-dialog-body {
   overflow: auto;
 }
 
-.g-dialog-footer {
+.arken-modal-dialog-footer {
   padding: 28px var(--_--side-padding);
   display: flex;
   align-items: center;
   justify-content: flex-end;
 }
-.g-dialog-footer__bts-wrapper {
+.arken-modal-dialog-footer__bts-wrapper {
   display: flex;
   gap: 10px;
 }
-.g-dialog-footer__children {
+.arken-modal-dialog-footer__children {
   flex-grow: 1;
   height: 100%;
   align-items: center;
   display: flex;
 }
-.g-dialog-footer__button {
+.arken-modal-dialog-footer__button {
   min-width: 128px;
   position: relative;
 }
-.g-dialog-footer__error {
+.arken-modal-dialog-footer__error {
   padding: 10px;
   color: var(--g-color-text-danger);
 }
 
 /* The footer error was a Gravity popup anchored above the apply button. */
-.g-dialog-footer__error-popup {
+.arken-modal-dialog-footer__error-popup {
   position: absolute;
   inset-block-end: calc(100% + 10px);
   inset-inline-end: 0;
@@ -143,7 +143,7 @@
     0 0 0 1px var(--g-color-line-generic-solid),
     0 8px 20px 1px var(--g-color-sfx-shadow);
 }
-.g-dialog-footer__error-popup::after {
+.arken-modal-dialog-footer__error-popup::after {
   content: "";
   position: absolute;
   inset-block-start: 100%;

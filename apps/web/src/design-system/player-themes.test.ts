@@ -151,7 +151,7 @@ describe("player theme configuration", () => {
       "utf8",
     );
     expect(bridge).toContain(
-      'html[data-player-theme]:not([data-player-theme="classic-v1"]) .g-root {',
+      'html[data-player-theme]:not([data-player-theme="classic-v1"]) .arken-root {',
     );
     expect(bridge).toContain(
       "--g-color-line-generic-active: var(--color-focus);",
@@ -162,7 +162,7 @@ describe("player theme configuration", () => {
     );
     // UIX-709: the ring is a plain outline now, not a Gravity outline hook.
     expect(foundation).toContain(
-      ".g-text-input__content:has(> input:not(:disabled):focus-visible)",
+      ".arken-text-input__content:has(> input:not(:disabled):focus-visible)",
     );
     expect(foundation).toContain(
       "outline: var(--focus-ring-width, 2px) solid var(--color-focus);",

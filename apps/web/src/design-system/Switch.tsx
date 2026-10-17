@@ -106,11 +106,11 @@ export const Switch = forwardRef<HTMLInputElement, SwitchProps>(function Switch(
 
   const rootClassName = cx(
     "arken-switch",
-    "g-switch",
+    "arken-switch",
     `arken-switch--${size}`,
-    `g-switch_size_${size}`,
-    isChecked && "arken-switch--checked g-switch_checked",
-    disabled && "arken-switch--disabled g-switch_disabled",
+    `arken-switch--size-${size}`,
+    isChecked && "arken-switch--checked",
+    disabled && "arken-switch--disabled",
     className,
   );
 
@@ -136,19 +136,16 @@ export const Switch = forwardRef<HTMLInputElement, SwitchProps>(function Switch(
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledBy}
         aria-describedby={ariaDescribedBy}
-        className="arken-switch__input g-switch__control"
+        className="arken-switch__input arken-switch__control"
         onChange={handleChange}
         onFocus={onFocus}
         onBlur={onBlur}
       />
-      <span className="arken-switch__track g-switch__track" aria-hidden="true">
-        <span
-          className="arken-switch__thumb g-switch__thumb"
-          aria-hidden="true"
-        />
+      <span className="arken-switch__track" aria-hidden="true">
+        <span className="arken-switch__thumb" aria-hidden="true" />
       </span>
       {labelText ? (
-        <span className="arken-switch__text g-switch__text">{labelText}</span>
+        <span className="arken-switch__text">{labelText}</span>
       ) : null}
     </label>
   );

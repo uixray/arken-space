@@ -417,7 +417,7 @@ for (const viewport of [
     );
     await expect(
       page
-        .locator(".g-toast")
+        .locator(".arken-toast")
         .filter({ hasText: "Проверка: сохранение недоступно" }),
     ).toHaveCount(0);
     await expect(preview.locator("pattern")).toHaveAttribute("width", "96");

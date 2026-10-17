@@ -3,8 +3,7 @@
    Tokens: --color-surface, --color-border, --color-accent, etc.
    ========================================================================== */
 
-.arken-loader,
-.g-loader {
+.arken-loader {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -20,21 +19,21 @@
   animation: arken-loader-spin 0.75s linear infinite;
 }
 
-.g-loader_size_s .arken-loader__spinner,
+.arken-loader--size-s .arken-loader__spinner,
 .arken-loader--s .arken-loader__spinner {
   width: 16px;
   height: 16px;
   border-width: 2px;
 }
 
-.g-loader_size_m .arken-loader__spinner,
+.arken-loader--size-m .arken-loader__spinner,
 .arken-loader--m .arken-loader__spinner {
   width: 24px;
   height: 24px;
   border-width: 2.5px;
 }
 
-.g-loader_size_l .arken-loader__spinner,
+.arken-loader--size-l .arken-loader__spinner,
 .arken-loader--l .arken-loader__spinner {
   width: 36px;
   height: 36px;

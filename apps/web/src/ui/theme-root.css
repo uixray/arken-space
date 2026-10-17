@@ -1,9 +1,9 @@
 /* UIX-709: generated from @gravity-ui/uikit 7.43 styles/styles.css (MIT).
  * Only the root variables that the app's CSS still reads, directly or through
- * other variables; PlayerThemeProvider puts `g-root g-root_theme_*` on <body>.
+ * other variables; PlayerThemeProvider puts `arken-root arken-root--theme-*` on <body>.
  * Regenerate rather than hand-edit; theme-root.test.ts lists what must exist. */
 
-.g-root {
+.arken-root {
   background: var(--g-color-base-background);
   color: var(--g-color-text-primary);
   --g-font-family-sans:
@@ -32,13 +32,13 @@
   --g-border-radius-xl: 10px;
 }
 
-body.g-root {
+body.arken-root {
   --g-flow-direction: 1;
   --g-flow-is-ltr: 1;
   --g-flow-is-rtl: 0;
 }
 
-.g-root_theme_light {
+.arken-root--theme-light {
   --g-color-private-white-70: rgba(255, 255, 255, 0.07);
   --g-color-private-white-100: rgba(255, 255, 255, 0.1);
   --g-color-private-white-150: rgba(255, 255, 255, 0.15);
@@ -163,7 +163,7 @@ body.g-root {
   --g-color-sfx-shadow: var(--g-color-private-black-150);
 }
 
-.g-root_theme_dark {
+.arken-root--theme-dark {
   --g-color-private-white-70: rgba(255, 255, 255, 0.07);
   --g-color-private-white-100: rgba(255, 255, 255, 0.1);
   --g-color-private-white-150: rgba(255, 255, 255, 0.15);
@@ -287,10 +287,10 @@ body.g-root {
   --g-color-sfx-shadow: var(--g-color-private-black-200);
 }
 
-:root:has(body.g-root_theme_light) {
+:root:has(body.arken-root--theme-light) {
   color-scheme: light;
 }
 
-:root:has(body.g-root_theme_dark) {
+:root:has(body.arken-root--theme-dark) {
   color-scheme: dark;
 }

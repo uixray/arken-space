@@ -6,8 +6,7 @@
 /* --------------------------------------------------------------------------
    Trigger
    -------------------------------------------------------------------------- */
-.arken-select,
-.g-select {
+.arken-select {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
@@ -37,7 +36,7 @@
    Sizes
    -------------------------------------------------------------------------- */
 .arken-select--xs,
-.g-select_size_xs {
+.arken-select--size-xs {
   height: var(--control-height-xs, 24px);
   font-size: var(--font-size-2xs, 10px);
   padding: 0 6px;
@@ -45,7 +44,7 @@
 }
 
 .arken-select--s,
-.g-select_size_s {
+.arken-select--size-s {
   height: var(--control-height-s, 28px);
   font-size: var(--font-size-label, 11px);
   padding: 0 8px;
@@ -53,7 +52,7 @@
 }
 
 .arken-select--m,
-.g-select_size_m {
+.arken-select--size-m {
   height: var(--size-control-height, var(--control-height-m, 32px));
   font-size: var(--font-size-body, 12px);
   padding: 0 10px;
@@ -61,7 +60,7 @@
 }
 
 .arken-select--l,
-.g-select_size_l {
+.arken-select--size-l {
   height: var(--control-height-l, 36px);
   font-size: var(--font-size-heading-sm, 14px);
   padding: 0 12px;
@@ -69,7 +68,7 @@
 }
 
 .arken-select--xl,
-.g-select_size_xl {
+.arken-select--size-xl {
   height: var(--control-height-xl, 44px);
   font-size: var(--font-size-md, 16px);
   padding: 0 14px;
@@ -79,8 +78,7 @@
 /* --------------------------------------------------------------------------
    Width
    -------------------------------------------------------------------------- */
-.arken-select--width-max,
-.g-select_width_max {
+.arken-select--width-max {
   width: 100%;
 }
 
@@ -88,13 +86,13 @@
    Views
    -------------------------------------------------------------------------- */
 .arken-select--normal,
-.g-select_view_normal {
+.arken-select--view-normal {
   background-color: var(--color-surface, #20201d);
   border-color: var(--color-border, #47443b);
 }
 
 .arken-select--clear,
-.g-select_view_clear {
+.arken-select--view-clear {
   background-color: transparent;
   border-color: transparent;
 }
@@ -132,28 +130,29 @@
 }
 
 .arken-select[data-popup-open] .arken-select__icon,
-.arken-select[aria-expanded="true"] .arken-select__icon,
-.g-select[aria-expanded="true"] .arken-select__icon {
+.arken-select[aria-expanded="true"] .arken-select__icon {
   transform: rotate(180deg);
 }
 
 /* --------------------------------------------------------------------------
    Interactive States (Hover, Focus, Invalid, Disabled)
    -------------------------------------------------------------------------- */
-.arken-select:hover:not(.arken-select--disabled):not(.g-select_disabled):not(
-    :disabled
-  ),
-.g-select:hover:not(.g-select_disabled):not(:disabled) {
+.arken-select:hover:not(.arken-select--disabled):not(
+    .arken-select--disabled
+  ):not(:disabled),
+.arken-select:hover:not(.arken-select--disabled):not(:disabled) {
   border-color: var(--color-border-hover, #696356);
 }
 
 .arken-select:focus-visible:not(.arken-select--disabled):not(
-    .g-select_disabled
+    .arken-select--disabled
   ):not(:disabled),
 .arken-select[data-focused]:not(.arken-select--disabled):not(:disabled),
 .arken-select[data-popup-open]:not(.arken-select--disabled):not(:disabled),
-.g-select:focus-visible:not(.g-select_disabled):not(:disabled),
-.g-select[aria-expanded="true"]:not(.g-select_disabled):not(:disabled) {
+.arken-select:focus-visible:not(.arken-select--disabled):not(:disabled),
+.arken-select[aria-expanded="true"]:not(.arken-select--disabled):not(
+    :disabled
+  ) {
   border-color: var(--color-focus, #c46f49);
   border-width: 2px;
   outline: none;
@@ -162,25 +161,19 @@
 
 /* Invalid / Error */
 .arken-select[data-invalid="true"],
-.arken-select[aria-invalid="true"],
-.g-select[data-invalid="true"],
-.g-select[aria-invalid="true"] {
+.arken-select[aria-invalid="true"] {
   border-color: var(--color-danger, #da6b61) !important;
 }
 
 .arken-select[data-invalid="true"]:focus-visible,
-.arken-select[aria-invalid="true"]:focus-visible,
-.g-select[data-invalid="true"]:focus-visible,
-.g-select[aria-invalid="true"]:focus-visible {
+.arken-select[aria-invalid="true"]:focus-visible {
   border-color: var(--color-danger, #da6b61) !important;
   box-shadow: none !important;
 }
 
 /* Disabled */
 .arken-select--disabled,
-.arken-select:disabled,
-.g-select_disabled,
-.g-select:disabled {
+.arken-select:disabled {
   opacity: 0.45;
   background-color: var(--palette-ink-900, #181816);
   cursor: not-allowed;
@@ -240,8 +233,7 @@
   list-style: none;
 }
 
-.arken-select__item,
-.g-select__item {
+.arken-select__item {
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -261,15 +253,12 @@
 }
 
 .arken-select__item:hover,
-.arken-select__item[data-highlighted],
-.g-select__item:hover,
-.g-select__item[data-highlighted] {
+.arken-select__item[data-highlighted] {
   background-color: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
   color: var(--color-text, #e8e4da);
 }
 
-.arken-select__item[data-selected],
-.g-select__item[data-selected] {
+.arken-select__item[data-selected] {
   color: var(--color-accent, #c46f49);
   font-weight: var(--font-weight-medium, 500);
 }

@@ -345,7 +345,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         });
         expect(hit).toBe(true);
         const dialogZ = await dialog.evaluate((node) => {
-          const wrapper = node.closest(".g-modal");
+          const wrapper = node.closest(".arken-modal");
           if (!wrapper) throw new Error("Missing modal layer wrapper");
           return Number(getComputedStyle(wrapper).zIndex);
         });
