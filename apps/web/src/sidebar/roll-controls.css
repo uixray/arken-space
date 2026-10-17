@@ -78,6 +78,11 @@
   display: none;
 }
 
-.quick-roll-panel__ability-group + .quick-roll-panel__ability-group {
+/* UIX-682 C19: every group in a quick-roll tab is set apart, including the
+   skill rows UIX-706 put in front of the character's own skills. */
+.quick-roll-panel__body
+  [role="tabpanel"]
+  > .activity-quick-rolls
+  + .activity-quick-rolls {
   margin-top: var(--space-md);
 }
