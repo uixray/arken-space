@@ -14,6 +14,10 @@ import type { CursorPresence } from "./cursor-presence";
 import type { GameSocket } from "../realtime";
 import type { MapMoveAck, MapMoveTarget } from "./map-move-queue";
 import type { MapTool } from "./map-interaction";
+import type {
+  StampCreatePayload,
+  TerrainStampSettings,
+} from "./TerrainStampControls";
 
 export interface SceneRendererProps {
   paused?: boolean;
@@ -108,22 +112,8 @@ export interface SceneRendererProps {
     color: string;
     strokeWidth?: number;
   }) => Promise<DrawingDto | void>;
-  onStampCreate?: (stamp: {
-    kind: "STAMP";
-    assetKey: "forest" | "mountains" | "clouds";
-    packId: "builtin-terrain-v1";
-    size: number;
-    rotation: number;
-    layer: "PUBLIC" | "GM";
-    x: number;
-    y: number;
-  }) => Promise<DrawingDto | void>;
-  stampTool?: {
-    assetKey: "forest" | "mountains" | "clouds";
-    size: number;
-    rotation: number;
-    layer: "PUBLIC" | "GM";
-  };
+  onStampCreate?: (stamp: StampCreatePayload) => Promise<DrawingDto | void>;
+  stampTool?: TerrainStampSettings;
   onPing: (point: { x: number; y: number }) => void;
   onPlaceTokenDefinition?: (
     definitionId: string,

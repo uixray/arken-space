@@ -9,7 +9,6 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import type { AssetDto } from "@arken/contracts";
 import { useCallback, useState, type ReactElement } from "react";
 import { SoundpadWorkspace } from "./SoundpadWorkspace";
@@ -64,11 +63,7 @@ beforeEach(() => {
 
 function renderInTheme(element: ReactElement) {
   return render(element, {
-    wrapper: ({ children }) => (
-      <ThemeProvider theme="dark" lang="ru">
-        {children}
-      </ThemeProvider>
-    ),
+    wrapper: ({ children }) => <>{children}</>,
   });
 }
 
@@ -252,6 +247,55 @@ it("marks starter-pack uploads explicitly as sound effects", async () => {
   expect(upload).toHaveBeenCalledWith(expect.any(File), "AUDIO", {
     audioPurpose: "SOUND_EFFECT",
   });
+});
+
+it("UIX-706: uploads a new effect file from the soundpad into the selected pack", async () => {
+  const upload = vi.fn().mockResolvedValue({ ...asset, id: "new-asset" });
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/soundpad")
+        return {
+          ok: true,
+          json: async () => ({ packs: [pack], playerPlaybackEnabled: true }),
+        };
+      return { ok: true, json: async () => ({}) };
+    },
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  renderInTheme(
+    <SoundpadWorkspace
+      campaignId={pack.campaignId}
+      membershipId="55555555-5555-4555-8555-555555555555"
+      role="GM"
+      assets={[asset]}
+      socket={null}
+      onUpload={upload}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Саундпад" }));
+  fireEvent.click(await screen.findByText("Управление паками"));
+  const input = screen.getByLabelText("Загрузить аудиофайл (до 10 секунд)");
+  fireEvent.change(input, {
+    target: {
+      files: [new File(["x"], "Драконий рык.ogg", { type: "audio/ogg" })],
+    },
+  });
+  await waitFor(() =>
+    expect(upload).toHaveBeenCalledWith(expect.any(File), "AUDIO", {
+      audioPurpose: "SOUND_EFFECT",
+    }),
+  );
+  await waitFor(() =>
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url) === `/api/soundpad/packs/${pack.id}/sounds` &&
+          JSON.parse(String(init?.body)).assetId === "new-asset" &&
+          JSON.parse(String(init?.body)).label === "Драконий рык",
+      ),
+    ).toBe(true),
+  );
 });
 
 it("renders real sound buttons and sends one authorized trigger intent without local double-play", async () => {

@@ -13,6 +13,7 @@ import type {
   Role,
   SoundpadPackDto,
 } from "@arken/contracts";
+import { ApiError, formatApiError } from "./api";
 import type { GameSocket } from "./realtime.js";
 import { SoundEffectsPlayback } from "./sound-effects-playback.js";
 import { SoundClipEditor } from "./SoundClipEditor.js";
@@ -360,8 +361,15 @@ export function SoundpadWorkspace({
     try {
       await work();
       await load();
-    } catch {
-      setError("Команда не выполнена. Проверьте соединение и права.");
+    } catch (reason) {
+      const fallback = "Команда не выполнена. Проверьте соединение и права.";
+      setError(
+        reason instanceof ApiError
+          ? formatApiError(reason, fallback)
+          : reason instanceof Error && reason.message === "PACK_REQUIRED"
+            ? "Сначала создайте пак или выберите его."
+            : fallback,
+      );
     } finally {
       setBusy(false);
     }
@@ -399,6 +407,27 @@ export function SoundpadWorkspace({
       });
       setSourceNote("");
     });
+  // UIX-706 п.6: короткий эффект загружается прямо из саундпада — тем же
+  // путём и с теми же правами, что стартовый пак, затем попадает в пак.
+  const uploadSound = async (file: File) => {
+    let uploaded: AssetDto | null = null;
+    await mutate(async () => {
+      if (!(selectedPack || data.packs[0]?.id))
+        throw new Error("PACK_REQUIRED");
+      uploaded = await onUpload(file, "AUDIO", {
+        audioPurpose: "SOUND_EFFECT",
+      });
+    });
+    const asset = uploaded as AssetDto | null;
+    if (asset)
+      await addSound(
+        asset.id,
+        file.name.replace(/\.[^.]+$/, "").slice(0, 80) || "Звук",
+        "🔊",
+        "Другое",
+        sourceNote,
+      );
+  };
   const installStarter = () =>
     mutate(async () => {
       const latest = await request<SoundpadResponse>("/api/soundpad");
@@ -656,180 +685,206 @@ export function SoundpadWorkspace({
             <details className="soundpad__manager-disclosure">
               <summary>Управление паками</summary>
               <div className="soundpad__manager">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void installStarter()}
-                >
-                  Добавить стартовый CC0-пак
-                </button>
-                {managementPack && (
-                  <>
-                    <label>
-                      Управляемый пак{" "}
-                      <select
-                        value={managementPack.id}
-                        onChange={(event) =>
-                          setManagePackId(event.target.value)
-                        }
-                      >
-                        {data.packs.map((pack) => (
-                          <option key={pack.id} value={pack.id}>
-                            {pack.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        void setPackPublished(
-                          managementPack.id,
-                          !managementPack.published,
-                        )
-                      }
-                    >
-                      {managementPack.published
-                        ? "Скрыть пак"
-                        : "Опубликовать пак"}
-                    </button>
-                    <label>
-                      Кому доступен{" "}
-                      <select
-                        aria-label={`Кому доступен ${managementPack.name}`}
-                        value={managementPack.audience}
+                {/* UIX-706 п.6: три смысловых блока вместо сплошного ряда полей. */}
+                <section className="soundpad__group">
+                  <h3 className="soundpad__group-title">Паки</h3>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void installStarter()}
+                  >
+                    Добавить стартовый CC0-пак
+                  </button>
+                  {managementPack && (
+                    <>
+                      <label>
+                        Управляемый пак{" "}
+                        <select
+                          value={managementPack.id}
+                          onChange={(event) =>
+                            setManagePackId(event.target.value)
+                          }
+                        >
+                          {data.packs.map((pack) => (
+                            <option key={pack.id} value={pack.id}>
+                              {pack.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
                         disabled={busy}
-                        onChange={(event) =>
-                          void setPackAudience(
+                        onClick={() =>
+                          void setPackPublished(
                             managementPack.id,
-                            event.target.value as "ALL_MEMBERS" | "GM_ONLY",
+                            !managementPack.published,
                           )
                         }
                       >
-                        <option value="ALL_MEMBERS">Всем участникам</option>
-                        <option value="GM_ONLY">Только ведущему</option>
-                      </select>
+                        {managementPack.published
+                          ? "Скрыть пак"
+                          : "Опубликовать пак"}
+                      </button>
+                      <label>
+                        Кому доступен{" "}
+                        <select
+                          aria-label={`Кому доступен ${managementPack.name}`}
+                          value={managementPack.audience}
+                          disabled={busy}
+                          onChange={(event) =>
+                            void setPackAudience(
+                              managementPack.id,
+                              event.target.value as "ALL_MEMBERS" | "GM_ONLY",
+                            )
+                          }
+                        >
+                          <option value="ALL_MEMBERS">Всем участникам</option>
+                          <option value="GM_ONLY">Только ведущему</option>
+                        </select>
+                      </label>
+                    </>
+                  )}
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void createPack();
+                    }}
+                  >
+                    <label>
+                      Название пака{" "}
+                      <input
+                        value={newPackName}
+                        maxLength={80}
+                        onChange={(event) => setNewPackName(event.target.value)}
+                      />
                     </label>
-                  </>
-                )}
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void createPack();
-                  }}
-                >
+                    <button
+                      type="submit"
+                      disabled={busy || !newPackName.trim()}
+                    >
+                      Создать пак
+                    </button>
+                  </form>
+                </section>
+                <section className="soundpad__group">
+                  <h3 className="soundpad__group-title">Добавить звук</h3>
                   <label>
-                    Название пака{" "}
+                    Пак для нового звука{" "}
+                    <select
+                      value={selectedPack}
+                      onChange={(event) => {
+                        setClipEditorOpen(false);
+                        setSelectedPack(event.target.value);
+                      }}
+                    >
+                      <option value="">Первый доступный пак</option>
+                      {data.packs.map((pack) => (
+                        <option key={pack.id} value={pack.id}>
+                          {pack.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Источник / лицензия{" "}
                     <input
-                      value={newPackName}
-                      maxLength={80}
-                      onChange={(event) => setNewPackName(event.target.value)}
+                      value={sourceNote}
+                      maxLength={240}
+                      onChange={(event) => setSourceNote(event.target.value)}
+                      placeholder="Укажите источник и права"
                     />
                   </label>
-                  <button type="submit" disabled={busy || !newPackName.trim()}>
-                    Создать пак
-                  </button>
-                </form>
-                <label>
-                  Пак для нового звука{" "}
-                  <select
-                    value={selectedPack}
-                    onChange={(event) => {
-                      setClipEditorOpen(false);
-                      setSelectedPack(event.target.value);
-                    }}
-                  >
-                    <option value="">Первый доступный пак</option>
-                    {data.packs.map((pack) => (
-                      <option key={pack.id} value={pack.id}>
-                        {pack.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Источник / лицензия{" "}
-                  <input
-                    value={sourceNote}
-                    maxLength={240}
-                    onChange={(event) => setSourceNote(event.target.value)}
-                    placeholder="Укажите источник и права"
-                  />
-                </label>
-                <label>
-                  Добавить существующий AUDIO{" "}
-                  <select
-                    defaultValue=""
-                    onChange={(event) => {
-                      const asset = assetsById.get(event.target.value);
-                      if (asset)
-                        void addSound(
-                          asset.id,
-                          asset.name.replace(/\.[^.]+$/, ""),
-                          "🔊",
-                          "Другое",
-                          sourceNote,
-                        );
-                      event.currentTarget.value = "";
-                    }}
-                  >
-                    <option value="">Выберите файл ≤ 10 секунд</option>
-                    {audioAssets.map((asset) => (
-                      <option key={asset.id} value={asset.id}>
-                        {asset.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Источник для нового эффекта{" "}
-                  <select
-                    aria-label="Источник для нового эффекта"
-                    value={clipSourceAssetId}
-                    onChange={(event) => {
-                      setClipEditorOpen(false);
-                      setClipSourceAssetId(event.target.value);
-                    }}
-                  >
-                    <option value="">Выберите аудиофайл</option>
-                    {sourceAudioAssets.map((asset) => (
-                      <option key={asset.id} value={asset.id}>
-                        {asset.name} · {asset.audioPurpose}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {clipSource && (
-                  <button
-                    type="button"
-                    disabled={!clipPackId || busy}
-                    onClick={() => setClipEditorOpen(true)}
-                  >
-                    Редактировать отрезок
-                  </button>
-                )}
-                {clipEditorOpen && clipSource && clipPackId && (
-                  <SoundClipEditor
-                    key={clipSource.id}
-                    source={clipSource}
-                    packId={clipPackId}
-                    sourceNote={sourceNote}
-                    onSaved={refreshCatalogAfterClipSave}
-                    onClose={() => setClipEditorOpen(false)}
-                  />
-                )}
-                <label className="soundpad__policy">
-                  <input
-                    type="checkbox"
-                    checked={data.playerPlaybackEnabled}
-                    onChange={(event) =>
-                      void setPlayerPolicy(event.target.checked)
-                    }
-                    disabled={busy}
-                  />{" "}
-                  Игрокам можно запускать звуки
-                </label>
+                  <label>
+                    Загрузить аудиофайл (до 10 секунд){" "}
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      disabled={busy}
+                      onChange={(event) => {
+                        const file = event.currentTarget.files?.[0];
+                        event.currentTarget.value = "";
+                        if (file) void uploadSound(file);
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Или выбрать загруженный{" "}
+                    <select
+                      defaultValue=""
+                      onChange={(event) => {
+                        const asset = assetsById.get(event.target.value);
+                        if (asset)
+                          void addSound(
+                            asset.id,
+                            asset.name.replace(/\.[^.]+$/, ""),
+                            "🔊",
+                            "Другое",
+                            sourceNote,
+                          );
+                        event.currentTarget.value = "";
+                      }}
+                    >
+                      <option value="">Выберите файл ≤ 10 секунд</option>
+                      {audioAssets.map((asset) => (
+                        <option key={asset.id} value={asset.id}>
+                          {asset.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Вырезать эффект из длинного файла{" "}
+                    <select
+                      aria-label="Источник для нового эффекта"
+                      value={clipSourceAssetId}
+                      onChange={(event) => {
+                        setClipEditorOpen(false);
+                        setClipSourceAssetId(event.target.value);
+                      }}
+                    >
+                      <option value="">Выберите аудиофайл</option>
+                      {sourceAudioAssets.map((asset) => (
+                        <option key={asset.id} value={asset.id}>
+                          {asset.name} · {asset.audioPurpose}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {clipSource && (
+                    <button
+                      type="button"
+                      disabled={!clipPackId || busy}
+                      onClick={() => setClipEditorOpen(true)}
+                    >
+                      Редактировать отрезок
+                    </button>
+                  )}
+                  {clipEditorOpen && clipSource && clipPackId && (
+                    <SoundClipEditor
+                      key={clipSource.id}
+                      source={clipSource}
+                      packId={clipPackId}
+                      sourceNote={sourceNote}
+                      onSaved={refreshCatalogAfterClipSave}
+                      onClose={() => setClipEditorOpen(false)}
+                    />
+                  )}
+                </section>
+                <section className="soundpad__group">
+                  <h3 className="soundpad__group-title">Игроки</h3>
+                  <label className="soundpad__policy">
+                    <input
+                      type="checkbox"
+                      checked={data.playerPlaybackEnabled}
+                      onChange={(event) =>
+                        void setPlayerPolicy(event.target.checked)
+                      }
+                      disabled={busy}
+                    />{" "}
+                    Игрокам можно запускать звуки
+                  </label>
+                </section>
               </div>
             </details>
           )}

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import type { ComponentProps } from "react";
 import type { AssetDto, CharacterDto, GameSnapshot } from "@arken/contracts";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CampaignActionsContext,
@@ -271,11 +270,11 @@ function view(
   commands = actions(),
 ) {
   return (
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <CampaignActionsContext.Provider value={commands}>
         {panel(state, overrides)}
       </CampaignActionsContext.Provider>
-    </ThemeProvider>
+    </>
   );
 }
 
@@ -321,6 +320,69 @@ function selectPortrait(
 }
 
 describe("character action feedback", () => {
+  it("UIX-707: GM row edits on a sheet with its own layout stay in that layout", async () => {
+    const commands = actions();
+    const characterLayout = vi.fn().mockResolvedValue(undefined);
+    const campaignLayout = vi.fn().mockResolvedValue(undefined);
+    commands.statLayout = {
+      onUpdateStatLayout: campaignLayout,
+      onUpdateCharacterStatLayout: characterLayout,
+    };
+    renderComponent(view(snapshot([character()]), {}, commands));
+    await galleryLoaded();
+    expect(screen.getByText(/своя раскладка/)).toBeInTheDocument();
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /Добавить строку/ })[0]!,
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: /Новая строка/,
+    });
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: "Название" }),
+      {
+        target: { value: "Удача мастера" },
+      },
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+    await waitFor(() => expect(characterLayout).toHaveBeenCalledTimes(1));
+    expect(characterLayout.mock.calls[0]![0]).toBe("character-a");
+    expect(characterLayout.mock.calls[0]![2]).toBe(7);
+    expect(JSON.stringify(characterLayout.mock.calls[0]![1])).toContain(
+      "Удача мастера",
+    );
+    expect(campaignLayout).not.toHaveBeenCalled();
+  });
+
+  it("UIX-707: without a personal layout the GM still edits the campaign template", async () => {
+    const commands = actions();
+    const characterLayout = vi.fn().mockResolvedValue(undefined);
+    const campaignLayout = vi.fn().mockResolvedValue(undefined);
+    commands.statLayout = {
+      onUpdateStatLayout: campaignLayout,
+      onUpdateCharacterStatLayout: characterLayout,
+    };
+    const state = snapshot([character({ statLayout: undefined })]);
+    renderComponent(view(state, {}, commands));
+    await galleryLoaded();
+    expect(screen.queryByText(/своя раскладка/)).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /Добавить строку/ })[0]!,
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: /Новая строка/,
+    });
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: "Название" }),
+      {
+        target: { value: "Общая строка" },
+      },
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+    await waitFor(() => expect(campaignLayout).toHaveBeenCalledTimes(1));
+    expect(campaignLayout.mock.calls[0]![1]).toBe(state.campaign.revision);
+    expect(characterLayout).not.toHaveBeenCalled();
+  });
+
   it("edits a standard skill through the revisioned character patch", async () => {
     const patch = vi.fn().mockResolvedValue(undefined);
     renderComponent(
@@ -921,7 +983,7 @@ describe("character action feedback", () => {
       character({ id: "character-b", name: "Персонаж B", revision: 12 }),
     ]);
     renderComponent(
-      <ThemeProvider theme="dark" lang="ru">
+      <>
         <CampaignActionsContext.Provider value={actions(upload)}>
           {state.characters.map((item) => (
             <article key={item.id} aria-label={item.name}>
@@ -933,7 +995,7 @@ describe("character action feedback", () => {
             </article>
           ))}
         </CampaignActionsContext.Provider>
-      </ThemeProvider>,
+      </>,
     );
     await galleryLoaded();
     const first = within(screen.getByRole("article", { name: "Персонаж A" }));
@@ -1188,13 +1250,13 @@ describe("character action feedback", () => {
       operatorFeedbackAllowed: false,
     };
     renderComponent(
-      <ThemeProvider theme="dark" lang="ru">
+      <>
         <CampaignActionsContext.Provider
           value={actions(undefined, onCampaignClock)}
         >
           <CharacterWorkspace {...workspaceProps} />
         </CampaignActionsContext.Provider>
-      </ThemeProvider>,
+      </>,
     );
     await galleryLoaded();
 

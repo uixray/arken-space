@@ -8,6 +8,7 @@ import {
   paintedIconContrast,
   settleIconState,
 } from "./helpers/painted-icon-contrast";
+import { fulfillUnmocked } from "./mock-api-contract";
 const originalPng = makePng(1, 1, [30, 60, 90]);
 const png = makePng(1, 1, [180, 80, 40]);
 for (const [width, longTitle] of [
@@ -55,7 +56,7 @@ for (const [width, longTitle] of [
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       if (path === "/api/operator/feedback/capability")
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await page.route("**/api/bootstrap", (route) =>
       route.fulfill({ json: current }),
@@ -204,6 +205,17 @@ for (const [width, longTitle] of [
       );
       await close.focus();
       await page.keyboard.press("Shift+Tab");
+      // The focus trap wraps from its guard on the next frame; let it land on
+      // the dialog's last control before tabbing forward again.
+      await expect
+        .poll(() =>
+          close.evaluate((node) => {
+            const active = document.activeElement;
+            const popup = node.closest('[role="dialog"]');
+            return !!popup?.contains(active) && active !== node;
+          }),
+        )
+        .toBe(true);
       await page.keyboard.press("Tab");
       await expect(close).toBeFocused();
       expect(

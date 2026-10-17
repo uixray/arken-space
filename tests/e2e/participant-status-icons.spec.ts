@@ -4,6 +4,7 @@ import type { CharacterDto } from "@arken/contracts";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 for (const role of ["GM"] as const)
   for (const width of [1280, 360]) {
@@ -65,7 +66,7 @@ for (const role of ["GM"] as const)
           return route.fulfill({ json: { posts: [], nextCursor: null } });
         if (path === "/api/operator/feedback/capability")
           return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-        return route.fulfill({ json: [] });
+        return fulfillUnmocked(route, path);
       });
       await page.routeWebSocket(/\/socket\.io\//, (s) => {
         socket = s;

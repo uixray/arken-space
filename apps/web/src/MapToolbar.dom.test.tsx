@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
 import {
@@ -18,29 +17,6 @@ import { writeToolbarCollapsed } from "./toolbar-preference";
 
 vi.mock("./api", () => ({
   api: vi.fn().mockResolvedValue([]),
-}));
-
-vi.mock("@gravity-ui/uikit", () => ({
-  Popup: ({ open, children }: { open?: boolean; children?: ReactNode }) =>
-    open ? <div>{children}</div> : null,
-  Switch: ({
-    checked,
-    onUpdate,
-    children,
-  }: {
-    checked?: boolean;
-    onUpdate?: (next: boolean) => void;
-    children?: ReactNode;
-  }) => (
-    <label>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onUpdate?.(event.target.checked)}
-      />
-      {children}
-    </label>
-  ),
 }));
 
 function createMockSnapshot(role: "GM" | "PLAYER" = "GM"): GameSnapshot {
@@ -305,6 +281,30 @@ describe("MapToolbar — панель инструментов карты (UIX-4
       ).not.toBeInTheDocument(),
     );
     expect(props.onToolSelect).toHaveBeenLastCalledWith("STAMP");
+  });
+
+  it("UIX-706: Escape outside the map returns from the stamp tool to PAN", () => {
+    const props = createDefaultProps({ tool: "STAMP" });
+    renderComponent(
+      <>
+        <MapToolbar {...props} />
+        <input aria-label="Поле" />
+        <div role="dialog" aria-label="Диалог">
+          <button type="button">Внутри</button>
+        </div>
+      </>,
+    );
+    const press = (target: Element) =>
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+
+    press(screen.getByRole("textbox", { name: "Поле" }));
+    press(screen.getByRole("button", { name: "Внутри" }));
+    expect(props.onToolSelect).not.toHaveBeenCalled();
+
+    press(document.body);
+    expect(props.onToolSelect).toHaveBeenLastCalledWith("PAN");
   });
 
   it("рендерит инструменты GM без отключённого боя (UIX-621)", () => {

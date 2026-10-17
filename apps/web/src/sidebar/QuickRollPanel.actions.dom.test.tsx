@@ -85,6 +85,43 @@ for (const kind of ["ABILITY", "SKILL"] as const) {
   }
 }
 
+it("UIX-706: skill rows roll 1d20 + bonus from the abilities tab, not the stats tab", () => {
+  const onQuickRoll = vi.fn();
+  renderComponent(
+    <QuickRollPanel
+      rollCharacter={
+        {
+          stats: { strength: 1, stealth: 3 },
+          skills: [],
+          entries: [],
+        } as unknown as CharacterDto
+      }
+      campaignId="campaign"
+      membershipId="member"
+      rows={[
+        { key: "strength", label: "Сила", group: "characteristics" },
+        { key: "stealth", label: "Скрытность", group: "skills" },
+      ]}
+      quickRollPending={false}
+      gmOnly={false}
+      onQuickRoll={onQuickRoll}
+    />,
+  );
+  // Not among the visible stats-tab buttons.
+  expect(screen.queryByRole("button", { name: "Скрытность" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Сила" })).toBeVisible();
+  fireEvent.click(screen.getByRole("tab", { name: "Способности" }));
+  expect(screen.queryByText("Нет навыков и способностей.")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Скрытность" }));
+  expect(onQuickRoll).toHaveBeenCalledWith(
+    "1d20 + stealth",
+    "Скрытность",
+    3,
+    "NORMAL",
+    1,
+  );
+});
+
 it("posts the info control as SHARE without activating the ability name", async () => {
   const entry = {
     id: "ability-info",

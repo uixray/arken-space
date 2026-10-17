@@ -101,8 +101,10 @@ for (const role of ["GM", "PLAYER"] as const) {
           { x: 0, y: 0, width: scene.width, height: scene.height },
           box,
         );
-        const list = map.getByRole("button", {
-          name: "Объекты карты",
+        // The toolbar owns the object list toggle; the list itself still
+        // renders inside the map viewport.
+        const list = map.page().getByRole("button", {
+          name: "Список объектов и токенов карты",
           exact: true,
         });
         await list.click();
@@ -195,54 +197,57 @@ for (const role of ["GM", "PLAYER"] as const) {
       }
       expect(moves).toHaveLength(1);
 
-      // Sample the lower half of the visible gold ring, away from the sender's
-      // small cursor and label. Composite all real canvas layers: hidden pixels
-      // under fog do not qualify. No socket/HTTP interception or React hooks.
+      // UIX-508 made the ping an animated ring in the sender's cursor colour,
+      // so sample geometry, not a fixed colour: the lower arc around the
+      // point, away from the sender's cursor and label, must visibly change on
+      // the other client and return to its baseline after the ping lifetime.
+      // Composite all real canvas layers: hidden pixels under fog do not count.
       const point = { x: 800, y: 500 };
-      const ringSamples = () =>
-        observer.map.evaluate(
-          (viewport, center) => {
-            const bounds = viewport.getBoundingClientRect();
-            const output = document.createElement("canvas");
-            output.width = Math.ceil(bounds.width);
-            output.height = Math.ceil(bounds.height);
-            const ctx = output.getContext("2d")!;
-            for (const canvas of viewport.querySelectorAll("canvas")) {
-              const rect = canvas.getBoundingClientRect();
-              ctx.drawImage(
-                canvas,
-                rect.x - bounds.x,
-                rect.y - bounds.y,
-                rect.width,
-                rect.height,
-              );
+      const center = {
+        x: observer.fit.position.x + point.x * observer.fit.scale,
+        y: observer.fit.position.y + point.y * observer.fit.scale,
+      };
+      const arcPixels = () =>
+        observer.map.evaluate((viewport, c) => {
+          const bounds = viewport.getBoundingClientRect();
+          const output = document.createElement("canvas");
+          output.width = Math.ceil(bounds.width);
+          output.height = Math.ceil(bounds.height);
+          const ctx = output.getContext("2d")!;
+          for (const canvas of viewport.querySelectorAll("canvas")) {
+            const rect = canvas.getBoundingClientRect();
+            ctx.drawImage(
+              canvas,
+              rect.x - bounds.x,
+              rect.y - bounds.y,
+              rect.width,
+              rect.height,
+            );
+          }
+          const samples: number[] = [];
+          for (let radius = 12; radius <= 36; radius += 4)
+            for (let i = 2; i <= 14; i++) {
+              const angle = (Math.PI * i) / 16;
+              const x = Math.round(c.x + radius * Math.cos(angle));
+              const y = Math.round(c.y + radius * Math.sin(angle));
+              samples.push(...ctx.getImageData(x, y, 1, 1).data);
             }
-            let count = 0;
-            for (let i = 1; i < 8; i++) {
-              const angle = (Math.PI * i) / 8;
-              const x = Math.round(center.x + 22 * Math.cos(angle));
-              const y = Math.round(center.y + 22 * Math.sin(angle));
-              const pixels = ctx.getImageData(x - 1, y - 1, 3, 3).data;
-              let gold = false;
-              for (let j = 0; j < pixels.length; j += 4) {
-                if (
-                  Math.abs(pixels[j]! - 240) < 20 &&
-                  Math.abs(pixels[j + 1]! - 199) < 20 &&
-                  Math.abs(pixels[j + 2]! - 94) < 20 &&
-                  pixels[j + 3]! > 240
-                )
-                  gold = true;
-              }
-              if (gold) count++;
-            }
-            return count;
-          },
-          {
-            x: observer.fit.position.x + point.x * observer.fit.scale,
-            y: observer.fit.position.y + point.y * observer.fit.scale,
-          },
-        );
-      expect(await ringSamples()).toBe(0);
+          return samples;
+        }, center);
+      const baseline = await arcPixels();
+      const changedSamples = async () => {
+        const current = await arcPixels();
+        let changed = 0;
+        for (let i = 0; i < current.length; i += 4) {
+          const delta =
+            Math.abs(current[i]! - baseline[i]!) +
+            Math.abs(current[i + 1]! - baseline[i + 1]!) +
+            Math.abs(current[i + 2]! - baseline[i + 2]!);
+          if (delta > 60) changed++;
+        }
+        return changed;
+      };
+      expect(await changedSamples()).toBe(0);
       await sender.client.keyboard.down("Control");
       try {
         await sender.client.mouse.click(
@@ -252,16 +257,16 @@ for (const role of ["GM", "PLAYER"] as const) {
       } finally {
         await sender.client.keyboard.up("Control");
       }
-      await expect.poll(ringSamples, { timeout: 2500 }).toBe(7);
+      await expect.poll(changedSamples, { timeout: 2500 }).toBeGreaterThan(8);
       await info.attach("other-client-visible-ping", {
         body: await observer.map.screenshot(),
         contentType: "image/png",
       });
-      await expect.poll(ringSamples, { timeout: 6000 }).toBe(0);
+      await expect.poll(changedSamples, { timeout: 6000 }).toBe(0);
       expect(moves).toHaveLength(1);
       expect(errors).toEqual([]);
       await info.attach("input-evidence", {
-        body: JSON.stringify({ role, step, moves, ringSamples: 7, errors }),
+        body: JSON.stringify({ role, step, moves, pingVisible: true, errors }),
         contentType: "application/json",
       });
     } finally {

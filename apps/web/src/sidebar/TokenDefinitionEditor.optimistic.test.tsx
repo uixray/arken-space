@@ -5,7 +5,6 @@ import type {
   SceneDto,
   TokenDto,
 } from "@arken/contracts";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import {
   useCallback,
   useEffect,
@@ -402,9 +401,9 @@ it("keeps the real editor and all input after delayed optimistic create-and-plac
   const { tokenRequests, telemetryRequests, unexpectedRequests } = network;
   const onClose = vi.fn();
   renderComponent(
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <Harness onClose={onClose} />
-    </ThemeProvider>,
+    </>,
   );
   const user = userEvent.setup();
   const editor = within(screen.getByRole("dialog", { name: "Новый токен" }));
@@ -510,9 +509,9 @@ it("waits for real HTTP success before closing, keeping unrelated shared errors 
   const network = networkBoundary();
   const onClose = vi.fn();
   renderComponent(
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <Harness onClose={onClose} initialError="Другая ошибка" />
-    </ThemeProvider>,
+    </>,
   );
   const user = userEvent.setup();
   await user.type(screen.getByLabelText("Название"), "Страж подтверждения");
@@ -543,9 +542,9 @@ it("waits for real HTTP success before closing, keeping unrelated shared errors 
 it("announces confirmed create-and-place only after the request succeeds", async () => {
   const network = networkBoundary();
   renderComponent(
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <Harness onClose={unusedAction} palette />
-    </ThemeProvider>,
+    </>,
   );
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: "Создать токен" }));
@@ -575,9 +574,9 @@ it("announces confirmed create-and-place only after the request succeeds", async
 it("keeps reopened PalettePanel editor B after header-close of pending A and A's late HTTP success", async () => {
   const network = networkBoundary();
   renderComponent(
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <Harness onClose={unusedAction} palette />
-    </ThemeProvider>,
+    </>,
   );
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: "Создать токен" }));
@@ -646,9 +645,9 @@ it("keeps reopened PalettePanel editor B after header-close of pending A and A's
 it("keeps reopened PalettePanel editor B clean after Escape from pending A and A's late HTTP refusal", async () => {
   const network = networkBoundary();
   renderComponent(
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <Harness onClose={unusedAction} palette />
-    </ThemeProvider>,
+    </>,
   );
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: "Создать токен" }));
@@ -697,9 +696,9 @@ it.each([201, 403] as const)(
     const network = networkBoundary();
     const onClose = vi.fn();
     const view = (sessionId: string) => (
-      <ThemeProvider theme="dark" lang="ru">
+      <>
         <Harness onClose={onClose} sessionId={sessionId} />
-      </ThemeProvider>
+      </>
     );
     const { rerender } = renderComponent(view("old-session"));
     const user = userEvent.setup();

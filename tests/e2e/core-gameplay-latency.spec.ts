@@ -2,6 +2,7 @@ import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Page, type Route, type WebSocketRoute } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const sceneId = "7376b502-02f8-4cd6-9c55-3816d70d44dc";
 const tokenId = "35f46186-2ebc-4cf8-bce7-870097305a6b";
@@ -144,7 +145,9 @@ async function openPlacementFixture(page: Page) {
       '0{"sid":"latency-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
     );
   });
-  await page.route("**/api/**", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/**", (route) =>
+    fulfillUnmocked(route, new URL(route.request().url()).pathname),
+  );
   await page.route("**/api/bootstrap", (route) =>
     route.fulfill({ json: current }),
   );

@@ -7,6 +7,7 @@ import {
   paintedIconContrast,
   settleIconState,
 } from "./helpers/painted-icon-contrast";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const sendName =
   "Отправить. Enter — отправить всем. Ctrl+Enter — отправить только мастеру.";
@@ -96,7 +97,7 @@ for (const role of ["GM", "PLAYER"] as const)
           });
         if (path === "/api/operator/feedback/capability")
           return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-        return route.fulfill({ json: [] });
+        return fulfillUnmocked(route, path);
       });
       await page.routeWebSocket(/\/socket\.io\//, (s) => {
         s.onMessage((m) => {

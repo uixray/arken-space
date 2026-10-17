@@ -1,0 +1,114 @@
+name: release-smoke
+
+# UIX-695: короткий smoke против production-сборки фронтенда.
+#
+# Все остальные браузерные тесты идут на Vite dev server и не трогают то, что
+# реально уходит в релиз: хешированные чанки, ленивые чанки рабочих
+# пространств, прокси preview. Здесь — `pnpm build`, `vite preview`, настоящий
+# API и одноразовая база; кампанию создаёт и чистит фикстура теста.
+#
+# Только release gate: запускается вручную перед выкладкой, в PR-матрицу и
+# required checks не входит.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: production build smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: arken
+          POSTGRES_USER: arken
+          POSTGRES_PASSWORD: arken
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U arken -d arken"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgres://arken:arken@127.0.0.1:5432/arken
+      WEB_ORIGIN: http://127.0.0.1:4173
+      PUBLIC_URL: http://127.0.0.1:4173
+      E2E_BASE_URL: http://127.0.0.1:4173
+      MEDIA_ROOT: ./media
+      ACCOUNT_AUTH_ENABLED: "true"
+      CAMPAIGN_LINK_ACCESS_ENABLED: "true"
+      LEGACY_DEV_AUTH_ENABLED: "false"
+      ACCOUNT_REGISTRATION_ENABLED: "false"
+      ACCOUNT_MAIL_RUNTIME_ENABLED: "false"
+      ARKEN_RELEASE_SMOKE: production-build
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Полная релизная сборка: та же команда, что в checks.
+      - run: pnpm build
+
+      - name: Generate GM access token
+        run: echo "GM_ACCESS_TOKEN=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+
+      - run: pnpm db:migrate
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chrome
+
+      - name: Start API server and production frontend
+        run: |
+          mkdir -p media
+          nohup node apps/server/dist/index.js > /tmp/server.log 2>&1 &
+          (cd apps/web && nohup node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4173 --strictPort > /tmp/preview.log 2>&1 &)
+          for i in $(seq 1 40); do
+            if curl -sf http://127.0.0.1:4173/healthz > /dev/null; then
+              echo "API reachable through the production frontend"
+              exit 0
+            fi
+            sleep 3
+          done
+          tail -40 /tmp/server.log /tmp/preview.log
+          exit 1
+
+      - name: Run the smoke
+        run: >-
+          pnpm exec playwright test tests/e2e/release-smoke.spec.ts
+          --project=chromium --workers=1 --reporter=list,json
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: smoke-report.json
+
+      - name: Fail on a skipped smoke
+        if: always()
+        run: node scripts/ci/assert-no-skips.mjs smoke-report.json 1
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-smoke
+          path: |
+            test-results/
+            smoke-report.json
+            /tmp/server.log
+            /tmp/preview.log
+          retention-days: 7
+          if-no-files-found: ignore

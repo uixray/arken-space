@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import {
   fireEvent,
   renderComponent,
@@ -38,11 +37,7 @@ async function openCreation() {
   renderComponent(
     <WorldContentWorkspace open assets={[]} onClose={() => {}} />,
     {
-      wrapper: ({ children }: { children: ReactNode }) => (
-        <ThemeProvider theme="dark" lang="ru">
-          {children}
-        </ThemeProvider>
-      ),
+      wrapper: ({ children }: { children: ReactNode }) => <>{children}</>,
     },
   );
   fireEvent.click(screen.getByRole("button", { name: "Создать сущность" }));

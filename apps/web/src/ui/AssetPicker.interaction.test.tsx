@@ -12,9 +12,7 @@ import { AssetPicker } from "./AssetPicker";
 // This file closes that gap with real DOM events (React Testing Library +
 // user-event) instead of asserting on rendered HTML strings.
 //
-// AssetPicker has no @gravity-ui/uikit dependency, so unlike most other
-// components in this app it needs no mocking here -- it is exercised as the
-// real component tree end to end.
+// No mocking: the real component tree is exercised end to end.
 
 function asset(overrides: Partial<AssetDto> = {}): AssetDto {
   return {

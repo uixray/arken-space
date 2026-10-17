@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useMemo, useState } from "react";
+import { useBodyColorScheme } from "./PlayerThemeProvider";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import { AppIcon } from "../ui/AppIcon";
 import {
   AddIcon,
@@ -434,7 +434,7 @@ const ALL_ICONS: IconItem[] = [
     original: "Settings",
     icon: SettingsIcon,
     category: "navigation",
-    locations: "GravityFoundationPreview / Настройки",
+    locations: "ChatPanels / настройки журнала",
   },
 
   // Статусы и маркеры
@@ -543,8 +543,9 @@ export function IconGalleryStand() {
     });
   }, [category, query]);
 
+  useBodyColorScheme(theme?.colorScheme ?? "dark");
   return (
-    <ThemeProvider theme={theme?.colorScheme ?? "dark"} lang="ru">
+    <>
       <div
         style={{
           background: "var(--color-canvas)",
@@ -920,7 +921,7 @@ export function IconGalleryStand() {
           </ul>
         </footer>
       </div>
-    </ThemeProvider>
+    </>
   );
 }
 

@@ -112,7 +112,7 @@ function before() {
     node: process.version,
     pnpm: command("pnpm", ["--version"]),
     playwright: version("node_modules/@playwright/test/package.json"),
-    uikit: version("apps/web/node_modules/@gravity-ui/uikit/package.json"),
+    baseUi: version("apps/web/node_modules/@base-ui/react/package.json"),
     react: version("apps/web/node_modules/react/package.json"),
     vite: version("apps/web/node_modules/vite/package.json"),
     chromeExecutable: realpathSync(command("which", ["google-chrome"])),
@@ -125,7 +125,7 @@ function before() {
   );
   check(
     dependencies.playwright === "1.62.1" &&
-      dependencies.uikit === "7.43.0" &&
+      dependencies.baseUi === "1.8.0" &&
       dependencies.react === "19.2.8" &&
       dependencies.vite === "8.2.1",
     "FRONTEND_DEPENDENCY_MISMATCH",

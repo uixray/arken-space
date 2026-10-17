@@ -40,7 +40,7 @@ for (const width of [360, 820]) {
         if (
           target instanceof HTMLElement &&
           target.parentElement === wrapper &&
-          target.matches('[data-floating-ui-focus-guard][data-type="inside"]')
+          target.matches("[data-base-ui-focus-guard]")
         ) {
           event.stopImmediatePropagation();
         }

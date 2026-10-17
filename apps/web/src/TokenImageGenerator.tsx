@@ -74,16 +74,20 @@ function sourceName(asset: AssetDto) {
   return asset.name.replace(/\.[^/.]+$/, "").slice(0, 90) || undefined;
 }
 
-function TokenFramePreview({ frame }: { frame: TokenFramePreset }) {
+function TokenFramePreview({
+  frame,
+  className = "token-image-preview__frame",
+  idSuffix = "",
+}: {
+  frame: TokenFramePreset;
+  className?: string;
+  idSuffix?: string;
+}) {
   if (frame === "NONE") return null;
   const [shadow, middle, highlight] = TOKEN_FRAME_PREVIEW_COLORS[frame];
-  const gradientId = `token-frame-${frame.toLowerCase()}`;
+  const gradientId = `token-frame-${frame.toLowerCase()}${idSuffix}`;
   return (
-    <svg
-      className="token-image-preview__frame"
-      viewBox="0 0 512 512"
-      aria-hidden="true"
-    >
+    <svg className={className} viewBox="0 0 512 512" aria-hidden="true">
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor={highlight} />
@@ -521,6 +525,17 @@ export function TokenImageGenerator({
                   updateTransform({ ...transform, frame });
                 }}
               />
+              {/* UIX-706 п.2: видно, как выглядит рамка, а не только её имя. */}
+              <span
+                className={`token-image-generator__frame-swatch token-image-generator__frame-swatch--${frame.toLowerCase()}`}
+                aria-hidden="true"
+              >
+                <TokenFramePreview
+                  frame={frame}
+                  className="token-image-generator__frame-swatch-ring"
+                  idSuffix="-swatch"
+                />
+              </span>
               {frameLabels[frame]}
             </label>
           ))}

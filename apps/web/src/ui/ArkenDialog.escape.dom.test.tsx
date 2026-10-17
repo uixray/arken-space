@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { createPortal } from "react-dom";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
@@ -29,11 +28,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 function renderComponent(ui: ReactElement) {
   return renderBase(ui, {
-    wrapper: ({ children }: { children: ReactNode }) => (
-      <ThemeProvider theme="dark" lang="ru">
-        {children}
-      </ThemeProvider>
-    ),
+    wrapper: ({ children }: { children: ReactNode }) => <>{children}</>,
   });
 }
 

@@ -3,6 +3,7 @@ import { type Locator, type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 import type { GameSnapshot } from "@arken/contracts";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const ids = {
   campaign: "b4c34840-cb11-4a07-884d-680ae85c48db",
@@ -503,7 +504,7 @@ for (const width of [1280, 360]) {
           path = new URL(r.url()).pathname;
         if (r.method() !== "GET" && path !== "/api/chat/read")
           writes.push(`${r.method()} ${path}`);
-        return route.fulfill({ json: [] });
+        return fulfillUnmocked(route, path);
       });
       await mockWorldMapApi(page, state);
       await page.route("**/map-background.png", (route) =>
@@ -645,7 +646,7 @@ for (const width of [1280, 360]) {
           path = new URL(r.url()).pathname;
         if (r.method() !== "GET" && path !== "/api/chat/read")
           writes.push(`${r.method()} ${path}`);
-        return route.fulfill({ json: [] });
+        return fulfillUnmocked(route, path);
       });
       await mockWorldMapApi(page, state);
       await page.route("**/map-background.png", (route) =>
