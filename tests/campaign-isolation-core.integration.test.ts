@@ -617,6 +617,16 @@ const probes: readonly Probe[] = [
     error: "PLAYER_NOT_FOUND",
   },
   {
+    key: "PATCH /api/members/:id/ruler-color",
+    request: () => ({
+      method: "PATCH",
+      url: `/api/members/${ids.foreignPlayer}/ruler-color`,
+      payload: { rulerColor: "black" },
+    }),
+    status: 404,
+    error: "MEMBER_NOT_FOUND",
+  },
+  {
     key: "PUT /api/characters/:id/controllers",
     request: () => ({
       method: "PUT",
@@ -1108,7 +1118,7 @@ probes.push({
 describe("UIX-413 core campaign isolation", () => {
   it("keeps the exported behavioral inventory exact and executable", () => {
     expect(probes.map((probe) => probe.key)).toEqual(CORE_CAMPAIGN_PROBE_KEYS);
-    expect(new Set(probes.map((probe) => probe.key)).size).toBe(43);
+    expect(new Set(probes.map((probe) => probe.key)).size).toBe(44);
   });
 
   it.each(probes)("rejects foreign entity: $key", async (probe) => {

@@ -7,6 +7,7 @@ import type {
   FogRevealDto,
   MapPing,
   Role,
+  RulerColorKey,
   SceneDto,
   TokenDto,
 } from "@arken/contracts";
@@ -49,7 +50,10 @@ export interface SceneRendererProps {
     displayName: string;
     points: Array<{ x: number; y: number }>;
     distance: number;
+    rulerColor?: RulerColorKey | null;
   }>;
+  /** UIX-509: this member's GM-assigned ruler colour from the snapshot. */
+  ownRulerColor?: RulerColorKey | null;
   onFogCreate: (
     payload:
       | { x: number; y: number; width: number; height: number }

@@ -1923,6 +1923,7 @@ export function App() {
                     onToolSelect={setTool}
                     pings={activePings}
                     rulers={activeRulers}
+                    ownRulerColor={viewSnapshot.me.rulerColor ?? null}
                     cursors={activeCursors}
                     cursorSendEnabled={cursorPreference.sendEnabled}
                     cursorShared={

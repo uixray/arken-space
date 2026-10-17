@@ -616,6 +616,8 @@ export const memberships = pgTable(
     defaultThemeRevision: integer("default_theme_revision")
       .notNull()
       .default(0),
+    /** UIX-509: GM-assigned ruler palette key; null = hashed fallback colour. */
+    rulerColor: text("ruler_color"),
     revision: integer("revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -634,6 +636,10 @@ export const memberships = pgTable(
     check(
       "memberships_default_theme_id_check",
       sql`${table.defaultThemeId} in ('forest','dragons','ice','fire','gold','silver','light','classic-v1')`,
+    ),
+    check(
+      "memberships_ruler_color_check",
+      sql`${table.rulerColor} is null or ${table.rulerColor} in ('green','lilac','orange','purple','black','blue')`,
     ),
     check(
       "memberships_selected_theme_id_check",

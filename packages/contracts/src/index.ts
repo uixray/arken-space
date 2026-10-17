@@ -14,7 +14,7 @@ export * from "./spell-schools.js";
 import { fogGeometrySchema } from "./fog-geometry.js";
 export * from "./ruler-geometry.js";
 export { PUBLISHED_PLAYER_THEME_DEFINITIONS } from "./player-themes.generated.js";
-import { rulerUpdateSchema } from "./ruler-geometry.js";
+import { rulerUpdateSchema, type RulerColorKey } from "./ruler-geometry.js";
 export {
   betaPlayerByHandle,
   betaPlayers,
@@ -2428,6 +2428,8 @@ export interface MembershipDto {
   defaultThemeId?: string;
   /** GM-only default-assignment revision; distinct from private preference and gameplay. */
   defaultThemeRevision?: number;
+  /** UIX-509: own membership and the GM's member list only; `null` = hashed fallback. */
+  rulerColor?: RulerColorKey | null;
 }
 
 export interface PublishedPlayerThemeDto {
@@ -3154,6 +3156,8 @@ export interface ServerToClientEvents {
       membershipId: string;
       displayName: string;
       distance: number;
+      /** UIX-509: resolved by the server, so peers need no member list. */
+      rulerColor: RulerColorKey | null;
     },
   ) => void;
   "ruler:cleared": (ruler: { sceneId: string; membershipId: string }) => void;
