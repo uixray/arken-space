@@ -1,4 +1,5 @@
 import { expect, test } from "./react-console-guard";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 test("UIX-652 procedures and FAQ stay discoverable without displacing sign-in", async ({
   page,
@@ -21,7 +22,7 @@ test("UIX-652 procedures and FAQ stay discoverable without displacing sign-in", 
           campaignCreationEnabled: false,
         },
       });
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, path);
   });
 
   const inspectAt = async (width: number, height: number) => {

@@ -57,3 +57,15 @@
   justify-content: stretch;
   gap: 0.25rem;
 }
+.terrain-stamp-controls__mode button {
+  flex: 1;
+  padding: 0.3rem 0.6rem;
+}
+.terrain-stamp-controls__mode button[aria-pressed="true"] {
+  outline: 2px solid var(--color-accent, #f6d365);
+}
+.terrain-stamp-controls__hint {
+  margin: 0;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}

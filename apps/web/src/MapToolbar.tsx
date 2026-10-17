@@ -21,6 +21,7 @@ import {
   TerrainStampControls,
   type TerrainStampSettings,
 } from "./renderers/TerrainStampControls";
+import { DEFAULT_TERRAIN_STAMP_SETTINGS } from "./renderers/terrain-stamp-settings";
 import { GridSettings } from "./renderers/GridSettings";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import { AppIcon } from "./ui/AppIcon";
@@ -100,13 +101,7 @@ export function MapToolbar({
   onGmFogVisibleChange,
   gmGridVisible,
   onGmGridVisibleChange,
-  stampSettings = {
-    packId: "builtin-terrain-v1",
-    assetKey: "forest",
-    size: 160,
-    rotation: 0,
-    layer: "PUBLIC",
-  },
+  stampSettings = DEFAULT_TERRAIN_STAMP_SETTINGS,
   onStampSettingsChange = () => undefined,
   onUploadStampImage,
 }: MapToolbarProps) {

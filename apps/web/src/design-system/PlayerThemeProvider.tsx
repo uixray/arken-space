@@ -1,7 +1,6 @@
 import { useLayoutEffect, type ReactNode } from "react";
-import { ThemeProvider } from "@gravity-ui/uikit";
 
-import { PLAYER_THEMES } from "./player-themes";
+import { PLAYER_THEMES, type PlayerThemeColorScheme } from "./player-themes";
 import "./player-themes.generated.css";
 import "./player-theme-gravity.css";
 
@@ -11,8 +10,9 @@ export interface PlayerThemeProviderProps {
 }
 
 /**
- * Sole application-level owner of `data-player-theme` and the matching Gravity
- * color scheme. Do not nest this provider: its cleanup deliberately removes the
+ * Sole application-level owner of `data-player-theme` and the matching
+ * `g-root_theme_*` color scheme on `<body>` (the former Gravity ThemeProvider
+ * contract, UIX-709). Do not nest this provider: its cleanup deliberately removes the
  * document attribute rather than restoring another provider's value.
  */
 export function PlayerThemeProvider({
@@ -33,9 +33,18 @@ export function PlayerThemeProvider({
     return () => root.removeAttribute("data-player-theme");
   }, [resolvedThemeId]);
 
-  return (
-    <ThemeProvider theme={theme?.colorScheme ?? "dark"} lang="ru">
-      {children}
-    </ThemeProvider>
-  );
+  useBodyColorScheme(theme?.colorScheme ?? "dark");
+  return children;
+}
+
+/**
+ * Puts `g-root g-root_theme_<scheme>` on <body>, where ui/theme-root.css
+ * defines the matching variables and `color-scheme`.
+ */
+export function useBodyColorScheme(colorScheme: PlayerThemeColorScheme) {
+  useLayoutEffect(() => {
+    const body = document.body;
+    body.classList.add("g-root", `g-root_theme_${colorScheme}`);
+    return () => body.classList.remove(`g-root_theme_${colorScheme}`);
+  }, [colorScheme]);
 }

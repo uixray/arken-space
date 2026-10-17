@@ -321,9 +321,7 @@ for (const topology of ["sibling", "nested"] as const) {
             )
               return;
             if (
-              target.matches(
-                '[data-floating-ui-focus-guard][data-type="inside"]',
-              ) &&
+              target.matches("[data-base-ui-focus-guard]") &&
               (target.parentElement === modalWrapper ||
                 target.parentElement === popup)
             )
@@ -363,7 +361,7 @@ for (const topology of ["sibling", "nested"] as const) {
         const bGuards = await b.evaluateHandle((element) =>
           Array.from(
             element.closest(".g-modal__content-wrapper")!.children,
-          ).filter((child) => child.matches("[data-floating-ui-focus-guard]")),
+          ).filter((child) => child.matches("[data-base-ui-focus-guard]")),
         );
         await page.keyboard.press("Escape");
         await expect(finalBPopup.listbox).toBeHidden();
@@ -412,9 +410,7 @@ for (const topology of ["sibling", "nested"] as const) {
           page.getByRole("dialog", { includeHidden: true }),
         ).toHaveCount(0);
         await expect(page.locator(".arken-form-select-popup")).toHaveCount(0);
-        await expect(
-          page.locator("[data-floating-ui-focus-guard]"),
-        ).toHaveCount(0);
+        await expect(page.locator("[data-base-ui-focus-guard]")).toHaveCount(0);
         await expect(page.locator("vite-error-overlay")).toHaveCount(0);
         await expect(page.getByRole("alert")).toHaveCount(0);
         expect(errors).toEqual([]);

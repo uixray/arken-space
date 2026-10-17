@@ -2,6 +2,7 @@ import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 import type { GameSnapshot } from "@arken/contracts";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const snapshot: GameSnapshot = {
   campaign: {
@@ -564,7 +565,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       if (path === "/api/operator/feedback/capability")
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
@@ -705,7 +706,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       if (path === "/api/operator/feedback/capability")
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((m) => {
@@ -868,7 +869,7 @@ for (const width of [1280, 360]) {
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       if (p === "/api/operator/feedback/capability")
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, p);
     });
     await page.route("**/api/scenes/scene-1/canvas", (route) => {
       const body = route.request().postDataJSON();
@@ -981,7 +982,7 @@ test("UIX-644 pending grid save preserves newer outside focus", async ({
       return route.fulfill({ json: { posts: [], nextCursor: null } });
     if (p === "/api/operator/feedback/capability")
       return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, p);
   });
   await page.route("**/api/scenes/scene-1/canvas", async (route) => {
     const body = route.request().postDataJSON();

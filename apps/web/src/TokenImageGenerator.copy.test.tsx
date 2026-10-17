@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { useState } from "react";
-import type { ButtonButtonProps } from "@gravity-ui/uikit";
 import type { AssetDto } from "@arken/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -13,24 +12,6 @@ import {
 } from "./test-support/render";
 
 // Isolate toolkit chrome, not the generator, its labels or generation payload.
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({
-    children,
-    onClick,
-    disabled,
-    loading,
-    "aria-label": ariaLabel,
-  }: ButtonButtonProps) => (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      onClick={onClick}
-      disabled={disabled || loading}
-    >
-      {children}
-    </button>
-  ),
-}));
 const { TokenImageGenerator } = await import("./TokenImageGenerator");
 
 const source: AssetDto = {

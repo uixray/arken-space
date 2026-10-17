@@ -9,7 +9,6 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import type { AssetDto } from "@arken/contracts";
 import { useCallback, useState, type ReactElement } from "react";
 import { SoundpadWorkspace } from "./SoundpadWorkspace";
@@ -64,11 +63,7 @@ beforeEach(() => {
 
 function renderInTheme(element: ReactElement) {
   return render(element, {
-    wrapper: ({ children }) => (
-      <ThemeProvider theme="dark" lang="ru">
-        {children}
-      </ThemeProvider>
-    ),
+    wrapper: ({ children }) => <>{children}</>,
   });
 }
 

@@ -9,8 +9,9 @@ it("App connects optimistic projection, all placements, conditions and session c
     /tokens:\s*projectBulkMoveIntents\(\s*tokenMutations\.project\(snapshot\.tokens\),\s*"TOKEN",\s*bulkMoveIntents,?\s*\)/,
   );
   expect(app).toMatch(/useTokenDefinitionActions\(\{[^}]*placeOptimistically/s);
+  expect(app).toContain("onPlaceTokenDefinition={handlePlaceTokenDefinition}");
   expect(app).toMatch(
-    /onPlaceTokenDefinition=\{async[\s\S]*?placeOptimistically\(/,
+    /const handlePlaceTokenDefinition = useCallback\([\s\S]*?placeOptimistically\(/,
   );
   expect(app).toContain("tokenMutations.setConditions(tokenId, conditions)");
   expect(app).toContain("return () => tokenMutations.reset()");

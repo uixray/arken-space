@@ -15,11 +15,6 @@ import type { GameSocket } from "./realtime";
 import { notify } from "./ui/notifications";
 import { fireEvent, renderComponent, screen } from "./test-support/render";
 
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: () => null,
-  Checkbox: () => null,
-  Loader: () => null,
-}));
 vi.mock("./ui/ArkenDialog", () => ({
   ArkenDialog: ({ open, children }: { open: boolean; children: ReactNode }) =>
     open ? createElement("div", { role: "dialog" }, children) : null,

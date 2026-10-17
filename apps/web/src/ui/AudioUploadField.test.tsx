@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   fireEvent,
@@ -8,12 +8,6 @@ import {
   userEvent,
 } from "../test-support/render";
 import { AudioUploadField } from "./AudioUploadField";
-
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({ children, ...props }: { children?: ReactNode }) => (
-    <button {...props}>{children}</button>
-  ),
-}));
 
 const originalCreateObjectURL = Object.getOwnPropertyDescriptor(
   URL,

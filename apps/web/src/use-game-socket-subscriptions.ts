@@ -1,3 +1,8 @@
+import { shareStructure } from "./structural-sharing";
+import {
+  applyDrawingRemoved,
+  applyDrawingUpserted,
+} from "./drawing-point-events";
 import {
   useEffect,
   useRef,
@@ -164,7 +169,12 @@ export function useGameSocketSubscriptions({
     next.io.on("reconnect_failed", () => setConnection("OFFLINE"));
     next.on("game:snapshot", (nextSnapshot) => {
       setSnapshot((current) => {
-        const reconciled = reconcileGameSnapshot(current, nextSnapshot);
+        // Unchanged slices keep their identity, so a chat-only broadcast
+        // does not re-render the map (see structural-sharing.ts).
+        const reconciled = shareStructure(
+          current,
+          reconcileGameSnapshot(current, nextSnapshot),
+        );
         if (reconciled.campaign.id !== campaignId) return reconciled;
         if (nextSnapshot.snapshotVersion >= canonicalAudioFloor)
           canonicalAudioFloor = nextSnapshot.snapshotVersion;
@@ -258,6 +268,37 @@ export function useGameSocketSubscriptions({
           : current,
       ),
     );
+    // UIX-412: ordered by the server after any snapshot in flight, so there
+    // is no snapshotVersion gate; an older revision never replaces a newer.
+    next.on("token:updated", (event) =>
+      setSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              snapshotVersion: Math.max(
+                current.snapshotVersion,
+                event.sequence,
+              ),
+              tokens: current.tokens.map((token) =>
+                token.id === event.data.id &&
+                event.data.revision >= token.revision
+                  ? event.data
+                  : token,
+              ),
+            }
+          : current,
+      ),
+    );
+    next.on("drawing:upserted", (event) =>
+      setSnapshot((current) =>
+        current ? applyDrawingUpserted(current, event) : current,
+      ),
+    );
+    next.on("drawing:removed", (event) =>
+      setSnapshot((current) =>
+        current ? applyDrawingRemoved(current, event) : current,
+      ),
+    );
     next.on("map:ping", (ping) => {
       setPings((current) => [...current.slice(-7), ping]);
       window.setTimeout(
@@ -337,12 +378,17 @@ export function useGameSocketSubscriptions({
         });
       }
     });
+    // UIX-412: like drawing events, ordered by the server after any snapshot
+    // already in flight; the merge itself refuses an older revision.
     next.on("character:updated", (event) =>
       setSnapshot((current) =>
-        current && event.sequence > current.snapshotVersion
+        current
           ? {
               ...current,
-              snapshotVersion: event.sequence,
+              snapshotVersion: Math.max(
+                current.snapshotVersion,
+                event.sequence,
+              ),
               characters: current.characters.map((item) => {
                 if (item.id !== event.data.id) return item;
                 return mergeCharacterMutationResponse(item, event.data) ?? item;

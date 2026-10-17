@@ -236,12 +236,12 @@ async function installMockedApp(
     `**/api/characters/${ids.character}/spell-branches`,
     (route) => {
       expect(route.request().method()).toBe("GET");
-      return route.fulfill({ json: [] });
+      return route.fulfill({ json: { branches: [], nextCursor: null } });
     },
   );
   await page.route("**/api/spell-assignable-schools", (route) => {
     expect(route.request().method()).toBe("GET");
-    return route.fulfill({ json: [] });
+    return route.fulfill({ json: { schools: [], nextCursor: null } });
   });
   await page.route(`**/api/assets/${ids.asset}/content`, (route) => {
     expect(route.request().method()).toBe("GET");

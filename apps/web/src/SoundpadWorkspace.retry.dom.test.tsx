@@ -8,7 +8,6 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import type { AssetDto, SoundpadPackDto } from "@arken/contracts";
 import { SoundpadWorkspace } from "./SoundpadWorkspace";
 
@@ -180,7 +179,7 @@ it("keeps a committed editor open after catalog refresh failure and retries refr
   vi.stubGlobal("fetch", fetchMock as typeof fetch);
 
   render(
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <SoundpadWorkspace
         campaignId={campaignId}
         membershipId={membershipId}
@@ -189,7 +188,7 @@ it("keeps a committed editor open after catalog refresh failure and retries refr
         socket={null}
         onUpload={vi.fn().mockResolvedValue(asset)}
       />
-    </ThemeProvider>,
+    </>,
   );
 
   fireEvent.click(screen.getByRole("button", { name: "Саундпад" }));

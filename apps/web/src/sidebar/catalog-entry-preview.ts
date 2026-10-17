@@ -7,9 +7,7 @@ import type { CatalogEntryDto } from "@arken/contracts";
  * a picker row and an assigned entry's roll button read identically.
  *
  * Kept dependency-free (no React/UI imports) so it can be unit tested
- * without pulling in @gravity-ui/uikit's CSS, which vitest's node
- * environment can't transform (see RollButton.test.tsx for the same
- * constraint on the presentational side).
+ * in vitest's node environment.
  */
 export function previewFormula(entry: CatalogEntryDto): string {
   const actions = entry.data.rollActions;

@@ -1,6 +1,7 @@
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 for (const role of ["GM", "PLAYER"] as const)
   for (const { width, height } of [
@@ -28,7 +29,7 @@ for (const role of ["GM", "PLAYER"] as const)
             status: 405,
             json: { error: "READ_ONLY_FIXTURE" },
           });
-        return route.fulfill({ json: [] });
+        return fulfillUnmocked(route, path);
       });
       await page.routeWebSocket(/\/socket\.io\//, (socket) => {
         socket.onMessage((message) => {

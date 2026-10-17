@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import type { ComponentProps } from "react";
 import type { GameSnapshot } from "@arken/contracts";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CampaignActionsContext,
@@ -62,11 +61,11 @@ function mount(
     ...overrides,
   };
   return renderComponent(
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <CampaignActionsContext.Provider value={campaignActions}>
         <ActivityPanel {...props} />
       </CampaignActionsContext.Provider>
-    </ThemeProvider>,
+    </>,
   );
 }
 

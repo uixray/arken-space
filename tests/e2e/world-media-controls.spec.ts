@@ -2,6 +2,7 @@ import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 for (const width of [1280, 360])
   test(`UIX-645 world media controls ${width}`, async ({ page }, testInfo) => {
@@ -92,7 +93,7 @@ for (const width of [1280, 360])
             contentType: "image/svg+xml",
             body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#637d72"/></svg>',
           });
-        return route.fulfill({ json: [] });
+        return fulfillUnmocked(route, path);
       }
       if (path === "/api/chat/read")
         return route.fulfill({ json: { ok: true } });

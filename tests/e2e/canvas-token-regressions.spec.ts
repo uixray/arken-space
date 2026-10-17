@@ -9,6 +9,7 @@ import {
   paintedIconContrast,
   settleIconState,
 } from "./helpers/painted-icon-contrast";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const sceneId = "7376b502-02f8-4cd6-9c55-3816d70d44dc";
 const tokenId = "35f46186-2ebc-4cf8-bce7-870097305a6b";
@@ -201,7 +202,7 @@ for (const role of ["GM", "PLAYER"] as const) {
           return route.fulfill({ json: { posts: [], nextCursor: null } });
         if (path === "/api/operator/feedback/capability")
           return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-        return route.fulfill({ json: [] });
+        return fulfillUnmocked(route, path);
       });
       await installCanvasRoutes(page);
       await page.route("**/api/bootstrap", (route) =>
@@ -2389,7 +2390,7 @@ for (const tool of ["PAN", "DRAW"] as const) {
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       if (path === "/api/operator/feedback/capability")
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await installCanvasRoutes(page);
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
@@ -2704,7 +2705,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       const path = new URL(r.url()).pathname;
       if (!["GET", "HEAD"].includes(r.method()) && path !== "/api/chat/read")
         writes.push(`${r.method()} ${path}`);
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await installCanvasReviewRoutes(page);
     const current: GameSnapshot = structuredClone(snapshot);
@@ -2818,7 +2819,9 @@ for (const role of ["GM", "PLAYER"] as const) {
     const writes: Array<{ path: string; body: Record<string, unknown> }> = [];
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.route("**/api/**", (route) => route.fulfill({ json: [] }));
+    await page.route("**/api/**", (route) =>
+      fulfillUnmocked(route, new URL(route.request().url()).pathname),
+    );
     await installCanvasReviewRoutes(page);
     const current: GameSnapshot = structuredClone(snapshot);
     current.me.role = role;
@@ -2938,7 +2941,7 @@ test("UIX-644 token menu remains reachable across viewport resize", async ({
       !request.url().includes("/chat/read")
     )
       writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, new URL(route.request().url()).pathname);
   });
   await installCanvasReviewRoutes(page);
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
@@ -3083,7 +3086,7 @@ for (const width of [1280, 390]) {
         !request.url().includes("/chat/read")
       )
         writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, new URL(route.request().url()).pathname);
     });
     await installCanvasReviewRoutes(page);
     await page.route("**/api/bootstrap", (route) =>
@@ -3253,7 +3256,7 @@ for (const width of [1280, 390]) {
         !request.url().includes("/chat/read")
       )
         writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, new URL(route.request().url()).pathname);
     });
     await installCanvasReviewRoutes(page);
     await page.route("**/api/bootstrap", (route) =>
@@ -3344,12 +3347,16 @@ for (const role of ["GM", "PLAYER"] as const) {
       page.on("pageerror", (error) => errors.push(error.message));
       await page.route("**/api/**", (route) => {
         const request = route.request();
+        const path = new URL(request.url()).pathname;
         if (
           !["GET", "HEAD"].includes(request.method()) &&
           !request.url().includes("/chat/read")
         )
-          writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
-        return route.fulfill({ json: [] });
+          writes.push(`${request.method()} ${path}`);
+        // The test ends with Delete; answer it like the server does.
+        if (request.method() === "DELETE" && path.startsWith("/api/tokens/"))
+          return route.fulfill({ json: { ok: true } });
+        return fulfillUnmocked(route, path);
       });
       await installCanvasReviewRoutes(page);
       await page.route("**/api/bootstrap", (route) =>
@@ -3493,7 +3500,7 @@ for (const change of [
         !request.url().includes("/chat/read")
       )
         writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, new URL(route.request().url()).pathname);
     });
     await installCanvasReviewRoutes(page);
     await page.route("**/api/bootstrap", (route) =>
@@ -3644,7 +3651,7 @@ for (const width of [1280, 390]) {
         !request.url().includes("/chat/read")
       )
         writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, new URL(route.request().url()).pathname);
     });
     await installCanvasReviewRoutes(page);
     await page.route("**/api/bootstrap", (route) =>
@@ -3777,7 +3784,7 @@ for (const width of [1280, 390]) {
           !request.url().includes("/chat/read")
         )
           writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
-        return route.fulfill({ json: [] });
+        return fulfillUnmocked(route, new URL(route.request().url()).pathname);
       });
       await installCanvasReviewRoutes(page);
       await page.route("**/api/bootstrap", (route) =>
@@ -3891,7 +3898,7 @@ for (const scenario of [
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       if (path === "/api/operator/feedback/capability")
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await installCanvasRoutes(page);
     const current: GameSnapshot = structuredClone(snapshot);
@@ -4055,7 +4062,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       if (path === "/api/operator/feedback/capability")
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await installCanvasReviewRoutes(page);
     await page.route("**/api/bootstrap", (route) =>

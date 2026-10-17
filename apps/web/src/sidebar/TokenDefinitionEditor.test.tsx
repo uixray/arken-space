@@ -14,15 +14,6 @@ import {
   waitFor,
 } from "../test-support/render";
 
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({
-    children,
-    ...props
-  }: {
-    children?: ReactNode;
-    [key: string]: unknown;
-  }) => <button {...props}>{children}</button>,
-}));
 vi.mock("../ui/ArkenDialog", () => ({
   ArkenDialog: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));

@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
 import {
@@ -18,29 +17,6 @@ import { writeToolbarCollapsed } from "./toolbar-preference";
 
 vi.mock("./api", () => ({
   api: vi.fn().mockResolvedValue([]),
-}));
-
-vi.mock("@gravity-ui/uikit", () => ({
-  Popup: ({ open, children }: { open?: boolean; children?: ReactNode }) =>
-    open ? <div>{children}</div> : null,
-  Switch: ({
-    checked,
-    onUpdate,
-    children,
-  }: {
-    checked?: boolean;
-    onUpdate?: (next: boolean) => void;
-    children?: ReactNode;
-  }) => (
-    <label>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onUpdate?.(event.target.checked)}
-      />
-      {children}
-    </label>
-  ),
 }));
 
 function createMockSnapshot(role: "GM" | "PLAYER" = "GM"): GameSnapshot {

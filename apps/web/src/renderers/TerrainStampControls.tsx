@@ -1,17 +1,54 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { AssetDto, StampPackId } from "@arken/contracts";
+import {
+  TEXTURE_BRUSH_WIDTH,
+  type AssetDto,
+  type StampPackId,
+  type TexturePackId,
+} from "@arken/contracts";
 import { api, formatApiError } from "../api";
 import { stampImageUrl } from "./stamp-image-url";
 import "./TerrainStampControls.css";
 
 export type TerrainStampSettings = {
+  /** UIX-706 pool 3: place single stamps, or paint a zone with a texture. */
+  mode: "STAMP" | "BRUSH";
   packId: StampPackId;
   assetKey: string;
   size: number;
   rotation: number;
   layer: "PUBLIC" | "GM";
+  /** Brush mode: tileable texture source; null until the GM picks one. */
+  texture: { packId: TexturePackId; assetKey: string } | null;
+  brushWidth: number;
+  tileSize: number;
 };
+
+/** Exact create-drawing payload the renderer sends for the stamp tool. */
+export type StampCreatePayload =
+  | {
+      kind: "STAMP";
+      packId: StampPackId;
+      assetKey: string;
+      size: number;
+      rotation: number;
+      layer: "PUBLIC" | "GM";
+      x: number;
+      y: number;
+    }
+  | {
+      kind: "TEXTURE";
+      packId: TexturePackId;
+      assetKey: string;
+      points: number[];
+      brushWidth: number;
+      size: number;
+      layer: "PUBLIC" | "GM";
+      x: number;
+      y: number;
+    };
+
+type CatalogEntry = { assetKey: string; title: string };
 
 type StampImage = Pick<AssetDto, "id" | "name">;
 
@@ -35,9 +72,9 @@ export function TerrainStampControls({
   images?: StampImage[];
   onUploadImage?: (file: File) => Promise<StampImage>;
 }) {
-  const [catalog, setCatalog] = useState<
-    Array<{ assetKey: string; title: string }>
-  >([]);
+  const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
+  const [textures, setTextures] = useState<CatalogEntry[]>([]);
+  const brush = value.mode === "BRUSH";
   const [error, setError] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -48,7 +85,14 @@ export function TerrainStampControls({
     setUploadError(null);
     try {
       const asset = await onUploadImage(file);
-      onChange({ ...value, packId: "campaign-image", assetKey: asset.id });
+      onChange(
+        brush
+          ? {
+              ...value,
+              texture: { packId: "campaign-image", assetKey: asset.id },
+            }
+          : { ...value, packId: "campaign-image", assetKey: asset.id },
+      );
     } catch (cause) {
       setUploadError(formatApiError(cause));
     } finally {
@@ -122,13 +166,14 @@ export function TerrainStampControls({
   }, [onClose, onDismissOutside, triggerRef]);
   useEffect(() => {
     let active = true;
-    void api<{ stamps: Array<{ assetKey: string; title: string }> }>(
+    void api<{ stamps: CatalogEntry[]; textures?: CatalogEntry[] }>(
       "/api/terrain-stamps/catalog",
     )
       .then((result) => {
         if (!active) return;
         if (Array.isArray(result?.stamps)) setCatalog(result.stamps);
         else setError(true);
+        if (Array.isArray(result?.textures)) setTextures(result.textures);
       })
       .catch(() => {
         if (active) setError(true);
@@ -147,25 +192,85 @@ export function TerrainStampControls({
       aria-label="Штампы рельефа"
       aria-modal="false"
     >
-      <div role="group" aria-label="Выбрать штамп">
-        {catalog.map(({ assetKey, title }) => (
-          <button
-            key={assetKey}
-            type="button"
-            aria-pressed={
-              value.packId === "builtin-terrain-v1" &&
-              value.assetKey === assetKey
-            }
-            aria-label={title}
-            onClick={() =>
-              onChange({ ...value, packId: "builtin-terrain-v1", assetKey })
-            }
-          >
-            <img alt="" src={stampImageUrl("builtin-terrain-v1", assetKey)} />
-            {title}
-          </button>
-        ))}
+      <div
+        role="group"
+        aria-label="Режим штампа"
+        className="terrain-stamp-controls__mode"
+      >
+        <button
+          type="button"
+          aria-pressed={!brush}
+          onClick={() => onChange({ ...value, mode: "STAMP" })}
+        >
+          Штамп
+        </button>
+        <button
+          type="button"
+          aria-pressed={brush}
+          onClick={() => onChange({ ...value, mode: "BRUSH" })}
+        >
+          Кисть текстуры
+        </button>
       </div>
+      {brush ? (
+        <>
+          {textures.length > 0 ? (
+            <div role="group" aria-label="Выбрать текстуру">
+              {textures.map(({ assetKey, title }) => (
+                <button
+                  key={assetKey}
+                  type="button"
+                  aria-pressed={
+                    value.texture?.packId === "builtin-texture-v1" &&
+                    value.texture.assetKey === assetKey
+                  }
+                  aria-label={title}
+                  onClick={() =>
+                    onChange({
+                      ...value,
+                      texture: { packId: "builtin-texture-v1", assetKey },
+                    })
+                  }
+                >
+                  <img
+                    alt=""
+                    src={stampImageUrl("builtin-texture-v1", assetKey)}
+                  />
+                  {title}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="terrain-stamp-controls__hint">
+              Встроенных бесшовных текстур пока нет — выберите или загрузите
+              свою картинку.
+            </p>
+          )}
+          {!value.texture && (
+            <span role="status">Выберите текстуру, чтобы закрашивать зону</span>
+          )}
+        </>
+      ) : (
+        <div role="group" aria-label="Выбрать штамп">
+          {catalog.map(({ assetKey, title }) => (
+            <button
+              key={assetKey}
+              type="button"
+              aria-pressed={
+                value.packId === "builtin-terrain-v1" &&
+                value.assetKey === assetKey
+              }
+              aria-label={title}
+              onClick={() =>
+                onChange({ ...value, packId: "builtin-terrain-v1", assetKey })
+              }
+            >
+              <img alt="" src={stampImageUrl("builtin-terrain-v1", assetKey)} />
+              {title}
+            </button>
+          ))}
+        </div>
+      )}
       {error && <span role="status">Не удалось загрузить каталог штампов</span>}
       <h3 className="terrain-stamp-controls__heading">Свои картинки</h3>
       {images.length > 0 && (
@@ -179,16 +284,30 @@ export function TerrainStampControls({
               key={image.id}
               type="button"
               aria-pressed={
-                value.packId === "campaign-image" && value.assetKey === image.id
+                brush
+                  ? value.texture?.packId === "campaign-image" &&
+                    value.texture.assetKey === image.id
+                  : value.packId === "campaign-image" &&
+                    value.assetKey === image.id
               }
               aria-label={image.name}
               title={image.name}
               onClick={() =>
-                onChange({
-                  ...value,
-                  packId: "campaign-image",
-                  assetKey: image.id,
-                })
+                onChange(
+                  brush
+                    ? {
+                        ...value,
+                        texture: {
+                          packId: "campaign-image",
+                          assetKey: image.id,
+                        },
+                      }
+                    : {
+                        ...value,
+                        packId: "campaign-image",
+                        assetKey: image.id,
+                      },
+                )
               }
             >
               <img alt="" src={stampImageUrl("campaign-image", image.id)} />
@@ -214,32 +333,69 @@ export function TerrainStampControls({
         </label>
       )}
       {uploadError && <span role="alert">{uploadError}</span>}
-      <label>
-        Размер{" "}
-        <input
-          aria-label="Размер штампа"
-          type="range"
-          min={16}
-          max={1024}
-          step={16}
-          value={value.size}
-          onChange={(e) => onChange({ ...value, size: Number(e.target.value) })}
-        />
-      </label>
-      <label>
-        Поворот{" "}
-        <input
-          aria-label="Поворот штампа"
-          type="range"
-          min={-180}
-          max={180}
-          step={15}
-          value={value.rotation}
-          onChange={(e) =>
-            onChange({ ...value, rotation: Number(e.target.value) })
-          }
-        />
-      </label>
+      {brush ? (
+        <>
+          <label>
+            Ширина кисти{" "}
+            <input
+              aria-label="Ширина кисти"
+              type="range"
+              min={TEXTURE_BRUSH_WIDTH.min}
+              max={TEXTURE_BRUSH_WIDTH.max}
+              step={8}
+              value={value.brushWidth}
+              onChange={(e) =>
+                onChange({ ...value, brushWidth: Number(e.target.value) })
+              }
+            />
+          </label>
+          <label>
+            Размер плитки{" "}
+            <input
+              aria-label="Размер плитки текстуры"
+              type="range"
+              min={16}
+              max={1024}
+              step={16}
+              value={value.tileSize}
+              onChange={(e) =>
+                onChange({ ...value, tileSize: Number(e.target.value) })
+              }
+            />
+          </label>
+        </>
+      ) : (
+        <>
+          <label>
+            Размер{" "}
+            <input
+              aria-label="Размер штампа"
+              type="range"
+              min={16}
+              max={1024}
+              step={16}
+              value={value.size}
+              onChange={(e) =>
+                onChange({ ...value, size: Number(e.target.value) })
+              }
+            />
+          </label>
+          <label>
+            Поворот{" "}
+            <input
+              aria-label="Поворот штампа"
+              type="range"
+              min={-180}
+              max={180}
+              step={15}
+              value={value.rotation}
+              onChange={(e) =>
+                onChange({ ...value, rotation: Number(e.target.value) })
+              }
+            />
+          </label>
+        </>
+      )}
       <label>
         Слой{" "}
         <select

@@ -4,6 +4,7 @@ import { starterStatLayout } from "@arken/system";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const scenes = ["Текущая", "Следующая"].map((name, index) => ({
   id: `uix644-scene-${index}`,
@@ -37,7 +38,7 @@ async function installSnapshot(page: Page) {
       throw new Error(
         `Unexpected mutation in UIX-644 read-only test: ${route.request().method()} ${path}`,
       );
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, path);
   });
   const sceneViews: unknown[] = [];
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
@@ -156,7 +157,7 @@ test("UIX-644 PlayerRequests custom selectors retain keyboard focus and state at
       throw new Error(
         `Unexpected mutation in UIX-644 read-only test: ${route.request().method()} ${path}`,
       );
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, path);
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {

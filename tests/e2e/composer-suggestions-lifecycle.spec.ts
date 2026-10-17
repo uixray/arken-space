@@ -2,6 +2,7 @@ import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { GameSnapshot } from "@arken/contracts";
 import { starterStatLayout } from "@arken/system";
 import { expect, test } from "./react-console-guard";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 // Public synthetic App fixture, same shape as the concept harness.
 // These mocked routes do not establish backend authorization or live acceptance.
@@ -379,11 +380,13 @@ for (const role of ["GM", "PLAYER"] as const) {
         if (!["GET", "HEAD"].includes(r.method()) && p !== "/api/chat/read")
           writes.push(`${r.method()} ${p}`);
         if (p === "/api/bootstrap") return route.fulfill({ json: current });
+        if (p === "/api/chat/read")
+          return route.fulfill({ json: { ok: true } });
         if (p === "/api/story/posts")
           return route.fulfill({ json: { posts: [], nextCursor: null } });
         if (p === "/api/operator/feedback/capability")
           return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-        return route.fulfill({ json: [] });
+        return fulfillUnmocked(route, p);
       });
       await page.routeWebSocket(/\/socket\.io\//, (socket) => {
         socket.onMessage((m) => {

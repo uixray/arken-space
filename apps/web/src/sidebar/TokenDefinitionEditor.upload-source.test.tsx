@@ -6,7 +6,6 @@ import {
   type ReactNode,
   type SelectHTMLAttributes,
 } from "react";
-import type { ButtonButtonProps } from "@gravity-ui/uikit";
 import type { AssetDto, GameSnapshot, SceneDto } from "@arken/contracts";
 import { cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,30 +33,6 @@ import {
 // upload/generation actions, TokenImageGenerator, ImageUploadField and
 // AssetPicker are the production implementations. In particular the source
 // select, transform state and preview are never mocked or controlled by a test.
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({
-    children,
-    type,
-    name,
-    value,
-    onClick,
-    disabled,
-    loading,
-    "aria-label": ariaLabel,
-  }: ButtonButtonProps) => (
-    <button
-      type={type ?? "button"}
-      name={name}
-      value={value}
-      onClick={onClick}
-      disabled={disabled || loading}
-      aria-label={ariaLabel}
-    >
-      {children}
-    </button>
-  ),
-  Icon: () => <span aria-hidden="true" />,
-}));
 vi.mock("../ui/ArkenDialog", () => ({
   ArkenDialog: ({
     children,

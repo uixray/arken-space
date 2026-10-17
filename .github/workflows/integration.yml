@@ -1,0 +1,229 @@
+name: integration
+
+# UIX-690 / UIX-691: интеграционный контур, который раньше не запускался вовсе.
+#
+# 20 unit-тестов (Postgres-гонки аудио-клипов и почтовой очереди, нативные
+# кодеки) и 12 realtime e2e (замена ассетов у подключённого игрока, клавиатура и
+# пинг между двумя клиентами, атомарность выделения) пропускаются без своего
+# окружения через `skipIf`/`test.skip`. Обычный CI честно видел их как SKIP,
+# поэтому за месяц часть e2e молча устарела: интерфейс ушёл вперёд, а тесты
+# остались зелёными, потому что не исполнялись.
+#
+# Здесь окружение есть, и `scripts/ci/assert-no-skips.mjs` роняет прогон, если
+# хоть один тест пропущен. Контур НЕ входит в обязательную PR-матрицу: он идёт
+# по ручному запуску, раз в сутки и на PR, только когда меняются затронутые
+# области. Required checks этот файл не трогает.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * *"
+  pull_request:
+    paths:
+      - "apps/server/src/audio-clip*"
+      - "apps/server/src/account-mail*"
+      - "apps/server/src/asset*"
+      - "apps/server/src/media*"
+      - "apps/server/src/realtime.ts"
+      - "apps/server/src/routes.ts"
+      - "apps/server/src/snapshot.ts"
+      - "apps/web/src/renderers/**"
+      - "apps/web/src/sidebar/CharacterWorkspace.tsx"
+      - "apps/web/src/sidebar/CharacterMediaGallery.tsx"
+      - "apps/web/src/use-game-socket-subscriptions.ts"
+      - "packages/db/drizzle/**"
+      - "tests/e2e/*-live.spec.ts"
+      - "tests/e2e/campaign-fixture.ts"
+      - "scripts/ci/assert-no-skips.mjs"
+      - ".github/workflows/integration.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  postgres-codec:
+    name: postgres + codec (20 tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      # Тесты сами требуют loopback, отдельную базу с префиксом и синтетическую
+      # роль; чужую базу они откажутся трогать.
+      AUDIO_CLIP_PG_URL: postgres://clipqa:clipqa@127.0.0.1:5432/arken_audio_clip_qa_ci
+      ACCOUNT_MAIL_PG_URL: postgres://authqa:authqa@127.0.0.1:5432/arken_auth_mail_qa_ci?application_name=arken-auth-outbox-disposable-gate
+      AUDIO_CLIP_CODEC_INTEGRATION: "1"
+      MEDIA_QUOTA_BYTES: "1048576"
+      MEDIA_ROOT: ./media-integration
+      PGPASSWORD: postgres
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @arken/server... --workspace-concurrency=1 build
+
+      - name: Verify the skip guard itself
+        run: node --test scripts/ci/assert-no-skips.test.mjs
+
+      - name: Native codecs
+        run: command -v ffmpeg && command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+
+      - name: Disposable QA roles and databases
+        run: |
+          psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 -c "create role clipqa login password 'clipqa' createdb"
+          psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 -c "create database arken_audio_clip_qa_ci owner clipqa"
+          psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 -c "create role authqa login password 'authqa'"
+          psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 -c "create database arken_auth_mail_qa_ci owner authqa"
+
+      # Тест восстановления делает pg_dump/pg_restore внутри контейнера базы и
+      # принимает только полный 64-символьный ID.
+      - name: Expose the Postgres container ID
+        run: echo "AUDIO_CLIP_PG_CONTAINER_ID=$(docker inspect --format '{{.Id}}' ${{ job.services.postgres.id }})" >> "$GITHUB_ENV"
+
+      - name: Run the integration tests
+        run: >-
+          pnpm exec vitest run
+          apps/server/src/audio-clip-postgres.integration.test.ts
+          apps/server/src/account-mail-postgres.integration.test.ts
+          apps/server/src/audio-clip-codec.test.ts
+          --reporter=default --reporter=json --outputFile=integration-report.json
+
+      - name: Fail on any skipped test
+        if: always()
+        run: node scripts/ci/assert-no-skips.mjs integration-report.json 20
+
+  realtime-live:
+    name: realtime live e2e (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium, firefox]
+        include:
+          - project: chromium
+            installBrowser: chrome
+          - project: firefox
+            installBrowser: firefox
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: arken
+          POSTGRES_USER: arken
+          POSTGRES_PASSWORD: arken
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U arken -d arken"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgres://arken:arken@127.0.0.1:5432/arken
+      # Live-тесты требуют loopback-адрес: они проверяют, что ходят не наружу.
+      WEB_ORIGIN: http://127.0.0.1:5173
+      PUBLIC_URL: http://127.0.0.1:5173
+      E2E_BASE_URL: http://127.0.0.1:5173
+      MEDIA_ROOT: ./media
+      ACCOUNT_AUTH_ENABLED: "true"
+      CAMPAIGN_LINK_ACCESS_ENABLED: "true"
+      LEGACY_DEV_AUTH_ENABLED: "false"
+      ACCOUNT_REGISTRATION_ENABLED: "false"
+      ACCOUNT_MAIL_RUNTIME_ENABLED: "false"
+      ARKEN_ASSET_LIVE_GATE: isolated-loopback
+      ARKEN_INPUT_LIVE_GATE: isolated-loopback
+      ARKEN_SELECTION_LIVE_GATE: isolated-loopback
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @arken/server... --workspace-concurrency=1 build
+
+      - name: Generate GM access token
+        run: echo "GM_ACCESS_TOKEN=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+
+      - run: pnpm db:migrate
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps ${{ matrix.installBrowser }}
+
+      - name: Start API server
+        run: |
+          mkdir -p media
+          nohup node apps/server/dist/index.js > /tmp/server.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -sf http://127.0.0.1:4100/healthz > /dev/null; then
+              echo "server ready"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "server did not become healthy"
+          tail -40 /tmp/server.log
+          exit 1
+
+      - name: Run the live specs
+        run: >-
+          pnpm exec playwright test
+          tests/e2e/asset-replacement-live.spec.ts
+          tests/e2e/keyboard-ping-live.spec.ts
+          tests/e2e/selection-authority-live.spec.ts
+          --project=${{ matrix.project }} --workers=1 --reporter=list,json
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: live-report.json
+
+      - name: Fail on any skipped test
+        if: always()
+        run: node scripts/ci/assert-no-skips.mjs live-report.json 12
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: realtime-live-${{ matrix.project }}
+          path: |
+            test-results/
+            live-report.json
+            /tmp/server.log
+          retention-days: 7
+          if-no-files-found: ignore

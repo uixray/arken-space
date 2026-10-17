@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { useState, type ReactElement, type ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import {
   act,
   fireEvent,
@@ -45,11 +44,7 @@ afterEach(() => {
 
 function render(ui: ReactElement) {
   return renderComponent(ui, {
-    wrapper: ({ children }: { children: ReactNode }) => (
-      <ThemeProvider theme="dark" lang="ru">
-        {children}
-      </ThemeProvider>
-    ),
+    wrapper: ({ children }: { children: ReactNode }) => <>{children}</>,
   });
 }
 

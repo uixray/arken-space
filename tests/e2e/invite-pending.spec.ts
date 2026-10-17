@@ -1,6 +1,7 @@
 import { expect, test } from "./react-console-guard";
 import type { Route } from "@playwright/test";
 import { playerSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { fulfillUnmocked } from "./mock-api-contract";
 // This fixture explicitly exercises the development-only legacy form contract.
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/account/capabilities", (route) =>
@@ -52,7 +53,7 @@ for (const width of [1280, 360]) {
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       if (path === "/api/operator/feedback/capability")
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await page.route("**/api/bootstrap", (route) =>
       authenticated
