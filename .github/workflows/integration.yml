@@ -26,10 +26,13 @@ on:
       - "apps/server/src/realtime.ts"
       - "apps/server/src/routes.ts"
       - "apps/server/src/snapshot.ts"
+      - "apps/server/src/soundpad*"
       - "apps/web/src/renderers/**"
       - "apps/web/src/sidebar/CharacterWorkspace.tsx"
       - "apps/web/src/sidebar/CharacterMediaGallery.tsx"
       - "apps/web/src/use-game-socket-subscriptions.ts"
+      - "apps/web/src/SoundpadWorkspace.tsx"
+      - "apps/web/src/sound-effects-playback.ts"
       - "packages/db/drizzle/**"
       - "tests/e2e/*-live.spec.ts"
       - "tests/e2e/campaign-fixture.ts"
@@ -208,13 +211,14 @@ jobs:
           tests/e2e/asset-replacement-live.spec.ts
           tests/e2e/keyboard-ping-live.spec.ts
           tests/e2e/selection-authority-live.spec.ts
+          tests/e2e/soundpad-live.spec.ts
           --project=${{ matrix.project }} --workers=1 --reporter=list,json
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: live-report.json
 
       - name: Fail on any skipped test
         if: always()
-        run: node scripts/ci/assert-no-skips.mjs live-report.json 12
+        run: node scripts/ci/assert-no-skips.mjs live-report.json 14
 
       - name: Upload diagnostics
         if: failure()
