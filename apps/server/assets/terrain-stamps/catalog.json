@@ -6,9 +6,21 @@
     { "key": "clouds", "title": "Облака", "file": "clouds.png" },
     { "key": "dark-cloud", "title": "Облако тьмы", "file": "dark-cloud.png" },
     { "key": "fire-circle", "title": "Круг огня", "file": "fire-circle.png" },
-    { "key": "flame-bursts", "title": "Пламенные всполохи", "file": "flame-bursts.png" },
-    { "key": "dug-soil", "title": "Перекопанная почва", "file": "dug-soil.webp" },
-    { "key": "fallen-trees", "title": "Поваленные деревья", "file": "fallen-trees.webp" },
+    {
+      "key": "flame-bursts",
+      "title": "Пламенные всполохи",
+      "file": "flame-bursts.png"
+    },
+    {
+      "key": "dug-soil",
+      "title": "Перекопанная почва",
+      "file": "dug-soil.webp"
+    },
+    {
+      "key": "fallen-trees",
+      "title": "Поваленные деревья",
+      "file": "fallen-trees.webp"
+    },
     { "key": "craters", "title": "Кратеры", "file": "craters.png" }
   ],
   "textures": [
@@ -16,7 +28,11 @@
     { "key": "mud", "title": "Грязь", "file": "mud.png" },
     { "key": "sand", "title": "Песок", "file": "sand.png" },
     { "key": "cobblestone", "title": "Брусчатка", "file": "cobblestone.png" },
-    { "key": "shallow-water", "title": "Мелководье", "file": "shallow-water.png" },
+    {
+      "key": "shallow-water",
+      "title": "Мелководье",
+      "file": "shallow-water.png"
+    },
     { "key": "snow", "title": "Снег", "file": "snow.png" }
   ]
 }
