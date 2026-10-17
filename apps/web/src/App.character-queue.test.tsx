@@ -1,11 +1,6 @@
 // @vitest-environment jsdom
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
 import type { ComponentProps } from "react";
-import {
-  ThemeProvider,
-  ToasterComponent,
-  ToasterProvider,
-} from "@gravity-ui/uikit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "./App";
 import type { Sidebar } from "./Sidebar";
@@ -18,6 +13,7 @@ import {
   screen,
   waitFor,
 } from "./test-support/render";
+import { AppToaster } from "./ui/AppToaster";
 import { appToaster } from "./ui/toaster";
 import {
   CAMPAIGN_ACTION_DOMAIN_KEYS,
@@ -164,12 +160,10 @@ it("reports removed canonical character in Russian, skips the queued phantom PAT
     },
   );
   renderComponent(
-    <ThemeProvider>
-      <ToasterProvider toaster={appToaster}>
-        <App />
-        <ToasterComponent />
-      </ToasterProvider>
-    </ThemeProvider>,
+    <>
+      <App />
+      <AppToaster toaster={appToaster} />
+    </>,
   );
   const edit = await screen.findByRole("button", {
     name: "Edit character queue",

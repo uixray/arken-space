@@ -1,12 +1,5 @@
 // @vitest-environment jsdom
 import type { ComponentProps } from "react";
-import type {
-  ButtonButtonProps,
-  DialogBodyProps,
-  DialogFooterProps,
-  DialogHeaderProps,
-  DialogProps,
-} from "@gravity-ui/uikit";
 import type { CharacterMediaDto } from "@arken/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -26,70 +19,6 @@ const apiMock = vi.hoisted(() => vi.fn());
 vi.mock("../api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api")>();
   return { ...actual, api: apiMock };
-});
-
-vi.mock("@gravity-ui/uikit", () => {
-  const Dialog = Object.assign(
-    ({ open, children, ...props }: DialogProps) =>
-      open ? (
-        <div role="dialog" aria-label={props["aria-label"]}>
-          {children}
-        </div>
-      ) : null,
-    {
-      Header: ({ caption }: DialogHeaderProps) => <h2>{caption}</h2>,
-      Body: ({ children }: DialogBodyProps) => <div>{children}</div>,
-      Footer: ({
-        textButtonApply,
-        textButtonCancel,
-        onClickButtonApply,
-        onClickButtonCancel,
-        loading,
-        errorText,
-        showError,
-      }: DialogFooterProps) => (
-        <div>
-          {showError ? <p role="alert">{errorText}</p> : null}
-          <button
-            type="button"
-            disabled={loading}
-            onClick={(event) => onClickButtonCancel?.(event)}
-          >
-            {textButtonCancel}
-          </button>
-          <button
-            type="button"
-            disabled={loading}
-            onClick={(event) => onClickButtonApply?.(event)}
-          >
-            {textButtonApply}
-          </button>
-        </div>
-      ),
-    },
-  );
-
-  return {
-    Dialog,
-    Button: ({
-      disabled,
-      loading,
-      onClick,
-      children,
-      ...props
-    }: ButtonButtonProps) => (
-      <button
-        type="button"
-        disabled={disabled}
-        aria-busy={loading}
-        aria-label={props["aria-label"]}
-        title={props.title}
-        onClick={onClick}
-      >
-        {children}
-      </button>
-    ),
-  };
 });
 
 type FormSelectProps = ComponentProps<typeof FormSelect>;
@@ -406,12 +335,14 @@ it("refreshes mounted gallery images and recovers failed images on a new asset v
       name: "Открыть в полном размере: Портрет у костра",
     }),
   );
-  expect(screen.getAllByRole("img", { name: "Портрет у костра" })).toHaveLength(
-    2,
-  );
+  // The open modal hides the gallery behind it from the accessibility tree.
+  expect(
+    screen.getAllByRole("img", { name: "Портрет у костра", hidden: true }),
+  ).toHaveLength(2);
   view.rerender(element("new"));
   for (const image of screen.getAllByRole("img", {
     name: "Портрет у костра",
+    hidden: true,
   })) {
     expect(image).toHaveAttribute(
       "src",
@@ -420,18 +351,23 @@ it("refreshes mounted gallery images and recovers failed images on a new asset v
     act(() => image.dispatchEvent(new Event("error")));
   }
   expect(
-    screen.getAllByRole("img", { name: "Изображение недоступно" }),
+    screen.getAllByRole("img", {
+      name: "Изображение недоступно",
+      hidden: true,
+    }),
   ).toHaveLength(2);
   view.rerender(element("recovered"));
   await waitFor(() =>
     expect(
       screen.queryAllByRole("img", {
         name: "Изображение недоступно",
+        hidden: true,
       }),
     ).toHaveLength(0),
   );
   for (const image of screen.getAllByRole("img", {
     name: "Портрет у костра",
+    hidden: true,
   })) {
     expect(image).toHaveAttribute(
       "src",

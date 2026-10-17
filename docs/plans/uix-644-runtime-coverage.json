@@ -1082,6 +1082,16 @@
       "next": "Capture offending observer at actual failure; do not repeat identical warm runs or filter client logs."
     },
     {
+      "file": "apps/web/src/ui/ArkenDialog.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "modal-dialog-surface",
+      "scope": "UIX-709: the ArkenDialog modal branch now renders Base UI Dialog.Popup instead of Gravity Dialog. A blocking modal surface, not a dropdown overlay.",
+      "evidence": [],
+      "next": "Modal ownership stays covered by modal-owner-contract, modal-focus and dialog-focus e2e; no UIX-644 runtime evidence row yet."
+    },
+    {
       "file": "apps/web/src/ui/CursorPresenceMenu.tsx",
       "kind": "tag:Popup",
       "count": 1,

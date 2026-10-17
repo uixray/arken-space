@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import userEvent from "@testing-library/user-event";
 import { useState, type ReactElement, type ReactNode } from "react";
 
@@ -28,11 +27,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 function renderComponent(ui: ReactElement) {
   return renderBase(ui, {
-    wrapper: ({ children }: { children: ReactNode }) => (
-      <ThemeProvider theme="dark" lang="ru">
-        {children}
-      </ThemeProvider>
-    ),
+    wrapper: ({ children }: { children: ReactNode }) => <>{children}</>,
   });
 }
 

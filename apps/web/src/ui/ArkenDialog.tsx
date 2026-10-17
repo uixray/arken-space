@@ -1,9 +1,17 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
-import { Dialog } from "@gravity-ui/uikit";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  type ReactNode,
+} from "react";
+import { Dialog } from "@base-ui/react/dialog";
+import { Button } from "../design-system/Button";
 import { useWorkspaceWindow } from "./useWorkspaceWindow";
 import { OverlayOwnerContext } from "./overlay-owner";
 import { AppIcon } from "./AppIcon";
 import { CloseIcon, ResetWindowIcon } from "./icons";
+import "./modal-dialog.css";
 
 export interface ArkenDialogProps {
   open: boolean;
@@ -42,6 +50,8 @@ export function ArkenDialog({
 }: ArkenDialogProps) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const wasOpen = useRef(open);
   // Firefox can leave `:open` true after the native popup consumed Escape.
@@ -66,6 +76,17 @@ export function ArkenDialog({
     previousFocus.current = document.activeElement as HTMLElement | null;
     closeRef.current?.focus();
     return () => previousFocus.current?.focus();
+  }, [open, variant]);
+
+  // Base UI returns focus only to a Dialog.Trigger, and ArkenDialog has none:
+  // remember who had focus when the modal opened and hand it back on close,
+  // as Gravity's Modal did.
+  const modalOpener = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    if (!open || variant !== "modal") return;
+    const active = document.activeElement;
+    modalOpener.current =
+      active instanceof HTMLElement && active !== document.body ? active : null;
   }, [open, variant]);
 
   useEffect(() => {
@@ -275,35 +296,121 @@ export function ArkenDialog({
     );
   }
 
+  // UIX-709: the former Gravity Dialog markup on Base UI. Only a press on
+  // this dialog's own veil closes it, as before: presses in toasts or other
+  // portals are not "outside" this dialog.
   return (
     <OverlayOwnerContext.Provider value="modal">
-      <Dialog
-        className="arken-dialog"
+      <Dialog.Root
         open={open}
-        onClose={onClose}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) onClose();
         }}
-        size="m"
-        initialFocus="cancel"
-        contentOverflow="auto"
-        aria-label={title}
+        disablePointerDismissal
       >
-        <Dialog.Header caption={title} />
-        <Dialog.Body>{children}</Dialog.Body>
-        {footer ? (
-          <Dialog.Footer
-            preset={danger ? "danger" : "default"}
-            textButtonApply={applyLabel}
-            textButtonCancel={cancelLabel}
-            onClickButtonApply={onApply}
-            onClickButtonCancel={onClose}
-            loading={loading}
-            errorText={error}
-            showError={Boolean(error)}
-          />
-        ) : null}
-      </Dialog>
+        <Dialog.Portal>
+          <div
+            className="g-modal g-modal_open arken-dialog__modal"
+            data-floating-ui-status="open"
+            onPointerDown={(event) => {
+              const target = event.target;
+              if (
+                target instanceof Node &&
+                event.currentTarget.contains(target) &&
+                !popupRef.current?.contains(target)
+              )
+                onClose();
+            }}
+          >
+            <div className="g-modal__content-aligner">
+              <div className="g-modal__content-wrapper">
+                <Dialog.Popup
+                  ref={popupRef}
+                  className="g-modal__content g-modal__content_has-scroll"
+                  aria-label={title}
+                  initialFocus={() => cancelRef.current ?? popupRef.current}
+                  finalFocus={() => {
+                    const opener = modalOpener.current;
+                    return opener?.isConnected ? opener : true;
+                  }}
+                >
+                  <div
+                    className={[
+                      "g-dialog g-dialog_size_m g-dialog_has-close g-dialog_has-scroll arken-dialog",
+                      className,
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    <div className="g-dialog-btn-close">
+                      <Button
+                        view="flat"
+                        size="l"
+                        className="g-dialog-btn-close__btn"
+                        onClick={onClose}
+                        aria-label="Закрыть диалоговое окно"
+                      >
+                        {/* An icon slot, not text: the 44px target leaves no
+                            room for size-l text padding around the glyph. */}
+                        <span className="g-button__icon" aria-hidden="true">
+                          <span className="g-button__icon-inner">
+                            <AppIcon icon={CloseIcon} size={20} />
+                          </span>
+                        </span>
+                      </Button>
+                    </div>
+                    <div className="g-dialog-header">
+                      <div className="g-dialog-header__caption">{title}</div>
+                    </div>
+                    <div className="g-dialog-body">{children}</div>
+                    {footer ? (
+                      <div className="g-dialog-footer">
+                        <div className="g-dialog-footer__bts-wrapper">
+                          <div className="g-dialog-footer__button g-dialog-footer__button_action_cancel">
+                            <Button
+                              ref={cancelRef}
+                              view="flat"
+                              size="l"
+                              width="max"
+                              onClick={onClose}
+                              disabled={loading}
+                            >
+                              {cancelLabel}
+                            </Button>
+                          </div>
+                          <div className="g-dialog-footer__button g-dialog-footer__button_action_apply">
+                            <Button
+                              type="submit"
+                              view="action"
+                              size="l"
+                              width="max"
+                              onClick={onApply}
+                              loading={loading}
+                              className={`g-dialog-footer__button-apply g-dialog-footer__button-apply_preset_${danger ? "danger" : "default"}`}
+                            >
+                              {applyLabel}
+                            </Button>
+                            {error ? (
+                              <div
+                                className="g-dialog-footer__error-popup"
+                                role="alert"
+                              >
+                                <div className="g-dialog-footer__error">
+                                  {error}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </Dialog.Popup>
+              </div>
+            </div>
+          </div>
+        </Dialog.Portal>
+      </Dialog.Root>
     </OverlayOwnerContext.Provider>
   );
 }

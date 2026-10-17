@@ -143,7 +143,7 @@ describe("player theme configuration", () => {
     expect(Object.isFrozen(PLAYER_THEMES[0])).toBe(true);
   });
 
-  it("maps the actual UIKit text-control focus hooks and error ink", async () => {
+  it("gives text controls the focus ring and maps error ink", async () => {
     // Structural guard only. Native keyboard/cascade/contrast are checked in
     // the real-controls browser gate, not proved by reading this stylesheet.
     const bridge = await readFile(
@@ -160,13 +160,14 @@ describe("player theme configuration", () => {
       new URL("../ui/gravity-foundation.css", import.meta.url),
       "utf8",
     );
-    for (const name of [
-      "g-text-input-focus-outline-color",
-      "g-text-area-focus-outline-color",
-    ]) {
-      expect(foundation).toContain(`--${name}: var(--color-focus);`);
-      expect(bridge).not.toContain(`--${name}:`);
-    }
+    // UIX-709: the ring is a plain outline now, not a Gravity outline hook.
+    expect(foundation).toContain(
+      ".g-text-input__content:has(> input:not(:disabled):focus-visible)",
+    );
+    expect(foundation).toContain(
+      "outline: var(--focus-ring-width, 2px) solid var(--color-focus);",
+    );
+    expect(bridge).not.toContain("focus-outline-color");
     for (const name of ["g-color-text-danger", "g-color-line-danger"]) {
       expect(bridge).toContain(`--${name}: var(--state-error-ink);`);
     }

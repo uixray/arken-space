@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import type { ComponentProps } from "react";
-import type { Button } from "@gravity-ui/uikit";
 import type { GameSnapshot } from "@arken/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { renderComponent, screen } from "./test-support/render";
@@ -35,13 +34,6 @@ import { Sidebar, type Props } from "./Sidebar";
 // mocks remove CSS, canvas and self-fetching workspaces, not the role decision.
 // The editor marker only knows its real `open` prop, never a test-only role.
 // This covers client routing, not editor internals, navigation or server ACL.
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({ children, disabled, onClick }: ComponentProps<typeof Button>) => (
-    <button type="button" disabled={disabled} onClick={onClick}>
-      {children}
-    </button>
-  ),
-}));
 vi.mock("./ui/ArkenDialog", () => ({
   ArkenDialog: (_props: ComponentProps<typeof ArkenDialog>) => null,
 }));

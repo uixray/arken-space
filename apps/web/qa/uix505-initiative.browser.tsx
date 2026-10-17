@@ -5,7 +5,6 @@ import type {
   GameSnapshot,
   InitiativeParticipantDto,
 } from "@arken/contracts";
-import "@gravity-ui/uikit/styles/styles.css";
 import { ActivityInitiativePanel } from "../src/sidebar/ActivityInitiativePanel";
 import {
   gmSnapshot,
@@ -14,6 +13,7 @@ import {
 // Match production's `main.tsx` import order: feature/component CSS (including
 // Input.css) is loaded before the global token/foundation/styles layers.
 import "../src/design-system/tokens.generated.css";
+import "../src/ui/theme-root.css";
 import "../src/design-system/foundations.css";
 import "../src/ui/gravity-foundation.css";
 import "../src/styles.css";

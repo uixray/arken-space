@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import type { ComponentProps } from "react";
 import type { ChatStream, GameSnapshot } from "@arken/contracts";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CampaignActionsContext,
@@ -169,7 +168,7 @@ function mount(surface: Surface, onChat: Send = vi.fn(async () => undefined)) {
       onMessageFocused: vi.fn(),
     };
     return (
-      <ThemeProvider theme="dark" lang="ru">
+      <>
         <CampaignActionsContext.Provider value={commands}>
           <section onKeyDown={escaped}>
             {surface === "activity" ? (
@@ -196,7 +195,7 @@ function mount(surface: Surface, onChat: Send = vi.fn(async () => undefined)) {
           </section>
           <button type="button">Вне composer</button>
         </CampaignActionsContext.Provider>
-      </ThemeProvider>
+      </>
     );
   }
   const rendered = renderComponent(view(state));

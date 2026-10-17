@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import type { ReactElement } from "react";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import { installMatchMediaMock } from "../test-support/dom-mocks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
@@ -18,11 +17,7 @@ import {
 // Keep real Gravity exports, including Popup and its native control adapters.
 function renderComponent(ui: ReactElement) {
   return renderWithDOM(ui, {
-    wrapper: ({ children }) => (
-      <ThemeProvider theme="dark" lang="ru">
-        {children}
-      </ThemeProvider>
-    ),
+    wrapper: ({ children }) => <>{children}</>,
   });
 }
 beforeEach(() => installMatchMediaMock());

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import type { ComponentProps } from "react";
 import type { AssetDto, CharacterDto, GameSnapshot } from "@arken/contracts";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CampaignActionsContext,
@@ -271,11 +270,11 @@ function view(
   commands = actions(),
 ) {
   return (
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <CampaignActionsContext.Provider value={commands}>
         {panel(state, overrides)}
       </CampaignActionsContext.Provider>
-    </ThemeProvider>
+    </>
   );
 }
 
@@ -984,7 +983,7 @@ describe("character action feedback", () => {
       character({ id: "character-b", name: "Персонаж B", revision: 12 }),
     ]);
     renderComponent(
-      <ThemeProvider theme="dark" lang="ru">
+      <>
         <CampaignActionsContext.Provider value={actions(upload)}>
           {state.characters.map((item) => (
             <article key={item.id} aria-label={item.name}>
@@ -996,7 +995,7 @@ describe("character action feedback", () => {
             </article>
           ))}
         </CampaignActionsContext.Provider>
-      </ThemeProvider>,
+      </>,
     );
     await galleryLoaded();
     const first = within(screen.getByRole("article", { name: "Персонаж A" }));
@@ -1251,13 +1250,13 @@ describe("character action feedback", () => {
       operatorFeedbackAllowed: false,
     };
     renderComponent(
-      <ThemeProvider theme="dark" lang="ru">
+      <>
         <CampaignActionsContext.Provider
           value={actions(undefined, onCampaignClock)}
         >
           <CharacterWorkspace {...workspaceProps} />
         </CampaignActionsContext.Provider>
-      </ThemeProvider>,
+      </>,
     );
     await galleryLoaded();
 

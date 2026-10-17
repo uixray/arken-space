@@ -205,6 +205,17 @@ for (const [width, longTitle] of [
       );
       await close.focus();
       await page.keyboard.press("Shift+Tab");
+      // The focus trap wraps from its guard on the next frame; let it land on
+      // the dialog's last control before tabbing forward again.
+      await expect
+        .poll(() =>
+          close.evaluate((node) => {
+            const active = document.activeElement;
+            const popup = node.closest('[role="dialog"]');
+            return !!popup?.contains(active) && active !== node;
+          }),
+        )
+        .toBe(true);
       await page.keyboard.press("Tab");
       await expect(close).toBeFocused();
       expect(

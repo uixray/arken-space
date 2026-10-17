@@ -26,12 +26,14 @@
   --arken-layer-toast: 3000;
 }
 
-/* Text controls need UIKit's dedicated outline hooks. Native input focus
- * styles alone are overridden by the component stylesheet. Keep one mapping
- * for baseline, classic and personal themes; the semantic color is inherited. */
-.g-root {
-  --g-text-input-focus-outline-color: var(--color-focus);
-  --g-text-area-focus-outline-color: var(--color-focus);
+/* UIX-317 keyboard focus ring for text controls, one rule for baseline,
+ * classic and personal themes; the semantic color is inherited. UIX-709:
+ * this used to be Gravity's outline hook, which only its own TextInput CSS
+ * read; the design-system controls need the outline spelled out. */
+.g-text-input__content:has(> input:not(:disabled):focus-visible),
+.g-text-area__content:has(> textarea:not(:disabled):focus-visible) {
+  outline: var(--focus-ring-width, 2px) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset, 1px);
 }
 
 /* Gravity portals default to z-index 1000. Blocking editors opened from a
@@ -373,16 +375,12 @@
 
 /* UIX-317: read-only is selectable content, not a disabled control. A dashed
  * frame supplies a non-color cue without dimming text or blocking selection.
- * Keep the normal solid focus outline and let disabled win if both are set.
- * Match native readonly attributes, not :read-only (which also matches many
- * controls that are not editable text, including selects and checkboxes). */
-.g-text-input__content:has(> input[readonly]:not(:disabled)),
-.g-text-area__content:has(> textarea[readonly]:not(:disabled)) {
+ * The frame is the control's own border (UIX-709: not the inner content box,
+ * which has no border of its own). Keep the normal solid focus outline and
+ * let disabled win if both are set. Match native readonly attributes, not
+ * :read-only (which also matches many controls that are not editable text,
+ * including selects and checkboxes). */
+.g-text-input:has(> .g-text-input__content > input[readonly]:not(:disabled)),
+.g-text-area:has(> .g-text-area__content > textarea[readonly]:not(:disabled)) {
   border-style: dashed;
-}
-
-.g-text-input__content:has(> input[readonly]:not(:disabled):focus-visible),
-.g-text-area__content:has(> textarea[readonly]:not(:disabled):focus-visible) {
-  outline: var(--focus-ring-width, 2px) solid var(--color-focus);
-  outline-offset: var(--focus-ring-offset, 1px);
 }

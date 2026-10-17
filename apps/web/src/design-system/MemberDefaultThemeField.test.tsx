@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import { type ReactElement, type ReactNode } from "react";
 
 vi.mock("../api", async (importOriginal) => {
@@ -21,11 +20,7 @@ import { MemberDefaultThemeField } from "./MemberDefaultThemeField";
 
 function renderComponent(ui: ReactElement) {
   return renderBase(ui, {
-    wrapper: ({ children }: { children: ReactNode }) => (
-      <ThemeProvider theme="dark" lang="ru">
-        {children}
-      </ThemeProvider>
-    ),
+    wrapper: ({ children }: { children: ReactNode }) => <>{children}</>,
   });
 }
 
