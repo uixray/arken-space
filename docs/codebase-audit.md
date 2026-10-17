@@ -40,7 +40,7 @@
 
 ## Надёжность тестов
 
-- Контур `integration` (UIX-690/691): 20 unit-тестов Postgres/codec и 12 realtime live e2e. `assert-no-skips` роняет прогон при любом пропуске. Пока эти тесты молча пропускались, 7 из 12 e2e устарели.
+- Контур `integration` (UIX-690/691): 20 unit-тестов Postgres/codec и 14 realtime live e2e (с 17.10 два из них — саундпад, UIX-512). `assert-no-skips` роняет прогон при любом пропуске. Пока эти тесты молча пропускались, 7 из 12 e2e устарели.
 - Контракт моков (UIX-693): `tests/e2e/mock-api-contract.ts` вместо catch-all `json: []`. Переведены 3 спецификации, около 66 файлов осталось.
 - Release smoke (UIX-695): `.github/workflows/release-smoke.yml` против production-сборки, ручной release gate.
 - Branch protection (UIX-692): предложение в Linear, ждёт решения владельца.
