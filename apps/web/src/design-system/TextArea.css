@@ -3,8 +3,7 @@
    Tokens: --color-surface, --color-border, --color-accent, --color-text, etc.
    ========================================================================== */
 
-.arken-text-area,
-.g-text-area {
+.arken-text-area {
   box-sizing: border-box;
   display: inline-flex;
   position: relative;
@@ -23,16 +22,16 @@
 }
 
 .arken-text-area:hover:not(.arken-text-area--disabled):not(
-    .g-text-area_disabled
+    .arken-text-area--disabled
   ),
-.g-text-area:hover:not(.g-text-area_disabled) {
+.arken-text-area:hover:not(.arken-text-area--disabled) {
   border-color: var(--color-border-hover, #696356);
 }
 
 .arken-text-area:focus-within:not(.arken-text-area--disabled):not(
-    .g-text-area_disabled
+    .arken-text-area--disabled
   ),
-.g-text-area:focus-within:not(.g-text-area_disabled) {
+.arken-text-area:focus-within:not(.arken-text-area--disabled) {
   border-color: var(--color-focus, #c46f49);
   border-width: 2px;
   outline: none;
@@ -41,20 +40,17 @@
 
 /* Invalid / Error */
 .arken-text-area[data-invalid="true"],
-.g-text-area[data-invalid="true"],
-.g-text-area_invalid {
+.arken-text-area--invalid {
   border-color: var(--color-danger, #da6b61) !important;
 }
 
-.arken-text-area[data-invalid="true"]:focus-within,
-.g-text-area[data-invalid="true"]:focus-within {
+.arken-text-area[data-invalid="true"]:focus-within {
   border-color: var(--color-danger, #da6b61) !important;
   box-shadow: none !important;
 }
 
 /* Disabled */
-.arken-text-area--disabled,
-.g-text-area_disabled {
+.arken-text-area--disabled {
   opacity: 0.45;
   background-color: var(--palette-ink-900, #181816);
   cursor: not-allowed;
@@ -62,16 +58,14 @@
 }
 
 /* Content & Inner Control */
-.arken-text-area__content,
-.g-text-area__content {
+.arken-text-area__content {
   display: flex;
   width: 100%;
   height: 100%;
   padding: var(--space-sm, 8px) var(--space-md, 12px);
 }
 
-.arken-text-area__control,
-.g-text-area__control {
+.arken-text-area__control {
   box-sizing: border-box;
   width: 100%;
   min-height: 64px;
@@ -89,13 +83,11 @@
 }
 
 /* The wrapper owns the only focus frame, including in the landing form. */
-.arken-text-area__control:focus-visible,
-.g-text-area__control:focus-visible {
+.arken-text-area__control:focus-visible {
   outline: none;
 }
 
-.arken-text-area__control::placeholder,
-.g-text-area__control::placeholder {
+.arken-text-area__control::placeholder {
   color: var(--color-text-faint, #777267);
   opacity: 1;
 }

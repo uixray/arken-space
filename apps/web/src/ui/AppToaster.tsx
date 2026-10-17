@@ -57,7 +57,7 @@ export function AppToaster({ toaster = appToaster }: { toaster?: Toaster }) {
   const leavingKeys = new Set(leaving.map(keyOf));
 
   return createPortal(
-    <div className="g-toaster" aria-live="assertive">
+    <div className="arken-toaster" aria-live="assertive">
       {rendered.map((toast) => (
         <Toast
           key={keyOf(toast)}
@@ -141,40 +141,42 @@ function Toast({
 
   const icon = THEME_ICONS[theme];
   const animation = leaving
-    ? "g-toast-animation-desktop_exit_active"
+    ? "arken-toast-animation-desktop--exit-active"
     : entering
-      ? "g-toast-animation-desktop_enter"
-      : "g-toast-animation-desktop_enter_active";
+      ? "arken-toast-animation-desktop--enter"
+      : "arken-toast-animation-desktop--enter-active";
 
   return (
     <div
       ref={ref}
-      className={`g-toast g-toast_theme_${theme} ${animation}`}
+      className={`arken-toast arken-toast--theme-${theme} ${animation}`}
       data-toast
       onMouseOver={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       {icon ? (
-        <div className="g-toast__icon-container">
+        <div className="arken-toast__icon-container">
           <AppIcon
             icon={icon}
             size={20}
-            className={`g-toast__icon g-toast__icon_${theme}`}
+            className={`arken-toast__icon arken-toast__icon--${theme}`}
           />
         </div>
       ) : null}
-      <div className="g-toast__container">
-        {toast.title ? <h3 className="g-toast__title">{toast.title}</h3> : null}
+      <div className="arken-toast__container">
+        {toast.title ? (
+          <h3 className="arken-toast__title">{toast.title}</h3>
+        ) : null}
         {toast.isClosable !== false ? (
           <Button
             size="s"
             view="flat"
-            className="g-toast__btn-close"
+            className="arken-toast__btn-close"
             onClick={onClose}
             aria-label="Закрыть"
           >
-            <span className="g-button__icon" aria-hidden="true">
-              <span className="g-button__icon-inner">
+            <span className="arken-button__icon" aria-hidden="true">
+              <span className="arken-button__icon-inner">
                 <AppIcon icon={CloseIcon} />
               </span>
             </span>
@@ -184,8 +186,8 @@ function Toast({
           <div
             className={
               toast.title
-                ? "g-toast__content"
-                : "g-toast__content g-toast__content_without-title"
+                ? "arken-toast__content"
+                : "arken-toast__content arken-toast__content--without-title"
             }
           >
             {toast.content}

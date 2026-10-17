@@ -11,7 +11,7 @@ export interface PlayerThemeProviderProps {
 
 /**
  * Sole application-level owner of `data-player-theme` and the matching
- * `g-root_theme_*` color scheme on `<body>` (the former Gravity ThemeProvider
+ * `arken-root--theme-*` color scheme on `<body>` (the former Gravity ThemeProvider
  * contract, UIX-709). Do not nest this provider: its cleanup deliberately removes the
  * document attribute rather than restoring another provider's value.
  */
@@ -38,13 +38,13 @@ export function PlayerThemeProvider({
 }
 
 /**
- * Puts `g-root g-root_theme_<scheme>` on <body>, where ui/theme-root.css
+ * Puts `arken-root arken-root--theme-<scheme>` on <body>, where ui/theme-root.css
  * defines the matching variables and `color-scheme`.
  */
 export function useBodyColorScheme(colorScheme: PlayerThemeColorScheme) {
   useLayoutEffect(() => {
     const body = document.body;
-    body.classList.add("g-root", `g-root_theme_${colorScheme}`);
-    return () => body.classList.remove(`g-root_theme_${colorScheme}`);
+    body.classList.add("arken-root", `arken-root--theme-${colorScheme}`);
+    return () => body.classList.remove(`arken-root--theme-${colorScheme}`);
   }, [colorScheme]);
 }

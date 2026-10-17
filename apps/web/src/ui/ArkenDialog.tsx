@@ -94,7 +94,8 @@ export function ArkenDialog({
     wasOpen.current = open;
     if (!justClosed || variant !== "modal") return;
     const frame = requestAnimationFrame(() => {
-      const modals = document.querySelectorAll<HTMLElement>(".g-modal_open");
+      const modals =
+        document.querySelectorAll<HTMLElement>(".arken-modal--open");
       const owner = modals[modals.length - 1];
       if (!owner || owner.contains(document.activeElement)) return;
       owner
@@ -310,7 +311,7 @@ export function ArkenDialog({
       >
         <Dialog.Portal>
           <div
-            className="g-modal g-modal_open arken-dialog__modal"
+            className="arken-modal arken-modal--open arken-dialog__modal"
             data-floating-ui-status="open"
             onPointerDown={(event) => {
               const target = event.target;
@@ -322,11 +323,11 @@ export function ArkenDialog({
                 onClose();
             }}
           >
-            <div className="g-modal__content-aligner">
-              <div className="g-modal__content-wrapper">
+            <div className="arken-modal__content-aligner">
+              <div className="arken-modal__content-wrapper">
                 <Dialog.Popup
                   ref={popupRef}
-                  className="g-modal__content g-modal__content_has-scroll"
+                  className="arken-modal__content arken-modal__content--has-scroll"
                   aria-label={title}
                   initialFocus={() => cancelRef.current ?? popupRef.current}
                   finalFocus={() => {
@@ -336,37 +337,39 @@ export function ArkenDialog({
                 >
                   <div
                     className={[
-                      "g-dialog g-dialog_size_m g-dialog_has-close g-dialog_has-scroll arken-dialog",
+                      "arken-modal-dialog arken-modal-dialog--size-m arken-modal-dialog--has-close arken-modal-dialog--has-scroll arken-dialog",
                       className,
                     ]
                       .filter(Boolean)
                       .join(" ")}
                   >
-                    <div className="g-dialog-btn-close">
+                    <div className="arken-modal-dialog-btn-close">
                       <Button
                         view="flat"
                         size="l"
-                        className="g-dialog-btn-close__btn"
+                        className="arken-modal-dialog-btn-close__btn"
                         onClick={onClose}
                         aria-label="Закрыть диалоговое окно"
                       >
                         {/* An icon slot, not text: the 44px target leaves no
                             room for size-l text padding around the glyph. */}
-                        <span className="g-button__icon" aria-hidden="true">
-                          <span className="g-button__icon-inner">
+                        <span className="arken-button__icon" aria-hidden="true">
+                          <span className="arken-button__icon-inner">
                             <AppIcon icon={CloseIcon} size={20} />
                           </span>
                         </span>
                       </Button>
                     </div>
-                    <div className="g-dialog-header">
-                      <div className="g-dialog-header__caption">{title}</div>
+                    <div className="arken-modal-dialog-header">
+                      <div className="arken-modal-dialog-header__caption">
+                        {title}
+                      </div>
                     </div>
-                    <div className="g-dialog-body">{children}</div>
+                    <div className="arken-modal-dialog-body">{children}</div>
                     {footer ? (
-                      <div className="g-dialog-footer">
-                        <div className="g-dialog-footer__bts-wrapper">
-                          <div className="g-dialog-footer__button g-dialog-footer__button_action_cancel">
+                      <div className="arken-modal-dialog-footer">
+                        <div className="arken-modal-dialog-footer__bts-wrapper">
+                          <div className="arken-modal-dialog-footer__button arken-modal-dialog-footer__button--action-cancel">
                             <Button
                               ref={cancelRef}
                               view="flat"
@@ -378,7 +381,7 @@ export function ArkenDialog({
                               {cancelLabel}
                             </Button>
                           </div>
-                          <div className="g-dialog-footer__button g-dialog-footer__button_action_apply">
+                          <div className="arken-modal-dialog-footer__button arken-modal-dialog-footer__button--action-apply">
                             <Button
                               type="submit"
                               view="action"
@@ -386,16 +389,16 @@ export function ArkenDialog({
                               width="max"
                               onClick={onApply}
                               loading={loading}
-                              className={`g-dialog-footer__button-apply g-dialog-footer__button-apply_preset_${danger ? "danger" : "default"}`}
+                              className={`arken-modal-dialog-footer__button-apply arken-modal-dialog-footer__button-apply--preset-${danger ? "danger" : "default"}`}
                             >
                               {applyLabel}
                             </Button>
                             {error ? (
                               <div
-                                className="g-dialog-footer__error-popup"
+                                className="arken-modal-dialog-footer__error-popup"
                                 role="alert"
                               >
-                                <div className="g-dialog-footer__error">
+                                <div className="arken-modal-dialog-footer__error">
                                   {error}
                                 </div>
                               </div>

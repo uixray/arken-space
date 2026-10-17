@@ -423,7 +423,9 @@ test("GM compact chrome keeps actions discoverable at release width", async ({
   await page.locator(".account-menu summary").click();
   await expect(page.locator(".account-menu__content")).toBeVisible();
   await expect(page.locator(".account-menu__content .status")).toBeVisible();
-  await expect(page.locator(".account-menu__content .g-button")).toHaveCount(1);
+  await expect(
+    page.locator(".account-menu__content .arken-button"),
+  ).toHaveCount(1);
 });
 
 test("UIX-386 GM toolbar keeps icons and encounter states accessible", async ({
@@ -705,7 +707,7 @@ test("GM opens token and file workflows without leaving the canvas", async ({
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const modal = document.querySelector<HTMLElement>(".g-modal");
+        const modal = document.querySelector<HTMLElement>(".arken-modal");
         const workspace = document.querySelector<HTMLElement>(
           ".arken-workspace-window",
         );
@@ -2346,7 +2348,7 @@ test("GM prepares a scene locally before publishing it to players", async ({
   ).toHaveCount(0);
   await expect(
     activeCard.getByRole("button", { name: "Открыть для мастера" }),
-  ).toHaveClass(/g-button_view_action/);
+  ).toHaveClass(/arken-button--view-action/);
   const secretCard = dialog.locator(".scene-manager-card", {
     hasText: "Тайная комната",
   });
@@ -2356,8 +2358,8 @@ test("GM prepares a scene locally before publishing it to players", async ({
   const publish = secretCard.getByRole("button", {
     name: "Показать игрокам",
   });
-  await expect(safeOpen).toHaveClass(/g-button_view_action/);
-  await expect(publish).not.toHaveClass(/g-button_view_action/);
+  await expect(safeOpen).toHaveClass(/arken-button--view-action/);
+  await expect(publish).not.toHaveClass(/arken-button--view-action/);
   await activeCard.screenshot({
     path: testInfo.outputPath("uix-418-scene-active-card.png"),
   });
@@ -2412,10 +2414,10 @@ test("destructive token-definition action stays visually subordinate", async ({
   const remove = card.getByRole("button", {
     name: "Удалить определение и все размещения",
   });
-  await expect(configure).not.toHaveClass(/g-button_view_flat-danger/);
+  await expect(configure).not.toHaveClass(/arken-button--view-flat-danger/);
   await expect(remove).toHaveClass(/danger-link/);
-  await expect(remove).toHaveClass(/g-button_view_flat-danger/);
-  await expect(remove).toHaveClass(/g-button_size_s/);
+  await expect(remove).toHaveClass(/arken-button--view-flat-danger/);
+  await expect(remove).toHaveClass(/arken-button--size-s/);
   await card.screenshot({
     path: testInfo.outputPath("uix-418-token-action-hierarchy.png"),
   });

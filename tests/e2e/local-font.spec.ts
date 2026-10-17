@@ -66,7 +66,7 @@ for (const width of [390, 1440]) {
     const result = await page.evaluate(() => {
       const sample = "Arken Space — Проверка шрифта";
       const bodyStyle = getComputedStyle(document.body);
-      const gravity = document.querySelector<HTMLElement>(".g-root");
+      const gravity = document.querySelector<HTMLElement>(".arken-root");
       const gravityStyle = gravity ? getComputedStyle(gravity) : null;
       const canvas = document.createElement("canvas");
       const context = canvas.getContext("2d")!;

@@ -120,7 +120,7 @@ for (const role of ["GM", "PLAYER"] as const)
         });
         await expect(modal).toBeVisible();
         const modalLayer = await modal.evaluate((node) =>
-          Number(getComputedStyle(node.closest(".g-modal")!).zIndex),
+          Number(getComputedStyle(node.closest(".arken-modal")!).zIndex),
         );
         expect(modalLayer).toBeGreaterThan(popupLayer);
         // Actual pointer close proves the popup does not intercept the modal.

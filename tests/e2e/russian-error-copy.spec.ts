@@ -166,7 +166,7 @@ async function textGeometry(target: Locator) {
   await expect(target).toBeVisible();
   return target.evaluate((element) => {
     const box = element.getBoundingClientRect();
-    const outer = element.closest(".g-toast") ?? element;
+    const outer = element.closest(".arken-toast") ?? element;
     const outerBox = outer.getBoundingClientRect();
     const serialize = (rect: DOMRect) => ({
       left: rect.left,
@@ -250,9 +250,9 @@ function expectTextFits(geometry: Awaited<ReturnType<typeof textGeometry>>) {
 async function settleToastEntrance(toast: Locator) {
   return toast.evaluate(async (element) => {
     const entranceNames = new Set([
-      "g-toast-enter-desktop",
-      "g-toast-enter-mobile",
-      "g-toast-enter-reduced-motion",
+      "arken-toast-enter-desktop",
+      "arken-toast-enter-mobile",
+      "arken-toast-enter-reduced-motion",
     ]);
     // Only the observed toast ancestor's own named entrance animation. Do not
     // wait for arbitrary descendant progress or auto-dismiss animations.
@@ -484,16 +484,16 @@ for (const width of [1280, 390]) {
       fixture.releaseAudioAcknowledgements();
       expect(fixture.acknowledgementsSent).toBe(1);
       const toast = page
-        .locator(".g-toast")
+        .locator(".arken-toast")
         .filter({ hasText: "Не удалось добавить дорожку" });
       await expect(toast).toBeVisible();
       const toastText = await toast.innerText();
       const entrances = await settleToastEntrance(toast);
       const titleGeometry = await textGeometry(
-        toast.locator(".g-toast__title"),
+        toast.locator(".arken-toast__title"),
       );
       const contentGeometry = await textGeometry(
-        toast.locator(".g-toast__content"),
+        toast.locator(".arken-toast__content"),
       );
       fixture.geometry.push({
         phase: "audio-error",

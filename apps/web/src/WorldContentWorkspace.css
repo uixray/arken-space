@@ -121,7 +121,8 @@
 }
 /* Only this creation dialog: Gravity's footer popup otherwise uses max-content
    width, so a complete validation message can extend beyond a compact dialog. */
-.g-dialog:has(.world-content-workspace__create-name) .g-dialog-footer__error {
+.arken-modal-dialog:has(.world-content-workspace__create-name)
+  .arken-modal-dialog-footer__error {
   box-sizing: border-box;
   max-width: calc(100vw - 64px);
   white-space: normal;
@@ -221,7 +222,7 @@
 }
 
 @media (max-width: 1023px) {
-  .world-content-workspace__media-actions .g-button {
+  .world-content-workspace__media-actions .arken-button {
     min-width: 44px;
     min-height: 44px;
   }

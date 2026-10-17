@@ -91,17 +91,17 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
 
   const sizeClass =
     typeof size === "string"
-      ? `g-text-input_size_${size} arken-text-input--${size}`
-      : "g-text-input_size_m arken-text-input--m";
+      ? `arken-text-input--size-${size} arken-text-input--${size}`
+      : "arken-text-input--size-m arken-text-input--m";
 
   const wrapperClassName = cx(
     "arken-text-input",
-    "g-text-input",
-    `g-text-input_view_${view}`,
-    `g-text-input_pin_${pin}`,
+    "arken-text-input",
+    `arken-text-input--view-${view}`,
+    `arken-text-input--pin-${pin}`,
     sizeClass,
-    disabled && "g-text-input_disabled arken-text-input--disabled",
-    isInvalid && "g-text-input_invalid",
+    disabled && "arken-text-input--disabled",
+    isInvalid && "arken-text-input--invalid",
     className,
   );
 
@@ -126,12 +126,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       data-qa={qa}
       data-invalid={isInvalid ? "true" : undefined}
     >
-      <span className="arken-text-input__content g-text-input__content">
+      <span className="arken-text-input__content">
         {label && (
-          <span
-            id={labelId}
-            className="arken-text-input__label g-text-input__label"
-          >
+          <span id={labelId} className="arken-text-input__label">
             {label}
           </span>
         )}
@@ -150,7 +147,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           onChange={handleChange}
           className={cx(
             "arken-text-input__control",
-            "g-text-input__control",
+            "arken-text-input__control",
             mergedControlProps.className,
           )}
           aria-labelledby={

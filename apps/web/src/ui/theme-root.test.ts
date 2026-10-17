@@ -42,8 +42,8 @@ describe("theme root variables", () => {
       join(sourceRoot, "ui/theme-root.css"),
       "utf8",
     );
-    expect(themeRoot).toContain(".g-root_theme_dark {");
-    expect(themeRoot).toContain(".g-root_theme_light {");
+    expect(themeRoot).toContain(".arken-root--theme-dark {");
+    expect(themeRoot).toContain(".arken-root--theme-light {");
     expect(themeRoot).toMatch(/--g-color-base-background:/);
   });
 

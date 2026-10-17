@@ -190,7 +190,7 @@ async function textGeometry(target: Locator) {
     for (
       let parent: Element | null =
         element instanceof HTMLInputElement &&
-        element.parentElement?.matches(".g-text-input__content")
+        element.parentElement?.matches(".arken-text-input__content")
           ? element.parentElement.parentElement
           : element instanceof HTMLInputElement ||
               element instanceof HTMLSelectElement

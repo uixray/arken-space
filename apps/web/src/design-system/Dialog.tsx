@@ -58,18 +58,22 @@ export const DialogHeader = forwardRef<HTMLDivElement, DialogHeaderProps>(
     return (
       <header
         ref={ref}
-        className={cx("arken-dialog__header", "g-dialog-header", className)}
+        className={cx(
+          "arken-dialog__header",
+          "arken-modal-dialog-header",
+          className,
+        )}
       >
         <BaseDialog.Title
           id={titleId}
-          className="arken-dialog__title g-dialog-header__caption"
+          className="arken-dialog__title arken-modal-dialog-header__caption"
         >
           {titleContent}
         </BaseDialog.Title>
         {!hideClose && (
           <button
             type="button"
-            className="arken-dialog__close g-dialog-btn-close__btn"
+            className="arken-dialog__close arken-modal-dialog-btn-close__btn"
             onClick={onClose}
             aria-label="Закрыть диалоговое окно"
             title="Закрыть диалоговое окно"
@@ -97,7 +101,11 @@ export const DialogBody = forwardRef<HTMLDivElement, DialogBodyProps>(
     return (
       <div
         ref={ref}
-        className={cx("arken-dialog__body", "g-dialog__body", className)}
+        className={cx(
+          "arken-dialog__body",
+          "arken-modal-dialog__body",
+          className,
+        )}
         style={style}
       >
         {children}
@@ -145,7 +153,11 @@ export const DialogFooter = forwardRef<HTMLDivElement, DialogFooterProps>(
     return (
       <footer
         ref={ref}
-        className={cx("arken-dialog__footer", "g-dialog-footer", className)}
+        className={cx(
+          "arken-dialog__footer",
+          "arken-modal-dialog-footer",
+          className,
+        )}
       >
         {showError && errorText && (
           <div role="alert" className="arken-dialog__error">
@@ -239,15 +251,15 @@ export function DialogComponent({
     <DialogContext.Provider value={contextValue}>
       <BaseDialog.Root open={open} onOpenChange={handleOpenChange} modal>
         <BaseDialog.Portal>
-          <BaseDialog.Backdrop className="arken-dialog__backdrop g-modal__backdrop" />
+          <BaseDialog.Backdrop className="arken-dialog__backdrop arken-modal__backdrop" />
           <div className="arken-dialog__viewport">
             <BaseDialog.Popup
               className={cx(
                 "arken-dialog__popup",
                 "arken-dialog",
-                "g-dialog",
+                "arken-modal-dialog",
                 `arken-dialog--${size}`,
-                `g-dialog_size_${size}`,
+                `arken-modal-dialog--size-${size}`,
                 className,
               )}
               style={style}

@@ -68,9 +68,9 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
 
     const wrapperClassName = cx(
       "arken-text-area",
-      "g-text-area",
-      disabled && "g-text-area_disabled arken-text-area--disabled",
-      isInvalid && "g-text-area_invalid",
+      "arken-text-area",
+      disabled && "arken-text-area--disabled",
+      isInvalid && "arken-text-area--invalid",
       className,
     );
 
@@ -91,12 +91,8 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
         data-qa={qa}
         data-invalid={isInvalid ? "true" : undefined}
       >
-        <span className="arken-text-area__content g-text-area__content">
-          {label && (
-            <span className="arken-text-area__label g-text-area__label">
-              {label}
-            </span>
-          )}
+        <span className="arken-text-area__content">
+          {label && <span className="arken-text-area__label">{label}</span>}
           <textarea
             {...mergedControlProps}
             ref={combinedRef}
@@ -107,7 +103,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
             onChange={handleChange}
             className={cx(
               "arken-text-area__control",
-              "g-text-area__control",
+              "arken-text-area__control",
               mergedControlProps.className,
             )}
             aria-invalid={isInvalid ? "true" : undefined}

@@ -18,9 +18,9 @@ export function Badge({
     <span
       className={[
         "arken-badge",
-        "g-label",
+        "arken-label",
         `arken-badge--${theme}`,
-        `g-label_theme_${theme}`,
+        `arken-label--theme-${theme}`,
         className,
       ]
         .filter(Boolean)

@@ -229,8 +229,8 @@ for (const role of ["GM", "PLAYER"] as const) {
         "data-player-theme",
         "light",
       );
-      await expect(page.locator(".g-root").first()).toHaveClass(
-        /g-root_theme_light/,
+      await expect(page.locator(".arken-root").first()).toHaveClass(
+        /arken-root--theme-light/,
       );
       expect(fixture.writes).toEqual([]);
       await dialog.getByRole("button", { name: "Отмена", exact: true }).click();

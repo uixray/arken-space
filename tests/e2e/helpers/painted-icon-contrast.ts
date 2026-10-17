@@ -93,7 +93,7 @@ export async function paintedIconContrast(icon: Locator) {
           // central, unclipped icon region are supported; other pseudos fail.
           const flatGravitySurface =
             pseudo === "::before" &&
-            node.classList.contains("g-button") &&
+            node.classList.contains("arken-button") &&
             ps.position === "absolute" &&
             ps.inset === "0px" &&
             ps.zIndex === "-1" &&

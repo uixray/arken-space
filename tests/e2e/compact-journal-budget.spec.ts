@@ -161,7 +161,7 @@ async function assertCompactBudget(
     page.locator(".resource-counters__summary"),
     page
       .locator(
-        '.quick-roll-panel [role="tabpanel"]:not([hidden]) .activity-quick-rolls .g-button',
+        '.quick-roll-panel [role="tabpanel"]:not([hidden]) .activity-quick-rolls .arken-button',
       )
       .last(),
   ]) {

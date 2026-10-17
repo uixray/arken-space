@@ -9,7 +9,7 @@ export async function assertModalFocusCycle(
 ) {
   await expect(dialog).toBeVisible();
   const recorder = await dialog.evaluateHandle((element) => {
-    const wrapper = element.closest(".g-modal__content-wrapper");
+    const wrapper = element.closest(".arken-modal__content-wrapper");
     if (!wrapper) throw new Error("Modal focus owner is missing");
     const state = { guardVisits: 0, violations: [] as string[] };
     const onFocus = (event: FocusEvent) => {

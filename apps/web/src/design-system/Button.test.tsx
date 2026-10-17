@@ -22,12 +22,12 @@ describe("Button", () => {
     expect(button).toHaveAttribute("aria-pressed", "true");
     expect(button).toHaveAttribute("data-qa", "save");
     expect(button).toHaveClass(
-      "g-button",
-      "g-button_view_action",
-      "g-button_size_l",
-      "g-button_selected",
+      "arken-button",
+      "arken-button--view-action",
+      "arken-button--size-l",
+      "arken-button--selected",
     );
-    expect(button.querySelector(".g-button__text")).toHaveTextContent(
+    expect(button.querySelector(".arken-button__text")).toHaveTextContent(
       "Сохранить",
     );
   });
@@ -44,7 +44,10 @@ describe("Button", () => {
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("tabindex", "-1");
     expect(button).toHaveAttribute("aria-busy", "true");
-    expect(button).toHaveClass("g-button_disabled", "g-button_loading");
+    expect(button).toHaveClass(
+      "arken-button--disabled",
+      "arken-button--loading",
+    );
     expect(button.querySelector(".arken-button__spinner")).toBeInTheDocument();
     expect(button).toHaveAccessibleName("Сохранение");
     fireEvent.click(button);
