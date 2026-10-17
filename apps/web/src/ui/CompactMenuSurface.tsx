@@ -32,6 +32,7 @@ export interface CompactMenuSurfaceProps {
   onOpenPlayerHandoff: () => void;
   onLogout: () => Promise<void> | void;
   onMusicControlsTarget: (target: HTMLElement | null) => void;
+  onSoundpadLauncherTarget: (target: HTMLElement | null) => void;
 }
 
 export const CompactMenuSurface = memo(function CompactMenuSurface({
@@ -46,6 +47,7 @@ export const CompactMenuSurface = memo(function CompactMenuSurface({
   onOpenPlayerHandoff,
   onLogout,
   onMusicControlsTarget,
+  onSoundpadLauncherTarget,
 }: CompactMenuSurfaceProps) {
   // Preview must expose the viewed player's navigation, not GM-only sections.
   const isGm = viewSnapshot.me.role === "GM";
@@ -161,6 +163,12 @@ export const CompactMenuSurface = memo(function CompactMenuSurface({
       {/* Audio & Ambience */}
       <section className="compact-menu-section">
         <h3 className="compact-menu-section-title">Звуки и музыка</h3>
+        {/* UIX-512: the compact map and menu hide the header, which holds the
+          soundpad launcher everywhere else. */}
+        <div
+          ref={onSoundpadLauncherTarget}
+          className="compact-menu-soundpad-slot"
+        />
         <div ref={onMusicControlsTarget} className="compact-menu-audio-card" />
       </section>
 

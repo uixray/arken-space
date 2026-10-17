@@ -341,6 +341,8 @@ export function App() {
   const [menuMusicTarget, setMenuMusicTarget] = useState<HTMLElement | null>(
     null,
   );
+  const [menuSoundpadTarget, setMenuSoundpadTarget] =
+    useState<HTMLElement | null>(null);
   useEffect(() => {
     setWorkspace(null);
     setCompactSectionsOpen(false);
@@ -2063,6 +2065,7 @@ export function App() {
                 onSelectWorkspace={(w) => handleWorkspaceChange(w)}
                 onSelectSurface={selectCompactSurface}
                 onMusicControlsTarget={setMenuMusicTarget}
+                onSoundpadLauncherTarget={setMenuSoundpadTarget}
                 onOpenThemeSettings={handleOpenThemeSettings}
                 onOpenShortcuts={() => setShortcutsOpen(true)}
                 onOpenPlayerHandoff={() => setPlayerHandoffOpen(true)}
@@ -2092,7 +2095,11 @@ export function App() {
               socket={socket}
               onUpload={handleUploadAudio}
               onRefreshSnapshot={load}
-              launcherTarget={headerSoundpadTarget}
+              launcherTarget={
+                compact && compactSurface === "menu"
+                  ? menuSoundpadTarget
+                  : headerSoundpadTarget
+              }
             />
           )}
           {compact && (

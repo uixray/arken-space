@@ -93,9 +93,17 @@ async function joinAsPlayer(
 
 async function openSoundpad(page: Page) {
   const launcher = page.getByRole("button", { name: "Саундпад", exact: true });
-  // The compact shell hides its header on the map; the journal shows it.
-  if (!(await launcher.isVisible()))
-    await page.getByRole("button", { name: "Журнал", exact: true }).click();
+  // The compact shell hides its header on the map; the launcher then sits in
+  // Menu → «Звуки и музыка», next to the music controls.
+  if (!(await launcher.isVisible())) {
+    await page.getByRole("button", { name: "Меню", exact: true }).click();
+    const audio = page
+      .locator(".compact-menu-section")
+      .filter({ hasText: "Звуки и музыка" });
+    await expect(
+      audio.getByRole("button", { name: "Саундпад", exact: true }),
+    ).toBeVisible();
+  }
   await launcher.click();
   const dialog = page.getByRole("dialog", { name: "Саундпад" });
   await expect(dialog).toBeVisible();

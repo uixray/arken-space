@@ -483,6 +483,18 @@
     width: 100%;
   }
 
+  .compact-menu-soundpad-slot {
+    display: flex;
+    margin-bottom: 8px;
+  }
+
+  .compact-menu-soundpad-slot .soundpad__launcher {
+    flex: 1 1 auto;
+    min-height: 44px;
+    padding: 12px 14px;
+    text-align: left;
+  }
+
   .compact-menu-actions-list {
     display: flex;
     flex-direction: column;
