@@ -14,6 +14,7 @@ import {
   campaignSounds,
   characters,
   characterMedia,
+  drawings,
   gameEvents,
   scenes,
   tokenDefinitions,
@@ -90,6 +91,7 @@ export async function resolveAssetUsages(
     worldContentMediaRows,
     worldContentInstanceRows,
     provenanceRows,
+    stampRows,
   ] = await Promise.all([
     db
       .select({ id: scenes.id, name: scenes.name })
@@ -236,6 +238,25 @@ export async function resolveAssetUsages(
           sql`${gameEvents.payload}->>'sourceAssetId' = ${assetId}`,
         ),
       ),
+    // UIX-706: campaign-image map stamps and texture strokes reference the
+    // asset by id.
+    db
+      .select({
+        id: drawings.id,
+        sceneName: scenes.name,
+        layer: drawings.stampLayer,
+        kind: drawings.kind,
+      })
+      .from(drawings)
+      .innerJoin(scenes, eq(drawings.sceneId, scenes.id))
+      .where(
+        and(
+          eq(scenes.campaignId, campaignId),
+          inArray(drawings.kind, ["STAMP", "TEXTURE"]),
+          eq(drawings.stampPackId, "campaign-image"),
+          eq(drawings.stampAssetKey, assetId),
+        ),
+      ),
   ]);
 
   return [
@@ -349,6 +370,16 @@ export async function resolveAssetUsages(
       location: "История изменений",
       visibility: "GM_ONLY" as const,
       deletionPolicy: "RETAIN_HISTORY" as const,
+    })),
+    ...stampRows.map((row) => ({
+      kind: "MAP_STAMP" as const,
+      entityId: row.id,
+      label: row.sceneName,
+      location: row.kind === "TEXTURE" ? "Текстура на карте" : "Штамп на карте",
+      visibility:
+        row.layer === "PUBLIC" ? ("PUBLIC" as const) : ("GM_ONLY" as const),
+      // A stamp without its picture is meaningless: it is removed with it.
+      deletionPolicy: "DETACH" as const,
     })),
   ];
 }
@@ -624,6 +655,24 @@ export function registerAssetLifecycleRoutes(
             and(
               eq(characterMedia.campaignId, auth.campaignId),
               eq(characterMedia.assetId, id),
+            ),
+          );
+        // UIX-706: a campaign-image stamp or texture stroke cannot outlive
+        // its picture.
+        await tx
+          .delete(drawings)
+          .where(
+            and(
+              inArray(drawings.kind, ["STAMP", "TEXTURE"]),
+              eq(drawings.stampPackId, "campaign-image"),
+              eq(drawings.stampAssetKey, id),
+              inArray(
+                drawings.sceneId,
+                tx
+                  .select({ id: scenes.id })
+                  .from(scenes)
+                  .where(eq(scenes.campaignId, auth.campaignId)),
+              ),
             ),
           );
         await tx

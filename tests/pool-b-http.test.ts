@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { and, desc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../packages/db/src/schema.js";
+import { createDrawingSchema } from "../packages/contracts/src/index.js";
 import { registerRoutes } from "../apps/server/src/routes.js";
 import { hashToken } from "../apps/server/src/security.js";
 import { env } from "../apps/server/src/env.js";
@@ -1412,6 +1413,325 @@ describe("Pool B HTTP boundaries", () => {
         color: "#ffffff",
         kind: "STAMP",
       } as never),
+    ).rejects.toThrow();
+  });
+
+  it("UIX-706 accepts GM campaign images as stamps, scopes them and removes them with the image", async () => {
+    const publicImage = crypto.randomUUID();
+    const hiddenImage = crypto.randomUUID();
+    await db.insert(schema.assets).values(
+      [publicImage, hiddenImage].map((id, index) => ({
+        id,
+        campaignId: ids.campaign,
+        uploadedByMembershipId: ids.gm,
+        kind: "IMAGE" as const,
+        name: `Stamp ${index}`,
+        storageKey: crypto.randomUUID(),
+        mimeType: "image/webp",
+        sizeBytes: 1,
+      })),
+    );
+    const makeStamp = (
+      assetKey: string,
+      packId: string,
+      layer: "PUBLIC" | "GM" = "PUBLIC",
+    ) =>
+      app.inject({
+        method: "POST",
+        url: "/api/drawings",
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: crypto.randomUUID(),
+          sceneId: ids.scene,
+          kind: "STAMP",
+          assetKey,
+          packId,
+          x: 10,
+          y: 20,
+          size: 96,
+          rotation: 0,
+          layer,
+        },
+      });
+
+    const visible = await makeStamp(publicImage, "campaign-image");
+    expect(visible.statusCode, visible.body).toBe(201);
+    expect(visible.json()).toMatchObject({
+      kind: "STAMP",
+      assetKey: publicImage,
+      packId: "campaign-image",
+    });
+    const hidden = await makeStamp(hiddenImage, "campaign-image", "GM");
+    expect(hidden.statusCode, hidden.body).toBe(201);
+
+    // Only IMAGE assets of this campaign qualify; templates must be catalogued.
+    expect((await makeStamp(ids.tokenAsset, "campaign-image")).json()).toEqual(
+      expect.objectContaining({ error: "STAMP_IMAGE_NOT_FOUND" }),
+    );
+    expect(
+      (await makeStamp(ids.foreignAsset, "campaign-image")).statusCode,
+    ).toBe(404);
+    // Shape errors are ZodErrors (400 via the production error handler; this
+    // harness has none), so assert the contract and that nothing is written.
+    const stampShape = {
+      sceneId: ids.scene,
+      kind: "STAMP",
+      x: 0,
+      y: 0,
+      size: 96,
+      rotation: 0,
+      layer: "PUBLIC",
+    };
+    expect(
+      createDrawingSchema.safeParse({
+        ...stampShape,
+        packId: "campaign-image",
+        assetKey: "forest",
+      }).success,
+    ).toBe(false);
+    expect(
+      createDrawingSchema.safeParse({
+        ...stampShape,
+        packId: "builtin-terrain-v1",
+        assetKey: "../x",
+      }).success,
+    ).toBe(false);
+    expect(
+      (await makeStamp("forest", "campaign-image")).statusCode,
+    ).toBeGreaterThanOrEqual(400);
+    const unknownTemplate = await makeStamp("dark-cloud", "builtin-terrain-v1");
+    expect(unknownTemplate.statusCode).toBe(400);
+    expect(unknownTemplate.json()).toMatchObject({
+      error: "STAMP_TEMPLATE_UNKNOWN",
+    });
+    expect(
+      (await makeStamp("../x", "builtin-terrain-v1")).statusCode,
+    ).toBeGreaterThanOrEqual(400);
+    expect(await db.select().from(schema.drawings)).toHaveLength(2);
+
+    const playerSnapshot = (
+      await app.inject({
+        method: "GET",
+        url: "/api/bootstrap",
+        headers: headers(secrets.player),
+      })
+    ).json();
+    const playerAssetIds = playerSnapshot.assets.map(
+      (asset: { id: string }) => asset.id,
+    );
+    expect(playerAssetIds).toContain(publicImage);
+    expect(playerAssetIds).not.toContain(hiddenImage);
+
+    const usage = await app.inject({
+      method: "GET",
+      url: `/api/assets/${publicImage}/usage`,
+      headers: headers(secrets.gm),
+    });
+    expect(usage.statusCode, usage.body).toBe(200);
+    expect(usage.json().usages).toEqual([
+      expect.objectContaining({
+        kind: "MAP_STAMP",
+        entityId: visible.json().id,
+        visibility: "PUBLIC",
+        deletionPolicy: "DETACH",
+      }),
+    ]);
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/assets/${publicImage}`,
+      headers: headers(secrets.gm),
+    });
+    expect(deleted.statusCode, deleted.body).toBe(200);
+    const remaining = await db.select().from(schema.drawings);
+    expect(remaining.map((drawing) => drawing.id)).toEqual([hidden.json().id]);
+  });
+
+  it("UIX-706 pool 3 paints GM texture strokes with the stamp ACL, layer projection and undo", async () => {
+    const tile = crypto.randomUUID();
+    await db.insert(schema.assets).values({
+      id: tile,
+      campaignId: ids.campaign,
+      uploadedByMembershipId: ids.gm,
+      kind: "IMAGE" as const,
+      name: "Tile",
+      storageKey: crypto.randomUUID(),
+      mimeType: "image/webp",
+      sizeBytes: 1,
+    });
+    const paint = (secret: string, overrides: Record<string, unknown> = {}) =>
+      app.inject({
+        method: "POST",
+        url: "/api/drawings",
+        headers: headers(secret),
+        payload: {
+          actionId: crypto.randomUUID(),
+          sceneId: ids.scene,
+          kind: "TEXTURE",
+          points: [0, 0, 120, 40, 200, 160],
+          brushWidth: 96,
+          assetKey: tile,
+          packId: "campaign-image",
+          size: 128,
+          layer: "PUBLIC",
+          x: 0,
+          y: 0,
+          ...overrides,
+        },
+      });
+
+    const publicStroke = await paint(secrets.gm);
+    expect(publicStroke.statusCode, publicStroke.body).toBe(201);
+    expect(publicStroke.json()).toMatchObject({
+      kind: "TEXTURE",
+      assetKey: tile,
+      packId: "campaign-image",
+      strokeWidth: 96,
+      size: 128,
+      layer: "PUBLIC",
+      points: [0, 0, 120, 40, 200, 160],
+    });
+    const hiddenStroke = await paint(secrets.gm, { layer: "GM" });
+    expect(hiddenStroke.statusCode, hiddenStroke.body).toBe(201);
+
+    // GM only; sources follow the stamp rules: this campaign's IMAGE assets
+    // or a catalogued texture, never a stamp template key or a path.
+    expect((await paint(secrets.player)).statusCode).toBe(403);
+    expect(
+      (await paint(secrets.gm, { assetKey: ids.foreignAsset })).statusCode,
+    ).toBe(404);
+    const unknownTexture = await paint(secrets.gm, {
+      packId: "builtin-texture-v1",
+      assetKey: "forest",
+    });
+    expect(unknownTexture.statusCode).toBe(400);
+    expect(unknownTexture.json()).toMatchObject({
+      error: "STAMP_TEMPLATE_UNKNOWN",
+    });
+    const textureShape = {
+      sceneId: ids.scene,
+      kind: "TEXTURE",
+      points: [0, 0, 10, 10],
+      brushWidth: 96,
+      size: 128,
+      layer: "PUBLIC",
+      x: 0,
+      y: 0,
+    };
+    for (const invalid of [
+      { packId: "builtin-terrain-v1", assetKey: "forest" },
+      { packId: "builtin-texture-v1", assetKey: "../x" },
+      { packId: "campaign-image", assetKey: tile, brushWidth: 4 },
+      { packId: "campaign-image", assetKey: tile, brushWidth: 401 },
+      { packId: "campaign-image", assetKey: tile, points: [0, 0] },
+    ])
+      expect(
+        createDrawingSchema.safeParse({ ...textureShape, ...invalid }).success,
+        JSON.stringify(invalid),
+      ).toBe(false);
+    expect(await db.select().from(schema.drawings)).toHaveLength(2);
+
+    const playerSnapshot = (
+      await app.inject({
+        method: "GET",
+        url: "/api/bootstrap",
+        headers: headers(secrets.player),
+      })
+    ).json();
+    expect(
+      playerSnapshot.drawings.map((drawing: { id: string }) => drawing.id),
+    ).toEqual([publicStroke.json().id]);
+    expect(
+      playerSnapshot.assets.map((asset: { id: string }) => asset.id),
+    ).toContain(tile);
+
+    // Like stamps, a stroke's brush width and colour are fixed after painting.
+    const widthChange = await app.inject({
+      method: "PATCH",
+      url: `/api/drawings/${publicStroke.json().id}`,
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), revision: 0, strokeWidth: 5 },
+    });
+    expect(widthChange.statusCode).toBe(422);
+    const playerMove = await app.inject({
+      method: "PATCH",
+      url: `/api/drawings/${publicStroke.json().id}`,
+      headers: headers(secrets.player),
+      payload: { actionId: crypto.randomUUID(), revision: 0, x: 5 },
+    });
+    expect(playerMove.statusCode).toBe(403);
+    const tileChange = await app.inject({
+      method: "PATCH",
+      url: `/api/drawings/${publicStroke.json().id}`,
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), revision: 0, size: 256 },
+    });
+    expect(tileChange.statusCode, tileChange.body).toBe(200);
+    expect(tileChange.json()).toMatchObject({ kind: "TEXTURE", size: 256 });
+
+    // Undo of a deleted stroke restores its brush width (the DB check requires
+    // 8..400, so a restore falling back to the default width would fail).
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/api/drawings/${publicStroke.json().id}`,
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), revision: 1 },
+    });
+    expect(removed.statusCode, removed.body).toBeLessThan(300);
+    const undone = await app.inject({
+      method: "POST",
+      url: "/api/canvas/undo",
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), sceneId: ids.scene },
+    });
+    expect(undone.statusCode, undone.body).toBe(200);
+    const [restored] = await db
+      .select()
+      .from(schema.drawings)
+      .where(eq(schema.drawings.id, publicStroke.json().id));
+    expect(restored).toMatchObject({
+      kind: "TEXTURE",
+      strokeWidth: 96,
+      stampSize: 256,
+      stampLayer: "PUBLIC",
+    });
+
+    const usage = await app.inject({
+      method: "GET",
+      url: `/api/assets/${tile}/usage`,
+      headers: headers(secrets.gm),
+    });
+    expect(usage.json().usages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "MAP_STAMP",
+          location: "Текстура на карте",
+          deletionPolicy: "DETACH",
+        }),
+      ]),
+    );
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/assets/${tile}`,
+      headers: headers(secrets.gm),
+    });
+    expect(deleted.statusCode, deleted.body).toBe(200);
+    expect(await db.select().from(schema.drawings)).toHaveLength(0);
+
+    await expect(
+      db.insert(schema.drawings).values({
+        sceneId: ids.scene,
+        authorMembershipId: ids.gm,
+        points: [0, 0, 1, 1],
+        color: "#ffffff",
+        strokeWidth: 3,
+        kind: "TEXTURE",
+        stampAssetKey: tile,
+        stampPackId: "campaign-image",
+        stampSize: 128,
+        stampRotation: 0,
+        stampLayer: "PUBLIC",
+      }),
     ).rejects.toThrow();
   });
 

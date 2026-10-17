@@ -172,7 +172,7 @@ function envelope<T>(
  * this projection reusable so a successful mutation can re-read the canonical
  * definition after commit instead of publishing the pre-transaction snapshot.
  */
-async function projectedToken(
+export async function projectedToken(
   db: CampaignCanvasDb,
   campaignId: string,
   tokenId: string,

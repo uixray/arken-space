@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import type { ComponentProps } from "react";
-import type { Button, TextArea, TextInput } from "@gravity-ui/uikit";
 import type { AssetDto, CharacterDto, GameSnapshot } from "@arken/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -28,78 +27,6 @@ import { CharacterPanel } from "./CharacterWorkspace";
 // native focus/change/blur events and mutation runner. Only the CSS library
 // controls, dialog shell, file-upload leaf and self-fetching gallery are
 // replaced. No mock receives a role or computes ownership.
-vi.mock("@gravity-ui/uikit", () => ({
-  Toaster: class {
-    add = vi.fn();
-    remove = vi.fn();
-  },
-  Button: ({
-    children,
-    disabled,
-    onClick,
-    onPointerDown,
-    title,
-    "aria-label": ariaLabel,
-  }: ComponentProps<typeof Button>) => (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      onPointerDown={onPointerDown}
-      title={title}
-      aria-label={ariaLabel}
-    >
-      {children}
-    </button>
-  ),
-  TextArea: ({
-    controlRef,
-    controlProps,
-    defaultValue,
-    value,
-    disabled,
-    onChange,
-    onBlur,
-    rows,
-    name,
-  }: ComponentProps<typeof TextArea>) => (
-    <textarea
-      {...controlProps}
-      ref={controlRef}
-      defaultValue={defaultValue}
-      value={value}
-      disabled={disabled}
-      onChange={onChange}
-      onBlur={onBlur}
-      rows={rows}
-      name={name}
-    />
-  ),
-  TextInput: ({
-    controlProps,
-    controlRef,
-    defaultValue,
-    value,
-    disabled,
-    onChange,
-    onBlur,
-    type,
-    placeholder,
-    onUpdate,
-  }: ComponentProps<typeof TextInput>) => (
-    <input
-      {...controlProps}
-      ref={controlRef}
-      defaultValue={defaultValue}
-      value={value}
-      disabled={disabled}
-      onChange={onChange ?? ((event) => onUpdate?.(event.target.value))}
-      onBlur={onBlur}
-      type={type}
-      placeholder={placeholder}
-    />
-  ),
-}));
 vi.mock("../ui/ArkenDialog", () => ({
   ArkenDialog: ({
     open,
@@ -531,7 +458,7 @@ describe("CharacterPanel identity and portrait role wiring", () => {
       ).toHaveAttribute("aria-hidden", "true");
       expect(
         screen.queryAllByRole("button", { name: "Добавить строку" }),
-      ).toHaveLength(actor === "CONTROLLER" ? 0 : 2);
+      ).toHaveLength(actor === "CONTROLLER" ? 0 : 3);
       const user = userEvent.setup();
       await user.click(screen.getByRole("button", { name: "Переименовать" }));
       const name = screen.getByRole("textbox", { name: "Имя персонажа" });
@@ -847,8 +774,18 @@ describe("CharacterPanel identity and portrait role wiring", () => {
 
     await user.click(screen.getByRole("tab", { name: "Показатели" }));
 
+    // UIX-706: the owner adds simple skills as rows (name + bonus) and keeps
+    // the personal catalog entry flow for skills with a description/formula.
+    const skillsCard = document.querySelector(".character-card--skills")!;
     expect(
-      screen.getByRole("button", { name: "+ Добавить навык…" }),
+      within(skillsCard as HTMLElement).getByRole("button", {
+        name: "Добавить строку",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(skillsCard as HTMLElement).getByRole("button", {
+        name: "+ Добавить навык…",
+      }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "+ Добавить способность…" }),
@@ -889,6 +826,8 @@ describe("CharacterPanel identity and portrait role wiring", () => {
       .setup()
       .click(screen.getByRole("tab", { name: "Показатели" }));
 
+    // UIX-706: a delegated player cannot edit the owner's layout rows, so
+    // skills still come from the catalog for them.
     expect(
       screen.getByRole("button", { name: "+ Добавить навык…" }),
     ).toBeInTheDocument();

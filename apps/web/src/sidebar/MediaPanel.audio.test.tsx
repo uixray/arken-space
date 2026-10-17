@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { ThemeProvider } from "@gravity-ui/uikit";
 import type { AssetDto } from "@arken/contracts";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
@@ -52,7 +51,7 @@ function setup(
   onRefresh?: AssetActions["refreshAssets"],
 ) {
   renderComponent(
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <MediaPanel
         snapshot={{ ...(player ? playerSnapshot() : gmSnapshot()), assets }}
         onUpload={onUpload}
@@ -60,7 +59,7 @@ function setup(
         onDelete={vi.fn()}
         onRefresh={onRefresh}
       />
-    </ThemeProvider>,
+    </>,
   );
   return onUpload;
 }

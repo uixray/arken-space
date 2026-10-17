@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fireEvent,
@@ -8,12 +8,6 @@ import {
   userEvent,
 } from "../test-support/render";
 import { ImageUploadField } from "./ImageUploadField";
-
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({ children, ...props }: { children?: ReactNode }) => (
-    <button {...props}>{children}</button>
-  ),
-}));
 
 function transfer(file: File) {
   return {

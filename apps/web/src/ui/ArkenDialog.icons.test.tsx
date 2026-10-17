@@ -5,11 +5,6 @@ import { ArkenDialog } from "./ArkenDialog";
 
 // Gravity imports CSS unsupported by this Vitest setup. Only its unused modal
 // branch is stubbed; workspace DOM, hooks, buttons and Lucide stay real.
-vi.mock("@gravity-ui/uikit", () => ({
-  Dialog: () => {
-    throw new Error("This suite must only render the workspace variant");
-  },
-}));
 
 describe("workspace close icon", () => {
   it("keeps its accessible name and initial focus with a real Lucide SVG", () => {

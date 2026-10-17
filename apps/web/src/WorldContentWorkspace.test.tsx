@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./api";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import type { ReactNode } from "react";
 import { fireEvent, renderComponent, screen } from "./test-support/render";
 
@@ -51,11 +50,7 @@ function renderManager(onClose = vi.fn()) {
   renderComponent(
     <WorldContentWorkspace open assets={[]} onClose={onClose} />,
     {
-      wrapper: ({ children }: { children: ReactNode }) => (
-        <ThemeProvider theme="dark" lang="ru">
-          {children}
-        </ThemeProvider>
-      ),
+      wrapper: ({ children }: { children: ReactNode }) => <>{children}</>,
     },
   );
   return onClose;

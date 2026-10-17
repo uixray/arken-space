@@ -3,6 +3,7 @@ import { type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 import type { GameSnapshot } from "@arken/contracts";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const snapshot = {
   campaign: {
@@ -304,7 +305,7 @@ test("compact PLAYER inventory commits normalized lines and survives acknowledge
       return route.fulfill({ json: { posts: [], nextCursor: null } });
     if (path === "/api/operator/feedback/capability")
       return route.fulfill({ status: 403, json: {} });
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, path);
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {

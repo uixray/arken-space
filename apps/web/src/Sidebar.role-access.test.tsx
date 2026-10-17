@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import type { ComponentProps } from "react";
-import type { Button } from "@gravity-ui/uikit";
 import type { GameSnapshot } from "@arken/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { renderComponent, screen } from "./test-support/render";
@@ -35,13 +34,6 @@ import { Sidebar, type Props } from "./Sidebar";
 // mocks remove CSS, canvas and self-fetching workspaces, not the role decision.
 // The editor marker only knows its real `open` prop, never a test-only role.
 // This covers client routing, not editor internals, navigation or server ACL.
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({ children, disabled, onClick }: ComponentProps<typeof Button>) => (
-    <button type="button" disabled={disabled} onClick={onClick}>
-      {children}
-    </button>
-  ),
-}));
 vi.mock("./ui/ArkenDialog", () => ({
   ArkenDialog: (_props: ComponentProps<typeof ArkenDialog>) => null,
 }));
@@ -240,15 +232,20 @@ function renderEditorRoute(snapshot: GameSnapshot) {
 }
 
 describe("Sidebar editor role routing", () => {
-  it("opens the editor route for a GM snapshot", () => {
+  // The workspace is lazy-loaded: wait for it rather than query synchronously.
+  it("opens the editor route for a GM snapshot", async () => {
     renderEditorRoute(gmSnapshot());
     expect(
-      screen.getByRole("region", { name: "World content editor route" }),
+      await screen.findByRole("region", { name: "World content editor route" }),
     ).toBeInTheDocument();
   });
 
-  it("rejects the editor route for a PLAYER snapshot", () => {
+  it("rejects the editor route for a PLAYER snapshot", async () => {
+    // Load the lazy module first, so absence proves the role gate rather
+    // than a chunk that has not arrived yet.
+    await import("./WorldContentWorkspace");
     renderEditorRoute(playerSnapshot());
+    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(
       screen.queryByRole("region", { name: "World content editor route" }),
     ).not.toBeInTheDocument();

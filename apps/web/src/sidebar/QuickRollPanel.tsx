@@ -130,8 +130,11 @@ export function QuickRollPanel({
     (row) => !row.group || row.group === "characteristics",
   );
   const combatRows = rows.filter((row) => row.group === "combat");
+  // UIX-706: строки навыков — во вкладке «Способности», рядом с прежними навыками.
+  const skillRows = rows.filter((row) => row.group === "skills");
   const otherRows = rows.filter(
-    (row) => row.group && !["characteristics", "combat"].includes(row.group),
+    (row) =>
+      row.group && !["characteristics", "combat", "skills"].includes(row.group),
   );
   const submitEntry = async (
     entry: CharacterCatalogEntryDto,
@@ -285,6 +288,11 @@ export function QuickRollPanel({
           aria-labelledby={`${tabsId}-abilities`}
           hidden={activeTab !== "abilities"}
         >
+          {skillRows.length > 0 && (
+            <div className="activity-quick-rolls" aria-busy={quickRollPending}>
+              {statButtons(skillRows, "skill")}
+            </div>
+          )}
           {(rollCharacter.skills.length > 0 ||
             entries.some((entry) => entry.kind === "SKILL")) && (
             <div
@@ -377,6 +385,7 @@ export function QuickRollPanel({
             </div>
           )}
           {rollCharacter.skills.length === 0 &&
+            skillRows.length === 0 &&
             !entries.some((entry) =>
               ["SKILL", "ABILITY"].includes(entry.kind),
             ) && <p className="muted">Нет навыков и способностей.</p>}

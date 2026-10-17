@@ -3,6 +3,7 @@ import { expect, test } from "./react-console-guard";
 import type { SpellProgressionGraph } from "@arken/contracts";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 for (const width of [390, 1280]) {
   test(`UIX-458 GM creates, reloads and edits a spell draft at ${width}px (mock API)`, async ({
@@ -128,7 +129,7 @@ for (const width of [390, 1280]) {
       }
       if (pathname === "/api/client-logs")
         return route.fulfill({ json: { ok: true } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, pathname);
     });
 
     await page.setViewportSize({ width, height: 850 });
@@ -226,7 +227,7 @@ test("UIX-458 PLAYER cannot open or preload the GM spell-school editor", async (
       });
     if (path === "/api/client-logs")
       return route.fulfill({ json: { ok: true } });
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, path);
   });
   await page.setViewportSize({ width: 390, height: 850 });
   await mockAuthenticatedGameCapabilities(page);
@@ -297,7 +298,7 @@ test("UIX-458 ambiguous save keeps the actual workspace open until exact retry s
     }
     if (pathname === "/api/client-logs")
       return route.fulfill({ json: { ok: true } });
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, pathname);
   });
 
   await page.setViewportSize({ width: 390, height: 850 });

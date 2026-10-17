@@ -3,6 +3,7 @@ import { expect, test } from "./react-console-guard";
 import type { Locator, Page, WebSocketRoute } from "@playwright/test";
 import type { GameSnapshot } from "@arken/contracts";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const sceneId = "uix314-fog-scene";
 
@@ -85,7 +86,7 @@ async function bootFogScene(
       return route.fulfill({ status: 204, body: "" });
     if (path === "/api/story/posts" || path === "/api/canvas/history")
       return route.fulfill({ json: [] });
-    if (route.request().method() === "GET") return route.fulfill({ json: [] });
+    if (route.request().method() === "GET") return fulfillUnmocked(route, path);
     return route.fulfill({ status: 204, body: "" });
   });
   await page.addInitScript(() => {

@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { CharacterDto } from "@arken/contracts";
 import { fireEvent, renderComponent, screen } from "../test-support/render";
@@ -13,21 +12,6 @@ import { QuickRollPanel } from "./QuickRollPanel";
  * (`use-panel-resize`), а ошибка задачи была именно в том, у какой панели ручка
  * висит. Границы и хранение проверяет `panel-height-preference.test.ts`.
  */
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({
-    disabled,
-    onClick,
-    children,
-  }: {
-    disabled?: boolean;
-    onClick?: () => void;
-    children?: ReactNode;
-  }) => (
-    <button type="button" disabled={disabled} onClick={() => onClick?.()}>
-      {children}
-    </button>
-  ),
-}));
 
 vi.mock("../RollModeControl", () => ({
   RollModeControl: () => <div />,

@@ -25,21 +25,6 @@ vi.mock("../ui/ArkenDialog", () => ({
     </section>
   ),
 }));
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({
-    children,
-    onClick,
-    disabled,
-  }: {
-    children: ReactNode;
-    onClick?: () => void;
-    disabled?: boolean;
-  }) => (
-    <button disabled={disabled} onClick={onClick}>
-      {children}
-    </button>
-  ),
-}));
 vi.mock("../ui/ImageUploadField", () => ({
   ImageUploadField: ({
     label,

@@ -4,6 +4,7 @@ import { starterStatLayout } from "@arken/system";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 async function install(page: Page) {
   const snapshot = buildGameSnapshot("GM", {
@@ -84,7 +85,7 @@ async function install(page: Page) {
       throw new Error(
         `Unexpected mutation in read-only RO reproduction: ${route.request().method()} ${path}`,
       );
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, path);
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {

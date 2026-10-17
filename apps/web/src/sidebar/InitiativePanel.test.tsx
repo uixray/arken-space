@@ -1,67 +1,8 @@
 // @vitest-environment jsdom
-import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { InitiativeParticipantDto } from "@arken/contracts";
 import { renderComponent, screen, userEvent } from "../test-support/render";
 import { InitiativePanel } from "./InitiativePanel";
-
-/**
- * UIX-431, этап 5. Заглушки `@gravity-ui/uikit` следуют образцу
- * `StatLayoutCard.test.tsx`: настоящий пакет тянет CSS, который трансформ этого
- * репозитория не разбирает.
- */
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({
-    disabled,
-    onClick,
-    children,
-    ...rest
-  }: {
-    disabled?: boolean;
-    onClick?: () => void;
-    children?: ReactNode;
-    "aria-label"?: string;
-    title?: string;
-  }) => (
-    <button
-      type="button"
-      disabled={disabled}
-      aria-label={rest["aria-label"]}
-      title={rest.title}
-      onClick={() => onClick?.()}
-    >
-      {children}
-    </button>
-  ),
-  TextInput: ({
-    value,
-    onUpdate,
-    onBlur,
-    defaultValue,
-    disabled,
-    type,
-    ...rest
-  }: {
-    value?: string;
-    defaultValue?: string;
-    disabled?: boolean;
-    type?: string;
-    onUpdate?: (next: string) => void;
-    onBlur?: (event: { target: { value: string } }) => void;
-    "aria-label"?: string;
-    placeholder?: string;
-  }) => (
-    <input
-      aria-label={rest["aria-label"]}
-      placeholder={rest.placeholder}
-      type={type}
-      disabled={disabled}
-      {...(value === undefined ? { defaultValue } : { value })}
-      onChange={(event) => onUpdate?.(event.target.value)}
-      onBlur={onBlur}
-    />
-  ),
-}));
 
 const participants: InitiativeParticipantDto[] = [
   {

@@ -3,6 +3,7 @@ import { expect, test } from "./react-console-guard";
 import AxeBuilder from "@axe-core/playwright";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 for (const width of [1280, 390]) {
   test(`operator list filters and next page remain usable at ${width}`, async ({
@@ -64,7 +65,7 @@ for (const width of [1280, 390]) {
         });
       if (path === "/api/story/posts")
         return route.fulfill({ json: { posts: [], nextCursor: null } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {

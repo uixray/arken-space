@@ -4,7 +4,6 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
-import type { ButtonButtonProps } from "@gravity-ui/uikit";
 import {
   worldContentPlayerDtoSchema,
   type WorldContentDto,
@@ -26,13 +25,6 @@ vi.mock("./api", async (importOriginal) => ({
 }));
 // Only toolkit chrome and unrelated asset selection are replaced. The actual
 // editor, reader, client query/payload builders and copy are exercised below.
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({ children, onClick, disabled, loading }: ButtonButtonProps) => (
-    <button type="button" onClick={onClick} disabled={disabled || loading}>
-      {children}
-    </button>
-  ),
-}));
 vi.mock("./ui/ArkenDialog", () => ({
   ArkenDialog: ({
     open,

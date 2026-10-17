@@ -1,118 +1,21 @@
 // @vitest-environment jsdom
-import type { ComponentProps, ReactNode } from "react";
-import type { TextInput } from "@gravity-ui/uikit";
 import { describe, expect, it, vi } from "vitest";
 import {
   renderComponent,
   screen,
   userEvent,
   fireEvent,
+  waitFor,
 } from "../test-support/render";
 import { StatLayoutCard } from "./StatLayoutCard";
 import { statKeyFromLabel, uniqueStatKey } from "../stat-keys";
 import { ApiError } from "../api";
 
 /**
- * UIX-424, шаг 5. `@gravity-ui/uikit` тянет CSS, который трансформ этого репо
- * не разбирает, — заглушки следуют заведённому здесь образцу
- * (см. `CursorPresenceMenu.test.tsx`) и типизированы по тем пропсам, которые
- * компонент действительно передаёт.
+ * UIX-424, шаг 5. `ArkenDialog`, `TextPromptDialog` и `useEntityForm` —
+ * настоящие: проверка «отказ остаётся перед глазами» опирается именно на них,
+ * и подменить их значило бы проверить заглушку.
  */
-/**
- * `Dialog` заглушён с его составными частями, а `ArkenDialog`,
- * `TextPromptDialog` и `useEntityForm` под ним — настоящие: проверка «отказ
- * остаётся перед глазами» опирается именно на них, и подменить их значило бы
- * проверить заглушку.
- */
-vi.mock("@gravity-ui/uikit", () => {
-  const Dialog = Object.assign(
-    ({ open, children }: { open?: boolean; children?: ReactNode }) =>
-      open ? <div role="dialog">{children}</div> : null,
-    {
-      Header: ({ caption }: { caption?: ReactNode }) => <h2>{caption}</h2>,
-      Body: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-      Footer: ({
-        textButtonApply,
-        textButtonCancel,
-        onClickButtonApply,
-        onClickButtonCancel,
-        errorText,
-        showError,
-      }: {
-        textButtonApply?: string;
-        textButtonCancel?: string;
-        onClickButtonApply?: () => void;
-        onClickButtonCancel?: () => void;
-        errorText?: string;
-        showError?: boolean;
-      }) => (
-        <div>
-          {showError && <p role="alert">{errorText}</p>}
-          <button type="button" onClick={onClickButtonCancel}>
-            {textButtonCancel}
-          </button>
-          <button type="button" onClick={onClickButtonApply}>
-            {textButtonApply}
-          </button>
-        </div>
-      ),
-    },
-  );
-
-  return {
-    Dialog,
-    Button: ({
-      disabled,
-      onClick,
-      children,
-      className,
-      ...rest
-    }: {
-      disabled?: boolean;
-      onClick?: (event: { preventDefault: () => void }) => void;
-      children?: ReactNode;
-      className?: string;
-      "aria-label"?: string;
-      title?: string;
-    }) => (
-      <button
-        type="button"
-        className={className}
-        disabled={disabled}
-        aria-label={rest["aria-label"]}
-        title={rest.title}
-        onClick={(event) => onClick?.(event)}
-      >
-        {children}
-      </button>
-    ),
-    // Один `TextInput` обслуживает и поле значения (через `FormInput`, где оно
-    // неуправляемое и отдаёт правку на `blur`), и поле ввода подписи в окне
-    // (управляемое, через `onUpdate`). Поэтому поддержаны оба способа.
-    TextInput: ({
-      value,
-      onUpdate,
-      onKeyDown,
-      onBlur,
-      defaultValue,
-      disabled,
-      type,
-      controlProps,
-      controlRef,
-    }: ComponentProps<typeof TextInput>) => (
-      <input
-        {...controlProps}
-        ref={controlRef}
-        type={type}
-        disabled={disabled}
-        {...(value === undefined ? { defaultValue } : { value })}
-        onChange={(event) => onUpdate?.(event.target.value)}
-        onKeyDown={onKeyDown}
-        onBlur={onBlur}
-      />
-    ),
-  };
-});
 const rows = [
   { key: "strength", label: "Сила" },
   { key: "agility", label: "Ловкость" },
@@ -368,11 +271,12 @@ describe("карточка группы характеристик", () => {
     });
     input.dispatchEvent(escape);
 
-    // The lightweight Dialog mock does not implement its own Escape close;
-    // this assertion only verifies that the row owner leaves the event alone.
-    expect(escape.defaultPrevented).toBe(false);
+    // The dialog owns this Escape and closes; the row menu under it must not
+    // treat the same key as its own and stays open.
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
     expect(menu).toHaveProperty("open", true);
-    expect(screen.getByRole("dialog")).toBeVisible();
   });
 
   it("hides editing actions behind the row menu and exposes a six-dot keyboard handle", async () => {

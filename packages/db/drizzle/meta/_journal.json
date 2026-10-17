@@ -421,6 +421,20 @@
       "when": 1791691209399,
       "tag": "0059_character_stat_layout",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1792053296331,
+      "tag": "0060_custom_terrain_stamps",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1792075085745,
+      "tag": "0061_texture_brush_strokes",
+      "breakpoints": true
     }
   ]
 }

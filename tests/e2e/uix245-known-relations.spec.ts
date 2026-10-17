@@ -2,6 +2,7 @@ import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const subjectId = "24500000-0000-4000-8000-000000000001";
 const linkedId = "24500000-0000-4000-8000-000000000002";
@@ -68,7 +69,7 @@ for (const width of [390, 1280]) {
         return route.fulfill({ json: [] });
       if (pathname === "/api/client-logs")
         return route.fulfill({ json: { ok: true } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, pathname);
     });
 
     await page.setViewportSize({ width, height: 850 });
