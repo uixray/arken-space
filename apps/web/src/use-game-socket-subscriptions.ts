@@ -149,6 +149,10 @@ export function useGameSocketSubscriptions({
     setSocket(next);
     next.on("connect", () => {
       setConnection("ONLINE");
+      // UIX-682 C20: rulers have no server snapshot. Only a recovered session
+      // gets missed ruler:cleared replayed; after a fresh one a kept ruler
+      // could never be cleared. An active drag redraws on its next update.
+      if (!next.recovered) setRulers([]);
       emitSceneViewIfNeeded(
         next,
         lastSceneViewEmissionRef,

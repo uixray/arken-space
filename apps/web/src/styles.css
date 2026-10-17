@@ -7862,7 +7862,9 @@ button:not([role="tab"]),
   gap: var(--space-sm);
   min-width: 0;
 }
-.arken-dialog .catalog-entry-form fieldset {
+/* UIX-682 C07: as specific as the reset above, so the inset wins by order;
+   the bare `.catalog-entry-form fieldset` lost and left content on the edge. */
+.arken-dialog form.catalog-entry-form fieldset {
   padding: var(--space-md);
   background: var(--surface-2);
 }
