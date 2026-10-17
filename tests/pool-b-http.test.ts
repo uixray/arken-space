@@ -1499,7 +1499,12 @@ describe("Pool B HTTP boundaries", () => {
     expect(
       (await makeStamp("forest", "campaign-image")).statusCode,
     ).toBeGreaterThanOrEqual(400);
-    const unknownTemplate = await makeStamp("dark-cloud", "builtin-terrain-v1");
+    // A valid-looking key that no catalog entry uses (the pack now ships
+    // "dark-cloud", which used to be the example here).
+    const unknownTemplate = await makeStamp(
+      "not-in-catalog",
+      "builtin-terrain-v1",
+    );
     expect(unknownTemplate.statusCode).toBe(400);
     expect(unknownTemplate.json()).toMatchObject({
       error: "STAMP_TEMPLATE_UNKNOWN",
