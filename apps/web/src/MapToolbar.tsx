@@ -21,6 +21,7 @@ import {
   TerrainStampControls,
   type TerrainStampSettings,
 } from "./renderers/TerrainStampControls";
+import { DEFAULT_TERRAIN_STAMP_SETTINGS } from "./renderers/terrain-stamp-settings";
 import { GridSettings } from "./renderers/GridSettings";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import { AppIcon } from "./ui/AppIcon";
@@ -71,6 +72,7 @@ export interface MapToolbarProps {
   onGmGridVisibleChange: (visible: boolean) => void;
   stampSettings?: TerrainStampSettings;
   onStampSettingsChange?: (settings: TerrainStampSettings) => void;
+  onUploadStampImage?: (file: File) => Promise<{ id: string; name: string }>;
 }
 
 export function MapToolbar({
@@ -99,13 +101,9 @@ export function MapToolbar({
   onGmFogVisibleChange,
   gmGridVisible,
   onGmGridVisibleChange,
-  stampSettings = {
-    assetKey: "forest",
-    size: 160,
-    rotation: 0,
-    layer: "PUBLIC",
-  },
+  stampSettings = DEFAULT_TERRAIN_STAMP_SETTINGS,
   onStampSettingsChange = () => undefined,
+  onUploadStampImage,
 }: MapToolbarProps) {
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const [stampPopoverOpen, setStampPopoverOpen] = useState(false);
@@ -580,6 +578,8 @@ export function MapToolbar({
           onChange={onStampSettingsChange}
           onClose={closeStampPopover}
           onDismissOutside={() => setStampPopoverOpen(false)}
+          images={snapshot.assets.filter((asset) => asset.kind === "IMAGE")}
+          onUploadImage={onUploadStampImage}
         />
       )}
     </div>

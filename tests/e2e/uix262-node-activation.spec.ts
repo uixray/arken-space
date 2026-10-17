@@ -3,6 +3,7 @@ import { expect, test } from "./react-console-guard";
 import type { SpellProgressionGraph } from "../../packages/contracts/src/spell-schools";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 for (const width of [390, 1280])
   test(`UIX-262 activation edits round-trip in mock GM browser at ${width}px`, async ({
@@ -106,7 +107,7 @@ for (const width of [390, 1280])
       }
       if (path === "/api/client-logs")
         return route.fulfill({ json: { ok: true } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await page.setViewportSize({ width, height: 850 });
     await mockAuthenticatedGameCapabilities(page);
@@ -188,7 +189,7 @@ test("UIX-262 PLAYER does not receive activation editor or draft fetch", async (
       });
     if (path === "/api/client-logs")
       return route.fulfill({ json: { ok: true } });
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, path);
   });
   await page.setViewportSize({ width: 390, height: 850 });
   await mockAuthenticatedGameCapabilities(page);

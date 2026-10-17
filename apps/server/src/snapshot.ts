@@ -17,6 +17,7 @@ import {
   statLayoutSchema,
   type StatLayout,
 } from "@arken/contracts";
+import { drawingSnapshotDto } from "./drawing-events.js";
 import {
   assets,
   campaignSoundPacks,
@@ -883,6 +884,17 @@ export async function buildSnapshot(
     ))
       visibleAssetIds.add(assetId);
   }
+  // UIX-706: a campaign-image stamp or texture stroke exposes its picture
+  // exactly where it is projected below — public layer on a visible scene.
+  for (const { drawing } of drawingRows)
+    if (
+      (drawing.kind === "STAMP" || drawing.kind === "TEXTURE") &&
+      drawing.stampPackId === "campaign-image" &&
+      drawing.stampAssetKey &&
+      visibleSceneIds.has(drawing.sceneId) &&
+      (auth.role === "GM" || drawing.stampLayer === "PUBLIC")
+    )
+      visibleAssetIds.add(drawing.stampAssetKey);
   const visibleAssets =
     auth.role === "GM"
       ? assetRows
@@ -1086,31 +1098,10 @@ export async function buildSnapshot(
         ({ drawing }) =>
           visibleSceneIds.has(drawing.sceneId) &&
           (auth.role === "GM" ||
-            drawing.kind !== "STAMP" ||
+            drawing.kind === "FREEHAND" ||
             drawing.stampLayer === "PUBLIC"),
       )
-      .map(({ drawing }) => ({
-        id: drawing.id,
-        sceneId: drawing.sceneId,
-        authorMembershipId: drawing.authorMembershipId,
-        points: drawing.points,
-        color: drawing.color,
-        strokeWidth: drawing.strokeWidth,
-        x: drawing.x,
-        y: drawing.y,
-        revision: drawing.revision,
-        kind: drawing.kind as "FREEHAND" | "STAMP",
-        ...(drawing.kind === "STAMP"
-          ? {
-              assetKey: drawing.stampAssetKey as
-                "forest" | "mountains" | "clouds",
-              packId: drawing.stampPackId as "builtin-terrain-v1",
-              size: drawing.stampSize!,
-              rotation: drawing.stampRotation!,
-              layer: drawing.stampLayer as "PUBLIC" | "GM",
-            }
-          : {}),
-      })),
+      .map(({ drawing }) => drawingSnapshotDto(drawing)),
     worldMaps: worldMapProjection.snapshot,
     playerRequests: playerRequestRows,
     encounters: encounterRows,

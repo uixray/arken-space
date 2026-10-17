@@ -1354,6 +1354,31 @@ export const drawingPointsSchema = z
   .min(4)
   .max(4096)
   .refine((points) => points.length % 2 === 0, "points must be x/y pairs");
+/** UIX-706: built-in template keys (catalog manifest) — matches the DB check. */
+export const STAMP_TEMPLATE_KEY_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;
+export const stampPackIdSchema = z.enum([
+  "builtin-terrain-v1",
+  "campaign-image",
+]);
+export type StampPackId = z.infer<typeof stampPackIdSchema>;
+/**
+ * UIX-706 pool 3: a TEXTURE stroke fills a brush polyline with a tileable
+ * texture — a built-in catalog texture or a campaign IMAGE asset.
+ */
+export const texturePackIdSchema = z.enum([
+  "builtin-texture-v1",
+  "campaign-image",
+]);
+export type TexturePackId = z.infer<typeof texturePackIdSchema>;
+export type DrawingPackId = StampPackId | TexturePackId;
+export const TEXTURE_BRUSH_WIDTH = { min: 8, max: 400 } as const;
+const isValidDrawingSource = (source: {
+  packId: DrawingPackId;
+  assetKey: string;
+}) =>
+  source.packId === "campaign-image"
+    ? z.string().uuid().safeParse(source.assetKey).success
+    : STAMP_TEMPLATE_KEY_PATTERN.test(source.assetKey);
 export const createDrawingSchema = z
   .object({
     actionId: actionIdSchema,
@@ -1366,18 +1391,54 @@ export const createDrawingSchema = z
     y: z.number().finite().default(0),
   })
   .or(
-    z.object({
-      actionId: actionIdSchema,
-      sceneId: z.string().uuid(),
-      kind: z.literal("STAMP"),
-      assetKey: z.enum(["forest", "mountains", "clouds"]),
-      packId: z.literal("builtin-terrain-v1"),
-      size: z.number().finite().min(16).max(1024),
-      rotation: z.number().finite().min(-360).max(360),
-      layer: z.enum(["PUBLIC", "GM"]),
-      x: z.number().finite().min(-32768).max(32768),
-      y: z.number().finite().min(-32768).max(32768),
-    }),
+    z
+      .object({
+        actionId: actionIdSchema,
+        sceneId: z.string().uuid(),
+        kind: z.literal("STAMP"),
+        /**
+         * UIX-706: a built-in template key from the server catalog manifest,
+         * or — for `campaign-image` — the id of a campaign IMAGE asset. The
+         * server resolves both; clients never supply paths or URLs.
+         */
+        assetKey: z.string().min(1).max(40),
+        packId: stampPackIdSchema,
+        size: z.number().finite().min(16).max(1024),
+        rotation: z.number().finite().min(-360).max(360),
+        layer: z.enum(["PUBLIC", "GM"]),
+        x: z.number().finite().min(-32768).max(32768),
+        y: z.number().finite().min(-32768).max(32768),
+      })
+      .refine(isValidDrawingSource, {
+        path: ["assetKey"],
+        message: "invalid stamp source",
+      }),
+  )
+  .or(
+    z
+      .object({
+        actionId: actionIdSchema,
+        sceneId: z.string().uuid(),
+        kind: z.literal("TEXTURE"),
+        /** Brush polyline, relative to x/y like a freehand drawing. */
+        points: drawingPointsSchema,
+        brushWidth: z
+          .number()
+          .finite()
+          .min(TEXTURE_BRUSH_WIDTH.min)
+          .max(TEXTURE_BRUSH_WIDTH.max),
+        assetKey: z.string().min(1).max(40),
+        packId: texturePackIdSchema,
+        /** Edge length of one texture tile in scene units. */
+        size: z.number().finite().min(16).max(1024),
+        layer: z.enum(["PUBLIC", "GM"]),
+        x: z.number().finite().min(-32768).max(32768),
+        y: z.number().finite().min(-32768).max(32768),
+      })
+      .refine(isValidDrawingSource, {
+        path: ["assetKey"],
+        message: "invalid texture source",
+      }),
   );
 export const updateDrawingSchema = z.object({
   actionId: actionIdSchema,
@@ -2313,6 +2374,7 @@ export const assetUsageKindSchema = z.enum([
   "WORLD_CONTENT_MEDIA",
   "WORLD_CONTENT_INSTANCE_PORTRAIT",
   "GENERATED_TOKEN_SOURCE",
+  "MAP_STAMP",
 ]);
 export type AssetUsageKind = z.infer<typeof assetUsageKindSchema>;
 
@@ -2525,9 +2587,10 @@ export interface DrawingDto {
   x: number;
   y: number;
   revision: number;
-  kind?: "FREEHAND" | "STAMP";
-  assetKey?: "forest" | "mountains" | "clouds";
-  packId?: "builtin-terrain-v1";
+  kind?: "FREEHAND" | "STAMP" | "TEXTURE";
+  /** Template/texture key, or the campaign asset id for campaign-image. */
+  assetKey?: string;
+  packId?: DrawingPackId;
   size?: number;
   rotation?: number;
   layer?: "PUBLIC" | "GM";
@@ -3055,9 +3118,17 @@ export interface ServerToClientEvents {
   "scene:activated": (event: EventEnvelope<string>) => void;
   "token:moving": (movement: z.infer<typeof moveTokenSchema>) => void;
   "token:moved": (event: EventEnvelope<TokenDto>) => void;
+  /** UIX-412: conditions or colours of a token the socket sees changed. */
+  "token:updated": (event: EventEnvelope<TokenDto>) => void;
   "fog:created": (event: EventEnvelope<FogRevealDto>) => void;
   "fog:removed": (
     event: EventEnvelope<{ fogRevealId: string; sceneId: string }>,
+  ) => void;
+  /** UIX-412: a drawing the socket sees was created or changed. */
+  "drawing:upserted": (event: EventEnvelope<DrawingDto>) => void;
+  /** UIX-412: a drawing the socket saw was deleted or hidden from it. */
+  "drawing:removed": (
+    event: EventEnvelope<{ drawingId: string; sceneId: string }>,
   ) => void;
   "chat:created": (event: EventEnvelope<ChatMessageDto>) => void;
   "story:changed": (event: StoryChangedEvent) => void;

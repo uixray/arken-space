@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import type { ComponentProps } from "react";
-import type { Button, TextArea, TextInput } from "@gravity-ui/uikit";
 import type { AssetDto, CharacterDto, GameSnapshot } from "@arken/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -28,78 +27,6 @@ import { CharacterPanel } from "./CharacterWorkspace";
 // native focus/change/blur events and mutation runner. Only the CSS library
 // controls, dialog shell, file-upload leaf and self-fetching gallery are
 // replaced. No mock receives a role or computes ownership.
-vi.mock("@gravity-ui/uikit", () => ({
-  Toaster: class {
-    add = vi.fn();
-    remove = vi.fn();
-  },
-  Button: ({
-    children,
-    disabled,
-    onClick,
-    onPointerDown,
-    title,
-    "aria-label": ariaLabel,
-  }: ComponentProps<typeof Button>) => (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      onPointerDown={onPointerDown}
-      title={title}
-      aria-label={ariaLabel}
-    >
-      {children}
-    </button>
-  ),
-  TextArea: ({
-    controlRef,
-    controlProps,
-    defaultValue,
-    value,
-    disabled,
-    onChange,
-    onBlur,
-    rows,
-    name,
-  }: ComponentProps<typeof TextArea>) => (
-    <textarea
-      {...controlProps}
-      ref={controlRef}
-      defaultValue={defaultValue}
-      value={value}
-      disabled={disabled}
-      onChange={onChange}
-      onBlur={onBlur}
-      rows={rows}
-      name={name}
-    />
-  ),
-  TextInput: ({
-    controlProps,
-    controlRef,
-    defaultValue,
-    value,
-    disabled,
-    onChange,
-    onBlur,
-    type,
-    placeholder,
-    onUpdate,
-  }: ComponentProps<typeof TextInput>) => (
-    <input
-      {...controlProps}
-      ref={controlRef}
-      defaultValue={defaultValue}
-      value={value}
-      disabled={disabled}
-      onChange={onChange ?? ((event) => onUpdate?.(event.target.value))}
-      onBlur={onBlur}
-      type={type}
-      placeholder={placeholder}
-    />
-  ),
-}));
 vi.mock("../ui/ArkenDialog", () => ({
   ArkenDialog: ({
     open,

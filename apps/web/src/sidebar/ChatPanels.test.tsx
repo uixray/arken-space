@@ -1,81 +1,11 @@
 // @vitest-environment jsdom
-import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
 import { CampaignActionsContext } from "../campaign-actions-context";
 
 // This suite checks server-rendered composer markup, not popup interaction.
-// Real Gravity Popup ownership/focus is covered by StickerPicker.dom.test.tsx.
-// Keep the closed Popup contract in this existing node-environment mock.
-vi.mock("@gravity-ui/uikit", () => ({
-  Popup: ({ open, children }: { open?: boolean; children?: ReactNode }) =>
-    open ? children : null,
-  Button: ({
-    className,
-    type,
-    disabled,
-    onClick,
-    children,
-    "aria-label": ariaLabel,
-    "aria-expanded": ariaExpanded,
-    "aria-haspopup": ariaHaspopup,
-    title,
-  }: {
-    className?: string;
-    type?: "button" | "submit";
-    disabled?: boolean;
-    onClick?: () => void;
-    children?: ReactNode;
-    "aria-label"?: string;
-    "aria-expanded"?: boolean;
-    // Narrower than `string` so the value stays assignable to the DOM
-    // button's own aria-haspopup union.
-    "aria-haspopup"?: "menu" | "listbox" | "dialog" | "true" | boolean;
-    title?: string;
-  }) => (
-    <button
-      className={className}
-      type={type}
-      disabled={disabled}
-      onClick={onClick}
-      aria-label={ariaLabel}
-      aria-expanded={ariaExpanded}
-      aria-haspopup={ariaHaspopup}
-      title={title}
-    >
-      {children}
-    </button>
-  ),
-  TextArea: ({
-    value,
-    placeholder,
-    rows,
-    "aria-label": ariaLabel,
-    "aria-describedby": ariaDescribedby,
-    "aria-expanded": ariaExpanded,
-    "aria-controls": ariaControls,
-  }: {
-    value?: string;
-    placeholder?: string;
-    rows?: number;
-    "aria-label"?: string;
-    "aria-describedby"?: string;
-    "aria-expanded"?: boolean;
-    "aria-controls"?: string;
-  }) => (
-    <textarea
-      value={value}
-      placeholder={placeholder}
-      rows={rows}
-      readOnly
-      aria-label={ariaLabel}
-      aria-describedby={ariaDescribedby}
-      aria-expanded={ariaExpanded}
-      aria-controls={ariaControls}
-    />
-  ),
-}));
+// Real popup ownership/focus is covered by StickerPicker.dom.test.tsx.
 
 const { ChatPanel, ChatMessageBody } = await import("./ChatPanels");
 

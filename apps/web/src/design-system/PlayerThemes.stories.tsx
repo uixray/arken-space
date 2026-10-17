@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useState } from "react";
+import { useBodyColorScheme } from "./PlayerThemeProvider";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import { Button } from "./Button";
 import { FormInput, FormSelect, FormTextArea } from "../ui/GravityFormControls";
 import {
@@ -31,8 +31,9 @@ function PlayerThemeControls() {
     };
   }, [themeId]);
 
+  useBodyColorScheme(theme?.colorScheme ?? "dark");
   return (
-    <ThemeProvider theme={theme?.colorScheme ?? "dark"} lang="ru">
+    <>
       <main
         style={{
           background: "var(--color-canvas)",
@@ -162,7 +163,7 @@ function PlayerThemeControls() {
           </label>
         </section>
       </main>
-    </ThemeProvider>
+    </>
   );
 }
 

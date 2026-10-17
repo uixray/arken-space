@@ -3,12 +3,11 @@ import type { Preview } from "@storybook/react-vite";
 /*
  * Стенд обязан показывать компоненты ровно так, как их видит игрок, иначе он
  * врёт. Поэтому подключается тот же набор стилей и в том же порядке, что и в
- * `apps/web/src/main.tsx`: сначала Gravity, затем наш foundation, затем
- * `styles.css`. Порядок важен — каскад решает, чьи значения победят.
+ * `apps/web/src/main.tsx`: токены и корневые переменные темы, затем наш
+ * foundation, затем `styles.css`. Порядок важен — каскад решает, чьи значения победят.
  */
-import "@gravity-ui/uikit/styles/fonts.css";
-import "@gravity-ui/uikit/styles/styles.css";
 import "../src/design-system/tokens.generated.css";
+import "../src/ui/theme-root.css";
 import "../src/design-system/foundations.css";
 import "../src/ui/gravity-foundation.css";
 import "../src/styles.css";

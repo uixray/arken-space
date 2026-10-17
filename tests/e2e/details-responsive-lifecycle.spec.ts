@@ -1,6 +1,7 @@
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 for (const role of ["GM", "PLAYER"] as const)
   for (const width of [1280]) {
@@ -44,7 +45,7 @@ for (const role of ["GM", "PLAYER"] as const)
           return route.fulfill({ json: { posts: [], nextCursor: null } });
         if (path === "/api/operator/feedback/capability")
           return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-        return route.fulfill({ json: [] });
+        return fulfillUnmocked(route, path);
       });
       await page.routeWebSocket(/\/socket\.io\//, (socket) => {
         socket.onMessage((message) => {

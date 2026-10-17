@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import type { ReactNode } from "react";
 import type { AssetDto, AssetUsageResponseDto } from "@arken/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -26,37 +25,11 @@ import type { ImageUploadFieldProps } from "../ui/ImageUploadField";
 //
 // Mocking notes (typed against the real prop contracts, per the AC's
 // concern about mocks that don't typecheck):
-// - This historical role-focused suite keeps a plain Button double restricted
-//   to the props it needs. Current vitest.config.ts supports real Gravity CSS;
-//   MediaPanel.audio.test.tsx deliberately uses real controls and upload fields.
+// - MediaPanel.audio.test.tsx deliberately uses real controls and upload fields.
 // - `ImageUploadField` is swapped for a minimal stub typed against its own
 //   exported `ImageUploadFieldProps`, so this file stays focused on
 //   MediaPanel's role gating rather than file-input/object-URL plumbing.
 //   This double must not be used as proof that actual MIME intake works.
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({
-    disabled,
-    loading,
-    onClick,
-    children,
-    "aria-describedby": describedBy,
-  }: {
-    disabled?: boolean;
-    loading?: boolean;
-    onClick?: () => void;
-    children?: ReactNode;
-    "aria-describedby"?: string;
-  }) => (
-    <button
-      disabled={disabled}
-      aria-busy={loading}
-      aria-describedby={describedBy}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  ),
-}));
 
 vi.mock("../ui/ImageUploadField", () => ({
   ImageUploadField: ({ label, disabled, onUpdate }: ImageUploadFieldProps) => (

@@ -10,6 +10,7 @@ import {
   gmSnapshot,
   playerSnapshot,
 } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 for (const width of [1280, 360]) {
   test(`UIX-645 audio replacement draft removal and cancel ${width}`, async ({
@@ -75,7 +76,7 @@ for (const width of [1280, 360]) {
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       if (path === "/api/operator/feedback/capability")
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
@@ -297,7 +298,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       if (path === "/api/operator/feedback/capability")
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await page.route("**/api/bootstrap", (route) =>
       route.fulfill({ json: current }),

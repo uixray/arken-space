@@ -10,6 +10,7 @@ import type { Locator, Page, TestInfo } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 // Real App/navigation/Gravity controls, isolated HTTP responses only. These
 // cases do not prove backend authorization, persistence, image generation,
@@ -398,8 +399,7 @@ async function installCopyApi(page: Page, withRelated = false) {
         )
       )
         return route.fulfill({ contentType: "image/png", body: png });
-      // Unrelated read endpoints (access, gallery, relations) are empty here.
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     }
     const allowed =
       method === "POST" &&

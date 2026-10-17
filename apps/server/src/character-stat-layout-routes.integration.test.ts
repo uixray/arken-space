@@ -64,15 +64,16 @@ const campaignLayout = () => {
   });
   return layout;
 };
-const layoutWith = (key: string) => {
+const layoutWith = (...keys: string[]) => {
   const layout = campaignLayout();
-  layout
-    .find((item) => item.id === "characteristics")!
-    .rows.push({
-      key,
-      label: key,
-      source: "STAT",
-    });
+  for (const key of keys)
+    layout
+      .find((item) => item.id === "characteristics")!
+      .rows.push({
+        key,
+        label: key,
+        source: "STAT",
+      });
   return layout;
 };
 const withoutKey = (layout: ReturnType<typeof campaignLayout>, key: string) =>
@@ -345,9 +346,72 @@ describe("PLAYER-owned character stat layout", () => {
     );
     expect(crossCampaign.statusCode).toBe(404);
     expect(crossCampaign.json().error).toBe("CHARACTER_NOT_FOUND");
-    const gm = await patch(ids.character, secrets.gm, actionId, 0, layout);
-    expect(gm.statusCode).toBe(403);
-    expect(gm.json().error).toBe("PLAYER_REQUIRED");
+    // UIX-707: the GM may edit personal layouts, but only in its campaign.
+    const gmForeign = await patch(
+      ids.foreignCharacter,
+      secrets.gm,
+      actionId,
+      0,
+      layout,
+    );
+    expect(gmForeign.statusCode).toBe(404);
+    expect(gmForeign.json().error).toBe("CHARACTER_NOT_FOUND");
+  });
+
+  it("UIX-707: the GM edits a personal layout without touching the campaign template", async () => {
+    const own = await patch(
+      ids.character,
+      secrets.owner,
+      id(),
+      0,
+      layoutWith("personalOnly"),
+    );
+    expect(own.statusCode, own.body).toBe(200);
+    const gmEdit = await patch(
+      ids.character,
+      secrets.gm,
+      id(),
+      own.json().revision,
+      layoutWith("personalOnly", "gmAdded"),
+    );
+    expect(gmEdit.statusCode, gmEdit.body).toBe(200);
+    expect(gmEdit.json()).toMatchObject({
+      characterId: ids.character,
+      revision: own.json().revision + 1,
+    });
+
+    const gmView = await bootstrap(secrets.gm);
+    expect(gmView.campaign.statLayout).toEqual(campaignLayout());
+    const keys = (layout: { rows: { key: string }[] }[]) =>
+      layout.flatMap((group) => group.rows.map((row) => row.key));
+    const ownerView = await bootstrap(secrets.owner);
+    const hero = ownerView.characters.find(
+      (character: { id: string }) => character.id === ids.character,
+    );
+    expect(keys(hero.statLayout)).toEqual(
+      expect.arrayContaining(["personalOnly", "gmAdded"]),
+    );
+    expect(keys(ownerView.campaign.statLayout)).not.toContain("gmAdded");
+
+    // Stale GM writes still lose to the character revision.
+    const stale = await patch(
+      ids.character,
+      secrets.gm,
+      id(),
+      own.json().revision,
+      layoutWith("personalOnly", "late"),
+    );
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error).toBe("CHARACTER_CONFLICT");
+    // A PLAYER still cannot edit another player's character.
+    const sibling = await patch(
+      ids.siblingCharacter,
+      secrets.owner,
+      id(),
+      0,
+      layoutWith("personalOnly"),
+    );
+    expect(sibling.statusCode).toBe(403);
   });
 
   it("uses character revision CAS and keeps the shared GM layout endpoint GM-only", async () => {

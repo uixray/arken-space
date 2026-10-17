@@ -4,6 +4,7 @@ import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const characterId = "68200000-0000-4000-8000-000000000001";
 const baseLayout: StatLayout = [
@@ -188,7 +189,7 @@ async function mockApi(
       path === "/api/operator/feedback/capability"
     )
       return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-    if (request.method() === "GET") return route.fulfill({ json: [] });
+    if (route.request().method() === "GET") return fulfillUnmocked(route, path);
     return route.fulfill({ status: 405, json: { error: "UNEXPECTED_WRITE" } });
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {

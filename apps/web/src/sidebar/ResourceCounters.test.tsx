@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
@@ -10,36 +9,6 @@ import {
 import { ResourceCounters } from "./ResourceCounters";
 import { RESOURCE_ADJUST_DELAY_MS } from "../resource-regen";
 import type { ResourceCounterIntent } from "../resource-counter-intent";
-
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({
-    disabled,
-    onClick,
-    children,
-    ...rest
-  }: {
-    disabled?: boolean;
-    onClick?: () => void;
-    children?: ReactNode;
-    "aria-label"?: string;
-    title?: string;
-  }) => (
-    <button
-      type="button"
-      disabled={disabled}
-      aria-label={rest["aria-label"]}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  ),
-  // UIX-468: ручной ввод очков идёт через `FormInput`, а тот — через
-  // `TextInput`. Без этой заглушки поле не отрисовалось бы вовсе.
-  TextInput: (props: Record<string, unknown>) => <input {...props} />,
-  Checkbox: () => null,
-  Select: () => null,
-  TextArea: () => null,
-}));
 
 /**
  * UIX-424, шаг 8. Счётчики стоят там, где раньше были снятые кнопки бросков, и

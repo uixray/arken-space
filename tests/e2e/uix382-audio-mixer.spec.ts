@@ -4,6 +4,7 @@ import {
   gmSnapshot,
   playerSnapshot,
 } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 for (const width of [1280, 390]) {
   test(`UIX-382 GM mixer and PLAYER local master boundary at ${width}px`, async ({
@@ -48,7 +49,10 @@ for (const width of [1280, 390]) {
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
       if (!["GET", "HEAD"].includes(route.request().method()))
         return route.abort();
-      return route.fulfill({ json: [] });
+      // Portrait bytes are irrelevant to the mixer.
+      if (/^\/api\/assets\/[^/]+\/content$/.test(path))
+        return route.fulfill({ contentType: "image/png", body: "" });
+      return fulfillUnmocked(route, path);
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {

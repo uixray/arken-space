@@ -200,7 +200,7 @@
     {
       "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
       "kind": "tag:select",
-      "count": 1
+      "count": 2
     },
     {
       "file": "apps/web/src/renderers/TerrainStampControls.tsx",
@@ -288,29 +288,19 @@
       "count": 2
     },
     {
-      "file": "apps/web/src/ui/CursorPresenceMenu.tsx",
+      "file": "apps/web/src/ui/ArkenDialog.tsx",
       "kind": "tag:Popup",
       "count": 1
     },
     {
-      "file": "apps/web/src/ui/FuturePoolDialogs.tsx",
-      "kind": "tag:Select",
+      "file": "apps/web/src/ui/CursorPresenceMenu.tsx",
+      "kind": "tag:Popup",
       "count": 1
     },
     {
       "file": "apps/web/src/ui/GravityFormControls.tsx",
       "kind": "tag:Select",
       "count": 1
-    },
-    {
-      "file": "apps/web/src/ui/GravityFoundationPreview.tsx",
-      "kind": "tag:Popup",
-      "count": 1
-    },
-    {
-      "file": "apps/web/src/ui/GravityFoundationPreview.tsx",
-      "kind": "tag:Select",
-      "count": 2
     },
     {
       "file": "apps/web/src/ui/SceneManagerDialog.tsx",

@@ -1,28 +1,5 @@
-import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
-
-// UIX-389: CharacterWorkspace.tsx pulls in the full Gravity UI kit (which
-// ships CSS imports vitest's node environment can't transform). Follow the
-// AppErrorBoundary.test.ts precedent of mocking the kit down to a plain
-// <button>, since RollButton only needs Button's basic prop contract.
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({
-    className,
-    disabled,
-    onClick,
-    children,
-  }: {
-    className?: string;
-    disabled?: boolean;
-    onClick?: () => void;
-    children?: ReactNode;
-  }) => (
-    <button className={className} disabled={disabled} onClick={onClick}>
-      {children}
-    </button>
-  ),
-}));
+import { describe, expect, it } from "vitest";
 
 const { RollButton } = await import("./RollButton");
 const { CampaignStatLabelsProvider } =
