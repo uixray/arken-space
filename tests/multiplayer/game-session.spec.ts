@@ -27,6 +27,9 @@ import type {
 } from "../../packages/contracts/src/index.js";
 import { createCampaignWithGmAccess } from "../../apps/server/src/seed.js";
 import { openWorkspaceSection } from "../e2e/workspace-nav-helper.js";
+import { fitRect } from "../../apps/web/src/renderers/camera-fit.js";
+import { cursorColorForMembership } from "../../apps/web/src/renderers/cursor-color.js";
+import { observePingOverlay } from "./ping-pixel-observer.js";
 
 const baseUrl = process.env.E2E_BASE_URL ?? "http://127.0.0.1:14180";
 const gmToken = `multiplayer-${crypto.randomUUID()}-${crypto.randomUUID()}`;
@@ -190,18 +193,6 @@ function waitForPing(
     socket.on("map:ping", onPing);
   });
 }
-async function expectPingOverlay(page: Page, before: Buffer) {
-  const viewport = page.locator(".map-viewport");
-  await expect
-    .poll(async () => !(await viewport.screenshot()).equals(before), {
-      timeout: 3_000,
-    })
-    .toBe(true);
-  await viewport.screenshot({
-    path: "test-results/multiplayer/live-ping-over-covered-fog.png",
-  });
-}
-
 function move(
   socket: GameSocket,
   token: Pick<TokenDto, "id" | "z" | "levelId" | "revision">,
@@ -1354,32 +1345,81 @@ test("GM and six isolated players recover authoritative state without security l
       y: expect.any(Number),
     });
 
-    const playerTwoMap = pages[1]!.locator(".map-viewport");
-    const beforePingOverlay = await playerTwoMap.screenshot();
-    // Observe the short-lived overlay concurrently with socket delivery.
-    // Waiting for the socket assertion first can consume its 3.5s lifetime
-    // when seven browser contexts are sharing the CI worker.
-    const pingOverlay = expectPingOverlay(pages[1]!, beforePingOverlay);
-    const receivedPing = waitForPing(
-      connections[2]!.socket,
-      (ping) =>
-        ping.sceneId === initialScene.id &&
-        ping.membershipId === playerOneSnapshot.me.id &&
-        ping.x === coveredForeignToken.x + coveredForeignToken.width / 2 &&
-        ping.y === coveredForeignToken.y + coveredForeignToken.height / 2,
-    );
-    connections[1]!.socket.emit("map:ping", {
-      sceneId: initialScene.id,
+    // UIX-716: Player 3 does not own Player 2's covered token. Player 2 would
+    // see their own token above fog and cannot prove this fog-overlay contract.
+    expect(
+      playerInitialSnapshots[1]!.tokens.map((token) => token.id),
+    ).toContain(coveredForeignToken.id);
+    expect(
+      playerInitialSnapshots[2]!.tokens.map((token) => token.id),
+    ).not.toContain(coveredForeignToken.id);
+    const pingPoint = {
       x: coveredForeignToken.x + coveredForeignToken.width / 2,
       y: coveredForeignToken.y + coveredForeignToken.height / 2,
-    });
-    await Promise.all([
-      expect(receivedPing).resolves.toMatchObject({
+    };
+    const observerMap = pages[2]!.locator(".map-viewport");
+    // The encounter above refits the camera. Explicitly fit, rather than
+    // mistaking world coordinates for pixels at the default zoom.
+    await observerMap.press("f");
+    const observerBounds = await observerMap.boundingBox();
+    if (!observerBounds) throw new Error("Ping observer map is not visible");
+    const fit = fitRect(
+      { x: 0, y: 0, width: initialScene.width, height: initialScene.height },
+      observerBounds,
+    );
+    const observer = await observePingOverlay(
+      observerMap,
+      {
+        x: fit.position.x + pingPoint.x * fit.scale,
+        y: fit.position.y + pingPoint.y * fit.scale,
+      },
+      cursorColorForMembership(playerOneSnapshot.me.id),
+    );
+    try {
+      const receivedPing = waitForPing(
+        connections[3]!.socket,
+        (ping) =>
+          ping.sceneId === initialScene.id &&
+          ping.membershipId === playerOneSnapshot.me.id &&
+          ping.x === pingPoint.x &&
+          ping.y === pingPoint.y,
+      );
+      // The observer is already sampling before this real authenticated send.
+      // No screenshot operation or socket roundtrip can miss a captured frame.
+      connections[1]!.socket.emit("map:ping", {
         sceneId: initialScene.id,
-        membershipId: playerOneSnapshot.me.id,
-      }),
-      pingOverlay,
-    ]);
+        ...pingPoint,
+      });
+      const [, pixels] = await Promise.all([
+        expect(receivedPing).resolves.toMatchObject({
+          sceneId: initialScene.id,
+          membershipId: playerOneSnapshot.me.id,
+          ...pingPoint,
+        }),
+        observer.result(),
+      ]);
+      for (const [name, data] of [
+        ["covered-fog-before-ping", pixels.before],
+        ["live-ping-over-covered-fog", pixels.after],
+      ]) {
+        await testInfo.attach(name, {
+          body: Buffer.from(data.split(",")[1]!, "base64"),
+          contentType: "image/png",
+        });
+      }
+      await testInfo.attach("ping-pixel-observation", {
+        body: JSON.stringify({
+          observerMembershipId: playerInitialSnapshots[2]!.me.id,
+          senderMembershipId: playerOneSnapshot.me.id,
+          point: pingPoint,
+          elapsedMs: pixels.elapsedMs,
+          matchedPixels: pixels.maxMatchedPixels,
+        }),
+        contentType: "application/json",
+      });
+    } finally {
+      await observer.dispose();
+    }
 
     const mapViewport = pages[0]!.locator(".map-viewport");
     const mapBounds = await mapViewport.boundingBox();
