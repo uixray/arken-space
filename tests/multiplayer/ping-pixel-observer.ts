@@ -1,4 +1,101 @@
-import type { Locator } from "@playwright/test";
+import type { Locator, Page, WebSocket } from "@playwright/test";
+
+type PingFrame = {
+  sceneId: string;
+  membershipId: string;
+  x: number;
+  y: number;
+  createdAt: string | number;
+};
+
+/** Never retain raw frames, names, URLs, cookies or non-ping events. */
+export function parsePingFrame(payload: unknown): PingFrame | null {
+  if (typeof payload !== "string" || !payload.startsWith("42")) return null;
+  try {
+    const event: unknown = JSON.parse(payload.slice(2));
+    if (!Array.isArray(event) || event[0] !== "map:ping") return null;
+    const ping = event[1];
+    if (
+      !ping ||
+      typeof ping !== "object" ||
+      typeof ping.sceneId !== "string" ||
+      !ping.sceneId ||
+      typeof ping.membershipId !== "string" ||
+      !ping.membershipId ||
+      typeof ping.x !== "number" ||
+      !Number.isFinite(ping.x) ||
+      typeof ping.y !== "number" ||
+      !Number.isFinite(ping.y) ||
+      !(
+        (typeof ping.createdAt === "number" &&
+          Number.isFinite(ping.createdAt)) ||
+        (typeof ping.createdAt === "string" &&
+          Number.isFinite(Date.parse(ping.createdAt)))
+      )
+    )
+      return null;
+    return {
+      sceneId: ping.sceneId,
+      membershipId: ping.membershipId,
+      x: ping.x,
+      y: ping.y,
+      createdAt: ping.createdAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function createPingFrameRecorder() {
+  const receipts: Array<PingFrame & { receivedAt: number }> = [];
+  const listeners = new Map<
+    WebSocket,
+    (frame: { payload: string | Buffer }) => void
+  >();
+  let attachedPage: Page | undefined;
+  const onSocket = (socket: WebSocket) => {
+    const onFrame = ({ payload }: { payload: string | Buffer }) => {
+      const ping = parsePingFrame(payload);
+      if (!ping) return;
+      receipts.push({ ...ping, receivedAt: Date.now() });
+      if (receipts.length > 16) receipts.shift();
+    };
+    listeners.set(socket, onFrame);
+    socket.on("framereceived", onFrame);
+  };
+  return {
+    attach(page: Page) {
+      if (attachedPage) throw new Error("Ping recorder already attached");
+      attachedPage = page;
+      page.on("websocket", onSocket);
+    },
+    clear() {
+      receipts.length = 0;
+    },
+    snapshot() {
+      return receipts.map((receipt) => ({ ...receipt }));
+    },
+    dispose() {
+      attachedPage?.off("websocket", onSocket);
+      for (const [socket, listener] of listeners)
+        socket.off("framereceived", listener);
+      listeners.clear();
+      attachedPage = undefined;
+    },
+  };
+}
+
+export async function assertPingReceiverForeground(page: Page) {
+  const state = await page.evaluate(() => ({
+    visibility: document.visibilityState,
+    focused: document.hasFocus(),
+  }));
+  if (state.visibility !== "visible" || !state.focused)
+    throw new Error(
+      "Ping pixel receiver must be visible and focused: " +
+        JSON.stringify(state),
+    );
+}
 
 /** Arm before sending: sample the painted canvas stack in-page, not a slow screenshot roundtrip. */
 export async function observePingOverlay(
@@ -75,6 +172,15 @@ export async function observePingOverlay(
         return ctx.getImageData(0, 0, size, size).data;
       };
       const baseline = capture();
+      const initialState = {
+        visibility: document.visibilityState,
+        focused: document.hasFocus(),
+        center: input.center,
+        color: input.color,
+        expectedRgb: Array.from(expected),
+        viewport: element.getBoundingClientRect().toJSON(),
+        wallTime: Date.now(),
+      };
       const before = output.toDataURL("image/png");
       const samples: Array<{ offset: number; side: number }> = [];
       // The lower arc excludes the cursor core and the name label to the right.
@@ -107,6 +213,19 @@ export async function observePingOverlay(
       let timer = 0;
       let settled = false;
       let maxMatchedPixels = 0;
+      let sampleCount = 0;
+      let capturedCount = 0;
+      let maxCaptureMs = 0;
+      let firstSampleMs: number | null = null;
+      let lastSampleMs: number | null = null;
+      const recentSamples: Array<{
+        elapsedMs: number;
+        captureMs: number | null;
+        visibility: string;
+        focused: boolean;
+        left: number;
+        right: number;
+      }> = [];
       const start = performance.now();
       type Result = {
         matched: boolean;
@@ -114,6 +233,20 @@ export async function observePingOverlay(
         maxMatchedPixels: number;
         before: string;
         after: string;
+        diagnostic: {
+          initial: typeof initialState;
+          sampleCount: number;
+          capturedCount: number;
+          firstSampleMs: number | null;
+          lastSampleMs: number | null;
+          maxCaptureMs: number;
+          failureCaptureMs: number | null;
+          failureCaptureError: string | null;
+          recentSamples: typeof recentSamples;
+          finishedWallTime: number;
+          finalVisibility: string;
+          finalFocused: boolean;
+        };
         error?: string;
       };
       let resolve!: (result: Result) => void;
@@ -125,20 +258,68 @@ export async function observePingOverlay(
         settled = true;
         cancelAnimationFrame(frame);
         clearTimeout(timer);
+        const elapsedMs = performance.now() - start;
+        let failureCaptureMs: number | null = null;
+        let failureCaptureError: string | null = null;
+        if (!matched) {
+          // Diagnostic only, after acceptance has ended. Even a now-visible
+          // late ring cannot change matched, counts or the original deadline.
+          const captureStart = performance.now();
+          try {
+            capture();
+          } catch (error) {
+            failureCaptureError = String(error);
+          }
+          failureCaptureMs = performance.now() - captureStart;
+        }
         resolve({
           matched,
-          elapsedMs: performance.now() - start,
+          elapsedMs,
           maxMatchedPixels,
           before,
-          after: matched ? output.toDataURL("image/png") : "",
+          // Serialize a failure-only composite too; this cannot
+          // turn a frame after the deadline into an accepted observation.
+          after: output.toDataURL("image/png"),
+          diagnostic: {
+            initial: initialState,
+            sampleCount,
+            capturedCount,
+            firstSampleMs,
+            lastSampleMs,
+            maxCaptureMs,
+            failureCaptureMs,
+            failureCaptureError,
+            recentSamples,
+            finishedWallTime: Date.now(),
+            finalVisibility: document.visibilityState,
+            finalFocused: document.hasFocus(),
+          },
           error,
         });
       };
       const sample = () => {
+        const elapsedMs = performance.now() - start;
+        sampleCount++;
+        firstSampleMs ??= elapsedMs;
+        lastSampleMs = elapsedMs;
+        const receipt = {
+          elapsedMs,
+          captureMs: null as number | null,
+          visibility: document.visibilityState,
+          focused: document.hasFocus(),
+          left: 0,
+          right: 0,
+        };
+        recentSamples.push(receipt);
+        if (recentSamples.length > 32) recentSamples.shift();
         // Never turn a delayed frame after the original deadline into a PASS.
         if (performance.now() - start >= 3_000) return finish(false);
         try {
+          const captureStart = performance.now();
           const current = capture();
+          receipt.captureMs = performance.now() - captureStart;
+          capturedCount++;
+          maxCaptureMs = Math.max(maxCaptureMs, receipt.captureMs);
           const matched = [0, 0];
           for (const { offset, side } of samples) {
             const delta = [0, 1, 2].map(
@@ -167,6 +348,8 @@ export async function observePingOverlay(
             )
               matched[side]!++;
           }
+          receipt.left = matched[0]!;
+          receipt.right = matched[1]!;
           maxMatchedPixels = Math.max(
             maxMatchedPixels,
             matched[0]! + matched[1]!,
@@ -192,6 +375,9 @@ export async function observePingOverlay(
           `Ping pixels not visible over fog within 3000ms (max=${result.maxMatchedPixels}): ${result.error ?? "no matching lower arc"}`,
         );
       return result;
+    },
+    async receipt() {
+      return handle.evaluate((observer) => observer.result);
     },
     async dispose() {
       await handle.evaluate((observer) => observer.cancel());

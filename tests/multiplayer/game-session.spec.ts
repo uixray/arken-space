@@ -29,7 +29,11 @@ import { createCampaignWithGmAccess } from "../../apps/server/src/seed.js";
 import { openWorkspaceSection } from "../e2e/workspace-nav-helper.js";
 import { fitRect } from "../../apps/web/src/renderers/camera-fit.js";
 import { cursorColorForMembership } from "../../apps/web/src/renderers/cursor-color.js";
-import { observePingOverlay } from "./ping-pixel-observer.js";
+import {
+  assertPingReceiverForeground,
+  createPingFrameRecorder,
+  observePingOverlay,
+} from "./ping-pixel-observer.js";
 
 const baseUrl = process.env.E2E_BASE_URL ?? "http://127.0.0.1:14180";
 const gmToken = `multiplayer-${crypto.randomUUID()}-${crypto.randomUUID()}`;
@@ -300,8 +304,10 @@ async function claimInvite(
   context: BrowserContext,
   inviteUrl: string,
   displayName: string,
+  onPageCreated?: (page: Page) => void,
 ) {
   const page = await context.newPage();
+  onPageCreated?.(page);
   await page.goto(inviteUrl);
   await page.getByLabel("Имя в кампании").fill(displayName);
   await page.getByRole("button", { name: "Продолжить в игру" }).click();
@@ -352,6 +358,7 @@ test("GM and six isolated players recover authoritative state without security l
   );
   const pages: Page[] = [];
   const connections: GameConnection[] = [];
+  const pingFrames = createPingFrameRecorder();
   try {
     const gmPage = await gm.newPage();
     await gmPage.goto("/gm/" + gmToken);
@@ -588,6 +595,7 @@ test("GM and six isolated players recover authoritative state without security l
         players[index],
         inviteUrls[index],
         "Player " + (index + 1),
+        index === 2 ? pingFrames.attach : undefined,
       );
     }
 
@@ -1357,16 +1365,21 @@ test("GM and six isolated players recover authoritative state without security l
       x: coveredForeignToken.x + coveredForeignToken.width / 2,
       y: coveredForeignToken.y + coveredForeignToken.height / 2,
     };
+    // A pixel assertion observes the receiver, not whichever sender tab was
+    // last active. This is a fixture precondition, not a proven flake cause.
+    await pages[2]!.bringToFront();
     const observerMap = pages[2]!.locator(".map-viewport");
     // The encounter above refits the camera. Explicitly fit, rather than
     // mistaking world coordinates for pixels at the default zoom.
     await observerMap.press("f");
+    await assertPingReceiverForeground(pages[2]!);
     const observerBounds = await observerMap.boundingBox();
     if (!observerBounds) throw new Error("Ping observer map is not visible");
     const fit = fitRect(
       { x: 0, y: 0, width: initialScene.width, height: initialScene.height },
       observerBounds,
     );
+    pingFrames.clear();
     const observer = await observePingOverlay(
       observerMap,
       {
@@ -1398,6 +1411,16 @@ test("GM and six isolated players recover authoritative state without security l
         }),
         observer.result(),
       ]);
+      const browserReceipts = pingFrames.snapshot();
+      expect(browserReceipts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            sceneId: initialScene.id,
+            membershipId: playerOneSnapshot.me.id,
+            ...pingPoint,
+          }),
+        ]),
+      );
       for (const [name, data] of [
         ["covered-fog-before-ping", pixels.before],
         ["live-ping-over-covered-fog", pixels.after],
@@ -1412,11 +1435,37 @@ test("GM and six isolated players recover authoritative state without security l
           observerMembershipId: playerInitialSnapshots[2]!.me.id,
           senderMembershipId: playerOneSnapshot.me.id,
           point: pingPoint,
+          browserReceipts,
+          diagnostic: pixels.diagnostic,
           elapsedMs: pixels.elapsedMs,
           matchedPixels: pixels.maxMatchedPixels,
         }),
         contentType: "application/json",
       });
+    } catch (error) {
+      const pixels = await observer.receipt();
+      await testInfo.attach("ping-observation-failure", {
+        body: JSON.stringify({
+          ...pixels,
+          before: undefined,
+          after: undefined,
+          browserReceipts: pingFrames.snapshot(),
+          point: pingPoint,
+          senderMembershipId: playerOneSnapshot.me.id,
+          observerMembershipId: playerInitialSnapshots[2]!.me.id,
+        }),
+        contentType: "application/json",
+      });
+      for (const [name, data] of [
+        ["failed-ping-baseline", pixels.before],
+        ["failed-ping-last-composite", pixels.after],
+      ]) {
+        await testInfo.attach(name, {
+          body: Buffer.from(data.split(",")[1]!, "base64"),
+          contentType: "image/png",
+        });
+      }
+      throw error;
     } finally {
       await observer.dispose();
     }
@@ -1993,6 +2042,7 @@ test("GM and six isolated players recover authoritative state without security l
     finalConnection.socket.disconnect();
     await finalPlayer.close();
   } finally {
+    pingFrames.dispose();
     for (const { socket } of connections) socket.disconnect();
     await Promise.all([gm.close(), ...players.map((player) => player.close())]);
   }
