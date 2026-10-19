@@ -62,6 +62,7 @@ export const requiredMembershipColumns = Object.freeze([
   "id",
   "revision",
   "role",
+  "ruler_color",
   "selected_theme_id",
   "theme_revision",
   "user_id",
