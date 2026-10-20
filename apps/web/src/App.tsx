@@ -201,6 +201,26 @@ export function App() {
     },
     [snapshot],
   );
+  // UIX-457: личная рамка бросков. Ответ сервера абсолютный, поэтому
+  // локальная подстановка совпадёт со следующим снапшотом.
+  const saveDiceFrame = useCallback(async (assetId: string | null) => {
+    const updated = await api<{ id: string; diceFrameAssetId: string | null }>(
+      "/api/me/dice-frame",
+      { method: "PATCH", body: JSON.stringify({ diceFrameAssetId: assetId }) },
+    );
+    setSnapshot((current) =>
+      current && current.me.id === updated.id
+        ? {
+            ...current,
+            me: { ...current.me, diceFrameAssetId: updated.diceFrameAssetId },
+          }
+        : current,
+    );
+  }, []);
+  const diceFrames = useMemo(
+    () => snapshot?.assets.filter((asset) => asset.kind === "DICE_FRAME"),
+    [snapshot?.assets],
+  );
   const themePreference = usePlayerThemePreference({
     scopeKey: personalTheme?.scopeKey ?? null,
     preference: personalTheme ?? {
@@ -1744,6 +1764,9 @@ export function App() {
               themePreference.cancel();
               setThemeSettingsOpen(false);
             }}
+            diceFrames={previewSnapshot ? null : (diceFrames ?? [])}
+            diceFrameAssetId={snapshot.me.diceFrameAssetId ?? null}
+            onSaveDiceFrame={saveDiceFrame}
             compact={compact}
             compactSectionsOpen={compactSectionsOpen}
             onCloseCompactSections={() => setCompactSectionsOpen(false)}

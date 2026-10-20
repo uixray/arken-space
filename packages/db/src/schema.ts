@@ -14,6 +14,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -35,6 +36,7 @@ export const assetKindEnum = pgEnum("asset_kind", [
   "PORTRAIT",
   "IMAGE",
   "AUDIO",
+  "DICE_FRAME",
 ]);
 export const audioPurposeEnum = pgEnum("audio_purpose", [
   "MUSIC",
@@ -618,6 +620,14 @@ export const memberships = pgTable(
       .default(0),
     /** UIX-509: GM-assigned ruler palette key; null = hashed fallback colour. */
     rulerColor: text("ruler_color"),
+    /**
+     * UIX-457: личная рамка бросков — предпочтение членства, не персонажа.
+     * Кампанию ассета проверяет маршрут; удаление ассета снимает выбор.
+     */
+    diceFrameAssetId: uuid("dice_frame_asset_id").references(
+      (): AnyPgColumn => assets.id,
+      { onDelete: "set null" },
+    ),
     revision: integer("revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -793,6 +803,9 @@ export const assets = pgTable(
     width: integer("width"),
     height: integer("height"),
     durationSeconds: doublePrecision("duration_seconds"),
+    /** UIX-457: второй blob рамки броска — статичный постер. */
+    posterStorageKey: text("poster_storage_key").unique(),
+    posterSizeBytes: integer("poster_size_bytes"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -802,6 +815,12 @@ export const assets = pgTable(
     check(
       "assets_audio_purpose_kind_check",
       sql`(${table.kind} = 'AUDIO' AND ${table.audioPurpose} IS NOT NULL) OR (${table.kind} <> 'AUDIO' AND ${table.audioPurpose} IS NULL)`,
+    ),
+    // `::text`: новое значение enum нельзя сравнивать в той же транзакции,
+    // где оно добавлено, а миграции drizzle идут одной транзакцией.
+    check(
+      "assets_dice_frame_poster_check",
+      sql`(${table.kind}::text = 'DICE_FRAME') = (${table.posterStorageKey} IS NOT NULL AND ${table.posterSizeBytes} IS NOT NULL)`,
     ),
   ],
 );
@@ -1218,6 +1237,10 @@ export const catalogEntries = pgTable(
     name: text("name").notNull(),
     description: text("description").notNull().default(""),
     data: jsonb("data").$type<Record<string, unknown>>().notNull().default({}),
+    /** UIX-457: рамка бросков навыка; копии у персонажей идут через source. */
+    diceFrameAssetId: uuid("dice_frame_asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
     revision: integer("revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

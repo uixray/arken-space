@@ -1,4 +1,10 @@
-import type { DiceFrameReference, DiceSemanticOutcome } from "@arken/contracts";
+import {
+  DICE_FRAME_SOURCES,
+  type DiceFrameChoice,
+  type DiceFrameReference,
+  type DiceFrameSource,
+  type DiceSemanticOutcome,
+} from "@arken/contracts";
 
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -48,4 +54,21 @@ export function normalizeDiceFrameReference(
       frameKey: "critical-success",
     };
   return null;
+}
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** UIX-457: рамка-оформление из истории; чужая форма просто не рисуется. */
+export function normalizeDiceStyleFrame(
+  value: unknown,
+): DiceFrameChoice | null {
+  if (
+    !record(value) ||
+    typeof value.assetId !== "string" ||
+    !UUID_PATTERN.test(value.assetId) ||
+    !DICE_FRAME_SOURCES.includes(value.source as DiceFrameSource)
+  )
+    return null;
+  return { assetId: value.assetId, source: value.source as DiceFrameSource };
 }

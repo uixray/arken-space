@@ -199,6 +199,9 @@ export function SetupPanel(props: Props) {
                 props.snapshot.campaign.statLayout,
               )}
               statLabels={statLabels}
+              diceFrames={props.snapshot.assets.filter(
+                (asset) => asset.kind === "DICE_FRAME",
+              )}
               key={catalogEditor === "NEW" ? "new" : catalogEditor.id}
               existing={catalogEditor === "NEW" ? undefined : catalogEditor}
               onCancel={() => setCatalogEditor(null)}

@@ -38,11 +38,17 @@ export const ASSET_DEPENDENCY_REGISTRY = [
   "WORLD_CONTENT_MEDIA",
   "WORLD_CONTENT_INSTANCE_PORTRAIT",
   "GENERATED_TOKEN_SOURCE",
+  "MEMBER_DICE_FRAME",
+  "SKILL_DICE_FRAME",
 ] as const;
 
-export interface AssetMetadata extends Omit<AssetDto, "url" | "createdAt"> {
+export interface AssetMetadata extends Omit<
+  AssetDto,
+  "url" | "posterUrl" | "createdAt"
+> {
   createdAt: Date;
   storageKey: string;
+  posterStorageKey?: string | null;
 }
 
 export function assetDto(asset: AssetMetadata): AssetDto {
@@ -57,6 +63,11 @@ export function assetDto(asset: AssetMetadata): AssetDto {
     height: asset.height,
     durationSeconds: asset.durationSeconds,
     url: `/api/assets/${asset.id}/content?v=${assetContentVersion(asset.storageKey).slice(1, -1)}`,
+    ...(asset.posterStorageKey
+      ? {
+          posterUrl: `/api/assets/${asset.id}/content?variant=poster&v=${assetContentVersion(asset.posterStorageKey).slice(1, -1)}`,
+        }
+      : {}),
     createdAt: asset.createdAt.toISOString(),
   };
 }

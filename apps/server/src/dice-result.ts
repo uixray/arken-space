@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { DiceResult, SkillCardSnapshot } from "@arken/contracts";
+import {
+  DICE_FRAME_SOURCES,
+  type DiceResult,
+  type SkillCardSnapshot,
+} from "@arken/contracts";
 
 const diceResultSchema = z.object({
   formula: z.string().max(160),
@@ -36,6 +40,13 @@ const diceResultSchema = z.object({
     .object({
       setKey: z.literal("ARKEN_CRITICAL_V1"),
       frameKey: z.enum(["critical-failure", "critical-success"]),
+    })
+    .nullable()
+    .optional(),
+  styleFrame: z
+    .object({
+      assetId: z.string().uuid(),
+      source: z.enum(DICE_FRAME_SOURCES),
     })
     .nullable()
     .optional(),

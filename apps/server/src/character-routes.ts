@@ -25,6 +25,7 @@ import { createStarterCharacter } from "@arken/system";
 import { requireAuth } from "./auth.js";
 import { characterDto } from "./character-dto.js";
 import { findAction } from "./action-lookup.js";
+import { isCampaignDiceFrame } from "./member-dice-frame-routes.js";
 import {
   canAccessCharacter,
   campaignDefaultStatLayout,
@@ -349,6 +350,11 @@ export function registerCharacterRoutes(
     const body = parsedBody.data;
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(200).send({ duplicate: true });
+    if (
+      body.diceFrameAssetId &&
+      !(await isCampaignDiceFrame(db, auth.campaignId, body.diceFrameAssetId))
+    )
+      return reply.code(404).send({ error: "DICE_FRAME_NOT_FOUND" });
     const { actionId, ...input } = body;
     const created = await db.transaction(async (tx) => {
       const [entry] = await tx
@@ -409,6 +415,11 @@ export function registerCharacterRoutes(
     if (!current) return reply.code(404).send({ error: "CATALOG_NOT_FOUND" });
     if (body.revision !== undefined && body.revision !== current.revision)
       return reply.code(409).send({ error: "CATALOG_CONFLICT" });
+    if (
+      body.diceFrameAssetId &&
+      !(await isCampaignDiceFrame(db, auth.campaignId, body.diceFrameAssetId))
+    )
+      return reply.code(404).send({ error: "DICE_FRAME_NOT_FOUND" });
     const { actionId, revision: _revision, ...updates } = body;
     const updated = await db.transaction(async (tx) => {
       const [next] = await tx

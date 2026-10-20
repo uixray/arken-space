@@ -215,11 +215,15 @@ export function publicUploadError(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   const allowed = new Set([
     "AUDIO_TOO_LARGE",
+    "DICE_FRAME_TOO_HEAVY",
+    "DICE_FRAME_TOO_LARGE",
     "IMAGE_DIMENSIONS_TOO_LARGE",
     "IMAGE_TOO_LARGE",
     "INVALID_AUDIO_DURATION",
+    "INVALID_DICE_FRAME",
     "LOW_DISK_SPACE",
     "MEDIA_QUOTA_EXCEEDED",
+    "PROCESSING_BUSY",
     "UNSUPPORTED_AUDIO_TYPE",
     "UNSUPPORTED_FILE_TYPE",
     "UNSUPPORTED_IMAGE_TYPE",

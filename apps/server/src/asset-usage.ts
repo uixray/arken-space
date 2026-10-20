@@ -12,10 +12,12 @@ import {
   assets,
   campaignAudioTracks,
   campaignSounds,
+  catalogEntries,
   characters,
   characterMedia,
   drawings,
   gameEvents,
+  memberships,
   scenes,
   tokenDefinitions,
   tokens,
@@ -92,6 +94,8 @@ export async function resolveAssetUsages(
     worldContentInstanceRows,
     provenanceRows,
     stampRows,
+    memberFrameRows,
+    skillFrameRows,
   ] = await Promise.all([
     db
       .select({ id: scenes.id, name: scenes.name })
@@ -257,6 +261,25 @@ export async function resolveAssetUsages(
           eq(drawings.stampAssetKey, assetId),
         ),
       ),
+    // UIX-457: личные рамки бросков и рамки навыков.
+    db
+      .select({ id: memberships.id, name: memberships.displayName })
+      .from(memberships)
+      .where(
+        and(
+          eq(memberships.campaignId, campaignId),
+          eq(memberships.diceFrameAssetId, assetId),
+        ),
+      ),
+    db
+      .select({ id: catalogEntries.id, name: catalogEntries.name })
+      .from(catalogEntries)
+      .where(
+        and(
+          eq(catalogEntries.campaignId, campaignId),
+          eq(catalogEntries.diceFrameAssetId, assetId),
+        ),
+      ),
   ]);
 
   return [
@@ -379,6 +402,22 @@ export async function resolveAssetUsages(
       visibility:
         row.layer === "PUBLIC" ? ("PUBLIC" as const) : ("GM_ONLY" as const),
       // A stamp without its picture is meaningless: it is removed with it.
+      deletionPolicy: "DETACH" as const,
+    })),
+    ...memberFrameRows.map((row) => ({
+      kind: "MEMBER_DICE_FRAME" as const,
+      entityId: row.id,
+      label: row.name,
+      location: "Личная рамка бросков",
+      visibility: "PARTICIPANT" as const,
+      deletionPolicy: "DETACH" as const,
+    })),
+    ...skillFrameRows.map((row) => ({
+      kind: "SKILL_DICE_FRAME" as const,
+      entityId: row.id,
+      label: row.name,
+      location: "Рамка бросков навыка",
+      visibility: "GM_ONLY" as const,
       deletionPolicy: "DETACH" as const,
     })),
   ];
@@ -526,6 +565,7 @@ export function registerAssetLifecycleRoutes(
       return reply.code(403).send({ error: "GM_REQUIRED" });
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     let storageKey = "";
+    let posterStorageKey: string | null = null;
     try {
       const result = await db.transaction(async (tx) => {
         const [asset] = await tx
@@ -688,6 +728,30 @@ export function registerAssetLifecycleRoutes(
               eq(worldContentInstances.portraitAssetId, id),
             ),
           );
+        // UIX-457: рамка уходит у игроков и навыков; прошлые броски хранят
+        // только id и просто перестанут её показывать.
+        await tx
+          .update(memberships)
+          .set({ diceFrameAssetId: null })
+          .where(
+            and(
+              eq(memberships.campaignId, auth.campaignId),
+              eq(memberships.diceFrameAssetId, id),
+            ),
+          );
+        await tx
+          .update(catalogEntries)
+          .set({
+            diceFrameAssetId: null,
+            revision: sql`${catalogEntries.revision} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(catalogEntries.campaignId, auth.campaignId),
+              eq(catalogEntries.diceFrameAssetId, id),
+            ),
+          );
         const detachedWorldMedia = await tx
           .delete(worldContentMedia)
           .where(eq(worldContentMedia.assetId, id))
@@ -727,6 +791,7 @@ export function registerAssetLifecycleRoutes(
           id,
         );
         storageKey = asset.storageKey;
+        posterStorageKey = asset.posterStorageKey;
         return deleteUnusedAsset(id, remainingUsages, {
           deleteMetadata: async () => {
             await tx
@@ -757,6 +822,7 @@ export function registerAssetLifecycleRoutes(
       let blobCleanupPending = false;
       try {
         await removeStoredUpload(storageKey);
+        if (posterStorageKey) await removeStoredUpload(posterStorageKey);
       } catch {
         blobCleanupPending = true;
         request.log.error(
@@ -797,6 +863,10 @@ export function registerAssetLifecycleRoutes(
       .where(and(eq(assets.id, id), eq(assets.campaignId, auth.campaignId)))
       .limit(1);
     if (!current) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
+    // UIX-457: у рамки два blob и свой перекод; заменить — значит загрузить
+    // новую рамку и выбрать её.
+    if (current.kind === "DICE_FRAME")
+      return reply.code(400).send({ error: "DICE_FRAME_REPLACE_UNSUPPORTED" });
 
     const file = await request.file({
       limits: {
