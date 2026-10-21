@@ -5523,11 +5523,15 @@ body:has(.landing-shell) {
   }
 }
 /* UIX-246: independent story timeline; it does not change the sidebar scroll owner. */
+/* UIX-245: колонка, а не три жёсткие строки сетки — между шапкой и лентой
+   бывают необязательные блоки (эпохи), после формы — события игры. Лента
+   забирает остаток высоты, остальные блоки — свою естественную. */
 .story-channel {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   height: 100%;
+  overflow-y: auto;
   background: linear-gradient(180deg, rgb(255 190 90 / 5%), transparent 24%);
 }
 .story-channel__header,
@@ -5553,9 +5557,11 @@ body:has(.landing-shell) {
 }
 .story-channel__timeline {
   display: grid;
+  flex: 1 0 auto;
   align-content: start;
   gap: var(--space-md);
-  min-height: 0;
+  /* Форма мастера не должна сжимать ленту до нуля. */
+  min-height: min(280px, 45vh);
   padding: var(--space-md);
   overflow: auto;
   overscroll-behavior: contain;
@@ -5695,6 +5701,47 @@ body:has(.landing-shell) {
   background: var(--accent);
   color: var(--surface-1);
 }
+/* UIX-245: игровое время летописи — день кампании и эпоха. */
+.story-post__world-time {
+  color: var(--color-text-accent);
+}
+.story-world-time-fields {
+  display: grid;
+  grid-template-columns: minmax(96px, 0.4fr) minmax(0, 1fr);
+  gap: var(--space-sm);
+}
+.story-world-time-fields label {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: max(12px, 0.78rem);
+}
+.story-channel__eras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md) 0;
+}
+.story-channel__eras button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-1));
+}
+.story-event-sources {
+  display: grid;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+  background: var(--surface-1);
+}
+.story-event-sources ul {
+  display: grid;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.story-event-sources p {
+  margin: 0;
+}
 @media (min-width: 960px) and (max-width: 1279px) {
   .story-post {
     max-width: none;
@@ -5702,6 +5749,9 @@ body:has(.landing-shell) {
 }
 @media (max-width: 760px) {
   .story-composer__attachments li {
+    grid-template-columns: 1fr;
+  }
+  .story-world-time-fields {
     grid-template-columns: 1fr;
   }
 }

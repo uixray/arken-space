@@ -3,6 +3,7 @@ import type {
   ChatAttachmentMetadata,
   ChatMessageDto,
   StoryEntityLink,
+  StoryEventSourceDto,
   StoryPostAdminDto,
   StoryPostDto,
 } from "@arken/contracts";
@@ -25,13 +26,18 @@ export type StoryDraftInput = {
   }>;
   entityLinks: StoryEntityLink[];
   gmNotes: string;
+  /** UIX-245: не указан — сервер берёт текущий день часов кампании. */
+  worldDay?: number | null;
+  era?: string | null;
 };
 
 import {
   canCreateStoryDraft,
   isStoryAdminPost,
+  parseStoryWorldDay,
   storyPostMedia,
   storyPostStatus,
+  storyWorldTimeLabel,
 } from "./story-channel-helpers";
 
 function imageUrl(contentId: string) {
@@ -66,6 +72,10 @@ export function StoryPost({
   const [draftTitle, setDraftTitle] = useState(post.title);
   const [draftBody, setDraftBody] = useState(post.body);
   const [draftGmNotes, setDraftGmNotes] = useState(adminPost?.gmNotes ?? "");
+  const [draftWorldDay, setDraftWorldDay] = useState(
+    post.worldDay == null ? "" : String(post.worldDay),
+  );
+  const [draftEra, setDraftEra] = useState(post.era ?? "");
   const [draftMedia, setDraftMedia] = useState<StoryMediaDraft[]>(() =>
     storyPostMedia(post).map((item) => ({
       contentId: item.contentId,
@@ -138,6 +148,10 @@ export function StoryPost({
     setDraftTitle(adminPost.title);
     setDraftBody(adminPost.body);
     setDraftGmNotes(adminPost.gmNotes);
+    setDraftWorldDay(
+      adminPost.worldDay == null ? "" : String(adminPost.worldDay),
+    );
+    setDraftEra(adminPost.era ?? "");
     setDraftMedia(
       storyPostMedia(adminPost).map((item) => ({
         contentId: item.contentId,
@@ -157,6 +171,11 @@ export function StoryPost({
       (!draftBody.trim() && draftMedia.length === 0)
     )
       return;
+    const worldDay = parseStoryWorldDay(draftWorldDay);
+    if (worldDay === undefined) {
+      setUpdateError("День кампании — целое число от 1, или оставьте пустым.");
+      return;
+    }
     setPending("update");
     setUpdateError("");
     try {
@@ -171,6 +190,8 @@ export function StoryPost({
         })),
         entityLinks: adminPost.entityLinks,
         gmNotes: draftGmNotes,
+        worldDay,
+        era: draftEra.trim() || null,
       });
       setEditing(false);
     } catch (reason) {
@@ -197,6 +218,11 @@ export function StoryPost({
             {storyPostStatus(post)}
           </span>
           {post.title && <strong>{post.title}</strong>}
+          {storyWorldTimeLabel(post) && (
+            <span className="story-post__world-time">
+              {storyWorldTimeLabel(post)}
+            </span>
+          )}
         </div>
         <time dateTime={post.publishedAt ?? post.createdAt}>
           {new Date(post.publishedAt ?? post.createdAt).toLocaleTimeString([], {
@@ -225,6 +251,28 @@ export function StoryPost({
               rows={5}
             />
           </label>
+          <div className="story-world-time-fields">
+            <label>
+              День кампании
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                value={draftWorldDay}
+                disabled={pending !== null}
+                onChange={(event) => setDraftWorldDay(event.target.value)}
+              />
+            </label>
+            <label>
+              Эпоха
+              <input
+                value={draftEra}
+                maxLength={80}
+                disabled={pending !== null}
+                onChange={(event) => setDraftEra(event.target.value)}
+              />
+            </label>
+          </div>
           {draftMedia.length > 0 && (
             <ul className="story-composer__attachments">
               {draftMedia.map((item) => (
@@ -451,6 +499,11 @@ export function StoryChannel({
   onUpdate,
   onUploadImage,
   mediaUrl,
+  eras = [],
+  eraFilter = null,
+  onSelectEra,
+  onLoadEventSources,
+  onCreateFromEvent,
 }: {
   posts: readonly StoryPostView[];
   legacyMessages?: readonly ChatMessageDto[];
@@ -464,8 +517,19 @@ export function StoryChannel({
   onUpdate?: (post: StoryPostAdminDto, input: StoryDraftInput) => Promise<void>;
   onUploadImage?: (file: File) => Promise<ChatAttachmentMetadata>;
   mediaUrl?: (contentId: string) => string;
+  /** UIX-245: эпохи летописи и выбранный фильтр. */
+  eras?: readonly string[];
+  eraFilter?: string | null;
+  onSelectEra?: (era: string | null) => Promise<void>;
+  onLoadEventSources?: () => Promise<StoryEventSourceDto[]>;
+  onCreateFromEvent?: (eventSequence: number) => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
+  const [worldDayText, setWorldDayText] = useState("");
+  const [era, setEra] = useState("");
+  const [eventSources, setEventSources] = useState<
+    StoryEventSourceDto[] | null
+  >(null);
   const [body, setBody] = useState("");
   const [gmNotes, setGmNotes] = useState("");
   const [media, setMedia] = useState<StoryMediaDraft[]>([]);
@@ -509,6 +573,11 @@ export function StoryChannel({
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!onCreateDraft || !canCreateStoryDraft({ body, media })) return;
+    const worldDay = parseStoryWorldDay(worldDayText);
+    if (worldDay === undefined) {
+      setError("День кампании — целое число от 1, или оставьте пустым.");
+      return;
+    }
     setLocalPending(true);
     setError("");
     try {
@@ -523,16 +592,71 @@ export function StoryChannel({
         })),
         entityLinks: [],
         gmNotes,
+        // Пустое поле дня — текущий день кампании на сервере.
+        ...(worldDay === null ? {} : { worldDay }),
+        era: era.trim() || null,
       });
       setTitle("");
       setBody("");
       setGmNotes("");
+      setWorldDayText("");
+      setEra("");
       setMedia([]);
     } catch (reason) {
       setError(
         reason instanceof Error
           ? reason.message
           : "Не удалось сохранить черновик.",
+      );
+    } finally {
+      setLocalPending(false);
+    }
+  }
+
+  async function selectEra(next: string | null) {
+    if (!onSelectEra || busy || next === eraFilter) return;
+    setLocalPending(true);
+    setError("");
+    try {
+      await onSelectEra(next);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Не удалось открыть эпоху.",
+      );
+    } finally {
+      setLocalPending(false);
+    }
+  }
+
+  async function loadEventSources() {
+    if (!onLoadEventSources || busy) return;
+    setLocalPending(true);
+    setError("");
+    try {
+      setEventSources(await onLoadEventSources());
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Не удалось загрузить события игры.",
+      );
+    } finally {
+      setLocalPending(false);
+    }
+  }
+
+  async function draftFromEvent(source: StoryEventSourceDto) {
+    if (!onCreateFromEvent || busy) return;
+    setLocalPending(true);
+    setError("");
+    try {
+      await onCreateFromEvent(source.sequence);
+      setEventSources(null);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Не удалось создать черновик из события.",
       );
     } finally {
       setLocalPending(false);
@@ -552,6 +676,25 @@ export function StoryChannel({
           </span>
         )}
       </header>
+      {onSelectEra && (eras.length > 0 || eraFilter) && (
+        <div
+          className="story-channel__eras"
+          role="group"
+          aria-label="Эпохи летописи"
+        >
+          {[null, ...eras].map((candidate) => (
+            <button
+              key={candidate ?? "all"}
+              type="button"
+              aria-pressed={eraFilter === candidate}
+              disabled={busy}
+              onClick={() => void selectEra(candidate)}
+            >
+              {candidate ?? "Все эпохи"}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="story-channel__timeline" aria-live="polite">
         {legacyMessages.map((message) => (
           <article className="story-post story-post--legacy" key={message.id}>
@@ -626,6 +769,29 @@ export function StoryChannel({
               }}
             />
           </label>
+          <div className="story-world-time-fields">
+            <label>
+              {"День кампании"}{" "}
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                value={worldDayText}
+                placeholder="Текущий"
+                disabled={busy}
+                onChange={(event) => setWorldDayText(event.target.value)}
+              />
+            </label>
+            <label>
+              {"Эпоха"}{" "}
+              <input
+                value={era}
+                maxLength={80}
+                disabled={busy}
+                onChange={(event) => setEra(event.target.value)}
+              />
+            </label>
+          </div>
           {media.length > 0 && (
             <ul
               className="story-composer__attachments"
@@ -731,6 +897,47 @@ export function StoryChannel({
             </p>
           )}
         </form>
+      )}
+      {isGm && onLoadEventSources && onCreateFromEvent && (
+        <section
+          className="story-event-sources"
+          aria-label="Черновик из события игры"
+        >
+          {eventSources === null ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void loadEventSources()}
+            >
+              {"Черновик из события игры"}
+            </button>
+          ) : eventSources.length === 0 ? (
+            <p className="muted">
+              {"Подходящих событий пока нет: броски, способности, смена сцены."}
+            </p>
+          ) : (
+            <ul>
+              {eventSources.map((source) => (
+                <li key={source.sequence}>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void draftFromEvent(source)}
+                  >
+                    {`${source.label} \u00b7 ${new Date(
+                      source.createdAt,
+                    ).toLocaleString([], {
+                      day: "2-digit",
+                      month: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}`}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
     </section>
   );

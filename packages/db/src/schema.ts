@@ -2457,6 +2457,14 @@ export const storyPosts = pgTable(
     /** GM-only editorial context; never project this to a player. */
     gmNotes: text("gm_notes").notNull().default(""),
     entityLinks: jsonb("entity_links").$type<unknown>().notNull().default([]),
+    /**
+     * UIX-245: время игрового мира. Летопись упорядочена по дню кампании, а не
+     * по дате записи на сервере; `null` — запись вне хронологии (старые и
+     * импортированные посты, у которых день неизвестен).
+     */
+    worldDay: integer("world_day"),
+    /** UIX-245: подпись эпохи, по ней фильтруют летопись. */
+    era: text("era"),
     lifecycle: storyPostLifecycleEnum("lifecycle").notNull().default("DRAFT"),
     /** Drafts/archives are GM-only; published/corrected posts are PUBLIC. */
     visibility: messageVisibilityEnum("visibility")
@@ -2483,6 +2491,17 @@ export const storyPosts = pgTable(
       table.visibility,
       table.updatedAt,
       table.id,
+    ),
+    // UIX-245: порядок летописи — день кампании, затем время правки.
+    index("story_posts_campaign_world_day_idx").on(
+      table.campaignId,
+      table.worldDay,
+      table.updatedAt,
+      table.id,
+    ),
+    check(
+      "story_posts_world_time_check",
+      sql`(${table.worldDay} IS NULL OR ${table.worldDay} BETWEEN 1 AND 1000000) AND (${table.era} IS NULL OR length(trim(${table.era})) BETWEEN 1 AND 80)`,
     ),
     foreignKey({
       name: "story_posts_campaign_thread_fk",
@@ -2514,6 +2533,8 @@ export const storyPostRevisions = pgTable(
     body: text("body").notNull(),
     gmNotes: text("gm_notes").notNull(),
     entityLinks: jsonb("entity_links").$type<unknown>().notNull().default([]),
+    worldDay: integer("world_day"),
+    era: text("era"),
     changedByMembershipId: uuid("changed_by_membership_id").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
