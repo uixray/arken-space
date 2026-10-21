@@ -14,6 +14,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -35,6 +36,7 @@ export const assetKindEnum = pgEnum("asset_kind", [
   "PORTRAIT",
   "IMAGE",
   "AUDIO",
+  "DICE_FRAME",
 ]);
 export const audioPurposeEnum = pgEnum("audio_purpose", [
   "MUSIC",
@@ -616,6 +618,16 @@ export const memberships = pgTable(
     defaultThemeRevision: integer("default_theme_revision")
       .notNull()
       .default(0),
+    /** UIX-509: GM-assigned ruler palette key; null = hashed fallback colour. */
+    rulerColor: text("ruler_color"),
+    /**
+     * UIX-457: личная рамка бросков — предпочтение членства, не персонажа.
+     * Кампанию ассета проверяет маршрут; удаление ассета снимает выбор.
+     */
+    diceFrameAssetId: uuid("dice_frame_asset_id").references(
+      (): AnyPgColumn => assets.id,
+      { onDelete: "set null" },
+    ),
     revision: integer("revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -634,6 +646,10 @@ export const memberships = pgTable(
     check(
       "memberships_default_theme_id_check",
       sql`${table.defaultThemeId} in ('forest','dragons','ice','fire','gold','silver','light','classic-v1')`,
+    ),
+    check(
+      "memberships_ruler_color_check",
+      sql`${table.rulerColor} is null or ${table.rulerColor} in ('green','lilac','orange','purple','black','blue')`,
     ),
     check(
       "memberships_selected_theme_id_check",
@@ -787,6 +803,9 @@ export const assets = pgTable(
     width: integer("width"),
     height: integer("height"),
     durationSeconds: doublePrecision("duration_seconds"),
+    /** UIX-457: второй blob рамки броска — статичный постер. */
+    posterStorageKey: text("poster_storage_key").unique(),
+    posterSizeBytes: integer("poster_size_bytes"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -796,6 +815,12 @@ export const assets = pgTable(
     check(
       "assets_audio_purpose_kind_check",
       sql`(${table.kind} = 'AUDIO' AND ${table.audioPurpose} IS NOT NULL) OR (${table.kind} <> 'AUDIO' AND ${table.audioPurpose} IS NULL)`,
+    ),
+    // `::text`: новое значение enum нельзя сравнивать в той же транзакции,
+    // где оно добавлено, а миграции drizzle идут одной транзакцией.
+    check(
+      "assets_dice_frame_poster_check",
+      sql`(${table.kind}::text = 'DICE_FRAME') = (${table.posterStorageKey} IS NOT NULL AND ${table.posterSizeBytes} IS NOT NULL)`,
     ),
   ],
 );
@@ -1212,6 +1237,10 @@ export const catalogEntries = pgTable(
     name: text("name").notNull(),
     description: text("description").notNull().default(""),
     data: jsonb("data").$type<Record<string, unknown>>().notNull().default({}),
+    /** UIX-457: рамка бросков навыка; копии у персонажей идут через source. */
+    diceFrameAssetId: uuid("dice_frame_asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
     revision: integer("revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -1747,7 +1776,7 @@ export const drawings = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
-    /** Missing values in pre-stamp rows migrate to FREEHAND. */
+    /** FREEHAND, STAMP or TEXTURE; missing values in pre-stamp rows migrate to FREEHAND. */
     kind: text("kind").notNull().default("FREEHAND"),
     /** Fixed server catalog key; never a path or URL supplied by a client. */
     stampAssetKey: text("stamp_asset_key"),
@@ -1758,10 +1787,18 @@ export const drawings = pgTable(
   },
   (table) => [
     index("drawings_scene_idx").on(table.sceneId),
-    check("drawings_kind_check", sql`${table.kind} in ('FREEHAND', 'STAMP')`),
+    check(
+      "drawings_kind_check",
+      sql`${table.kind} in ('FREEHAND', 'STAMP', 'TEXTURE')`,
+    ),
     check(
       "drawings_stamp_fields_check",
-      sql`(${table.kind} = 'FREEHAND' and ${table.stampAssetKey} is null and ${table.stampPackId} is null and ${table.stampSize} is null and ${table.stampRotation} is null and ${table.stampLayer} is null) or (${table.kind} = 'STAMP' and ${table.stampAssetKey} is not null and ${table.stampAssetKey} in ('forest', 'mountains', 'clouds') and ${table.stampPackId} is not null and ${table.stampPackId} = 'builtin-terrain-v1' and ${table.stampSize} is not null and ${table.stampSize} between 16 and 1024 and ${table.stampRotation} is not null and ${table.stampRotation} between -360 and 360 and ${table.stampLayer} is not null and ${table.stampLayer} in ('PUBLIC', 'GM'))`,
+      // UIX-706: built-in templates come from the server catalog manifest
+      // (key pattern only here, so new templates need no migration); a
+      // campaign image stamp stores the campaign asset id as its key.
+      // A TEXTURE stroke (pool 3) is a brush polyline filled with a tileable
+      // texture: strokeWidth is the brush width, stampSize the tile size.
+      sql`(${table.kind} = 'FREEHAND' and ${table.stampAssetKey} is null and ${table.stampPackId} is null and ${table.stampSize} is null and ${table.stampRotation} is null and ${table.stampLayer} is null) or (${table.kind} = 'STAMP' and ${table.stampAssetKey} is not null and ((${table.stampPackId} = 'builtin-terrain-v1' and ${table.stampAssetKey} ~ '^[a-z][a-z0-9-]{0,39}$') or (${table.stampPackId} = 'campaign-image' and ${table.stampAssetKey} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')) and ${table.stampSize} is not null and ${table.stampSize} between 16 and 1024 and ${table.stampRotation} is not null and ${table.stampRotation} between -360 and 360 and ${table.stampLayer} is not null and ${table.stampLayer} in ('PUBLIC', 'GM')) or (${table.kind} = 'TEXTURE' and ${table.stampAssetKey} is not null and ((${table.stampPackId} = 'builtin-texture-v1' and ${table.stampAssetKey} ~ '^[a-z][a-z0-9-]{0,39}$') or (${table.stampPackId} = 'campaign-image' and ${table.stampAssetKey} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')) and ${table.stampSize} is not null and ${table.stampSize} between 16 and 1024 and ${table.stampRotation} is not null and ${table.stampRotation} between -360 and 360 and ${table.stampLayer} is not null and ${table.stampLayer} in ('PUBLIC', 'GM') and ${table.strokeWidth} between 8 and 400)`,
     ),
   ],
 );

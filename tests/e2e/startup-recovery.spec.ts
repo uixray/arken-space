@@ -1,6 +1,7 @@
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 for (const width of [1280, 390]) {
   test(`UIX-317 startup error exposes alert semantics and keyboard retry recovers ${width}`, async ({
@@ -31,7 +32,7 @@ for (const width of [1280, 390]) {
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       if (path === "/api/operator/feedback/capability")
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await page.route("**/api/bootstrap", async (route) => {
       if (!recovering)

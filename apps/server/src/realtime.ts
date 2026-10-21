@@ -53,6 +53,7 @@ import {
   soundpadGenerationIsCurrent,
 } from "./soundpad-runtime.js";
 import { effectiveAudioPosition, ensureAudioDuration } from "./audio-state.js";
+import { rulerColorKey } from "./member-ruler-color-routes.js";
 import {
   isCampaignCanvasGuardError,
   runCampaignCanvasMutation,
@@ -172,7 +173,7 @@ function envelope<T>(
  * this projection reusable so a successful mutation can re-read the canonical
  * definition after commit instead of publishing the pre-transaction snapshot.
  */
-async function projectedToken(
+export async function projectedToken(
   db: CampaignCanvasDb,
   campaignId: string,
   tokenId: string,
@@ -1675,12 +1676,18 @@ export function registerRealtime(
             )
             .limit(1);
           if (!scene) return;
+          const [member] = await tx
+            .select({ rulerColor: memberships.rulerColor })
+            .from(memberships)
+            .where(eq(memberships.id, auth.membershipId))
+            .limit(1);
           if (!socket.connected) return;
           canvasEphemera.rulerSceneId = scene.id;
           io.to(campaignRoom(auth.campaignId)).emit("ruler:updated", {
             ...parsed.data,
             membershipId: auth.membershipId,
             displayName: auth.displayName,
+            rulerColor: rulerColorKey(member?.rulerColor ?? null),
             distance: rulerPolylineDistance(
               parsed.data.points,
               scene.grid.enabled ? scene.grid.size : 1,

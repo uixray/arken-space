@@ -7,6 +7,7 @@ import type {
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 for (const width of [390, 1280]) {
   test(`UIX-458 custom school explicit activation and branch display ${width}px (mock API)`, async ({
@@ -199,7 +200,7 @@ for (const width of [390, 1280]) {
         ];
         return route.fulfill({ status: 201, json: { ok: true } });
       }
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, pathname);
     });
 
     await page.setViewportSize({ width, height: 850 });

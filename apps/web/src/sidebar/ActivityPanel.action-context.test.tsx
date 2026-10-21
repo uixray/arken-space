@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import type { ComponentProps, ReactNode } from "react";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -97,7 +96,7 @@ function renderActivity(
   };
   const rendered = renderComponent(<ActivityPanel {...props} />, {
     wrapper: ({ children }: { children: ReactNode }) => (
-      <ThemeProvider theme="dark" lang="ru">
+      <>
         <CampaignActionsContext.Provider
           value={
             { catalog: { onRollEntry: vi.fn(async () => undefined) } } as never
@@ -107,7 +106,7 @@ function renderActivity(
             {children}
           </RollVisibilityContext.Provider>
         </CampaignActionsContext.Provider>
-      </ThemeProvider>
+      </>
     ),
   });
   return {

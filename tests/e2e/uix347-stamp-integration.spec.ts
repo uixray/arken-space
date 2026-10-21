@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
 import type { DrawingDto, GameSnapshot } from "@arken/contracts";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const png = (key: "forest" | "mountains" | "clouds") =>
   readFileSync(
@@ -139,16 +140,39 @@ async function installMocks(
         body: png(key),
       });
     }
+    // UIX-706 pool 3: one catalog texture, served from a stamp raster.
+    if (path === "/api/terrain-stamps/textures/dug-soil") {
+      assetRequests.push(path);
+      return route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        headers: { "cache-control": "private, no-store" },
+        body: png("forest"),
+      });
+    }
     if (path === "/api/terrain-stamps/catalog") {
       if (snapshot.me.role !== "GM")
         throw new Error("PLAYER requested GM stamp catalog");
       return route.fulfill({
         json: {
           packId: "builtin-terrain-v1",
-          stamps: ["forest", "mountains", "clouds"].map((assetKey) => ({
+          // UIX-706: titles come from the server catalog manifest.
+          stamps: [
+            ["forest", "Лес"],
+            ["mountains", "Горы"],
+            ["clouds", "Облака"],
+          ].map(([assetKey, title]) => ({
             assetKey,
             packId: "builtin-terrain-v1",
+            title,
           })),
+          textures: [
+            {
+              assetKey: "dug-soil",
+              packId: "builtin-texture-v1",
+              title: "Перекопанная почва",
+            },
+          ],
         },
       });
     }
@@ -251,7 +275,7 @@ async function installMocks(
         json: { ...original, ...body, revision: (original?.revision ?? 1) + 1 },
       });
     }
-    if (request.method() === "GET") return route.fulfill({ json: [] });
+    if (route.request().method() === "GET") return fulfillUnmocked(route, path);
     if (path === "/api/client-logs")
       return route.fulfill({ status: 204, body: "" });
     throw new Error(
@@ -651,3 +675,235 @@ for (const count of [100, 500]) {
     expect(canvasCount).toBeGreaterThan(0);
   });
 }
+
+const makeTextureStroke = (
+  id: string,
+  layer: "PUBLIC" | "GM" = "PUBLIC",
+): DrawingDto => ({
+  id,
+  sceneId,
+  authorMembershipId: "uix347-gm",
+  // Wide enough to cover the whole scene, so the painted texture is under
+  // every sampled viewport pixel regardless of camera fit.
+  points: [-200, 400, 1400, 400],
+  color: "#ffffff",
+  strokeWidth: 400,
+  x: 0,
+  y: 0,
+  revision: 1,
+  kind: "TEXTURE",
+  assetKey: "dug-soil",
+  packId: "builtin-texture-v1",
+  size: 128,
+  rotation: 0,
+  layer,
+});
+
+/**
+ * Composites every map canvas at its on-screen rectangle (as the asset
+ * replacement pixel tests do) and counts olive/green pixels (G >= R, G > B + 12): the
+ * test texture is the forest raster; the empty dark scene has none.
+ */
+async function greenMapPixels(page: Page) {
+  return page.locator(".map-viewport").evaluate((viewport) => {
+    const bounds = viewport.getBoundingClientRect();
+    const composite = document.createElement("canvas");
+    composite.width = Math.ceil(bounds.width);
+    composite.height = Math.ceil(bounds.height);
+    const context = composite.getContext("2d")!;
+    for (const canvas of viewport.querySelectorAll("canvas")) {
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+      context.drawImage(
+        canvas,
+        rect.x - bounds.x,
+        rect.y - bounds.y,
+        rect.width,
+        rect.height,
+      );
+    }
+    const data = context.getImageData(
+      0,
+      0,
+      composite.width,
+      composite.height,
+    ).data;
+    let green = 0;
+    for (let index = 0; index < data.length; index += 4) {
+      const [red, greenChannel, blue] = [
+        data[index]!,
+        data[index + 1]!,
+        data[index + 2]!,
+      ];
+      if (greenChannel >= red && greenChannel > blue + 12) green++;
+    }
+    return { green, total: data.length / 4 };
+  });
+}
+
+/** A player sees the zone only where fog is revealed; reveal the scene. */
+function revealedPlayerSnapshot(drawings: DrawingDto[]) {
+  const snapshot = snapshotFor("PLAYER");
+  snapshot.fogReveals = [
+    { id: "revealed", sceneId, x: 0, y: 0, width: 1200, height: 800 },
+  ];
+  snapshot.drawings = drawings;
+  return snapshot;
+}
+
+test("UIX-706 GM paints a zone with the texture brush; a cancelled stroke emits nothing", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1077, height: 900 });
+  const { commands, assetRequests } = await installMocks(
+    page,
+    snapshotFor("GM"),
+  );
+  await mockAuthenticatedGameCapabilities(page);
+  await page.goto("/");
+  const map = page.locator(".map-viewport");
+  await expect(map).toBeVisible();
+  await page.getByRole("button", { name: "Штамп рельефа" }).click();
+  await page.getByRole("button", { name: "Кисть текстуры" }).click();
+  await expect(page.getByRole("group", { name: "Выбрать штамп" })).toHaveCount(
+    0,
+  );
+  await page.getByRole("button", { name: "Перекопанная почва" }).click();
+  await expect
+    .poll(() => assetRequests)
+    .toContain("/api/terrain-stamps/textures/dug-soil");
+  const box = await map.boundingBox();
+  if (!box) throw new Error("map has no bounds");
+  await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.5);
+  await page.mouse.down();
+  for (let step = 1; step <= 10; step++)
+    await page.mouse.move(
+      box.x + box.width * (0.3 + step * 0.04),
+      box.y + box.height * (0.5 + (step % 2) * 0.05),
+    );
+  await page.mouse.up();
+  await expect
+    .poll(
+      () => commands.filter((entry) => entry.path === "/api/drawings").length,
+    )
+    .toBe(1);
+  const command = commands[0]!.body;
+  expect(command).toMatchObject({
+    kind: "TEXTURE",
+    assetKey: "dug-soil",
+    packId: "builtin-texture-v1",
+    brushWidth: 96,
+    size: 128,
+    layer: "PUBLIC",
+    x: 0,
+    y: 0,
+    sceneId,
+  });
+  expect(command.actionId).toBeTruthy();
+  const points = command.points as number[];
+  expect(points.length).toBeGreaterThanOrEqual(6);
+  expect(points.length % 2).toBe(0);
+  await expect(map).toHaveAttribute("data-terrain-texture-count", "1");
+  // The brush never falls back to placing a stamp.
+  expect(commands.some((entry) => entry.body.kind === "STAMP")).toBe(false);
+
+  const canvas = page.locator(".map-viewport canvas").first();
+  await canvas.dispatchEvent("pointerdown", {
+    pointerId: 9,
+    pointerType: "touch",
+    isPrimary: true,
+    button: 0,
+    clientX: box.x + box.width * 0.4,
+    clientY: box.y + box.height * 0.7,
+  });
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new PointerEvent("pointercancel", {
+        bubbles: true,
+        pointerId: 9,
+        pointerType: "touch",
+        isPrimary: true,
+      }),
+    ),
+  );
+  await page.waitForTimeout(200);
+  expect(
+    commands.filter((entry) => entry.path === "/api/drawings"),
+  ).toHaveLength(1);
+});
+
+test("UIX-706 PLAYER sees a public texture zone painted, without the GM catalog", async ({
+  page,
+}) => {
+  // Baseline: the same scene without the zone, in a second tab.
+  const emptyPage = await page.context().newPage();
+  await installMocks(emptyPage, revealedPlayerSnapshot([]));
+  await mockAuthenticatedGameCapabilities(emptyPage);
+  await emptyPage.goto("/");
+  await expect(emptyPage.locator(".map-viewport")).toHaveAttribute(
+    "data-terrain-texture-count",
+    "0",
+  );
+  const baseline = await greenMapPixels(emptyPage);
+  await emptyPage.close();
+
+  const snapshot = revealedPlayerSnapshot([
+    makeTextureStroke("texture-public"),
+  ]);
+  const { commands, assetRequests } = await installMocks(page, snapshot);
+  await mockAuthenticatedGameCapabilities(page);
+  await page.goto("/");
+  const map = page.locator(".map-viewport");
+  await expect(map).toHaveAttribute("data-terrain-texture-count", "1");
+  await expect
+    .poll(() => assetRequests)
+    .toEqual(["/api/terrain-stamps/textures/dug-soil"]);
+  // The player actually sees the texture: a large share of the visible map
+  // turns green, which the empty scene does not have.
+  await expect
+    .poll(async () => {
+      const { green, total } = await greenMapPixels(page);
+      return (green - baseline.green) / total;
+    })
+    .toBeGreaterThan(0.05);
+  await expect(page.getByRole("button", { name: "Штамп рельефа" })).toHaveCount(
+    0,
+  );
+  expect(commands).toHaveLength(0);
+});
+
+test("UIX-706 GM edits a selected texture zone's tile size and layer", async ({
+  page,
+}) => {
+  const snapshot = snapshotFor("GM");
+  snapshot.drawings = [makeTextureStroke("texture-target")];
+  const { commands } = await installMocks(page, snapshot);
+  await mockAuthenticatedGameCapabilities(page);
+  await page.goto("/");
+  await expect(page.locator(".map-viewport")).toHaveAttribute(
+    "data-terrain-texture-count",
+    "1",
+  );
+  await page
+    .getByRole("button", {
+      name: "Список объектов и токенов карты",
+      exact: true,
+    })
+    .click();
+  const list = page.getByRole("region", { name: "Объекты карты", exact: true });
+  await list.getByRole("button", { name: "Рисунок 1", exact: true }).click();
+  await expect(page.getByLabel("Размер выбранного штампа")).toHaveCount(0);
+  await expect(page.getByLabel("Размер плитки выбранной текстуры")).toHaveValue(
+    "128",
+  );
+  await page
+    .getByLabel("Слой выбранной текстуры")
+    .selectOption({ label: "Только мастеру" });
+  await expect
+    .poll(() =>
+      commands.find(
+        (entry) => entry.path === "PATCH /api/drawings/texture-target",
+      ),
+    )
+    .toMatchObject({ body: { layer: "GM", revision: 1 } });
+});

@@ -208,6 +208,19 @@ export function CharacterWorkspace({
 
   const singlePlayerCharacter =
     props.snapshot.me.role === "PLAYER" && characters.length === 1;
+  // UIX-706 п.5: у игрока закрытие последнего листа возвращает к карте, а не
+  // оставляет пустую колоду, из которой (без видимого списка) не уйти.
+  const closeSheet = (id: string) => {
+    const closingLast = state.openIds.length === 1 && state.openIds[0] === id;
+    dispatch({ type: "CLOSE", id });
+    if (closingLast && props.snapshot.me.role === "PLAYER") onClose();
+  };
+  const onlyCharacterId = singlePlayerCharacter ? characters[0]!.id : null;
+  const noSheetOpen = state.openIds.length === 0;
+  useEffect(() => {
+    if (active && onlyCharacterId && noSheetOpen)
+      dispatch({ type: "OPEN", id: onlyCharacterId });
+  }, [active, onlyCharacterId, noSheetOpen]);
   const openCount = state.openIds.length;
   const sheetLimitReached = openCount >= MAX_OPEN_CHARACTER_SHEETS;
   return createPortal(
@@ -368,9 +381,7 @@ export function CharacterWorkspace({
                       className="character-rail__close"
                       aria-label={`Закрыть лист ${character.name}`}
                       title={`Закрыть лист ${character.name}`}
-                      onClick={() =>
-                        dispatch({ type: "CLOSE", id: character.id })
-                      }
+                      onClick={() => closeSheet(character.id)}
                     >
                       <AppIcon icon={CloseIcon} />
                     </button>
@@ -431,7 +442,7 @@ export function CharacterWorkspace({
                     <button
                       type="button"
                       aria-label={`Закрыть лист ${character.name}`}
-                      onClick={() => dispatch({ type: "CLOSE", id })}
+                      onClick={() => closeSheet(id)}
                     >
                       Закрыть
                     </button>
@@ -945,6 +956,7 @@ export function CharacterPanel({
   const statLabels = statLabelsFromLayout(layout);
   const characteristicRows = statRowsOfGroup(layout, "characteristics");
   const combatRows = statRowsOfGroup(layout, "combat");
+  const skillRows = statRowsOfGroup(layout, "skills");
   const initiativeRows = combatRows.filter(
     (row) => row.key === "initiative" || row.key === "reaction",
   );
@@ -999,6 +1011,7 @@ export function CharacterPanel({
     character.ownerMembershipId === snapshot.me.id,
   );
   const canEditLayout = snapshot.me.role === "GM" || canEditCharacterLayout;
+  const hasPersonalLayout = Boolean(character?.statLayout);
   const statLayoutPendingRef = useRef(false);
   const saveLayout = async (next: typeof layout) => {
     if (!character) return;
@@ -1006,12 +1019,14 @@ export function CharacterPanel({
       throw new Error("Дождитесь сохранения предыдущей правки.");
     statLayoutPendingRef.current = true;
     try {
-      if (snapshot.me.role === "GM") {
+      // UIX-707: on a sheet with its own layout the GM edits that personal
+      // layout, never the campaign template behind it.
+      if (snapshot.me.role === "GM" && !hasPersonalLayout) {
         await statLayoutActions.onUpdateStatLayout(
           next,
           snapshot.campaign.revision,
         );
-      } else if (canEditCharacterLayout) {
+      } else if (snapshot.me.role === "GM" || canEditCharacterLayout) {
         await statLayoutActions.onUpdateCharacterStatLayout(
           character.id,
           next,
@@ -1045,11 +1060,20 @@ export function CharacterPanel({
       throw new Error(
         "Из этого названия не получается имя для формул. Добавьте в него буквы.",
       );
+    const row = { key, label, source: "STAT" as const };
+    // UIX-706: группы «Навыки» в старых раскладках нет — первая строка её создаёт.
+    if (!layout.some((group) => group.id === groupId))
+      return saveLayout([
+        ...layout,
+        {
+          id: groupId as (typeof layout)[number]["id"],
+          label: groupId === "skills" ? "Навыки" : groupId,
+          rows: [row],
+        },
+      ]);
     return saveLayout(
       layout.map((group) =>
-        group.id === groupId
-          ? { ...group, rows: [...group.rows, { key, label, source: "STAT" }] }
-          : group,
+        group.id === groupId ? { ...group, rows: [...group.rows, row] } : group,
       ),
     );
   };
@@ -1720,6 +1744,12 @@ export function CharacterPanel({
             className="character-section character-section--stats"
             data-character-section="stats"
           >
+            {snapshot.me.role === "GM" && hasPersonalLayout && (
+              <p className="muted character-layout-note">
+                У персонажа своя раскладка: правки строк меняют только этот
+                лист, не шаблон кампании.
+              </p>
+            )}
             <div className="character-card-row">
               <StatLayoutCard
                 title="Характеристики"
@@ -1776,14 +1806,35 @@ export function CharacterPanel({
                 onMoveRow={moveStatRowBy}
                 onReorderRow={reorderStatRow}
               />
-              <div className="character-card character-card--skills">
-                <h3 className="character-card__header">Навыки</h3>
+              {/* UIX-706: навыки — такие же строки «название + бонус», как
+               * характеристики; бросок 1d20 + значение. Старые навыки с
+               * формулой и записи каталога остаются ниже, их можно удалить. */}
+              <StatLayoutCard
+                title="Навыки"
+                modifier="skills"
+                rows={skillRows}
+                values={character.stats}
+                editable={Boolean(editable)}
+                rollPending={rollPending}
+                canEditLayout={canEditLayout}
+                onChangeValue={(key, value) =>
+                  changeStatValue(character, key, value)
+                }
+                onRoll={(formula, label, mode) =>
+                  void submitCharacterRoll(formula, label, mode)
+                }
+                onRenameRow={renameStatRow}
+                onAddRow={(label) => addStatRow("skills", label)}
+                onDeleteRow={deleteStatRow}
+                onMoveRow={moveStatRowBy}
+                onReorderRow={reorderStatRow}
+              >
                 {standardSkillError && (
                   <p className="field-error" role="alert">
                     {standardSkillError}
                   </p>
                 )}
-                <div className="character-card__body">
+                <div className="character-card__legacy-skills">
                   {character.skills.length > 0 &&
                     character.skills.map((skill) => (
                       <div className="character-card__row" key={skill.key}>
@@ -1878,10 +1929,14 @@ export function CharacterPanel({
                         )}
                       </div>
                     ))
-                  ) : character.skills.length === 0 ? (
+                  ) : character.skills.length === 0 &&
+                    skillRows.length === 0 ? (
                     <p className="muted">Навыки ещё не добавлены.</p>
                   ) : null}
                 </div>
+                {/* Простой навык — строкой «название + бонус» (владелец);
+                 * навык с описанием и формулой — личной записью через каталог,
+                 * доступной всем, кто правит лист. */}
                 {editable && (
                   <div className="character-card__add">
                     <Button onClick={() => setCatalogPicker("SKILL")}>
@@ -1889,7 +1944,7 @@ export function CharacterPanel({
                     </Button>
                   </div>
                 )}
-              </div>
+              </StatLayoutCard>
               <div className="character-card character-card--abilities">
                 <h3 className="character-card__header">
                   Способности и заклинания

@@ -4,6 +4,7 @@ import type { CharacterDto } from "@arken/contracts";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 for (const role of ["GM", "PLAYER"] as const)
   for (const width of [1280, 390])
@@ -79,7 +80,7 @@ for (const role of ["GM", "PLAYER"] as const)
               contentType: "image/svg+xml",
               body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#637d72"/></svg>',
             });
-          return route.fulfill({ json: [] });
+          return fulfillUnmocked(route, path);
         }
         if (path === "/api/chat/read")
           return route.fulfill({ json: { ok: true } });

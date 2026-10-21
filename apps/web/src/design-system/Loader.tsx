@@ -14,9 +14,9 @@ export function Loader({ size = "m", className, ...props }: LoaderProps) {
       aria-label="Загрузка"
       className={[
         "arken-loader",
-        "g-loader",
+        "arken-loader",
         `arken-loader--${size}`,
-        `g-loader_size_${size}`,
+        `arken-loader--size-${size}`,
         className,
       ]
         .filter(Boolean)

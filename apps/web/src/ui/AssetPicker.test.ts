@@ -12,9 +12,7 @@ import {
 // UIX-390: the repo's vitest include glob (`apps/**/src/**/*.test.ts`) does
 // not pick up `.tsx` specs (see RollButton.test.tsx, which currently isn't
 // run by `pnpm test`), so this file stays `.test.ts` and uses
-// `createElement` instead of JSX. The component itself has no
-// `@gravity-ui/uikit` dependency, so no mocking is needed the way
-// RollButton.test.tsx mocks Button.
+// `createElement` instead of JSX.
 
 function asset(overrides: Partial<AssetDto> = {}): AssetDto {
   return {

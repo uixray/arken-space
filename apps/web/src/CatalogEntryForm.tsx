@@ -5,15 +5,16 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import type { CatalogEntryDto } from "@arken/contracts";
+import type { AssetDto, CatalogEntryDto } from "@arken/contracts";
 import { Button } from "./design-system/Button";
 import { FormInput, FormSelect, FormTextArea } from "./ui/GravityFormControls";
 import { ApiError } from "./api";
+import { DiceFramePicker } from "./DiceFramePicker";
 
 export type CatalogEntryFormInput = Pick<
   CatalogEntryDto,
   "kind" | "name" | "description" | "data"
->;
+> & { diceFrameAssetId?: string | null };
 
 type RollAction = NonNullable<CatalogEntryDto["data"]["rollActions"]>[number];
 type RollModifier = RollAction["modifiers"][number];
@@ -89,6 +90,11 @@ type Props = {
    * когда списывает. Меняются только имена, которые видит мастер.
    */
   resourceLabels: { physical: string; magic: string };
+  /**
+   * UIX-457: рамки кампании. Передаётся только для общего каталога: рамка
+   * навыка живёт в шаблоне, копии у персонажей наследуют её через source.
+   */
+  diceFrames?: readonly AssetDto[];
   onSubmit: (input: CatalogEntryFormInput) => void | Promise<void>;
   onCancel: () => void;
 };
@@ -151,6 +157,7 @@ export function CatalogEntryForm({
   existing,
   statLabels,
   resourceLabels,
+  diceFrames,
   onSubmit,
   onCancel,
 }: Props) {
@@ -160,6 +167,9 @@ export function CatalogEntryForm({
   );
   const [name, setName] = useState(existing?.name ?? "");
   const [description, setDescription] = useState(existing?.description ?? "");
+  const [diceFrameAssetId, setDiceFrameAssetId] = useState<string | null>(
+    existing?.diceFrameAssetId ?? null,
+  );
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
     const control = descriptionRef.current;
@@ -397,6 +407,7 @@ export function CatalogEntryForm({
         name: cleanName,
         description: description.trim(),
         data,
+        ...(diceFrames ? { diceFrameAssetId } : {}),
       });
     } catch (cause) {
       const mapped =
@@ -455,6 +466,17 @@ export function CatalogEntryForm({
           onChange={(event) => setDescription(event.target.value)}
         />
       </label>
+
+      {diceFrames ? (
+        <DiceFramePicker
+          legend="Рамка бросков навыка"
+          noneLabel="Рамка игрока"
+          frames={diceFrames}
+          value={diceFrameAssetId}
+          disabled={submitting}
+          onChange={setDiceFrameAssetId}
+        />
+      ) : null}
 
       <fieldset>
         <legend>Лимит использований</legend>

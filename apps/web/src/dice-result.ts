@@ -1,6 +1,7 @@
 import type { DiceResult } from "@arken/contracts";
 import {
   normalizeDiceFrameReference,
+  normalizeDiceStyleFrame,
   parseDiceSemanticOutcome,
 } from "./dice-outcome";
 
@@ -70,6 +71,8 @@ export function normalizeClientDiceResult(value: unknown): DiceResult | null {
       dice.frame,
       semanticOutcome ?? null,
     );
+  if (dice.styleFrame !== undefined)
+    normalized.styleFrame = normalizeDiceStyleFrame(dice.styleFrame);
   return normalized as unknown as DiceResult;
 }
 

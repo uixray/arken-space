@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import type { ReactNode } from "react";
 import type { CharacterDto } from "@arken/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { renderComponent, screen, userEvent } from "../test-support/render";
@@ -8,74 +7,6 @@ import {
   playerSnapshot,
 } from "../test-support/game-snapshot-fixtures";
 import { CampaignClockDialog } from "./CampaignClockDialog";
-
-vi.mock("@gravity-ui/uikit", () => {
-  const Dialog = Object.assign(
-    ({ open, children }: { open?: boolean; children?: ReactNode }) =>
-      open ? <div role="dialog">{children}</div> : null,
-    {
-      Header: ({ caption }: { caption?: ReactNode }) => <h2>{caption}</h2>,
-      Body: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-      Footer: ({
-        textButtonApply,
-        textButtonCancel,
-        onClickButtonApply,
-        onClickButtonCancel,
-        loading,
-        errorText,
-        showError,
-      }: {
-        textButtonApply?: string;
-        textButtonCancel?: string;
-        onClickButtonApply?: () => void;
-        onClickButtonCancel?: () => void;
-        loading?: boolean;
-        errorText?: string;
-        showError?: boolean;
-      }) => (
-        <div>
-          {showError ? <p role="alert">{errorText}</p> : null}
-          <button
-            type="button"
-            disabled={loading}
-            onClick={onClickButtonCancel}
-          >
-            {textButtonCancel}
-          </button>
-          <button type="button" disabled={loading} onClick={onClickButtonApply}>
-            {textButtonApply}
-          </button>
-        </div>
-      ),
-    },
-  );
-
-  return {
-    Dialog,
-    Button: ({
-      children,
-      disabled,
-      loading,
-      title,
-      onClick,
-    }: {
-      children?: ReactNode;
-      disabled?: boolean;
-      loading?: boolean;
-      title?: string;
-      onClick?: () => void;
-    }) => (
-      <button
-        type="button"
-        disabled={disabled || loading}
-        title={title}
-        onClick={onClick}
-      >
-        {children}
-      </button>
-    ),
-  };
-});
 
 function clockSnapshot(
   clock: Partial<ReturnType<typeof gmSnapshot>["campaign"]> = {},
@@ -191,7 +122,7 @@ describe("окно времени кампании", () => {
     );
     expect(props.onCommand).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("heading", { name: "Сбросить время кампании?" }),
+      screen.getByRole("dialog", { name: "Сбросить время кампании?" }),
     ).toBeInTheDocument();
 
     await userEvent.click(
@@ -286,7 +217,7 @@ describe("окно времени кампании", () => {
       expect(reset).toBeEnabled();
       await userEvent.click(reset);
       expect(
-        screen.getByRole("heading", { name: "Сбросить время кампании?" }),
+        screen.getByRole("dialog", { name: "Сбросить время кампании?" }),
       ).toBeInTheDocument();
     },
   );
@@ -308,7 +239,7 @@ describe("окно времени кампании", () => {
       "Конфликт ревизии",
     );
     expect(
-      screen.getByRole("heading", { name: "Сбросить время кампании?" }),
+      screen.getByRole("dialog", { name: "Сбросить время кампании?" }),
     ).toBeInTheDocument();
     expect(props.onClose).not.toHaveBeenCalled();
   });

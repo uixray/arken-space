@@ -13,7 +13,7 @@ test("icon contrast oracle models settled Gravity backing and rejects unsupporte
     button::before { content:""; position:absolute; inset:0; z-index:-1; border-radius:4px; background:rgba(0,0,0,0); transition:background-color .15s linear; }
     button:hover::before { background:rgba(0,0,0,.5); }
     svg { display:block; width:16px; height:16px; margin:auto; }
-  </style><button class="g-button" aria-label="Oracle"><svg stroke="currentColor" fill="none"><path d="M2 2L14 14"/></svg></button>`);
+  </style><button class="arken-button" aria-label="Oracle"><svg stroke="currentColor" fill="none"><path d="M2 2L14 14"/></svg></button>`);
   const control = page.getByRole("button");
   const icon = control.locator("svg");
   await page.mouse.move(300, 300);

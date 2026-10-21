@@ -47,9 +47,9 @@ it("keeps one Gravity root around application and portal owners while switching 
       <div data-testid="toaster-owner" />
     </PlayerThemeRoot>,
   );
-  const gravityRoot = screen.getByText("Приложение").closest(".g-root");
-  expect(gravityRoot).toHaveClass("g-root_theme_light");
-  expect(screen.getByTestId("toaster-owner").closest(".g-root")).toBe(
+  const gravityRoot = screen.getByText("Приложение").closest(".arken-root");
+  expect(gravityRoot).toHaveClass("arken-root--theme-light");
+  expect(screen.getByTestId("toaster-owner").closest(".arken-root")).toBe(
     gravityRoot,
   );
   expect(document.documentElement).toHaveAttribute(
@@ -63,8 +63,8 @@ it("keeps one Gravity root around application and portal owners while switching 
       <div data-testid="toaster-owner" />
     </PlayerThemeRoot>,
   );
-  expect(screen.getByText("Приложение").closest(".g-root")).toHaveClass(
-    "g-root_theme_dark",
+  expect(screen.getByText("Приложение").closest(".arken-root")).toHaveClass(
+    "arken-root--theme-dark",
   );
   expect(document.documentElement).not.toHaveAttribute("data-player-theme");
   unmount();

@@ -1,4 +1,5 @@
 import { expect, test } from "./react-console-guard";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const accountSession = {
   authenticated: true,
@@ -49,7 +50,7 @@ test("account registration, verification, reset, login and logout in browser (mo
       }
       return route.fulfill({ json: { ok: true, accepted: true } });
     }
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, path);
   });
 
   await page.goto("/account");
@@ -126,7 +127,7 @@ test("expired action link is recoverable without exposing its fragment token", a
         status: 400,
         json: { error: "INVALID_OR_EXPIRED_ACCOUNT_TOKEN" },
       });
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, path);
   });
   await page.goto("/account/verify#token=expired-synthetic-token");
   await expect(

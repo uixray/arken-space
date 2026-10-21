@@ -4,6 +4,7 @@ import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { PLAYER_THEMES } from "../../apps/web/src/design-system/player-themes";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 async function preferenceFixture(page: Page, role: "GM" | "PLAYER") {
   const snapshot = buildGameSnapshot(role);
@@ -93,7 +94,7 @@ async function preferenceFixture(page: Page, role: "GM" | "PLAYER") {
       return route.fulfill({ json: { posts: [], nextCursor: null } });
     if (path === "/api/operator/feedback/capability")
       return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, path);
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
@@ -228,8 +229,8 @@ for (const role of ["GM", "PLAYER"] as const) {
         "data-player-theme",
         "light",
       );
-      await expect(page.locator(".g-root").first()).toHaveClass(
-        /g-root_theme_light/,
+      await expect(page.locator(".arken-root").first()).toHaveClass(
+        /arken-root--theme-light/,
       );
       expect(fixture.writes).toEqual([]);
       await dialog.getByRole("button", { name: "Отмена", exact: true }).click();

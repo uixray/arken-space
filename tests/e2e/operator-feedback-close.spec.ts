@@ -3,6 +3,7 @@ import type { Route } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 for (const mode of ["close", "revoked"] as const) {
   test(`operator ${mode} cancels clipboard export without leaking detail on reopen`, async ({
@@ -62,7 +63,7 @@ for (const mode of ["close", "revoked"] as const) {
       }
       if (path === "/api/story/posts")
         return route.fulfill({ json: { posts: [], nextCursor: null } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {

@@ -155,6 +155,29 @@ describe("canonical map object selection", () => {
     expect(canSelectDrawing(stamp, context)).toBe(false);
   });
 
+  it("pads texture stroke bounds by half the brush width (pool 3)", () => {
+    const stroke = drawing({
+      id: "texture",
+      authorMembershipId: "gm",
+      points: [0, 0, 100, 0],
+      kind: "TEXTURE",
+      assetKey: "dug-soil",
+      packId: "builtin-texture-v1",
+      strokeWidth: 40,
+      size: 128,
+      layer: "PUBLIC",
+      x: 10,
+      y: 10,
+    });
+    expect(drawingBounds(stroke)).toEqual({
+      x: -10,
+      y: -10,
+      width: 140,
+      height: 40,
+    });
+    expect(canSelectDrawing(stroke, context)).toBe(false);
+  });
+
   it("returns the same bounded policy for bulk candidates", () => {
     const result = selectMapObjects(
       [token(), token({ id: "gm", layer: "GM" })],

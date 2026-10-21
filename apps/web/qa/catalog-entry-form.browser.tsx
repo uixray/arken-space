@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { CatalogEntryDto } from "@arken/contracts";
-import "@gravity-ui/uikit/styles/styles.css";
 import "../src/design-system/tokens.generated.css";
+import "../src/ui/theme-root.css";
 import "../src/design-system/foundations.css";
 import "../src/ui/gravity-foundation.css";
 import "../src/styles.css";

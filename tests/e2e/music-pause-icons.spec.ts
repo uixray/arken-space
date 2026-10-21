@@ -6,6 +6,7 @@ import {
   paintedIconContrast,
   settleIconState,
 } from "./helpers/painted-icon-contrast";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 async function icon(
   control: Locator,
@@ -179,7 +180,7 @@ for (const role of ["GM", "PLAYER"] as const)
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       if (path === "/api/operator/feedback/capability")
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await page.routeWebSocket(/\/socket\.io\//, (s) => {
       socket = s;

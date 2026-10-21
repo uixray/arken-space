@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import type { AssetDto, SceneDto } from "@arken/contracts";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ThemeProvider } from "@gravity-ui/uikit";
 import type { ReactElement, ReactNode } from "react";
 import {
   fireEvent,
@@ -29,11 +28,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 function renderComponent(ui: ReactElement) {
   return renderBase(ui, {
-    wrapper: ({ children }: { children: ReactNode }) => (
-      <ThemeProvider theme="dark" lang="ru">
-        {children}
-      </ThemeProvider>
-    ),
+    wrapper: ({ children }: { children: ReactNode }) => <>{children}</>,
   });
 }
 

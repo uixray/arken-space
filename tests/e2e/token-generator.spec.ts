@@ -53,7 +53,7 @@ test("UIX-589 narrow frame targets are at least 44px", async ({ page }) => {
   await page
     .getByRole("button", { name: "Создать токен", exact: true })
     .click();
-  const editor = page.locator(".g-modal").last();
+  const editor = page.locator(".arken-modal").last();
   await expect(editor.locator(".token-image-generator")).toBeVisible();
   await editor.evaluate(async (node) => {
     await Promise.all(
@@ -563,7 +563,7 @@ test("UIX-589 GM saves crop and definition with one confirmation", async ({
   await page
     .getByRole("button", { name: "Создать токен", exact: true })
     .click();
-  const editor = page.locator(".g-modal").last();
+  const editor = page.locator(".arken-modal").last();
   await expect(editor.locator(".token-image-generator")).toBeVisible();
   await chooseEmbeddedSource(editor);
 

@@ -4,6 +4,7 @@ import type { GameSnapshot } from "@arken/contracts";
 import { PLAYER_THEMES } from "../../apps/web/src/design-system/player-themes";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { expect, test } from "./react-console-guard";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 test.use({ actionTimeout: 10_000 });
 
@@ -162,7 +163,7 @@ async function mockSurfaceApp(page: Page, snapshot: GameSnapshot) {
       return route.fulfill({ json: { posts: [], nextCursor: null } });
     if (path === "/api/operator/feedback/capability")
       return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, path);
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
@@ -344,7 +345,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         });
         expect(hit).toBe(true);
         const dialogZ = await dialog.evaluate((node) => {
-          const wrapper = node.closest(".g-modal");
+          const wrapper = node.closest(".arken-modal");
           if (!wrapper) throw new Error("Missing modal layer wrapper");
           return Number(getComputedStyle(wrapper).zIndex);
         });

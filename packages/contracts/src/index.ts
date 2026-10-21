@@ -14,7 +14,7 @@ export * from "./spell-schools.js";
 import { fogGeometrySchema } from "./fog-geometry.js";
 export * from "./ruler-geometry.js";
 export { PUBLISHED_PLAYER_THEME_DEFINITIONS } from "./player-themes.generated.js";
-import { rulerUpdateSchema } from "./ruler-geometry.js";
+import { rulerUpdateSchema, type RulerColorKey } from "./ruler-geometry.js";
 export {
   betaPlayerByHandle,
   betaPlayers,
@@ -34,6 +34,8 @@ export const assetKindSchema = z.enum([
   "PORTRAIT",
   "IMAGE",
   "AUDIO",
+  /** UIX-457: рамка броска; анимированный WebP + статичный постер. */
+  "DICE_FRAME",
 ]);
 export const audioPurposeSchema = z.enum(["MUSIC", "SOUND_EFFECT", "BOTH"]);
 export const tokenFramePresetSchema = z.enum([
@@ -1354,6 +1356,31 @@ export const drawingPointsSchema = z
   .min(4)
   .max(4096)
   .refine((points) => points.length % 2 === 0, "points must be x/y pairs");
+/** UIX-706: built-in template keys (catalog manifest) — matches the DB check. */
+export const STAMP_TEMPLATE_KEY_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;
+export const stampPackIdSchema = z.enum([
+  "builtin-terrain-v1",
+  "campaign-image",
+]);
+export type StampPackId = z.infer<typeof stampPackIdSchema>;
+/**
+ * UIX-706 pool 3: a TEXTURE stroke fills a brush polyline with a tileable
+ * texture — a built-in catalog texture or a campaign IMAGE asset.
+ */
+export const texturePackIdSchema = z.enum([
+  "builtin-texture-v1",
+  "campaign-image",
+]);
+export type TexturePackId = z.infer<typeof texturePackIdSchema>;
+export type DrawingPackId = StampPackId | TexturePackId;
+export const TEXTURE_BRUSH_WIDTH = { min: 8, max: 400 } as const;
+const isValidDrawingSource = (source: {
+  packId: DrawingPackId;
+  assetKey: string;
+}) =>
+  source.packId === "campaign-image"
+    ? z.string().uuid().safeParse(source.assetKey).success
+    : STAMP_TEMPLATE_KEY_PATTERN.test(source.assetKey);
 export const createDrawingSchema = z
   .object({
     actionId: actionIdSchema,
@@ -1366,18 +1393,54 @@ export const createDrawingSchema = z
     y: z.number().finite().default(0),
   })
   .or(
-    z.object({
-      actionId: actionIdSchema,
-      sceneId: z.string().uuid(),
-      kind: z.literal("STAMP"),
-      assetKey: z.enum(["forest", "mountains", "clouds"]),
-      packId: z.literal("builtin-terrain-v1"),
-      size: z.number().finite().min(16).max(1024),
-      rotation: z.number().finite().min(-360).max(360),
-      layer: z.enum(["PUBLIC", "GM"]),
-      x: z.number().finite().min(-32768).max(32768),
-      y: z.number().finite().min(-32768).max(32768),
-    }),
+    z
+      .object({
+        actionId: actionIdSchema,
+        sceneId: z.string().uuid(),
+        kind: z.literal("STAMP"),
+        /**
+         * UIX-706: a built-in template key from the server catalog manifest,
+         * or — for `campaign-image` — the id of a campaign IMAGE asset. The
+         * server resolves both; clients never supply paths or URLs.
+         */
+        assetKey: z.string().min(1).max(40),
+        packId: stampPackIdSchema,
+        size: z.number().finite().min(16).max(1024),
+        rotation: z.number().finite().min(-360).max(360),
+        layer: z.enum(["PUBLIC", "GM"]),
+        x: z.number().finite().min(-32768).max(32768),
+        y: z.number().finite().min(-32768).max(32768),
+      })
+      .refine(isValidDrawingSource, {
+        path: ["assetKey"],
+        message: "invalid stamp source",
+      }),
+  )
+  .or(
+    z
+      .object({
+        actionId: actionIdSchema,
+        sceneId: z.string().uuid(),
+        kind: z.literal("TEXTURE"),
+        /** Brush polyline, relative to x/y like a freehand drawing. */
+        points: drawingPointsSchema,
+        brushWidth: z
+          .number()
+          .finite()
+          .min(TEXTURE_BRUSH_WIDTH.min)
+          .max(TEXTURE_BRUSH_WIDTH.max),
+        assetKey: z.string().min(1).max(40),
+        packId: texturePackIdSchema,
+        /** Edge length of one texture tile in scene units. */
+        size: z.number().finite().min(16).max(1024),
+        layer: z.enum(["PUBLIC", "GM"]),
+        x: z.number().finite().min(-32768).max(32768),
+        y: z.number().finite().min(-32768).max(32768),
+      })
+      .refine(isValidDrawingSource, {
+        path: ["assetKey"],
+        message: "invalid texture source",
+      }),
   );
 export const updateDrawingSchema = z.object({
   actionId: actionIdSchema,
@@ -1500,6 +1563,8 @@ export const catalogEntryInputSchema = z.object({
 });
 export const catalogEntryCommandSchema = catalogEntryInputSchema.extend({
   actionId: actionIdSchema,
+  /** UIX-457: рамка бросков этого навыка; только для записи каталога кампании. */
+  diceFrameAssetId: z.string().uuid().nullable().optional(),
 });
 export const assignCatalogEntrySchema = z.object({
   actionId: actionIdSchema,
@@ -2296,6 +2361,8 @@ export interface AssetDto {
   height: number | null;
   durationSeconds: number | null;
   url: string;
+  /** UIX-457: статичный кадр рамки броска для истории и reduced motion. */
+  posterUrl?: string;
   createdAt: string;
 }
 
@@ -2313,6 +2380,9 @@ export const assetUsageKindSchema = z.enum([
   "WORLD_CONTENT_MEDIA",
   "WORLD_CONTENT_INSTANCE_PORTRAIT",
   "GENERATED_TOKEN_SOURCE",
+  "MAP_STAMP",
+  "MEMBER_DICE_FRAME",
+  "SKILL_DICE_FRAME",
 ]);
 export type AssetUsageKind = z.infer<typeof assetUsageKindSchema>;
 
@@ -2366,6 +2436,10 @@ export interface MembershipDto {
   defaultThemeId?: string;
   /** GM-only default-assignment revision; distinct from private preference and gameplay. */
   defaultThemeRevision?: number;
+  /** UIX-509: own membership and the GM's member list only; `null` = hashed fallback. */
+  rulerColor?: RulerColorKey | null;
+  /** UIX-457: own membership only — личная рамка бросков, `null` = без рамки. */
+  diceFrameAssetId?: string | null;
 }
 
 export interface PublishedPlayerThemeDto {
@@ -2450,6 +2524,8 @@ export interface CatalogEntryDto {
   description: string;
   data: z.infer<typeof entryDataSchema>;
   revision: number;
+  /** UIX-457: GM-only каталог; рамка бросков навыка. */
+  diceFrameAssetId?: string | null;
 }
 export interface CharacterCatalogEntryDto extends CatalogEntryDto {
   sourceCatalogEntryId: string | null;
@@ -2525,9 +2601,10 @@ export interface DrawingDto {
   x: number;
   y: number;
   revision: number;
-  kind?: "FREEHAND" | "STAMP";
-  assetKey?: "forest" | "mountains" | "clouds";
-  packId?: "builtin-terrain-v1";
+  kind?: "FREEHAND" | "STAMP" | "TEXTURE";
+  /** Template/texture key, or the campaign asset id for campaign-image. */
+  assetKey?: string;
+  packId?: DrawingPackId;
   size?: number;
   rotation?: number;
   layer?: "PUBLIC" | "GM";
@@ -2788,6 +2865,11 @@ export interface DiceFrameChoice {
   source: DiceFrameSource;
 }
 
+/** UIX-457: игрок выбирает свою рамку; `null` снимает выбор. */
+export const memberDiceFrameUpdateSchema = z
+  .object({ diceFrameAssetId: z.string().uuid().nullable() })
+  .strict();
+
 /**
  * Первый непустой источник по порядку. `null` — рамки нет вовсе, и это
  * нормальное состояние: до UIX-457 её не было ни у кого.
@@ -2820,6 +2902,12 @@ export interface DiceResult {
   semanticOutcome?: DiceSemanticOutcome;
   /** Immutable curated frame reference stored with chat history. */
   frame?: DiceFrameReference | null;
+  /**
+   * UIX-457: оформление броска, выбранное сервером в момент броска. Отдельно
+   * от `frame`: критическая рамка — смысл результата, эта — вкус игрока или
+   * мастера, и при крите показывается критическая.
+   */
+  styleFrame?: DiceFrameChoice | null;
 }
 
 export interface SkillCardEntrySnapshot {
@@ -3055,9 +3143,17 @@ export interface ServerToClientEvents {
   "scene:activated": (event: EventEnvelope<string>) => void;
   "token:moving": (movement: z.infer<typeof moveTokenSchema>) => void;
   "token:moved": (event: EventEnvelope<TokenDto>) => void;
+  /** UIX-412: conditions or colours of a token the socket sees changed. */
+  "token:updated": (event: EventEnvelope<TokenDto>) => void;
   "fog:created": (event: EventEnvelope<FogRevealDto>) => void;
   "fog:removed": (
     event: EventEnvelope<{ fogRevealId: string; sceneId: string }>,
+  ) => void;
+  /** UIX-412: a drawing the socket sees was created or changed. */
+  "drawing:upserted": (event: EventEnvelope<DrawingDto>) => void;
+  /** UIX-412: a drawing the socket saw was deleted or hidden from it. */
+  "drawing:removed": (
+    event: EventEnvelope<{ drawingId: string; sceneId: string }>,
   ) => void;
   "chat:created": (event: EventEnvelope<ChatMessageDto>) => void;
   "story:changed": (event: StoryChangedEvent) => void;
@@ -3083,6 +3179,8 @@ export interface ServerToClientEvents {
       membershipId: string;
       displayName: string;
       distance: number;
+      /** UIX-509: resolved by the server, so peers need no member list. */
+      rulerColor: RulerColorKey | null;
     },
   ) => void;
   "ruler:cleared": (ruler: { sceneId: string; membershipId: string }) => void;

@@ -29,7 +29,7 @@ describe("Input", () => {
     const input = screen.getByPlaceholderText("Введите имя...");
     expect(ref.current).toBe(input);
     expect(input).toHaveValue("Квентин");
-    expect(input.closest(".g-text-input")).toBeInTheDocument();
+    expect(input.closest(".arken-text-input")).toBeInTheDocument();
     expect(input.closest(".arken-text-input")).toBeInTheDocument();
     expect(input.closest("[data-qa='char-name']")).toBeInTheDocument();
   });

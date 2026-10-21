@@ -192,10 +192,10 @@ export function FormSelect({
   const popupClassName = useOverlayPopupClassName("arken-form-select-popup");
   useEffect(() => {
     if (!open || !popupClassName?.includes("arken-select-popup--modal")) return;
-    const owner = controlRef.current?.closest(".g-modal_open");
+    const owner = controlRef.current?.closest(".arken-modal--open");
     if (!owner) return;
     const closeWhenAnotherModalOwnsFocus = () => {
-      const modals = document.querySelectorAll(".g-modal_open");
+      const modals = document.querySelectorAll(".arken-modal--open");
       if (modals.length > 0 && modals[modals.length - 1] !== owner)
         setOpen(false);
     };

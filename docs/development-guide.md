@@ -465,8 +465,8 @@ different component (`Orthographic2DRenderer`)» — setState во время р
 
 ### Правило CSS может быть написано и не применяться
 
-У Gravity UI собственные селекторы на контролах:
-`.g-text-input_size_m .g-text-input__control` — это (0,2,0), а наше
+У контролов дизайн-системы собственные составные селекторы (наследие Gravity UI):
+`.arken-text-input--size-m .arken-text-input__control` — это (0,2,0), а наше
 `.stat-field input` — (0,1,1). Наше проигрывает, причём молча: блок в
 `styles.css` выглядит написанным, а в браузере не действует.
 
@@ -477,7 +477,7 @@ different component (`Orthographic2DRenderer`)» — setState во время р
 потому что его видно в исходнике.
 
 Отсюда два следствия. Первое: селектор должен включать класс контрола —
-`.stat-field input.g-text-input__control`. Второе: `border: none` у uikit задаёт
+`.stat-field input.arken-text-input__control`. Второе: `border: none` у контрола задаёт
 **стиль**, и одной `border-width` мало — при стиле `none` ширина считается
 нулевой; ставьте `border-style` явно.
 

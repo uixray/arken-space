@@ -5,7 +5,6 @@ const { reportRenderFailure } = vi.hoisted(() => ({
   reportRenderFailure: vi.fn(),
 }));
 vi.mock("./app-error-report", () => ({ reportRenderFailure }));
-vi.mock("@gravity-ui/uikit", () => ({ Button: () => null }));
 
 import { AppErrorBoundary } from "./AppErrorBoundary";
 

@@ -324,6 +324,7 @@ function ChatMessageBodyComponent({
                   }
                 : null)
             }
+            styleFrame={dice?.styleFrame ?? null}
             active={isActive ?? false}
           />
         }
@@ -438,6 +439,7 @@ function ChatMessageBodyComponent({
                   }
                 : null)
             }
+            styleFrame={dice?.styleFrame ?? null}
             active={isActive ?? false}
           />
           {dice.total}

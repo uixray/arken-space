@@ -7,4 +7,5 @@ export const ASSET_KIND_LABELS = {
   PORTRAIT: "Портрет персонажа",
   IMAGE: "Изображение",
   AUDIO: "Аудиофайл",
+  DICE_FRAME: "Рамка бросков",
 } satisfies Record<AssetKind, string>;

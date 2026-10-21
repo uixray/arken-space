@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
 import { PLAYER_THEMES } from "../../apps/web/src/design-system/player-themes";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const characterName =
   "Александра Невероятно-Длинная, Хранительница Семнадцати Королевств";
@@ -125,7 +126,7 @@ async function mockReadOnlyApp(page: Page, snapshot: GameSnapshot) {
         status: 403,
         json: { error: "OPERATOR_REQUIRED" },
       });
-    return route.fulfill({ json: [] });
+    return fulfillUnmocked(route, path);
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
@@ -178,7 +179,7 @@ for (const role of ["GM", "PLAYER"] as const) {
           expect(clipping.overflow).toBe("ellipsis");
           expect(clipping.whiteSpace).toBe("nowrap");
         } else {
-          const control = picker.locator(".g-select");
+          const control = picker.locator(".arken-select");
           const value = control.locator(".arken-select__value");
           await expect(value).toHaveText(characterName);
           const clipping = await value.evaluate((node) => ({

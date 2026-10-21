@@ -31,7 +31,7 @@ for (const width of [1280, 390]) {
     const wide = width === 390 ? 240 : 320;
     await field.evaluate((node, size) => {
       (node as HTMLElement).style.width = `${size}px`;
-      const select = node.querySelector<HTMLElement>(".g-select");
+      const select = node.querySelector<HTMLElement>(".arken-select");
       if (!select) throw new Error("Missing fixture Select");
       select.style.width = "100%";
     }, wide);

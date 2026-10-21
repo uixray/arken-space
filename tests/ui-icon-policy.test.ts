@@ -67,7 +67,6 @@ describe("UIX-645 icon source policy", () => {
       "apps/web/src/ui/SelectionActions.tsx",
       "apps/web/src/ui/ImageUploadField.tsx",
       "apps/web/src/ui/AudioUploadField.tsx",
-      "apps/web/src/ui/GravityFoundationPreview.tsx",
       "apps/web/src/StickerPicker.tsx",
       "apps/web/src/sidebar/ChatPanels.tsx",
       "apps/web/src/ui/CursorPresenceMenu.tsx",

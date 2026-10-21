@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import type { ReactNode } from "react";
 import type { AssetDto, AssetUsageResponseDto } from "@arken/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -26,37 +25,11 @@ import type { ImageUploadFieldProps } from "../ui/ImageUploadField";
 //
 // Mocking notes (typed against the real prop contracts, per the AC's
 // concern about mocks that don't typecheck):
-// - This historical role-focused suite keeps a plain Button double restricted
-//   to the props it needs. Current vitest.config.ts supports real Gravity CSS;
-//   MediaPanel.audio.test.tsx deliberately uses real controls and upload fields.
+// - MediaPanel.audio.test.tsx deliberately uses real controls and upload fields.
 // - `ImageUploadField` is swapped for a minimal stub typed against its own
 //   exported `ImageUploadFieldProps`, so this file stays focused on
 //   MediaPanel's role gating rather than file-input/object-URL plumbing.
 //   This double must not be used as proof that actual MIME intake works.
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({
-    disabled,
-    loading,
-    onClick,
-    children,
-    "aria-describedby": describedBy,
-  }: {
-    disabled?: boolean;
-    loading?: boolean;
-    onClick?: () => void;
-    children?: ReactNode;
-    "aria-describedby"?: string;
-  }) => (
-    <button
-      disabled={disabled}
-      aria-busy={loading}
-      aria-describedby={describedBy}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  ),
-}));
 
 vi.mock("../ui/ImageUploadField", () => ({
   ImageUploadField: ({ label, disabled, onUpdate }: ImageUploadFieldProps) => (
@@ -119,7 +92,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("MediaPanel upload sections by role", () => {
   it.each(["GM", "PLAYER"] as const)(
-    "renders Russian types for all five visible asset kinds for %s without changing names or actions",
+    "renders Russian types for all six visible asset kinds for %s without changing names or actions",
     (role) => {
       const examples = [
         ["MAP", "Карта", "Карты", "North Gate.webp"],
@@ -132,6 +105,7 @@ describe("MediaPanel upload sections by role", () => {
         ["PORTRAIT", "Портрет персонажа", "Портреты персонажей", "Elena.webp"],
         ["IMAGE", "Изображение", "Другие изображения", "Замок.webp"],
         ["AUDIO", "Фоновая музыка", "Музыка и звуки", "Moonlight.ogg"],
+        ["DICE_FRAME", "Рамка бросков", "Рамки бросков", "Огонь.webp"],
       ] as const;
       // These DTOs represent already-visible shared assets, not a claim that
       // PLAYER can see every asset stored by the GM. Server filtering is unchanged.
@@ -173,11 +147,11 @@ describe("MediaPanel upload sections by role", () => {
       expect(screen.getByLabelText("Аудиофайл")).toHaveTextContent("Аудиофайл");
       expect(screen.queryByText("AUDIO")).not.toBeInTheDocument();
       expect(screen.getAllByRole("button", { name: "Загрузить" })).toHaveLength(
-        role === "GM" ? 5 : 2,
+        role === "GM" ? 6 : 2,
       );
       expect(
         screen.queryAllByRole("button", { name: "Проверить использование" }),
-      ).toHaveLength(role === "GM" ? 5 : 0);
+      ).toHaveLength(role === "GM" ? 6 : 0);
       expect(
         screen.queryByRole("button", { name: "Удалить файл" }),
       ).not.toBeInTheDocument();
@@ -195,7 +169,7 @@ describe("MediaPanel upload sections by role", () => {
     },
   );
 
-  it("offers all five asset kinds -- including GM-only MAP and AUDIO -- to a GM", () => {
+  it("offers all six asset kinds -- including GM-only MAP, AUDIO and dice frames -- to a GM", () => {
     renderComponent(
       <MediaPanel snapshot={gmSnapshot()} {...defaultActions()} />,
     );
@@ -206,6 +180,7 @@ describe("MediaPanel upload sections by role", () => {
       "Портреты персонажей",
       "Другие изображения",
       "Музыка и звуки",
+      "Рамки бросков",
     ]) {
       const section = queryUploadSection(label);
       expect(section).not.toBeNull();
@@ -224,7 +199,12 @@ describe("MediaPanel upload sections by role", () => {
 
     expect(queryUploadSection("Изображения токенов")).not.toBeNull();
     expect(queryUploadSection("Портреты персонажей")).not.toBeNull();
-    for (const label of ["Карты", "Другие изображения", "Музыка и звуки"])
+    for (const label of [
+      "Карты",
+      "Другие изображения",
+      "Музыка и звуки",
+      "Рамки бросков",
+    ])
       expect(queryUploadSection(label)).toBeNull();
   });
 
@@ -315,7 +295,7 @@ describe("MediaPanel upload sections by role", () => {
 
       expect(
         screen.getAllByText(/Загрузка не прикрепляет файл автоматически\./),
-      ).toHaveLength(_role === "GM" ? 5 : 2);
+      ).toHaveLength(_role === "GM" ? 6 : 2);
       const tokenSection = screen
         .getByRole("button", {
           name: "Выбрать файл: Изображения токенов",

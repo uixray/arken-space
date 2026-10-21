@@ -1,17 +1,11 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
 import { fireEvent, renderComponent, screen } from "../test-support/render";
 import { RollAvatar } from "./RollAvatar";
 import { rollInitials } from "../roll-initials";
 import { createRollAvatarSource } from "../roll-avatar-source";
 import { ChatMessageBody } from "./ChatPanels";
-
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({ children }: { children?: React.ReactNode }) => (
-    <button type="button">{children}</button>
-  ),
-}));
 
 const diceMessage = {
   id: "m1",

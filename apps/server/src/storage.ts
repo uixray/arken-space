@@ -155,6 +155,51 @@ export async function storeUpload(
   return storePreparedUpload(await prepareUpload(buffer, family));
 }
 
+export interface StoredDiceFrame {
+  upload: StoredUpload;
+  posterStorageKey: string;
+  posterSizeBytes: number;
+}
+
+/**
+ * UIX-457: рамка броска — два blob. Если постер не записался, анимация
+ * удаляется: строка в `assets` без постера нарушила бы CHECK, а blob без
+ * строки — невидимый мусор.
+ */
+export async function storeDiceFrame(encoded: {
+  animated: Buffer;
+  poster: Buffer;
+  width: number;
+  height: number;
+}): Promise<StoredDiceFrame> {
+  await mkdir(mediaRoot(), { recursive: true });
+  const storageKey = `${randomToken(18)}.webp`;
+  const posterStorageKey = `${randomToken(18)}.webp`;
+  await writeFile(storedPath(storageKey), encoded.animated, { flag: "wx" });
+  try {
+    await writeFile(storedPath(posterStorageKey), encoded.poster, {
+      flag: "wx",
+    });
+  } catch (error) {
+    await removeStoredUpload(storageKey);
+    throw error;
+  }
+  return {
+    upload: {
+      storageKey,
+      mimeType: "image/webp",
+      // Квоту считают по `sizeBytes` в нескольких местах; рамка занимает
+      // оба blob, поэтому здесь их сумма.
+      sizeBytes: encoded.animated.length + encoded.poster.length,
+      width: encoded.width,
+      height: encoded.height,
+      durationSeconds: null,
+    },
+    posterStorageKey,
+    posterSizeBytes: encoded.poster.length,
+  };
+}
+
 export interface TokenAssetTransform {
   cropX: number;
   cropY: number;

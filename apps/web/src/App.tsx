@@ -79,7 +79,11 @@ import {
   type CompactSurface,
 } from "./ui/useCompactNavigation";
 import { MapToolbar } from "./MapToolbar";
-import { type TerrainStampSettings } from "./renderers/TerrainStampControls";
+import {
+  type StampCreatePayload,
+  type TerrainStampSettings,
+} from "./renderers/TerrainStampControls";
+import { DEFAULT_TERRAIN_STAMP_SETTINGS } from "./renderers/terrain-stamp-settings";
 import { GamePauseOverlay } from "./GamePauseOverlay";
 import { useChatHistoryActions } from "./use-chat-history-actions";
 import { useStoryActions } from "./use-story-actions";
@@ -107,6 +111,7 @@ import { usePlayerThemeRuntime } from "./design-system/player-theme-runtime-cont
 import { usePlayerThemePreference } from "./design-system/usePlayerThemePreference";
 import { patchPersonalThemePreference } from "./design-system/personal-theme-api";
 import { useCharacterActions } from "./use-character-actions";
+const NO_ENCOUNTERS: never[] = [];
 const Orthographic2DRenderer = lazy(() =>
   import("./renderers/Orthographic2DRenderer").then((module) => ({
     default: module.Orthographic2DRenderer,
@@ -196,6 +201,26 @@ export function App() {
     },
     [snapshot],
   );
+  // UIX-457: личная рамка бросков. Ответ сервера абсолютный, поэтому
+  // локальная подстановка совпадёт со следующим снапшотом.
+  const saveDiceFrame = useCallback(async (assetId: string | null) => {
+    const updated = await api<{ id: string; diceFrameAssetId: string | null }>(
+      "/api/me/dice-frame",
+      { method: "PATCH", body: JSON.stringify({ diceFrameAssetId: assetId }) },
+    );
+    setSnapshot((current) =>
+      current && current.me.id === updated.id
+        ? {
+            ...current,
+            me: { ...current.me, diceFrameAssetId: updated.diceFrameAssetId },
+          }
+        : current,
+    );
+  }, []);
+  const diceFrames = useMemo(
+    () => snapshot?.assets.filter((asset) => asset.kind === "DICE_FRAME"),
+    [snapshot?.assets],
+  );
   const themePreference = usePlayerThemePreference({
     scopeKey: personalTheme?.scopeKey ?? null,
     preference: personalTheme ?? {
@@ -244,12 +269,9 @@ export function App() {
     Array<{ membershipId: string; online: boolean }>
   >([]);
   const [tool, setTool] = useState<MapTool>("PAN");
-  const [stampSettings, setStampSettings] = useState<TerrainStampSettings>({
-    assetKey: "forest",
-    size: 160,
-    rotation: 0,
-    layer: "PUBLIC",
-  });
+  const [stampSettings, setStampSettings] = useState<TerrainStampSettings>(
+    DEFAULT_TERRAIN_STAMP_SETTINGS,
+  );
   // UIX-313: shared brush radius (world units) for the circular fog brush,
   // reused for both FOG_BRUSH and COVER_BRUSH.
   const [fogBrushRadius, setFogBrushRadius] = useState(40);
@@ -339,6 +361,8 @@ export function App() {
   const [menuMusicTarget, setMenuMusicTarget] = useState<HTMLElement | null>(
     null,
   );
+  const [menuSoundpadTarget, setMenuSoundpadTarget] =
+    useState<HTMLElement | null>(null);
   useEffect(() => {
     setWorkspace(null);
     setCompactSectionsOpen(false);
@@ -1179,17 +1203,37 @@ export function App() {
     [activeScene?.id, run],
   );
 
+  // Stable renderer props: the map renderer is memoised, and an inline
+  // callback would re-render the whole scene on every App render.
+  const handleObjectListToggle = useCallback(
+    () => setMapObjectsOpen((open) => !open),
+    [],
+  );
+  const handleObjectListClose = useCallback(() => setMapObjectsOpen(false), []);
+  const activeSceneIdForPlacement = activeSceneValue?.id;
+  const handlePlaceTokenDefinition = useCallback(
+    async (definitionId: string, point?: { x: number; y: number }) => {
+      if (!activeSceneIdForPlacement) return;
+      void placeOptimistically({
+        path: `/api/token-definitions/${definitionId}/placements`,
+        body: {
+          actionId: crypto.randomUUID(),
+          definitionId,
+          sceneId: activeSceneIdForPlacement,
+          ...point,
+        },
+      });
+    },
+    [activeSceneIdForPlacement, placeOptimistically],
+  );
+
   const handleStampCreate = useCallback(
-    async (stamp: {
-      kind: "STAMP";
-      assetKey: "forest" | "mountains" | "clouds";
-      packId: "builtin-terrain-v1";
-      size: number;
-      rotation: number;
-      layer: "PUBLIC" | "GM";
-      x: number;
-      y: number;
-    }) => {
+    async (stamp: StampCreatePayload) => {
+      // Read live state at call time (user event): depending on `snapshot`
+      // would give this prop a new identity on every broadcast and re-render
+      // the memoised map.
+      const snapshot = snapshotRef.current;
+      const activeScene = activeSceneRef.current;
       if (!activeScene || snapshot?.me.role !== "GM") return undefined;
       const requestedSceneId = activeScene.id;
       const requestedCampaignId = snapshot.campaign.id;
@@ -1236,14 +1280,7 @@ export function App() {
       }
       return created;
     },
-    [
-      activeScene,
-      activeSceneRef,
-      run,
-      snapshot?.campaign.id,
-      snapshot?.me.role,
-      snapshot?.snapshotVersion,
-    ],
+    [activeSceneRef, run, snapshotRef],
   );
 
   const handlePing = useCallback(
@@ -1638,6 +1675,10 @@ export function App() {
       assetActions.uploadAsset(file, kind, options),
     [assetActions],
   );
+  const handleUploadStampImage = useCallback(
+    (file: File) => assetActions.uploadAsset(file, "IMAGE"),
+    [assetActions],
+  );
 
   const loadAfterHome = () => {
     window.history.replaceState(null, "", "/");
@@ -1723,6 +1764,9 @@ export function App() {
               themePreference.cancel();
               setThemeSettingsOpen(false);
             }}
+            diceFrames={previewSnapshot ? null : (diceFrames ?? [])}
+            diceFrameAssetId={snapshot.me.diceFrameAssetId ?? null}
+            onSaveDiceFrame={saveDiceFrame}
             compact={compact}
             compactSectionsOpen={compactSectionsOpen}
             onCloseCompactSections={() => setCompactSectionsOpen(false)}
@@ -1862,6 +1906,7 @@ export function App() {
                   gmGridVisible={gmGridVisible}
                   stampSettings={stampSettings}
                   onStampSettingsChange={setStampSettings}
+                  onUploadStampImage={handleUploadStampImage}
                   onGmGridVisibleChange={(visible) => {
                     setGmGridVisible(visible);
                     localStorage.setItem(
@@ -1879,10 +1924,8 @@ export function App() {
                     key={`${activeScene.id}:${snapshot.campaign.paused}`}
                     paused={snapshot.campaign.paused}
                     externalObjectListOpen={mapObjectsOpen}
-                    onObjectListToggle={() =>
-                      setMapObjectsOpen((open) => !open)
-                    }
-                    onObjectListClose={() => setMapObjectsOpen(false)}
+                    onObjectListToggle={handleObjectListToggle}
+                    onObjectListClose={handleObjectListClose}
                     scene={
                       gridPreview
                         ? { ...activeScene, grid: gridPreview }
@@ -1903,6 +1946,7 @@ export function App() {
                     onToolSelect={setTool}
                     pings={activePings}
                     rulers={activeRulers}
+                    ownRulerColor={viewSnapshot.me.rulerColor ?? null}
                     cursors={activeCursors}
                     cursorSendEnabled={cursorPreference.sendEnabled}
                     cursorShared={
@@ -1912,7 +1956,7 @@ export function App() {
                     gmFogVisible={gmFogVisible}
                     gmGridVisible={gmGridVisible}
                     fogBrushRadius={fogBrushRadius}
-                    encounters={[]}
+                    encounters={NO_ENCOUNTERS}
                     canvasEditMode={canvasEditMode}
                     onCanvasEditCancel={handleCanvasEditCancel}
                     onCanvasPatch={handleCanvasPatch}
@@ -1923,17 +1967,7 @@ export function App() {
                     }
                     stampTool={stampSettings}
                     onPing={handlePing}
-                    onPlaceTokenDefinition={async (definitionId, point) => {
-                      void placeOptimistically({
-                        path: `/api/token-definitions/${definitionId}/placements`,
-                        body: {
-                          actionId: crypto.randomUUID(),
-                          definitionId,
-                          sceneId: activeScene.id,
-                          ...point,
-                        },
-                      });
-                    }}
+                    onPlaceTokenDefinition={handlePlaceTokenDefinition}
                     onTokenLayerChange={handleTokenLayerChange}
                     onTokenConditionsChange={handleTokenConditionsChange}
                     onTokenDelete={handleTokenDelete}
@@ -2055,6 +2089,7 @@ export function App() {
                 onSelectWorkspace={(w) => handleWorkspaceChange(w)}
                 onSelectSurface={selectCompactSurface}
                 onMusicControlsTarget={setMenuMusicTarget}
+                onSoundpadLauncherTarget={setMenuSoundpadTarget}
                 onOpenThemeSettings={handleOpenThemeSettings}
                 onOpenShortcuts={() => setShortcutsOpen(true)}
                 onOpenPlayerHandoff={() => setPlayerHandoffOpen(true)}
@@ -2084,7 +2119,11 @@ export function App() {
               socket={socket}
               onUpload={handleUploadAudio}
               onRefreshSnapshot={load}
-              launcherTarget={headerSoundpadTarget}
+              launcherTarget={
+                compact && compactSurface === "menu"
+                  ? menuSoundpadTarget
+                  : headerSoundpadTarget
+              }
             />
           )}
           {compact && (

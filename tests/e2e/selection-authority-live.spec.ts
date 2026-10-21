@@ -215,8 +215,9 @@ for (const initiator of ["token", "drawing"] as const) {
         revision: revised.revision,
       });
       const observer = await camera(page);
-      const list = observer.map.getByRole("button", {
-        name: "Объекты карты",
+      // The toolbar owns the object list toggle; the list renders in the map.
+      const list = observer.map.page().getByRole("button", {
+        name: "Список объектов и токенов карты",
         exact: true,
       });
       await list.click();
@@ -326,7 +327,10 @@ for (const initiator of ["token", "drawing"] as const) {
       // The GM can still delete the pair deliberately. The player's open object
       // list must converge through the live connection, without a page reload.
       await player
-        .getByRole("button", { name: "Объекты карты", exact: true })
+        .getByRole("button", {
+          name: "Список объектов и токенов карты",
+          exact: true,
+        })
         .click();
       const playerDrawing = player
         .locator(".map-object-list")

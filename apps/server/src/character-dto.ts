@@ -3,7 +3,7 @@ import {
   type CharacterDto,
   type StatLayout,
 } from "@arken/contracts";
-import { arkenSystem, starterStatLayout } from "@arken/system";
+import { starterStatLayout } from "@arken/system";
 import { normalizeSystemRegenStatRows } from "./stat-layout.js";
 import { characterCatalogEntries, characters } from "@arken/db";
 import {
@@ -63,6 +63,29 @@ export function resolveCharacterStatLayout(
   return normalizeSystemRegenStatRows(effective);
 }
 
+/**
+ * Значения характеристик, по которым считаются броски.
+ *
+ * Строку раскладки (кампании или своего персонажа) добавляют без значения —
+ * лист показывает её как 0, а движок формул ищет `stats[key]` напрямую и
+ * отвечал «Стат не найден». Отсутствующее значение STAT-строки эффективной
+ * раскладки — 0, как на экране; сохранённые значения не трогаются.
+ */
+export function characterRollStats(
+  character: Pick<CharacterRow, "stats" | "statLayout">,
+  campaignDefaultLayout: unknown,
+): Record<string, number> {
+  const stats = normalizeLegacyStats(character.stats);
+  for (const group of resolveCharacterStatLayout(
+    character.statLayout,
+    campaignDefaultLayout,
+  ))
+    for (const row of group.rows)
+      if (row.source === "STAT" && !Number.isFinite(stats[row.key]))
+        stats[row.key] = 0;
+  return stats;
+}
+
 export function characterDto(
   character: CharacterRow,
   entries: CharacterEntryRow[],
@@ -79,19 +102,14 @@ export function characterDto(
     ownerMembershipId: character.ownerMembershipId,
     controllerMembershipIds,
     portraitAssetId: character.portraitAssetId,
-    stats: normalizeLegacyStats(character.stats),
+    stats: characterRollStats(character, campaignDefaultLayout),
     statLayout: resolveCharacterStatLayout(
       character.statLayout,
       campaignDefaultLayout,
     ),
-    skills: (() => {
-      const existing = Array.isArray(character.skills) ? character.skills : [];
-      const keys = new Set(existing.map((skill) => skill.key));
-      return [
-        ...existing,
-        ...arkenSystem.starterSkills.filter((skill) => !keys.has(skill.key)),
-      ];
-    })(),
+    // UIX-706: стандартные навыки больше не подставляются при каждом чтении —
+    // иначе удалённый навык возвращался. Навыки теперь строки раскладки.
+    skills: Array.isArray(character.skills) ? character.skills : [],
     spells: Array.isArray(character.spells) ? character.spells : [],
     notes: character.notes,
     backstory: character.backstory,

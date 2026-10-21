@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { ThemeProvider } from "@gravity-ui/uikit";
 import { afterEach, expect, it, vi } from "vitest";
 import { renderComponent, screen, userEvent } from "./test-support/render";
 import { CatalogEntryForm } from "./CatalogEntryForm";
@@ -21,14 +20,14 @@ it("explains machine keys in Russian without translating submitted keys", async 
   }));
   const onSubmit = vi.fn();
   renderComponent(
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <CatalogEntryForm
         statLabels={{}}
         resourceLabels={{ physical: "Выносливость", magic: "Мана" }}
         onSubmit={onSubmit}
         onCancel={vi.fn()}
       />
-    </ThemeProvider>,
+    </>,
   );
   const user = userEvent.setup();
   await user.type(
@@ -69,14 +68,14 @@ it("keeps numeric ENTRY_VALUE modifiers separate from resource costs", async () 
   }));
   const onSubmit = vi.fn();
   renderComponent(
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <CatalogEntryForm
         statLabels={{}}
         resourceLabels={{ physical: "Выносливость", magic: "Мана" }}
         onSubmit={onSubmit}
         onCancel={vi.fn()}
       />
-    </ThemeProvider>,
+    </>,
   );
   const user = userEvent.setup();
   await user.type(
@@ -130,14 +129,14 @@ it("stores explicit no-roll activation cost separately from description prose", 
   }));
   const onSubmit = vi.fn();
   renderComponent(
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <CatalogEntryForm
         statLabels={{}}
         resourceLabels={{ physical: "Выносливость", magic: "Мана" }}
         onSubmit={onSubmit}
         onCancel={vi.fn()}
       />
-    </ThemeProvider>,
+    </>,
   );
   const user = userEvent.setup();
   await user.type(
@@ -175,14 +174,14 @@ it("saves an unlimited no-roll ability with cost after turning off its use limit
   }));
   const onSubmit = vi.fn();
   renderComponent(
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <CatalogEntryForm
         statLabels={{}}
         resourceLabels={{ physical: "Выносливость", magic: "Мана" }}
         onSubmit={onSubmit}
         onCancel={vi.fn()}
       />
-    </ThemeProvider>,
+    </>,
   );
   const user = userEvent.setup();
   await user.type(
@@ -256,7 +255,7 @@ it("preserves legacy activation data when renaming an ability that also has roll
   } as unknown as CatalogEntryDto;
   const onSubmit = vi.fn();
   renderComponent(
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <CatalogEntryForm
         existing={existing}
         statLabels={{}}
@@ -264,7 +263,7 @@ it("preserves legacy activation data when renaming an ability that also has roll
         onSubmit={onSubmit}
         onCancel={vi.fn()}
       />
-    </ThemeProvider>,
+    </>,
   );
   const user = userEvent.setup();
   const name = screen.getByLabelText("Название *", { exact: true });
@@ -306,14 +305,14 @@ it("maps safe server field errors and keeps the submitted draft", async () => {
     ),
   );
   renderComponent(
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <CatalogEntryForm
         statLabels={{}}
         resourceLabels={{ physical: "Выносливость", magic: "Мана" }}
         onSubmit={onSubmit}
         onCancel={vi.fn()}
       />
-    </ThemeProvider>,
+    </>,
   );
   const user = userEvent.setup();
   await user.type(
@@ -352,14 +351,14 @@ it("keeps technical values behind an accessible closed disclosure", async () => 
   }));
   const onSubmit = vi.fn();
   renderComponent(
-    <ThemeProvider theme="dark" lang="ru">
+    <>
       <CatalogEntryForm
         statLabels={{}}
         resourceLabels={{ physical: "Выносливость", magic: "Мана" }}
         onSubmit={onSubmit}
         onCancel={vi.fn()}
       />
-    </ThemeProvider>,
+    </>,
   );
   const details = screen
     .getByText("Дополнительные числовые параметры")

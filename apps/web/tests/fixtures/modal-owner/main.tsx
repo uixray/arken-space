@@ -1,20 +1,14 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  Button,
-  configure,
-  ThemeProvider,
-  ToasterComponent,
-  ToasterProvider,
-} from "@gravity-ui/uikit";
-import "@gravity-ui/uikit/styles/fonts.css";
-import "@gravity-ui/uikit/styles/styles.css";
+import { Button } from "../../../src/design-system/Button";
+import { PlayerThemeProvider } from "../../../src/design-system/PlayerThemeProvider";
 import "../../../src/random-uuid-polyfill";
 import { AppErrorBoundary } from "../../../src/AppErrorBoundary";
 import { ArkenDialog } from "../../../src/ui/ArkenDialog";
 import { FormSelect } from "../../../src/ui/GravityFormControls";
-import { appToaster } from "../../../src/ui/toaster";
+import { AppToaster } from "../../../src/ui/AppToaster";
 import "../../../src/design-system/tokens.generated.css";
+import "../../../src/ui/theme-root.css";
 import "../../../src/ui/gravity-foundation.css";
 import "../../../src/styles.css";
 import "../../../src/mobile-foundation.css";
@@ -22,7 +16,6 @@ import "../../../src/mobile-foundation.css";
 // Test-only HTML entry; neither production index.html nor App imports this file.
 // No UI mocks, forced Select open state, custom focus management, portal target
 // or layer override. Only fixture state and an asynchronous response are owned here.
-configure({ lang: "ru" });
 
 const topology = new URLSearchParams(window.location.search).get("topology");
 if (topology !== "sibling" && topology !== "nested")
@@ -156,13 +149,11 @@ function ModalOwnerFixture() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ThemeProvider theme="dark" lang="ru">
-      <ToasterProvider toaster={appToaster}>
-        <AppErrorBoundary>
-          <ModalOwnerFixture />
-        </AppErrorBoundary>
-        <ToasterComponent />
-      </ToasterProvider>
-    </ThemeProvider>
+    <PlayerThemeProvider themeId={null}>
+      <AppErrorBoundary>
+        <ModalOwnerFixture />
+      </AppErrorBoundary>
+      <AppToaster />
+    </PlayerThemeProvider>
   </StrictMode>,
 );

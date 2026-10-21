@@ -1,38 +1,9 @@
 // @vitest-environment jsdom
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderComponent, screen, userEvent } from "../test-support/render";
 import { CursorPresenceMenu } from "./CursorPresenceMenu";
 import { cursorPreferenceDefault } from "../cursor-preference";
-
-// `@gravity-ui/uikit` ships CSS this repo's Vitest transform cannot handle,
-// so it is stubbed — the established pattern here, see MediaPanel.test.tsx.
-// The stubs are typed against the props this component actually passes: a
-// mock that does not typecheck is the failure mode docs/testing.md warns
-// about. `Popup` renders its children only when open, which is the part of
-// its behaviour these tests depend on.
-vi.mock("@gravity-ui/uikit", () => ({
-  Popup: ({ open, children }: { open?: boolean; children?: ReactNode }) =>
-    open ? <div>{children}</div> : null,
-  Switch: ({
-    checked,
-    onUpdate,
-    children,
-  }: {
-    checked?: boolean;
-    onUpdate?: (next: boolean) => void;
-    children?: ReactNode;
-  }) => (
-    <label>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onUpdate?.(event.target.checked)}
-      />
-      {children}
-    </label>
-  ),
-}));
 
 /**
  * UIX-403: the two roles get different controls, and the reason is not

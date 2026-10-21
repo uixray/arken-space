@@ -176,7 +176,9 @@ export function createStarterCharacter() {
     stats: Object.fromEntries(
       arkenSystem.stats.map((stat) => [stat.key, stat.defaultValue]),
     ),
-    skills: arkenSystem.starterSkills,
+    // UIX-706: навыки — строки раскладки; формульные удары дублировали
+    // «Ближний бой» / «Дальний бой» и не удалялись.
+    skills: [],
     spells: [],
     resources: {
       physicalPower: { current: 10, maximum: 10 },

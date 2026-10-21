@@ -126,6 +126,8 @@ export class OptimisticTokenMutations {
   }
 
   project(tokens: TokenDto[]): TokenDto[] {
+    // Nothing pending: keep the canonical array so memoised map props hold.
+    if (this.conditions.size === 0 && this.placements.size === 0) return tokens;
     const result = tokens.map((token) => {
       const pending = this.conditions.get(token.id);
       return pending

@@ -4,6 +4,156 @@ This checklist prepares and verifies a release. It is not evidence that backup,
 restore, deployment, the human GM + 6 rehearsal, or final manual production
 acceptance has passed.
 
+> **Текущий production — хост bb03 (`80.85.154.36`).** `infra/deploy/release.sh`
+> и разделы ниже про `/home/uixray/apps/arken-space`, `/etc/arken-space` и
+> Compose project `arken-space` на bb03 **сейчас неприменимы**: скрипт упадёт
+> на первой проверке `APP_ROOT`. Выкладывайте по разделу
+> [bb03: фактическая схема выкладки](#bb03-фактическая-схема-выкладки). Code
+> quality gate, требование «ревизия в `origin/main`», правила rollback и запрет
+> сброса игры действуют и там.
+
+## bb03: фактическая схема выкладки
+
+Схема проверена релизами 6db32f2 (11.10.2026) и c1d1243 (17.10.2026). Скрипты
+и receipts последнего релиза лежат на хосте в
+`/opt/arken-space/releases/release-c1d1243f-20261017/`; новый релиз кладёт
+свои в новую папку `release-<sha8>-<YYYYMMDD>/` (root, `umask 077`). Каждый
+этап — отдельный fail-closed скрипт с receipt JSON; любой FAIL — остановка и
+отчёт, а не обход. На прод выкладывается только ревизия, на которую владелец
+дал GO.
+
+### Чем хост отличается от предположений `release.sh`
+
+| `release.sh` ожидает                                    | На bb03                                                                                                                                                               |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| пользователь `uixray`, git checkout в `APP_ROOT`        | вход `root@80.85.154.36`, checkout и build-окружения нет                                                                                                              |
+| `/home/uixray/apps/arken-space`, `.env` в checkout      | база `/opt/arken-space/releases/bb03e115`: `config/compose.production-ff9.yml` + `config/compose.env`                                                                 |
+| Compose project `arken-space`                           | Compose project `arken-prod-bb03` + per-release `compose.release.override.yml`, который пинит image ID server/web, `BUILD_REVISION` и `SCHEMA_VERSION`                |
+| сборка образов на хосте                                 | сборка в GitHub Actions (`release-images.yml`), доставка архивом, `docker load`                                                                                       |
+| `/etc/arken-space/restic.env`, `infra/backup/backup.sh` | отдельный restic-репозиторий на каждый снимок в `/opt/arken-space/backups/<имя>/`; ядро снимка — `capture-portfolio-cutover-20261016` (`capture-service-snapshot.sh`) |
+| schema `2`, `test-results/restore/runner.json`          | `SCHEMA_VERSION` = число записей журнала миграций (на c1d1243 — `62`); репетиция пишет свой receipt                                                                   |
+| edge принадлежит проекту                                | edge общий с другими сайтами: только `nginx -t` и `nginx -s reload`, **не пересоздавать** и не менять его конфиг                                                      |
+
+Перед стартом снимите read-only состояние: `healthz` (ревизия, schemaVersion),
+image ID всех четырёх сервисов (server, web, postgres, edge), ledger миграций
+(`<число>|<when последней>`), sha256 `bb03e115/config/default.conf` и текущего
+override, свободное место. Если `default.conf` не совпадает с последним
+записанным пином — уточните у владельца, прежде чем закреплять новое значение.
+
+### Сборка образов
+
+Образы собираются не на хосте: сборка монорепо съест RAM/CPU живого сервиса и
+несколько ГБ диска. Запуск — вручную, только по точному SHA из `origin/main`:
+
+```sh
+gh workflow run release-images.yml -f revision=<reviewed-40-character-sha>
+```
+
+Workflow сам отвергает SHA вне `origin/main`, собирает `Dockerfile.server` и
+`Dockerfile.web` (amd64), кладёт оба образа в один `docker save`-архив и пишет
+`manifest.json` (ревизия, image ID, sha256 и размер архива, run id). Artifact
+живёт сутки; секретов в образах нет. Скачайте artifact на ноутбук
+(`gh run download <run-id>`).
+
+### Доставка параллельными частями
+
+Входящий канал хоста ограничен **~17 KiB/s на одно TCP-соединение** (и с
+GitHub, и с ноутбука), поэтому одиночный `scp` или `curl` архива на сотни МБ
+идёт часами. Рабочий способ 17.10: разрезать архив на ~32 части (`split`),
+передать их `scp` в ~24 параллельных потока (~1 MiB/s суммарно), на хосте
+сверить sha256 каждой части, склеить и сверить sha256 и размер архива с
+`manifest.json`.
+
+### ID образов на containerd
+
+Docker на bb03 работает с хранилищем образов containerd: `docker image inspect`
+и `.Image` контейнера показывают **digest OCI-манифеста**, а не config digest,
+который печатает CI в `manifest.json`. Поэтому прямое сравнение «image ID =
+manifest» после `docker load` всегда даст расхождение. Проверка:
+
+1. sha256 архива = `manifest.json`;
+2. в `index.json` архива найти manifest каждого образа и убедиться, что его
+   `config.digest` равен ID из `manifest.json`;
+3. после `docker load` ID тегов `arken-release-server:<sha>` и
+   `arken-release-web:<sha>` должны равняться digest этих манифестов. Именно
+   эти digest-и пинятся в override и сверяются с запущенными контейнерами.
+
+### Этапы
+
+1. **Preflight и снимок** (прод не меняется, кроме паузы API ~2–3 мин).
+   Preflight: живые image ID = текущий релиз, ledger, sha256 `default.conf` и
+   override, место (см. порог ниже). Неизменяемые теги на **уже существующие**
+   образы: `arken-space-rollback-server:<production-sha>` и
+   `arken-space-rollback-web:<production-sha>`; существующий тег с другим ID —
+   FAIL. Копии `default.conf` и текущего override — в папку релиза. Снимок
+   `capture-service-snapshot.sh` в новый restic-репозиторий
+   `/opt/arken-space/backups/pre-release-<sha8>-<YYYYMMDD>/`, точный
+   `snapshotId` из receipt, затем `restic check --read-data`. Health старого
+   API после возобновления.
+2. **Репетиция восстановления и миграций на одноразовом loopback-контуре.**
+   Отдельный Compose project `arken-restore-<sha8>`, только `127.0.0.1`,
+   свой том PostgreSQL и временная папка медиа. `restic restore <snapshotId>`,
+   сверка sha256 файлов снимка с его manifest, восстановление дампа в
+   PostgreSQL того же образа, что на проде, сверка счётчиков таблиц. Старт
+   кандидата на этой копии: сервер сам применяет новые миграции. Ожидание:
+   healthz = кандидат и новый `SCHEMA_VERSION`, ledger = журнал кандидата,
+   счётчики таблиц и старые строки ledger не изменились. Receipt — по смыслу
+   `runner.json`, но это не вывод `restore:rehearse`; так и пишите в отчёте.
+3. **Медиа-проверка на копии.** Через SSH-туннель на loopback-порт контура:
+   вход тестовым аккаунтом, созданным только в копии, загрузка одной картинки
+   и одного аудиофайла, чтение через `/api/assets/:id/content`. В живой
+   кампании ничего не загружается. Затем
+   `docker compose -p arken-restore-<sha8> down -v`, удаление временных папок,
+   проверка, что контейнеров, томов, сетей и порта проекта не осталось.
+4. **Активация с trap-откатом** — единственный шаг, меняющий прод. Скрипт с
+   явным гейтом подтверждения (`ARKEN_RELEASE_CONFIRM=publish-<sha8>-after-gate`)
+   и предусловиями: receipts этапов 1–3 есть и PASS, живые образы = текущий
+   релиз, `default.conf` = записанный sha256, загруженные образы = проверенные
+   digest-и. Новый `compose.release.override.yml` копирует edge-сети из
+   текущего override (без них edge теряет `edge-ingress` — урок 11.10).
+   Затем `up -d --no-deps --force-recreate server web` (postgres и edge не
+   пересоздаются), `nginx -s reload` в контейнере edge, ожидание health до
+   120 с. `trap` на любой ненулевой выход поднимает server/web со старым
+   override (образы сверены с rollback-тегами), делает `nginx -s reload` и
+   проверяет старый health.
+5. **Проверки после выкладки.** Скриптом: image ID всех четырёх сервисов,
+   ledger, `nginx -t`, публичный `https://arken-khar.space/healthz` = кандидат,
+   `/socket.io/` upgrade → `101`, соседние сайты на общем edge отвечают, в
+   логах server/edge нет ошибок. `docker compose … restart postgres server web`
+   и сверка счётчиков таблиц и ledger до/после. Руками: вход мастером и
+   игроком (входит владелец, агент пароли не вводит), карта, броски, журнал,
+   музыка, новые возможности релиза. `infra/deploy/smoke-auth.sh` здесь не
+   запускается: он рассчитан на layout `release.sh`.
+6. **Перепин weekly-capture.** `/opt/arken-space/backup-tools/weekly-capture.sh`
+   держит пины: образы server/web, `EXPECT_BUILD`, schemaVersion,
+   `EXPECT_LEDGER`, sha256 override и `default.conf`. Сохраните старую копию
+   (`weekly-capture-<sha8>-<YYYYMMDD>.sh`), обновите пины на новый релиз,
+   прогоните `PREFLIGHT_ONLY=1`, затем первый снимок `weekly-<YYYYMMDD>` и
+   `restic check --read-data`.
+
+### Диск: порог и снимки
+
+Сервер отклоняет загрузки медиа, если свободного места меньше
+`MIN_FREE_DISK_BYTES` (по умолчанию **5 GiB**, на проде не переопределён).
+Каждый restic-снимок занимает **~0.7 GB**; восстановленная копия на этапах 2–3
+и архив образов временно съедают ещё столько же и больше. 17.10 первая
+медиа-проверка получила `LOW_DISK_SPACE`, а пока лежали архивы образов, живые
+загрузки на проде тоже отклонялись бы. Перед этапами 1–3 посчитайте запас:
+свободно минус (архив образов + снимок + восстановленная копия) должно
+оставаться выше 5 GiB; архивы удаляйте сразу после проверки `docker load`.
+Чистить старые образы и бэкапы — только с разрешения владельца (локальная
+копия данных — `D:\ArkenBackups`).
+
+### Откат на bb03
+
+Пока в базе нет данных, которые старый код не понимает: поднять server/web со
+старым override (`-f config/compose.production-ff9.yml -f
+<папка прошлого релиза>/compose.release.override.yml up -d --no-deps
+--force-recreate server web`), `nginx -s reload` в edge, проверить старый
+health. Если новые виды данных уже появились — сначала удалить их; иначе
+восстановление снимка этапа 1 только через изолированную репетицию и отдельно
+согласованную процедуру. Команду сброса игры не запускать.
+
 ## Release identity
 
 Use one reviewed, committed revision for every gate:
@@ -71,7 +221,7 @@ code of each command. In particular, do not pipe Playwright into a trailing
 is the read-only gate; running the writing `pnpm format` is not equivalent
 evidence.
 
-## The scripted host path (preferred)
+## The scripted host path (не для bb03)
 
 `infra/deploy/release.sh` automates the host-side safety and deployment gates:
 nginx/certificate/disk preflight, environment/permission validation, exact

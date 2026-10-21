@@ -20,7 +20,7 @@ describe("Switch", () => {
     expect(ref.current).toBe(input);
     expect(input).toHaveAttribute("id", "music-loop");
     expect(input.closest(".arken-switch")).toBeInTheDocument();
-    expect(input.closest(".g-switch")).toBeInTheDocument();
+    expect(input.closest(".arken-switch")).toBeInTheDocument();
   });
 
   it("forwards controlRef directly to the native input element", () => {

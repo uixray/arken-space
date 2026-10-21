@@ -1,0 +1,157 @@
+/* UIX-709: modal dialog styles carried over from @gravity-ui/uikit 7.43 (MIT)
+ * with the same class names, so ArkenDialog keeps its look without the
+ * library. Behaviour (focus trap, Escape, scroll lock) comes from Base UI. */
+
+.arken-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  outline: none;
+  background-color: var(--g-color-sfx-veil);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+}
+.arken-modal__content-aligner {
+  min-width: 100%;
+  min-height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.arken-modal__content-wrapper {
+  margin: var(--g-modal-margin, 20px);
+}
+.arken-modal__content {
+  height: var(--g-modal-height, auto);
+  width: var(--g-modal-width, auto);
+  background-color: var(--g-color-base-modal);
+  border-radius: var(--g-modal-border-radius, 5px);
+  clip-path: inset(0 round var(--g-modal-border-radius, 5px));
+  outline: none;
+  transition: height 350ms ease-in-out;
+}
+.arken-modal__content--has-scroll {
+  overflow: auto;
+  max-width: calc(100vw - var(--g-modal-margin, 20px) * 2);
+  max-height: calc(100vh - var(--g-modal-margin, 20px) * 2);
+}
+
+.arken-modal-dialog {
+  --_--side-padding: 32px;
+  --_--close-button-space: 0px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: var(--g-dialog-width, var(--_--width));
+}
+.arken-modal-dialog--has-scroll {
+  overflow-y: auto;
+  max-height: calc(100vh - var(--g-modal-margin, 20px) * 2);
+}
+.arken-modal-dialog--size-s {
+  --_--width: 480px;
+}
+.arken-modal-dialog--size-m {
+  --_--width: 720px;
+}
+.arken-modal-dialog--size-l {
+  --_--width: 900px;
+}
+.arken-modal-dialog--has-close {
+  --_--close-button-space: 24px;
+}
+
+.arken-modal-dialog-btn-close {
+  position: absolute;
+  inset-block-start: 14px;
+  inset-inline-end: 14px;
+  z-index: 1;
+}
+
+.arken-modal-dialog-header {
+  padding-block: 20px 10px;
+  padding-inline: var(--_--side-padding)
+    calc(
+      var(--_--side-padding) + var(--_--close-button-space) *
+        var(--g-flow-is-ltr) + var(--_--close-button-space) *
+        var(--g-flow-is-rtl)
+    );
+  line-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  color: var(--g-color-text-primary);
+}
+
+.arken-modal-dialog-header__caption {
+  font-family: var(--g-text-subheader-font-family);
+  font-weight: var(--g-text-subheader-font-weight);
+  font-size: var(--g-text-subheader-3-font-size);
+  line-height: var(--g-text-subheader-3-line-height);
+}
+
+.arken-modal-dialog-body {
+  padding: 10px var(--_--side-padding);
+  flex: 1 1 auto;
+  transition: height 0.35s ease-in-out;
+}
+.arken-modal-dialog-body--has-borders {
+  border-block-start: 1px solid var(--g-color-line-generic);
+  border-block-end: 1px solid var(--g-color-line-generic);
+}
+.arken-modal-dialog--has-scroll .arken-modal-dialog-body {
+  overflow: auto;
+}
+
+.arken-modal-dialog-footer {
+  padding: 28px var(--_--side-padding);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.arken-modal-dialog-footer__bts-wrapper {
+  display: flex;
+  gap: 10px;
+}
+.arken-modal-dialog-footer__children {
+  flex-grow: 1;
+  height: 100%;
+  align-items: center;
+  display: flex;
+}
+.arken-modal-dialog-footer__button {
+  min-width: 128px;
+  position: relative;
+}
+.arken-modal-dialog-footer__error {
+  padding: 10px;
+  color: var(--g-color-text-danger);
+}
+
+/* The footer error was a Gravity popup anchored above the apply button. */
+.arken-modal-dialog-footer__error-popup {
+  position: absolute;
+  inset-block-end: calc(100% + 10px);
+  inset-inline-end: 0;
+  z-index: 1;
+  width: max-content;
+  max-width: calc(100vw - 40px);
+  border-radius: 4px;
+  background-color: var(--g-color-base-float);
+  box-shadow:
+    0 0 0 1px var(--g-color-line-generic-solid),
+    0 8px 20px 1px var(--g-color-sfx-shadow);
+}
+.arken-modal-dialog-footer__error-popup::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 100%;
+  inset-inline-end: calc(50% - 5px);
+  width: 10px;
+  height: 10px;
+  margin-block-start: -5px;
+  transform: rotate(45deg);
+  background-color: var(--g-color-base-float);
+  box-shadow: 1px 1px 0 0 var(--g-color-line-generic-solid);
+}

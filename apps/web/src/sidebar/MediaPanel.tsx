@@ -59,7 +59,7 @@ export function MediaPanel({
   const allowed = useMemo<AssetKind[]>(
     () =>
       snapshot.me.role === "GM"
-        ? ["MAP", "TOKEN", "PORTRAIT", "IMAGE", "AUDIO"]
+        ? ["MAP", "TOKEN", "PORTRAIT", "IMAGE", "AUDIO", "DICE_FRAME"]
         : ["TOKEN", "PORTRAIT"],
     [snapshot.me.role],
   );
@@ -69,6 +69,7 @@ export function MediaPanel({
     PORTRAIT: "Портреты персонажей",
     IMAGE: "Другие изображения",
     AUDIO: "Музыка и звуки",
+    DICE_FRAME: "Рамки бросков",
   };
   const uploadPurposes: Record<AssetKind, string> = {
     MAP: "Для карт и фонов сцен кампании.",
@@ -76,8 +77,17 @@ export function MediaPanel({
     PORTRAIT: "Для портретов персонажей.",
     IMAGE: "Для изображений в других разделах кампании.",
     AUDIO: "Для музыкальных дорожек и звуков кампании.",
+    DICE_FRAME:
+      "Для рамок вокруг итога броска; анимация APNG, GIF и WebP сохраняется.",
   };
-  const kindOrder: AssetKind[] = ["MAP", "TOKEN", "PORTRAIT", "IMAGE", "AUDIO"];
+  const kindOrder: AssetKind[] = [
+    "MAP",
+    "TOKEN",
+    "PORTRAIT",
+    "IMAGE",
+    "AUDIO",
+    "DICE_FRAME",
+  ];
   const visibleKinds = kindOrder.filter((kind) =>
     snapshot.assets.some((asset) => asset.kind === kind),
   );
@@ -232,8 +242,16 @@ export function MediaPanel({
                 <ImageUploadField
                   label={labels[kind]}
                   value={drafts[kind]}
-                  accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
-                  hint="PNG, JPEG или WebP"
+                  accept={
+                    kind === "DICE_FRAME"
+                      ? ".png,.apng,.gif,.webp,image/png,image/apng,image/gif,image/webp"
+                      : ".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                  }
+                  hint={
+                    kind === "DICE_FRAME"
+                      ? "APNG, GIF или WebP; уменьшается до 128 px"
+                      : "PNG, JPEG или WebP"
+                  }
                   disabled={uploading !== null}
                   onUpdate={(file) =>
                     setDrafts((current) => ({ ...current, [kind]: file }))

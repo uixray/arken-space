@@ -137,13 +137,13 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
 
     const rootClassName = cx(
       "arken-checkbox",
-      "g-checkbox",
+      "arken-checkbox",
       `arken-checkbox--${size}`,
-      `g-checkbox_size_${size}`,
-      isChecked && "arken-checkbox--checked g-checkbox_checked",
-      indeterminate && "arken-checkbox--indeterminate g-checkbox_indeterminate",
-      disabled && "arken-checkbox--disabled g-checkbox_disabled",
-      isInvalid && "arken-checkbox--invalid g-checkbox_invalid",
+      `arken-checkbox--size-${size}`,
+      isChecked && "arken-checkbox--checked",
+      indeterminate && "arken-checkbox--indeterminate",
+      disabled && "arken-checkbox--disabled",
+      isInvalid && "arken-checkbox--invalid",
       className,
     );
 
@@ -174,16 +174,13 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
             ariaDescribedBy ?? controlProps?.["aria-describedby"]
           }
           aria-invalid={isInvalid ? "true" : undefined}
-          className="arken-checkbox__input g-checkbox__control"
+          className="arken-checkbox__input arken-checkbox__control"
           onChange={handleChange}
           onFocus={onFocus ?? controlProps?.onFocus}
           onBlur={onBlur ?? controlProps?.onBlur}
           onKeyDown={onKeyDown ?? controlProps?.onKeyDown}
         />
-        <span
-          className="arken-checkbox__box g-checkbox__box"
-          aria-hidden="true"
-        >
+        <span className="arken-checkbox__box" aria-hidden="true">
           {indeterminate ? (
             <Minus
               className="arken-checkbox__icon"
@@ -199,9 +196,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
           ) : null}
         </span>
         {labelText ? (
-          <span className="arken-checkbox__text g-checkbox__text">
-            {labelText}
-          </span>
+          <span className="arken-checkbox__text">{labelText}</span>
         ) : null}
       </label>
     );

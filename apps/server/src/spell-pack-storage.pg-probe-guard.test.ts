@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { getTableColumns } from "drizzle-orm";
+import { memberships } from "@arken/db";
 import {
   classifyProbeDiagnostic,
   deriveMigrationIdentity,
@@ -34,6 +36,32 @@ describe("spell-pack PostgreSQL probe preflight diagnostics", () => {
     ).not.toThrow();
   });
 
+  it("matches the membership schema, including migrations 0062-0063, without accepting drift", () => {
+    const columns = Object.values(getTableColumns(memberships))
+      .map((column) => column.name)
+      .sort();
+    expect(requiredMembershipColumns).toEqual(columns);
+    expect(columns).toContain("ruler_color");
+    expect(columns).toContain("dice_frame_asset_id");
+    expect(() =>
+      validateMigrationPreflight(currentIdentity, {
+        ...validSnapshot(),
+        membershipColumns: columns,
+      }),
+    ).not.toThrow();
+    for (const membershipColumns of [
+      columns.filter((column) => column !== "ruler_color"),
+      columns.filter((column) => column !== "dice_frame_asset_id"),
+      [...columns, "unexpected_column"].sort(),
+    ]) {
+      expect(() =>
+        validateMigrationPreflight(currentIdentity, {
+          ...validSnapshot(),
+          membershipColumns,
+        }),
+      ).toThrow("SPELL_PROBE_PREFLIGHT:MEMBERSHIP_COLUMNS");
+    }
+  });
   it("fails closed when image migration identity is stale or modified", () => {
     const staleImage = validSnapshot();
     staleImage.source = {

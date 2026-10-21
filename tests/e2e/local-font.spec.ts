@@ -1,6 +1,7 @@
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 for (const width of [390, 1440]) {
   test(`local Pragmatica Next loads and applies ${width}px`, async ({
@@ -37,7 +38,7 @@ for (const width of [390, 1440]) {
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       if (path === "/api/operator/feedback/capability")
         return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
-      return route.fulfill({ json: [] });
+      return fulfillUnmocked(route, path);
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
@@ -65,7 +66,7 @@ for (const width of [390, 1440]) {
     const result = await page.evaluate(() => {
       const sample = "Arken Space — Проверка шрифта";
       const bodyStyle = getComputedStyle(document.body);
-      const gravity = document.querySelector<HTMLElement>(".g-root");
+      const gravity = document.querySelector<HTMLElement>(".arken-root");
       const gravityStyle = gravity ? getComputedStyle(gravity) : null;
       const canvas = document.createElement("canvas");
       const context = canvas.getContext("2d")!;

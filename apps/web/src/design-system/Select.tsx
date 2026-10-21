@@ -402,14 +402,14 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
 
     const triggerClassName = [
       "arken-select",
-      "g-select",
+      "arken-select",
       `arken-select--${size}`,
-      `g-select_size_${size}`,
-      width === "max" ? "arken-select--width-max g-select_width_max" : "",
+      `arken-select--size-${size}`,
+      width === "max" ? "arken-select--width-max" : "",
       `arken-select--${view}`,
-      `g-select_view_${view}`,
-      disabled ? "arken-select--disabled g-select_disabled" : "",
-      isInvalid ? "arken-select--invalid g-select_invalid" : "",
+      `arken-select--view-${view}`,
+      disabled ? "arken-select--disabled" : "",
+      isInvalid ? "arken-select--invalid" : "",
       className,
     ]
       .filter(Boolean)
@@ -442,7 +442,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
               }}
               className={[
                 "arken-select__item",
-                "g-select__item",
+                "arken-select__item",
                 opt.disabled ? "arken-select__item--disabled" : "",
                 opt.value === FORM_SELECT_CREATE_VALUE
                   ? "arken-select__item--create"

@@ -20,6 +20,7 @@ export interface CatalogActions {
       name: string;
       description: string;
       data?: Record<string, unknown>;
+      diceFrameAssetId?: string | null;
     },
     characterId?: string,
   ) => Promise<CatalogEntryDto>;

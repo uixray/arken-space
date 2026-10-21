@@ -1,0 +1,111 @@
+name: release-images
+
+# Сборка production-образов server и web для выкладки на bb03.
+#
+# На production-хосте нет checkout и build-окружения, а собирать монорепо
+# рядом с живым сервисом нельзя: не хватает памяти и диска. Образы собираются
+# здесь из точной ревизии `main`, сохраняются одним `docker save` архивом и
+# отдаются хосту как artifact. Хост сверяет sha256 архива и image ID с
+# `manifest.json` до `docker load`.
+#
+# Только release gate: запускается вручную, в PR-матрицу не входит. Секретов в
+# образах нет — env подаётся в рантайме, поэтому artifact живёт сутки.
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: "Точный 40-символьный SHA из истории origin/main"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-images-${{ inputs.revision }}
+  cancel-in-progress: false
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    # Нативная сборка sharp в Dockerfile.server занимает основную часть времени.
+    timeout-minutes: 60
+
+    env:
+      REVISION: ${{ inputs.revision }}
+
+    steps:
+      - name: Validate revision format
+        run: |
+          printf '%s' "$REVISION" | grep -Eq '^[0-9a-f]{40}$' || {
+            echo "revision должен быть полным SHA из 40 hex-символов" >&2
+            exit 1
+          }
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Выкладывается только то, что уже в main: локальный или несмерженный
+      # SHA отвергается так же, как в release.sh.
+      - name: Require revision in origin/main
+        run: |
+          test "$(git rev-parse HEAD)" = "$REVISION"
+          git merge-base --is-ancestor "$REVISION" origin/main
+
+      - name: Free disk space
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc || true
+          df -h / | tail -1
+
+      - name: Build server image
+        run: |
+          docker build --file Dockerfile.server \
+            --label "org.opencontainers.image.revision=$REVISION" \
+            --tag "arken-release-server:$REVISION" .
+
+      - name: Build web image
+        run: |
+          docker build --file Dockerfile.web \
+            --label "org.opencontainers.image.revision=$REVISION" \
+            --tag "arken-release-web:$REVISION" .
+
+      - name: Save images and manifest
+        run: |
+          mkdir -p release-images
+          archive="release-images/arken-release-$REVISION.tar"
+          docker save --output "$archive" \
+            "arken-release-server:$REVISION" "arken-release-web:$REVISION"
+          server_id="$(docker image inspect --format '{{.Id}}' "arken-release-server:$REVISION")"
+          web_id="$(docker image inspect --format '{{.Id}}' "arken-release-web:$REVISION")"
+          archive_sha="$(sha256sum "$archive" | cut -d' ' -f1)"
+          archive_size="$(stat -c '%s' "$archive")"
+          node -e '
+            const [revision, server, web, sha256, size, runId] = process.argv.slice(1);
+            const manifest = {
+              format: "arken-release-images-v1",
+              revision,
+              images: {
+                server: { tag: `arken-release-server:${revision}`, id: server },
+                web: { tag: `arken-release-web:${revision}`, id: web },
+              },
+              archive: { name: `arken-release-${revision}.tar`, sha256, size: Number(size) },
+              githubRunId: runId,
+              builtAt: new Date().toISOString(),
+            };
+            process.stdout.write(JSON.stringify(manifest, null, 2) + "\n");
+          ' "$REVISION" "$server_id" "$web_id" "$archive_sha" "$archive_size" "$GITHUB_RUN_ID" \
+            > release-images/manifest.json
+          cat release-images/manifest.json
+
+      - name: Upload images
+        uses: actions/upload-artifact@v4
+        with:
+          name: arken-release-images-${{ inputs.revision }}
+          path: release-images/
+          retention-days: 1
+          if-no-files-found: error
+          compression-level: 6

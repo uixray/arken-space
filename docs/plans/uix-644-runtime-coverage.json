@@ -31,10 +31,7 @@
       "apps/web/src/sidebar/ChatPanels.tsx::role:listbox",
       "apps/web/src/sidebar/ChatPanels.tsx::tag:select",
       "apps/web/src/sidebar/InitiativePanel.tsx::tag:details",
-      "apps/web/src/sidebar/SetupPanel.tsx::tag:FormSelect",
-      "apps/web/src/ui/FuturePoolDialogs.tsx::tag:Select",
-      "apps/web/src/ui/GravityFoundationPreview.tsx::tag:Popup",
-      "apps/web/src/ui/GravityFoundationPreview.tsx::tag:Select"
+      "apps/web/src/sidebar/SetupPanel.tsx::tag:FormSelect"
     ],
     "remaining": {
       "singleRuntimeDefectRepresentedBy": [
@@ -764,6 +761,16 @@
       "next": "Scoped menu acceptance complete. Preserve historical registry gaps; no further work until the owner resumes."
     },
     {
+      "file": "apps/web/src/design-system/MemberRulerColorField.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "UIX-509 GM ruler-colour Select per member in Setup overview. DOM-level select/reset/error coverage only (MemberRulerColorField.test.tsx); no browser placement, keyboard or hit-test acceptance claimed.",
+      "evidence": [],
+      "next": "Verify open/select/Escape/outside/focus for the ruler-colour Select in a connected browser gate and attach revision-bound evidence."
+    },
+    {
       "file": "apps/web/src/design-system/Popup.tsx",
       "kind": "tag:Popup",
       "count": 1,
@@ -806,10 +813,10 @@
     {
       "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
       "kind": "tag:select",
-      "count": 1,
+      "count": 2,
       "status": "BLOCKED",
       "classification": "current-source-runtime-evidence-pending",
-      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; UIX-706 pool 3 adds the texture layer select in the same panel; no current browser acceptance claimed.",
       "evidence": [],
       "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
     },
@@ -1085,6 +1092,16 @@
       "next": "Capture offending observer at actual failure; do not repeat identical warm runs or filter client logs."
     },
     {
+      "file": "apps/web/src/ui/ArkenDialog.tsx",
+      "kind": "tag:Popup",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "modal-dialog-surface",
+      "scope": "UIX-709: the ArkenDialog modal branch now renders Base UI Dialog.Popup instead of Gravity Dialog. A blocking modal surface, not a dropdown overlay.",
+      "evidence": [],
+      "next": "Modal ownership stays covered by modal-owner-contract, modal-focus and dialog-focus e2e; no UIX-644 runtime evidence row yet."
+    },
+    {
       "file": "apps/web/src/ui/CursorPresenceMenu.tsx",
       "kind": "tag:Popup",
       "count": 1,
@@ -1095,31 +1112,6 @@
       "next": "Retain scoped cursor/owner acceptance; original TokenPalette observer failure, full registry and physical-device acceptance remain separate."
     },
     {
-      "file": "apps/web/src/ui/FuturePoolDialogs.tsx",
-      "kind": "tag:Select",
-      "count": 1,
-      "status": "BLOCKED",
-      "classification": "preview-only",
-      "scope": "No production caller; historical preview only. Not a missing GM/PLAYER menu.",
-      "evidence": [],
-      "next": "Preserve the static occurrence and re-review if activated; it does not block the current reachable-product runtime gate.",
-      "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
-      "applicability": {
-        "resolution": "NOT_APPLICABLE_CURRENT_PRODUCT",
-        "occurrences": [
-          {
-            "label": "historical future-pool dialog Select",
-            "count": 1,
-            "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
-            "runtimeStatus": "NOT_RUN",
-            "sourceCallerEvidence": "Preview-only chain has no production caller."
-          }
-        ],
-        "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#отдельно-исключённые-из-игровых-popup-сценариев",
-        "reactivationCriterion": "Re-open if FuturePoolDialogs is called from a production route or entry."
-      }
-    },
-    {
       "file": "apps/web/src/ui/GravityFormControls.tsx",
       "kind": "tag:Select",
       "count": 1,
@@ -1128,56 +1120,6 @@
       "scope": "Shared implementation, not another caller. Built tests and true zoom passed, unresolved original RO still prevents complete acceptance.",
       "evidence": ["built", "ro", "exactMainCceMenuRegression"],
       "next": "Do not mark common implementation fixed from non-reproduction. Preserve failure evidence."
-    },
-    {
-      "file": "apps/web/src/ui/GravityFoundationPreview.tsx",
-      "kind": "tag:Popup",
-      "count": 1,
-      "status": "BLOCKED",
-      "classification": "preview-only",
-      "scope": "No production caller; historical preview only. Not a missing GM/PLAYER menu.",
-      "evidence": [],
-      "next": "Preserve the static occurrence and re-review if activated; it does not block the current reachable-product runtime gate.",
-      "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
-      "applicability": {
-        "resolution": "NOT_APPLICABLE_CURRENT_PRODUCT",
-        "occurrences": [
-          {
-            "label": "foundation preview Popup",
-            "count": 1,
-            "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
-            "runtimeStatus": "NOT_RUN",
-            "sourceCallerEvidence": "FoundationPreviewRoute is declared but has no production entry or router link."
-          }
-        ],
-        "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#отдельно-исключённые-из-игровых-popup-сценариев",
-        "reactivationCriterion": "Re-open if FoundationPreviewRoute becomes production-reachable."
-      }
-    },
-    {
-      "file": "apps/web/src/ui/GravityFoundationPreview.tsx",
-      "kind": "tag:Select",
-      "count": 2,
-      "status": "BLOCKED",
-      "classification": "preview-only",
-      "scope": "No production caller; historical preview only. Not a missing GM/PLAYER menu.",
-      "evidence": [],
-      "next": "Preserve both static occurrences and re-review if activated; they do not block the current reachable-product runtime gate.",
-      "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
-      "applicability": {
-        "resolution": "NOT_APPLICABLE_CURRENT_PRODUCT",
-        "occurrences": [
-          {
-            "label": "foundation preview Select controls",
-            "count": 2,
-            "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
-            "runtimeStatus": "NOT_RUN",
-            "sourceCallerEvidence": "FoundationPreviewRoute is declared but has no production entry or router link."
-          }
-        ],
-        "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#отдельно-исключённые-из-игровых-popup-сценариев",
-        "reactivationCriterion": "Re-open both occurrences if FoundationPreviewRoute becomes production-reachable."
-      }
     },
     {
       "file": "apps/web/src/ui/SceneManagerDialog.tsx",

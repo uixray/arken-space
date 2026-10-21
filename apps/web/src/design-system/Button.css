@@ -3,7 +3,6 @@
    Tokens: --color-surface, --color-border, --color-accent, --color-text, etc.
    ========================================================================== */
 
-.g-button,
 .arken-button {
   box-sizing: border-box;
   display: inline-flex;
@@ -34,7 +33,7 @@
 /* --------------------------------------------------------------------------
    Sizes (Compact Desktop & Touch Friendly)
    -------------------------------------------------------------------------- */
-.g-button_size_xs,
+.arken-button--size-xs,
 .arken-button--xs {
   height: 24px;
   padding: 0 var(--space-sm, 8px);
@@ -42,7 +41,7 @@
   gap: var(--space-xs, 4px);
 }
 
-.g-button_size_s,
+.arken-button--size-s,
 .arken-button--s {
   height: 28px;
   padding: 0 var(--space-sm, 8px);
@@ -50,7 +49,7 @@
   gap: var(--space-xs, 4px);
 }
 
-.g-button_size_m,
+.arken-button--size-m,
 .arken-button--m {
   height: var(--size-control-height, 32px);
   padding: 0 var(--space-md, 12px);
@@ -58,7 +57,7 @@
   gap: var(--space-sm, 8px);
 }
 
-.g-button_size_l,
+.arken-button--size-l,
 .arken-button--l {
   height: 36px;
   padding: 0 var(--space-lg, 16px);
@@ -66,7 +65,7 @@
   gap: var(--space-sm, 8px);
 }
 
-.g-button_size_xl,
+.arken-button--size-xl,
 .arken-button--xl {
   height: 44px;
   padding: 0 var(--space-xl, 24px);
@@ -77,12 +76,10 @@
 /* --------------------------------------------------------------------------
    Width modifiers
    -------------------------------------------------------------------------- */
-.g-button_width_max,
 .arken-button--width-max {
   width: 100%;
 }
 
-.g-button_width_auto,
 .arken-button--width-auto {
   width: auto;
 }
@@ -92,116 +89,121 @@
    -------------------------------------------------------------------------- */
 
 /* Normal (Subtle Surface Card) */
-.g-button_view_normal,
+.arken-button--view-normal,
 .arken-button--normal {
   background-color: var(--color-surface-raised, #292824);
   border-color: var(--color-border, #47443b);
   color: var(--color-text, #e8e4da);
 }
-.g-button_view_normal:hover:not(:disabled):not(.g-button_disabled),
+.arken-button--view-normal:hover:not(:disabled):not(.arken-button--disabled),
 .arken-button--normal:hover:not(:disabled) {
   background-color: var(--color-surface-hover, #34322c);
   border-color: var(--color-border-hover, #696356);
 }
-.g-button_view_normal:active:not(:disabled):not(.g-button_disabled),
+.arken-button--view-normal:active:not(:disabled):not(.arken-button--disabled),
 .arken-button--normal:active:not(:disabled) {
   background-color: var(--color-surface-active, #34322c);
 }
 
 /* Action (Primary Terracotta Clay Accent) */
-.g-button_view_action,
+.arken-button--view-action,
 .arken-button--action {
   background-color: var(--color-accent, #c46f49);
   border-color: var(--color-accent, #c46f49);
   color: #ffffff;
   font-weight: 600;
 }
-.g-button_view_action:hover:not(:disabled):not(.g-button_disabled),
+.arken-button--view-action:hover:not(:disabled):not(.arken-button--disabled),
 .arken-button--action:hover:not(:disabled) {
   background-color: var(--color-accent-hover, #d57d55);
   border-color: var(--color-accent-hover, #d57d55);
 }
-.g-button_view_action:active:not(:disabled):not(.g-button_disabled),
+.arken-button--view-action:active:not(:disabled):not(.arken-button--disabled),
 .arken-button--action:active:not(:disabled) {
   background-color: var(--color-accent-active, #d57d55);
 }
 
 /* Flat / Ghost (Toolbar & Icons) */
-.g-button_view_flat,
-.g-button_view_flat-secondary,
+.arken-button--view-flat,
+.arken-button--view-flat-secondary,
 .arken-button--flat {
   background-color: transparent;
   border-color: transparent;
   color: var(--color-text-muted, #aaa598);
 }
-.g-button_view_flat:hover:not(:disabled):not(.g-button_disabled),
-.g-button_view_flat-secondary:hover:not(:disabled):not(.g-button_disabled),
+.arken-button--view-flat:hover:not(:disabled):not(.arken-button--disabled),
+.arken-button--view-flat-secondary:hover:not(:disabled):not(
+    .arken-button--disabled
+  ),
 .arken-button--flat:hover:not(:disabled) {
   background-color: var(--color-surface-hover, #34322c);
   color: var(--color-text, #e8e4da);
 }
-.g-button_view_flat:active:not(:disabled):not(.g-button_disabled),
+.arken-button--view-flat:active:not(:disabled):not(.arken-button--disabled),
 .arken-button--flat:active:not(:disabled) {
   background-color: var(--color-surface-active, #34322c);
 }
 
 /* Outlined */
-.g-button_view_outlined,
+.arken-button--view-outlined,
 .arken-button--outlined {
   background-color: transparent;
   border-color: var(--color-border, #47443b);
   color: var(--color-text, #e8e4da);
 }
-.g-button_view_outlined:hover:not(:disabled):not(.g-button_disabled),
+.arken-button--view-outlined:hover:not(:disabled):not(.arken-button--disabled),
 .arken-button--outlined:hover:not(:disabled) {
   background-color: var(--color-surface-hover, #34322c);
   border-color: var(--color-border-hover, #696356);
 }
 
 /* Raised */
-.g-button_view_raised,
+.arken-button--view-raised,
 .arken-button--raised {
   background-color: var(--color-surface-raised, #292824);
   border-color: var(--color-border, #47443b);
   color: var(--color-text, #e8e4da);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
-.g-button_view_raised:hover:not(:disabled):not(.g-button_disabled),
+.arken-button--view-raised:hover:not(:disabled):not(.arken-button--disabled),
 .arken-button--raised:hover:not(:disabled) {
   background-color: var(--color-surface-hover, #34322c);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
 }
 
 /* Danger */
-.g-button_view_flat-danger,
-.g-button_view_outlined-danger,
+.arken-button--view-flat-danger,
+.arken-button--view-outlined-danger,
 .arken-button--danger {
   color: var(--color-danger, #da6b61);
 }
-.g-button_view_flat-danger {
+.arken-button--view-flat-danger {
   background-color: transparent;
   border-color: transparent;
 }
-.g-button_view_flat-danger:hover:not(:disabled):not(.g-button_disabled) {
+.arken-button--view-flat-danger:hover:not(:disabled):not(
+    .arken-button--disabled
+  ) {
   background-color: rgba(218, 107, 97, 0.12);
   color: #ff8278;
 }
-.g-button_view_outlined-danger {
+.arken-button--view-outlined-danger {
   background-color: transparent;
   border-color: var(--color-danger, #da6b61);
 }
-.g-button_view_outlined-danger:hover:not(:disabled):not(.g-button_disabled) {
+.arken-button--view-outlined-danger:hover:not(:disabled):not(
+    .arken-button--disabled
+  ) {
   background-color: rgba(218, 107, 97, 0.12);
 }
 
 /* Success */
-.g-button_view_flat-success,
-.g-button_view_outlined-success {
+.arken-button--view-flat-success,
+.arken-button--view-outlined-success {
   color: var(--color-success, #7ba77a);
 }
 
 /* Selected state */
-.g-button_selected,
 .arken-button--selected {
   background-color: var(--color-surface-active, #34322c);
   border-color: var(--color-accent, #c46f49);
@@ -211,7 +213,6 @@
 /* --------------------------------------------------------------------------
    Focus Visibility (WCAG 2.1 AA)
    -------------------------------------------------------------------------- */
-.g-button:focus-visible,
 .arken-button:focus-visible {
   outline: var(--focus-ring-width, 2px) solid var(--color-focus, #c46f49);
   outline-offset: var(--focus-ring-offset, 1px);
@@ -220,8 +221,6 @@
 /* --------------------------------------------------------------------------
    Disabled state
    -------------------------------------------------------------------------- */
-.g-button:disabled,
-.g-button_disabled,
 .arken-button:disabled,
 .arken-button--disabled {
   opacity: 0.45;
@@ -232,7 +231,6 @@
 /* --------------------------------------------------------------------------
    Loading state
    -------------------------------------------------------------------------- */
-.g-button_loading,
 .arken-button--loading {
   cursor: wait;
 }
@@ -263,7 +261,7 @@
 /* --------------------------------------------------------------------------
    Internal layout: Text, Icons, Pins
    -------------------------------------------------------------------------- */
-.g-button__text {
+.arken-button__text {
   display: inline-flex;
   align-items: center;
   max-width: 100%;
@@ -272,7 +270,7 @@
   white-space: nowrap;
 }
 
-.g-button__icon {
+.arken-button__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -280,21 +278,21 @@
 }
 
 /* Pins (border-radius combos) */
-.g-button_pin_brick-brick {
+.arken-button--pin-brick-brick {
   border-radius: 0;
 }
-.g-button_pin_circle-circle {
+.arken-button--pin-circle-circle {
   border-radius: var(--radius-pill, 999px);
 }
-.g-button_pin_round-brick {
+.arken-button--pin-round-brick {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }
-.g-button_pin_brick-round {
+.arken-button--pin-brick-round {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
 }
-.g-button_pin_clear-clear {
+.arken-button--pin-clear-clear {
   border-radius: 0;
   border-color: transparent;
 }

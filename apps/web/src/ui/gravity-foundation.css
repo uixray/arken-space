@@ -26,33 +26,35 @@
   --arken-layer-toast: 3000;
 }
 
-/* Text controls need UIKit's dedicated outline hooks. Native input focus
- * styles alone are overridden by the component stylesheet. Keep one mapping
- * for baseline, classic and personal themes; the semantic color is inherited. */
-.g-root {
-  --g-text-input-focus-outline-color: var(--color-focus);
-  --g-text-area-focus-outline-color: var(--color-focus);
+/* UIX-317 keyboard focus ring for text controls, one rule for baseline,
+ * classic and personal themes; the semantic color is inherited. UIX-709:
+ * this used to be Gravity's outline hook, which only its own TextInput CSS
+ * read; the design-system controls need the outline spelled out. */
+.arken-text-input__content:has(> input:not(:disabled):focus-visible),
+.arken-text-area__content:has(> textarea:not(:disabled):focus-visible) {
+  outline: var(--focus-ring-width, 2px) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset, 1px);
 }
 
 /* Gravity portals default to z-index 1000. Blocking editors opened from a
  * workspace window must stay above their 1200 parent layer. */
-.g-modal {
+.arken-modal {
   z-index: var(--arken-layer-dialog);
 }
 
 /* A filename can be one long word. Keep the full caption readable without
  * allowing its flex min-content width to cover the independently placed close
  * control: 14px inset + 44px target + 8px gap. Scope to our modal wrapper. */
-.arken-dialog .g-dialog-header {
+.arken-dialog .arken-modal-dialog-header {
   padding-inline-end: 66px;
 }
 
-.arken-dialog .g-dialog-header__caption {
+.arken-dialog .arken-modal-dialog-header__caption {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.arken-dialog .g-dialog-btn-close__btn {
+.arken-dialog .arken-modal-dialog-btn-close__btn {
   width: 44px;
   min-width: 44px;
   min-height: 44px;
@@ -292,18 +294,20 @@
 /* Keep the draft-remove glyph legible on the hovered preview surface.
  * The normal state retains the danger color; use the shared high-contrast
  * foreground on hover rather than changing the whole application's palette. */
-.arken-upload-field__preview .g-button_view_flat-danger {
+.arken-upload-field__preview .arken-button--view-flat-danger {
   --g-button-text-color-hover: var(--g-color-text-primary);
 }
 
-.arken-upload-field__preview .g-button_view_flat-danger .g-button__text {
+.arken-upload-field__preview
+  .arken-button--view-flat-danger
+  .arken-button__text {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 @media (max-width: 767px), (pointer: coarse) {
-  .arken-upload-field__preview .g-button_view_flat-danger {
+  .arken-upload-field__preview .arken-button--view-flat-danger {
     min-width: 44px;
     min-height: 44px;
     flex-shrink: 0;
@@ -373,16 +377,16 @@
 
 /* UIX-317: read-only is selectable content, not a disabled control. A dashed
  * frame supplies a non-color cue without dimming text or blocking selection.
- * Keep the normal solid focus outline and let disabled win if both are set.
- * Match native readonly attributes, not :read-only (which also matches many
- * controls that are not editable text, including selects and checkboxes). */
-.g-text-input__content:has(> input[readonly]:not(:disabled)),
-.g-text-area__content:has(> textarea[readonly]:not(:disabled)) {
+ * The frame is the control's own border (UIX-709: not the inner content box,
+ * which has no border of its own). Keep the normal solid focus outline and
+ * let disabled win if both are set. Match native readonly attributes, not
+ * :read-only (which also matches many controls that are not editable text,
+ * including selects and checkboxes). */
+.arken-text-input:has(
+  > .arken-text-input__content > input[readonly]:not(:disabled)
+),
+.arken-text-area:has(
+  > .arken-text-area__content > textarea[readonly]:not(:disabled)
+) {
   border-style: dashed;
-}
-
-.g-text-input__content:has(> input[readonly]:not(:disabled):focus-visible),
-.g-text-area__content:has(> textarea[readonly]:not(:disabled):focus-visible) {
-  outline: var(--focus-ring-width, 2px) solid var(--color-focus);
-  outline-offset: var(--focus-ring-offset, 1px);
 }

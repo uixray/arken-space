@@ -4,6 +4,7 @@ import { type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
 import { openWorkspaceSection } from "./workspace-nav-helper";
+import { fulfillUnmocked } from "./mock-api-contract";
 
 const ids = {
   campaign: "11111111-1111-4111-8111-111111111111",
@@ -527,7 +528,7 @@ for (const owner of ["edit", "picker", "setup"] as const) {
           unexpected.push(
             `${request.method()} ${new URL(request.url()).pathname}`,
           );
-        return route.fulfill({ json: [] });
+        return fulfillUnmocked(route, new URL(request.url()).pathname);
       });
       await page.routeWebSocket(/\/socket\.io\//, (socket) => socket.close());
       await mockApp(page, () => current);

@@ -174,7 +174,7 @@ multi-campaign provisioning service.
 
 ### HTTP API по доменам
 
-Всего **206** HTTP-маршрута во всех server route-модулях: 85 остаются в
+Всего **208** HTTP-маршрутов во всех server route-модулях: 85 остаются в
 `routes.ts`, остальные разделены по персонажам, столкновениям, паузе кампании,
 operator feedback, заявкам игроков, сюжетному каналу, картам, магии и
 содержимому мира.
@@ -182,7 +182,7 @@ operator feedback, заявкам игроков, сюжетному канал�
 | Домен              | Маршруты                                                                                                                                                                                                                                                                                                            |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Auth/bootstrap     | `/api/auth/*`, `/api/bootstrap`, `/api/diagnostics`, `/api/preview/:membershipId`                                                                                                                                                                                                                                   |
-| Membership/access  | rename membership, private `/api/me/theme` preference CAS, GM same-campaign `/api/members/:id/theme-default` default CAS, legacy invite, list/revoke/rotate persistent player access                                                                                                                                |
+| Membership/access  | rename membership, private `/api/me/theme` preference CAS, GM same-campaign `/api/members/:id/theme-default` default CAS, GM same-campaign `/api/members/:id/ruler-color` (UIX-509), private `/api/me/dice-frame` (UIX-457), legacy invite, list/revoke/rotate persistent player access                             |
 | Characters/catalog | character CRUD, controllers, media, campaign catalog, assignment snapshots, counters, recharge, roll                                                                                                                                                                                                                |
 | Scenes/canvas      | scene metadata/activation/config, definitions, placements, layers, fog, drawings, bulk, history/undo/redo, состояния фигур (`/api/tokens/:id/conditions`)                                                                                                                                                           |
 | Столкновения       | создание, переходы состояний, применение результатов                                                                                                                                                                                                                                                                |
@@ -203,7 +203,17 @@ same-/cross-campaign and non-GM evidence is
 `apps/server/src/player-theme-routes.integration.test.ts`; the route key is
 registered in `tests/helpers/campaign-isolation-routes.ts`, so an unlisted
 future `:id` route fails the inventory guard rather than becoming an exception.
-| Media/feedback | загрузка и выдача ассетов, генерация изображения токена, публичные предложения, отчёты, `client-logs` |
+`PATCH /api/members/:id/ruler-color` (UIX-509) follows the same rule: GM only,
+same-campaign membership, a palette key from `RULER_COLOR_PALETTE` or `null`;
+the colour reaches peers inside `ruler:updated`, never through the member list.
+`PATCH /api/me/dice-frame` (UIX-457) takes no target id: it sets only the
+caller's own frame and accepts a `DICE_FRAME` asset of the same campaign or
+`null`. A skill frame is `diceFrameAssetId` on `PATCH /api/catalog/:id`, GM
+only, validated the same way. The server resolves the frame at roll time
+(`resolveDiceFrame`: skill → school → player; school is still empty because
+spell-pack spells are not rollable) and freezes it as `styleFrame` in the
+stored `DiceResult`; a critical result shows the critical frame instead.
+| Media/feedback | загрузка и выдача ассетов, рамки бросков `DICE_FRAME` (анимированный WebP 128 px + постер `?variant=poster`, UIX-457), генерация изображения токена, публичные предложения, отчёты, `client-logs` |
 
 Подробные request-схемы являются экспортами `@arken/contracts`. REST response и
 error shapes централизованы не полностью, поэтому при добавлении endpoint нужно
@@ -450,7 +460,7 @@ Drizzle schema содержит **71** прикладных таблиц.
   удалении меняйте content version и не считайте browser cache persistence;
 - `game_events` и `action_journal` обеспечивают разные виды истории.
 
-Миграции `0000`–`0059` (60 SQL files) применяются при старте server-контейнера
+Миграции `0000`–`0063` (64 SQL files) применяются при старте server-контейнера
 до запуска Fastify. Изменение schema обязано сопровождаться migration, тестами, обновлением
 backup/restore manifests и проверкой role-filtered snapshot.
 

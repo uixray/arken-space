@@ -17,6 +17,8 @@ import {
   statLayoutSchema,
   type StatLayout,
 } from "@arken/contracts";
+import { drawingSnapshotDto } from "./drawing-events.js";
+import { rulerColorKey } from "./member-ruler-color-routes.js";
 import {
   assets,
   campaignSoundPacks,
@@ -883,12 +885,26 @@ export async function buildSnapshot(
     ))
       visibleAssetIds.add(assetId);
   }
+  // UIX-706: a campaign-image stamp or texture stroke exposes its picture
+  // exactly where it is projected below — public layer on a visible scene.
+  for (const { drawing } of drawingRows)
+    if (
+      (drawing.kind === "STAMP" || drawing.kind === "TEXTURE") &&
+      drawing.stampPackId === "campaign-image" &&
+      drawing.stampAssetKey &&
+      visibleSceneIds.has(drawing.sceneId) &&
+      (auth.role === "GM" || drawing.stampLayer === "PUBLIC")
+    )
+      visibleAssetIds.add(drawing.stampAssetKey);
   const visibleAssets =
     auth.role === "GM"
       ? assetRows
       : assetRows.filter(
           (asset) =>
             visibleAssetIds.has(asset.id) ||
+            // UIX-457: рамки — общая палитра кампании: игрок выбирает из них
+            // свою и видит чужие на бросках в ленте.
+            asset.kind === "DICE_FRAME" ||
             (asset.uploadedByMembershipId === auth.membershipId &&
               (asset.kind === "TOKEN" || asset.kind === "PORTRAIT")),
         );
@@ -980,6 +996,8 @@ export async function buildSnapshot(
       displayName: me.displayName,
       characterId: characterByOwner.get(me.id) ?? null,
       revision: me.revision,
+      rulerColor: rulerColorKey(me.rulerColor),
+      diceFrameAssetId: me.diceFrameAssetId,
     },
     personalTheme: personalThemeDto(me),
     members: (auth.role === "GM"
@@ -995,6 +1013,7 @@ export async function buildSnapshot(
         ? {
             defaultThemeId: member.defaultThemeId,
             defaultThemeRevision: member.defaultThemeRevision,
+            rulerColor: rulerColorKey(member.rulerColor),
           }
         : {}),
     })),
@@ -1046,6 +1065,7 @@ export async function buildSnapshot(
               entry.data,
             ) as CatalogEntryDto["data"],
             revision: entry.revision,
+            diceFrameAssetId: entry.diceFrameAssetId,
           }))
         : [],
     tokens: projectedTokens,
@@ -1086,31 +1106,10 @@ export async function buildSnapshot(
         ({ drawing }) =>
           visibleSceneIds.has(drawing.sceneId) &&
           (auth.role === "GM" ||
-            drawing.kind !== "STAMP" ||
+            drawing.kind === "FREEHAND" ||
             drawing.stampLayer === "PUBLIC"),
       )
-      .map(({ drawing }) => ({
-        id: drawing.id,
-        sceneId: drawing.sceneId,
-        authorMembershipId: drawing.authorMembershipId,
-        points: drawing.points,
-        color: drawing.color,
-        strokeWidth: drawing.strokeWidth,
-        x: drawing.x,
-        y: drawing.y,
-        revision: drawing.revision,
-        kind: drawing.kind as "FREEHAND" | "STAMP",
-        ...(drawing.kind === "STAMP"
-          ? {
-              assetKey: drawing.stampAssetKey as
-                "forest" | "mountains" | "clouds",
-              packId: drawing.stampPackId as "builtin-terrain-v1",
-              size: drawing.stampSize!,
-              rotation: drawing.stampRotation!,
-              layer: drawing.stampLayer as "PUBLIC" | "GM",
-            }
-          : {}),
-      })),
+      .map(({ drawing }) => drawingSnapshotDto(drawing)),
     worldMaps: worldMapProjection.snapshot,
     playerRequests: playerRequestRows,
     encounters: encounterRows,

@@ -107,7 +107,11 @@ test("UIX-317 readonly fields have a non-color cue without losing text selection
     for (const name of ["Владелец", "Заметка только для чтения"]) {
       const field = page.getByRole("textbox", { name, exact: true });
       const content = field.locator("..");
-      await expect(content).toHaveCSS("border-top-style", "dashed");
+      // UIX-709: the dashed cue is the control's own border, not the inner box.
+      await expect(content.locator("..")).toHaveCSS(
+        "border-top-style",
+        "dashed",
+      );
       // Reach the readonly field with native Tab, not programmatic focus.
       const previous =
         name === "Владелец"
@@ -146,7 +150,10 @@ test("UIX-317 readonly fields have a non-color cue without losing text selection
       "Недоступная заметка",
     ]) {
       const field = page.getByRole("textbox", { name, exact: true });
-      await expect(field.locator("..")).toHaveCSS("border-top-style", "solid");
+      await expect(field.locator("../..")).toHaveCSS(
+        "border-top-style",
+        "solid",
+      );
       if (name.startsWith("Недоступ")) await expect(field).toBeDisabled();
     }
     await page
@@ -318,7 +325,10 @@ test("UIX-317 editable fields expose the shared keyboard focus ring in every the
           .join(", ");
         await expect(content).toHaveCSS("outline-color", `rgb(${rgb})`);
         await expect(content).toHaveCSS("opacity", "1");
-        await expect(content).toHaveCSS("border-top-style", "solid");
+        await expect(content.locator("..")).toHaveCSS(
+          "border-top-style",
+          "solid",
+        );
         const box = (await content.boundingBox())!;
         expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(width);

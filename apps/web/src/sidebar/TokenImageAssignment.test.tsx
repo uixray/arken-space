@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderComponent, screen, userEvent } from "../test-support/render";
 import type { ImageUploadFieldProps } from "../ui/ImageUploadField";
@@ -17,35 +16,9 @@ import type { GameSnapshot } from "@arken/contracts";
  *
  * Блок показывается игроку: у мастера на его месте кнопка «Настроить».
  *
- * Моки — по тем же причинам, что и в `MediaPanel.test.tsx`: `Button` из
- * `@gravity-ui/uikit` тянет CSS, который здешний transform не берёт, а
- * `ImageUploadField` — отдельная забота с file input и object URL, к этой
- * проверке отношения не имеющая. Оба типизированы своими же контрактами.
+ * `ImageUploadField` заглушён: file input и object URL — отдельная забота,
+ * к этой проверке отношения не имеющая. Заглушка типизирована его контрактом.
  */
-vi.mock("@gravity-ui/uikit", () => ({
-  Button: ({
-    disabled,
-    loading,
-    onClick,
-    children,
-    "aria-describedby": describedBy,
-  }: {
-    disabled?: boolean;
-    loading?: boolean;
-    onClick?: () => void;
-    children?: ReactNode;
-    "aria-describedby"?: string;
-  }) => (
-    <button
-      disabled={disabled}
-      aria-busy={loading}
-      aria-describedby={describedBy}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  ),
-}));
 
 vi.mock("../ui/ImageUploadField", () => ({
   ImageUploadField: ({ label, disabled, onUpdate }: ImageUploadFieldProps) => (

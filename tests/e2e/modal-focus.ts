@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-/** UIKit wraps focus through an owned guard on the next animation frame. */
+/** Base UI wraps focus through its own guard spans beside the dialog popup. */
 export async function assertModalFocusCycle(
   page: Page,
   dialog: Locator,
@@ -9,7 +9,7 @@ export async function assertModalFocusCycle(
 ) {
   await expect(dialog).toBeVisible();
   const recorder = await dialog.evaluateHandle((element) => {
-    const wrapper = element.closest(".g-modal__content-wrapper");
+    const wrapper = element.closest(".arken-modal__content-wrapper");
     if (!wrapper) throw new Error("Modal focus owner is missing");
     const state = { guardVisits: 0, violations: [] as string[] };
     const onFocus = (event: FocusEvent) => {
@@ -17,7 +17,7 @@ export async function assertModalFocusCycle(
       if (!(target instanceof Element) || element.contains(target)) return;
       if (
         target instanceof HTMLElement &&
-        target.matches('[data-floating-ui-focus-guard][data-type="inside"]') &&
+        target.matches("[data-base-ui-focus-guard]") &&
         target.parentElement === wrapper
       ) {
         state.guardVisits += 1;

@@ -32,10 +32,14 @@ describe("Orthographic2DRenderer persisted drawing interactions", () => {
 
   it("keeps the ACL-gated drawing group hittable through its foreground stroke", () => {
     const drawingBlock = rendererSource.slice(
-      rendererSource.indexOf("{props.drawings.map((drawing) => {"),
+      rendererSource.indexOf(
+        "{texturesFirst(props.drawings).map((drawing) => {",
+      ),
       rendererSource.indexOf(
         "{pendingDrawings",
-        rendererSource.indexOf("{props.drawings.map((drawing) => {"),
+        rendererSource.indexOf(
+          "{texturesFirst(props.drawings).map((drawing) => {",
+        ),
       ),
     );
 

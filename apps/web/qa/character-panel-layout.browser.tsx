@@ -5,8 +5,8 @@ import { CampaignActionsContext } from "../src/campaign-actions-context";
 import { CharacterPanel } from "../src/sidebar/CharacterWorkspace";
 import { playerSnapshot } from "../src/test-support/game-snapshot-fixtures";
 // Mirror main.tsx production cascade/order after the component graph is loaded.
-import "@gravity-ui/uikit/styles/styles.css";
 import "../src/design-system/tokens.generated.css";
+import "../src/ui/theme-root.css";
 import "../src/design-system/foundations.css";
 import "../src/ui/gravity-foundation.css";
 import "../src/styles.css";

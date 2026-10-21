@@ -20,16 +20,30 @@ export interface ImageUploadFieldProps {
   onUpdate: (file?: File) => void;
 }
 
-const SUPPORTED_IMAGE_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-]);
+const DEFAULT_ACCEPT = "image/png,image/jpeg,image/webp";
+const TYPE_NAMES: Record<string, string> = {
+  "image/png": "PNG",
+  "image/apng": "APNG",
+  "image/jpeg": "JPEG",
+  "image/webp": "WebP",
+  "image/gif": "GIF",
+};
 
-function validateImageUploadFile(file: File) {
-  return SUPPORTED_IMAGE_TYPES.has(file.type)
-    ? null
-    : "Поддерживаются только PNG, JPEG и WebP.";
+/** MIME-типы из `accept`; расширения там — подсказка системному диалогу. */
+function acceptedImageTypes(accept: string) {
+  return new Set(
+    accept
+      .split(",")
+      .map((entry) => entry.trim().toLowerCase())
+      .filter((entry) => entry.startsWith("image/")),
+  );
+}
+
+function validateImageUploadFile(file: File, accept: string) {
+  const types = acceptedImageTypes(accept);
+  if (types.has(file.type)) return null;
+  const names = [...types].map((type) => TYPE_NAMES[type] ?? type);
+  return `Поддерживаются только ${names.slice(0, -1).join(", ")}${names.length > 1 ? " и " : ""}${names.at(-1) ?? ""}.`;
 }
 
 function firstTransferredFile(
@@ -45,7 +59,7 @@ function firstTransferredFile(
 export function ImageUploadField({
   label,
   value,
-  accept = "image/png,image/jpeg,image/webp",
+  accept = DEFAULT_ACCEPT,
   disabled,
   hint,
   unifiedIntake = false,
@@ -61,7 +75,7 @@ export function ImageUploadField({
 
   const acceptFile = (file?: File | null) => {
     if (disabled || !file) return;
-    const nextError = validateImageUploadFile(file);
+    const nextError = validateImageUploadFile(file, accept);
     setIntakeError(nextError ?? "");
     if (!nextError) onUpdate(file);
   };

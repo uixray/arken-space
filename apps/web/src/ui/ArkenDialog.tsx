@@ -1,9 +1,17 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
-import { Dialog } from "@gravity-ui/uikit";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  type ReactNode,
+} from "react";
+import { Dialog } from "@base-ui/react/dialog";
+import { Button } from "../design-system/Button";
 import { useWorkspaceWindow } from "./useWorkspaceWindow";
 import { OverlayOwnerContext } from "./overlay-owner";
 import { AppIcon } from "./AppIcon";
 import { CloseIcon, ResetWindowIcon } from "./icons";
+import "./modal-dialog.css";
 
 export interface ArkenDialogProps {
   open: boolean;
@@ -42,6 +50,8 @@ export function ArkenDialog({
 }: ArkenDialogProps) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const wasOpen = useRef(open);
   // Firefox can leave `:open` true after the native popup consumed Escape.
@@ -68,12 +78,24 @@ export function ArkenDialog({
     return () => previousFocus.current?.focus();
   }, [open, variant]);
 
+  // Base UI returns focus only to a Dialog.Trigger, and ArkenDialog has none:
+  // remember who had focus when the modal opened and hand it back on close,
+  // as Gravity's Modal did.
+  const modalOpener = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    if (!open || variant !== "modal") return;
+    const active = document.activeElement;
+    modalOpener.current =
+      active instanceof HTMLElement && active !== document.body ? active : null;
+  }, [open, variant]);
+
   useEffect(() => {
     const justClosed = wasOpen.current && !open;
     wasOpen.current = open;
     if (!justClosed || variant !== "modal") return;
     const frame = requestAnimationFrame(() => {
-      const modals = document.querySelectorAll<HTMLElement>(".g-modal_open");
+      const modals =
+        document.querySelectorAll<HTMLElement>(".arken-modal--open");
       const owner = modals[modals.length - 1];
       if (!owner || owner.contains(document.activeElement)) return;
       owner
@@ -275,35 +297,123 @@ export function ArkenDialog({
     );
   }
 
+  // UIX-709: the former Gravity Dialog markup on Base UI. Only a press on
+  // this dialog's own veil closes it, as before: presses in toasts or other
+  // portals are not "outside" this dialog.
   return (
     <OverlayOwnerContext.Provider value="modal">
-      <Dialog
-        className="arken-dialog"
+      <Dialog.Root
         open={open}
-        onClose={onClose}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) onClose();
         }}
-        size="m"
-        initialFocus="cancel"
-        contentOverflow="auto"
-        aria-label={title}
+        disablePointerDismissal
       >
-        <Dialog.Header caption={title} />
-        <Dialog.Body>{children}</Dialog.Body>
-        {footer ? (
-          <Dialog.Footer
-            preset={danger ? "danger" : "default"}
-            textButtonApply={applyLabel}
-            textButtonCancel={cancelLabel}
-            onClickButtonApply={onApply}
-            onClickButtonCancel={onClose}
-            loading={loading}
-            errorText={error}
-            showError={Boolean(error)}
-          />
-        ) : null}
-      </Dialog>
+        <Dialog.Portal>
+          <div
+            className="arken-modal arken-modal--open arken-dialog__modal"
+            data-floating-ui-status="open"
+            onPointerDown={(event) => {
+              const target = event.target;
+              if (
+                target instanceof Node &&
+                event.currentTarget.contains(target) &&
+                !popupRef.current?.contains(target)
+              )
+                onClose();
+            }}
+          >
+            <div className="arken-modal__content-aligner">
+              <div className="arken-modal__content-wrapper">
+                <Dialog.Popup
+                  ref={popupRef}
+                  className="arken-modal__content arken-modal__content--has-scroll"
+                  aria-label={title}
+                  initialFocus={() => cancelRef.current ?? popupRef.current}
+                  finalFocus={() => {
+                    const opener = modalOpener.current;
+                    return opener?.isConnected ? opener : true;
+                  }}
+                >
+                  <div
+                    className={[
+                      "arken-modal-dialog arken-modal-dialog--size-m arken-modal-dialog--has-close arken-modal-dialog--has-scroll arken-dialog",
+                      className,
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    <div className="arken-modal-dialog-btn-close">
+                      <Button
+                        view="flat"
+                        size="l"
+                        className="arken-modal-dialog-btn-close__btn"
+                        onClick={onClose}
+                        aria-label="Закрыть диалоговое окно"
+                      >
+                        {/* An icon slot, not text: the 44px target leaves no
+                            room for size-l text padding around the glyph. */}
+                        <span className="arken-button__icon" aria-hidden="true">
+                          <span className="arken-button__icon-inner">
+                            <AppIcon icon={CloseIcon} size={20} />
+                          </span>
+                        </span>
+                      </Button>
+                    </div>
+                    <div className="arken-modal-dialog-header">
+                      <div className="arken-modal-dialog-header__caption">
+                        {title}
+                      </div>
+                    </div>
+                    <div className="arken-modal-dialog-body">{children}</div>
+                    {footer ? (
+                      <div className="arken-modal-dialog-footer">
+                        <div className="arken-modal-dialog-footer__bts-wrapper">
+                          <div className="arken-modal-dialog-footer__button arken-modal-dialog-footer__button--action-cancel">
+                            <Button
+                              ref={cancelRef}
+                              view="flat"
+                              size="l"
+                              width="max"
+                              onClick={onClose}
+                              disabled={loading}
+                            >
+                              {cancelLabel}
+                            </Button>
+                          </div>
+                          <div className="arken-modal-dialog-footer__button arken-modal-dialog-footer__button--action-apply">
+                            <Button
+                              type="submit"
+                              view="action"
+                              size="l"
+                              width="max"
+                              onClick={onApply}
+                              loading={loading}
+                              className={`arken-modal-dialog-footer__button-apply arken-modal-dialog-footer__button-apply--preset-${danger ? "danger" : "default"}`}
+                            >
+                              {applyLabel}
+                            </Button>
+                            {error ? (
+                              <div
+                                className="arken-modal-dialog-footer__error-popup"
+                                role="alert"
+                              >
+                                <div className="arken-modal-dialog-footer__error">
+                                  {error}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </Dialog.Popup>
+              </div>
+            </div>
+          </div>
+        </Dialog.Portal>
+      </Dialog.Root>
     </OverlayOwnerContext.Provider>
   );
 }

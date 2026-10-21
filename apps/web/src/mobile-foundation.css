@@ -137,7 +137,7 @@
     overscroll-behavior: contain;
   }
 
-  .app-shell--compact .account-menu__content :is(button, .g-button) {
+  .app-shell--compact .account-menu__content :is(button, .arken-button) {
     min-height: 44px;
     height: auto;
     white-space: normal;
@@ -483,6 +483,18 @@
     width: 100%;
   }
 
+  .compact-menu-soundpad-slot {
+    display: flex;
+    margin-bottom: 8px;
+  }
+
+  .compact-menu-soundpad-slot .soundpad__launcher {
+    flex: 1 1 auto;
+    min-height: 44px;
+    padding: 12px 14px;
+    text-align: left;
+  }
+
   .compact-menu-actions-list {
     display: flex;
     flex-direction: column;
@@ -601,7 +613,7 @@
     flex-wrap: wrap;
   }
 
-  .app-shell--compact #activity-sidebar .activity-quick-rolls > .g-button,
+  .app-shell--compact #activity-sidebar .activity-quick-rolls > .arken-button,
   .app-shell--compact #activity-sidebar .dice-tray-panel__toolbar button,
   .app-shell--compact #activity-sidebar .skill-chat-card button {
     min-width: 44px;
@@ -636,7 +648,7 @@
     grid-template-columns: 36px minmax(10px, 1fr) 36px 36px;
   }
 
-  .app-shell--compact .resource-counters__item .g-button {
+  .app-shell--compact .resource-counters__item .arken-button {
     min-width: 36px;
     min-height: 36px;
     padding-inline: 2px;
@@ -668,7 +680,7 @@
     min-height: 44px;
   }
 
-  .app-shell--compact .chat-composer-input textarea.g-text-area__control {
+  .app-shell--compact .chat-composer-input textarea.arken-text-area__control {
     min-height: 68px;
     padding-right: 144px;
     font-size: 16px;
@@ -794,7 +806,8 @@
     max-width: 100%;
   }
 
-  .character-workspace[data-compact="true"] :is(button, summary, .g-button) {
+  .character-workspace[data-compact="true"]
+    :is(button, summary, .arken-button) {
     min-width: 44px;
     min-height: 44px;
   }
@@ -806,7 +819,7 @@
     grid-template-columns: 44px minmax(0, 1fr) minmax(72px, auto) 44px;
   }
 
-  .character-workspace[data-compact="true"] .g-checkbox,
+  .character-workspace[data-compact="true"] .arken-checkbox,
   .app-shell--compact .compact-check {
     min-height: 44px;
     align-items: center;
@@ -835,9 +848,9 @@
       .app-shell--compact,
       .character-workspace[data-compact="true"],
       .landing-shell,
-      .g-dialog
+      .arken-modal-dialog
     )
-    :is(.g-select, .g-text-input, .g-text-area) {
+    :is(.arken-select, .arken-text-input, .arken-text-area) {
     min-width: 0;
     max-width: 100%;
   }
@@ -846,9 +859,9 @@
       .app-shell--compact,
       .character-workspace[data-compact="true"],
       .landing-shell,
-      .g-dialog
+      .arken-modal-dialog
     )
-    :is(.g-text-input, .g-select__control) {
+    :is(.arken-text-input, .arken-select__control) {
     min-height: 44px;
   }
 
@@ -856,9 +869,13 @@
       .app-shell--compact,
       .character-workspace[data-compact="true"],
       .landing-shell,
-      .g-dialog
+      .arken-modal-dialog
     )
-    :is(input.g-text-input__control, textarea.g-text-area__control, select) {
+    :is(
+      input.arken-text-input__control,
+      textarea.arken-text-area__control,
+      select
+    ) {
     min-width: 0;
     min-height: 44px;
     max-width: 100%;
@@ -929,7 +946,7 @@
   }
 
   /* Geometry only: keep Gravity's modal/workspace popup ownership layers. */
-  .g-modal {
+  .arken-modal {
     --g-modal-margin: 8px;
     top: var(--compact-viewport-top, 0px);
     bottom: auto;
@@ -938,7 +955,7 @@
       env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   }
 
-  .g-modal .g-dialog {
+  .arken-modal .arken-modal-dialog {
     --_--side-padding: 16px;
     width: min(
       720px,
@@ -953,18 +970,18 @@
     );
   }
 
-  .g-modal .g-modal__content_has-scroll {
+  .arken-modal .arken-modal__content--has-scroll {
     max-height: calc(
       min(var(--compact-viewport-height, 100dvh), 100dvh) -
         env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px
     );
   }
 
-  .g-modal :is(.g-dialog__footer, .g-dialog-footer) {
+  .arken-modal :is(.arken-modal-dialog__footer, .arken-modal-dialog-footer) {
     flex-wrap: wrap;
   }
 
-  .g-modal :is(button, .g-button) {
+  .arken-modal :is(button, .arken-button) {
     min-height: 45px;
   }
 

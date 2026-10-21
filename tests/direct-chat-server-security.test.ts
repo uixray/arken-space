@@ -1,7 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
-const routesUrl = new URL("../apps/server/src/routes.ts", import.meta.url);
+// Chat routes moved out of routes.ts unchanged; the invariants are read
+// from their new module.
+const routesUrl = new URL("../apps/server/src/chat-routes.ts", import.meta.url);
 // UIX-450: проекция сообщений переехала из `snapshot.ts` в отдельный модуль,
 // чтобы маршрут истории отдавал ровно её же, а не свою копию. Инвариант тот
 // же, проверяется в новом месте.

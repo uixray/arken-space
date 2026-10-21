@@ -48,6 +48,8 @@ describe("asset dependency registry", () => {
       "WORLD_CONTENT_MEDIA",
       "WORLD_CONTENT_INSTANCE_PORTRAIT",
       "GENERATED_TOKEN_SOURCE",
+      "MEMBER_DICE_FRAME",
+      "SKILL_DICE_FRAME",
     ]);
   });
 });
