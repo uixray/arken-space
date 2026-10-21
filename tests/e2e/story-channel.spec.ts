@@ -159,6 +159,8 @@ function adminPost(
     updatedAt: now,
     archivedAt: lifecycle === "ARCHIVED" ? now : null,
     gmNotes: "GM-only preparation note",
+    worldDay: null,
+    era: null,
   };
 }
 
