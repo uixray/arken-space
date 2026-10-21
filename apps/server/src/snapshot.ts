@@ -18,6 +18,7 @@ import {
   type StatLayout,
 } from "@arken/contracts";
 import { drawingSnapshotDto } from "./drawing-events.js";
+import { rulerColorKey } from "./member-ruler-color-routes.js";
 import {
   assets,
   campaignSoundPacks,
@@ -992,6 +993,7 @@ export async function buildSnapshot(
       displayName: me.displayName,
       characterId: characterByOwner.get(me.id) ?? null,
       revision: me.revision,
+      rulerColor: rulerColorKey(me.rulerColor),
     },
     personalTheme: personalThemeDto(me),
     members: (auth.role === "GM"
@@ -1007,6 +1009,7 @@ export async function buildSnapshot(
         ? {
             defaultThemeId: member.defaultThemeId,
             defaultThemeRevision: member.defaultThemeRevision,
+            rulerColor: rulerColorKey(member.rulerColor),
           }
         : {}),
     })),

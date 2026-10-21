@@ -435,6 +435,13 @@
       "when": 1792075085745,
       "tag": "0061_texture_brush_strokes",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1792274126660,
+      "tag": "0062_member_ruler_color",
+      "breakpoints": true
     }
   ]
 }

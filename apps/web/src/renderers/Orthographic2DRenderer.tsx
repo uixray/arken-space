@@ -347,7 +347,7 @@ import {
 } from "./cursor-broadcast";
 import { cursorColorForMembership } from "./cursor-color";
 import { AnimatedMapPing } from "./AnimatedMapPing";
-import { rulerColorForMembership } from "./ruler-colors";
+import { rulerStyle } from "./ruler-colors";
 import {
   mapViewportAriaKeyShortcuts,
   regionCommitTarget,
@@ -1330,16 +1330,20 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     if (rulerDraft) {
       const points = rulerDraftPoints(rulerDraft);
       const gridSize = props.scene.grid.enabled ? props.scene.grid.size : 1;
+      const index = result.findIndex(
+        (r) => r.membershipId === props.membershipId,
+      );
+      // UIX-509: the server's echo carries the freshest colour; before the
+      // first echo the draft uses the colour from the snapshot.
       const localRuler = {
         sceneId: props.scene.id,
         membershipId: props.membershipId,
         displayName: "Вы",
         points,
         distance: rulerPolylineDistance(points, gridSize),
+        rulerColor:
+          index >= 0 ? result[index]!.rulerColor : props.ownRulerColor,
       };
-      const index = result.findIndex(
-        (r) => r.membershipId === props.membershipId,
-      );
       if (index >= 0) {
         result[index] = localRuler;
       } else {
@@ -1353,6 +1357,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     props.scene.grid,
     props.scene.id,
     props.membershipId,
+    props.ownRulerColor,
   ]);
 
   const selectableObjects = selectMapObjects(
@@ -3900,7 +3905,12 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
 
         <Layer listening={false}>
           {displayRulers.map((ruler) => {
-            const rulerColor = rulerColorForMembership(ruler.membershipId);
+            const style = rulerStyle(
+              ruler.rulerColor,
+              ruler.membershipId,
+              visual.color.selectionOutline,
+            );
+            const rulerColor = style.stroke;
             // UIX-381: `points` is the committed waypoints plus (while a
             // local drag is live) the in-progress segment following the
             // pointer. A lone point (drag just started, no movement yet) has
@@ -3934,7 +3944,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                       points={points
                         .slice(0, -1)
                         .flatMap((point) => [point.x, point.y])}
-                      stroke={visual.color.selectionOutline}
+                      stroke={style.halo}
                       strokeWidth={5.5 / scale}
                       lineJoin="round"
                       opacity={0.6}
@@ -3952,8 +3962,8 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                 )}
                 <Arrow
                   points={[beforeLast.x, beforeLast.y, last.x, last.y]}
-                  stroke={visual.color.selectionOutline}
-                  fill={visual.color.selectionOutline}
+                  stroke={style.halo}
+                  fill={style.halo}
                   strokeWidth={5.5 / scale}
                   pointerLength={13 / scale}
                   pointerWidth={13 / scale}
@@ -3995,7 +4005,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                   />
                   <Text
                     text={labelText}
-                    fill={rulerColor}
+                    fill={style.label}
                     fontSize={13 / scale}
                     fontStyle="bold"
                   />

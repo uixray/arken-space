@@ -1,0 +1,2 @@
+ALTER TABLE "memberships" ADD COLUMN "ruler_color" text;--> statement-breakpoint
+ALTER TABLE "memberships" ADD CONSTRAINT "memberships_ruler_color_check" CHECK ("memberships"."ruler_color" is null or "memberships"."ruler_color" in ('green','lilac','orange','purple','black','blue'));

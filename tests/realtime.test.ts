@@ -1996,6 +1996,39 @@ describe("durable realtime token commands", () => {
     });
   });
 
+  it("UIX-509: attaches the sender's GM-assigned ruler colour to every update", async () => {
+    const nextUpdate = () =>
+      new Promise<Parameters<ServerToClientEvents["ruler:updated"]>[0]>(
+        (resolve) => otherClient.once("ruler:updated", resolve),
+      );
+    const move = () =>
+      client.emit("ruler:update", {
+        sceneId: ids.scene,
+        points: [
+          { x: 0, y: 0 },
+          { x: 64, y: 0 },
+        ],
+      });
+    let updated = nextUpdate();
+    move();
+    expect((await updated).rulerColor).toBeNull();
+
+    await database.query(
+      `update memberships set ruler_color = 'purple' where id = '${ids.player}'`,
+    );
+    updated = nextUpdate();
+    move();
+    expect((await updated).rulerColor).toBe("purple");
+
+    await database.query(
+      `update memberships set ruler_color = null where id = '${ids.player}'`,
+    );
+    updated = nextUpdate();
+    move();
+    expect((await updated).rulerColor).toBeNull();
+    client.emit("ruler:clear", { sceneId: ids.scene });
+  });
+
   it("UIX-381: broadcasts the server-computed total distance across every leg of a multi-segment ruler", async () => {
     const updated = new Promise<
       Parameters<ServerToClientEvents["ruler:updated"]>[0]

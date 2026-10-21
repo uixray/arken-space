@@ -9,6 +9,7 @@
 export const CORE_CAMPAIGN_PROBE_KEYS = [
   "PATCH /api/memberships/:id/name",
   "PATCH /api/members/:id/theme-default",
+  "PATCH /api/members/:id/ruler-color",
   "PUT /api/characters/:id/controllers",
   "PATCH /api/characters/:id",
   "POST /api/characters/:id/archive",

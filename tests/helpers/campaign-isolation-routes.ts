@@ -119,6 +119,7 @@ export const CAMPAIGN_ROUTE_KEYS = [
   "PATCH /api/drawings/:id",
   "PATCH /api/memberships/:id/name",
   "PATCH /api/members/:id/theme-default",
+  "PATCH /api/members/:id/ruler-color",
   "PATCH /api/player-requests/:id",
   "PATCH /api/scenes/:id",
   "PATCH /api/scenes/:id/canvas",

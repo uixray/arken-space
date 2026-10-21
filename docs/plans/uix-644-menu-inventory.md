@@ -21,10 +21,11 @@ Negative drift controls remain required; historical results below unchanged.
 Текущий static index расширен до **39 groups / 78 occurrences**. Исторические
 37 / 76 и их PASS / FAIL / BLOCKED ниже не переписаны задним числом.
 
-| Место                                                      | Роль и вход                                       | Владелец / слой                           | Приёмка                                                                                      |
-| ---------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `design-system/PlayerThemeSettings.tsx` — 1 FormSelect     | GM / PLAYER: аккаунт → Оформление                 | Shared FormSelect, modal-owned portal     | Текущий connected gate и real-server persistence CI; не наследует PASS старых списков        |
-| `design-system/MemberDefaultThemeField.tsx` — 1 FormSelect | GM: Подготовка → Игрок → Тема игрока по умолчанию | Shared FormSelect, workspace-owned portal | Отдельные open / select / Escape / focus / outside / save cases; статус до receipt — BLOCKED |
+| Место                                                                 | Роль и вход                                       | Владелец / слой                           | Приёмка                                                                                                                                             |
+| --------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `design-system/PlayerThemeSettings.tsx` — 1 FormSelect                | GM / PLAYER: аккаунт → Оформление                 | Shared FormSelect, modal-owned portal     | Текущий connected gate и real-server persistence CI; не наследует PASS старых списков                                                               |
+| `design-system/MemberDefaultThemeField.tsx` — 1 FormSelect            | GM: Подготовка → Игрок → Тема игрока по умолчанию | Shared FormSelect, workspace-owned portal | Отдельные open / select / Escape / focus / outside / save cases; статус до receipt — BLOCKED                                                        |
+| `design-system/MemberRulerColorField.tsx` — 1 FormSelect на участника | GM: Подготовка → Обзор → Цвета линеек             | Shared FormSelect, workspace-owned portal | DOM: выбор, сброс на «Автоматический», ошибка сохранения (`MemberRulerColorField.test.tsx`); браузерные open / Escape / outside — BLOCKED (UIX-509) |
 
 Для обеих строк сохраняются общий overflow/resize contract и реальные
 pointer/keyboard проверки без force. Новый статический индекс не является

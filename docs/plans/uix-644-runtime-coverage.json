@@ -761,6 +761,16 @@
       "next": "Scoped menu acceptance complete. Preserve historical registry gaps; no further work until the owner resumes."
     },
     {
+      "file": "apps/web/src/design-system/MemberRulerColorField.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "current-source-runtime-evidence-pending",
+      "scope": "UIX-509 GM ruler-colour Select per member in Setup overview. DOM-level select/reset/error coverage only (MemberRulerColorField.test.tsx); no browser placement, keyboard or hit-test acceptance claimed.",
+      "evidence": [],
+      "next": "Verify open/select/Escape/outside/focus for the ruler-colour Select in a connected browser gate and attach revision-bound evidence."
+    },
+    {
       "file": "apps/web/src/design-system/Popup.tsx",
       "kind": "tag:Popup",
       "count": 1,

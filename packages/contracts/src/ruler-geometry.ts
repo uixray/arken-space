@@ -44,3 +44,29 @@ export function rulerPolylineDistance(
   }
   return total / gridSize;
 }
+
+/**
+ * UIX-509: named ruler colours. A membership stores only the key (GM-assigned,
+ * `null` = the hashed per-member fallback); the hex lives here so every client
+ * draws the same colour. Dark entries get a light halo on the canvas.
+ */
+export const RULER_COLOR_PALETTE = {
+  green: "#3fbf5f",
+  lilac: "#c79bf2",
+  orange: "#f08a24",
+  purple: "#8b5cf6",
+  black: "#111111",
+  blue: "#3b82f6",
+} as const;
+export const rulerColorKeySchema = z.enum([
+  "green",
+  "lilac",
+  "orange",
+  "purple",
+  "black",
+  "blue",
+]);
+export type RulerColorKey = z.infer<typeof rulerColorKeySchema>;
+export const memberRulerColorUpdateSchema = z
+  .object({ rulerColor: rulerColorKeySchema.nullable() })
+  .strict();

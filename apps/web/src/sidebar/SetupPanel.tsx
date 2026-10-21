@@ -18,6 +18,7 @@ import type { Props } from "../Sidebar";
 import { AppIcon } from "../ui/AppIcon";
 import { OfflineStatusIcon, OnlineStatusIcon } from "../ui/icons";
 import { MemberDefaultThemeField } from "../design-system/MemberDefaultThemeField";
+import { MemberRulerColors } from "../design-system/MemberRulerColorField";
 import { CampaignStatLayoutEditor } from "./CampaignStatLayoutEditor";
 import { CampaignClockDialog } from "./CampaignClockDialog";
 
@@ -384,6 +385,7 @@ export function SetupPanel(props: Props) {
         >
           Посмотреть глазами игрока
         </Button>
+        <MemberRulerColors members={props.snapshot.members} />
       </div>
       <div className="subsection" hidden aria-hidden="true">
         <h3>Сцены (устаревшее управление)</h3>
