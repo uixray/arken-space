@@ -1014,7 +1014,9 @@ for (const role of ["GM", "PLAYER"] as const) {
         name: "Загрузить",
         exact: true,
       });
-      for (let index = 0; index < 5; index += 1) {
+      // Шесть разделов загрузки у мастера: пять видов + рамки бросков (UIX-457).
+      await expect(uploads).toHaveCount(6);
+      for (let index = 0; index < 6; index += 1) {
         await expect(uploads.nth(index)).toBeDisabled();
         await expect(uploads.nth(index)).toHaveAccessibleDescription(
           "Сначала выберите файл.",
@@ -1022,7 +1024,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       }
       await expect(
         files.getByText("Сначала выберите файл.", { exact: true }),
-      ).toHaveCount(5);
+      ).toHaveCount(6);
       // UIX-589/421: use the real shared upload field, not its component mock.
       // setInputFiles checks the browser reset contract, not OS chooser behavior.
       const portraitInput = files.getByLabel("Портреты персонажей", {
@@ -1137,8 +1139,13 @@ for (const role of ["GM", "PLAYER"] as const) {
       expect(unexpectedWrites).toEqual([]);
       await expect(
         files.getByRole("button", { name: "Загрузить", exact: true }),
-      ).toHaveCount(5);
-      for (const name of ["Карты", "Другие изображения", "Музыка и звуки"]) {
+      ).toHaveCount(6);
+      for (const name of [
+        "Карты",
+        "Другие изображения",
+        "Музыка и звуки",
+        "Рамки бросков",
+      ]) {
         await expect(
           files
             .locator(".upload-section")

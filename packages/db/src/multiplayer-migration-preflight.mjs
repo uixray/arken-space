@@ -58,6 +58,7 @@ export const requiredMembershipColumns = Object.freeze([
   "created_at",
   "default_theme_id",
   "default_theme_revision",
+  "dice_frame_asset_id",
   "display_name",
   "id",
   "revision",

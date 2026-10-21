@@ -76,6 +76,7 @@ import { emitDrawingChange, type DrawingChange } from "./drawing-events.js";
 import { registerEncounterRoutes } from "./encounters.js";
 import { registerPlayerThemeRoutes } from "./player-theme-routes.js";
 import { registerMemberRulerColorRoutes } from "./member-ruler-color-routes.js";
+import { registerMemberDiceFrameRoutes } from "./member-dice-frame-routes.js";
 import { campaignCanvasDatabase } from "./campaign-pause-guard.js";
 import { registerCampaignPauseRoutes } from "./campaign-pause.js";
 import { clearCampaignCanvasEphemera, projectedToken } from "./realtime.js";
@@ -423,6 +424,7 @@ export function registerRoutes(
   );
   registerPlayerThemeRoutes(app, db);
   registerMemberRulerColorRoutes(app, db);
+  registerMemberDiceFrameRoutes(app, db);
   registerEncounterRoutes(app, db, (campaignId) =>
     broadcastSnapshots(io, db, campaignId),
   );

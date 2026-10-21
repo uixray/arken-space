@@ -34,6 +34,8 @@ export const assetKindSchema = z.enum([
   "PORTRAIT",
   "IMAGE",
   "AUDIO",
+  /** UIX-457: рамка броска; анимированный WebP + статичный постер. */
+  "DICE_FRAME",
 ]);
 export const audioPurposeSchema = z.enum(["MUSIC", "SOUND_EFFECT", "BOTH"]);
 export const tokenFramePresetSchema = z.enum([
@@ -1561,6 +1563,8 @@ export const catalogEntryInputSchema = z.object({
 });
 export const catalogEntryCommandSchema = catalogEntryInputSchema.extend({
   actionId: actionIdSchema,
+  /** UIX-457: рамка бросков этого навыка; только для записи каталога кампании. */
+  diceFrameAssetId: z.string().uuid().nullable().optional(),
 });
 export const assignCatalogEntrySchema = z.object({
   actionId: actionIdSchema,
@@ -2357,6 +2361,8 @@ export interface AssetDto {
   height: number | null;
   durationSeconds: number | null;
   url: string;
+  /** UIX-457: статичный кадр рамки броска для истории и reduced motion. */
+  posterUrl?: string;
   createdAt: string;
 }
 
@@ -2375,6 +2381,8 @@ export const assetUsageKindSchema = z.enum([
   "WORLD_CONTENT_INSTANCE_PORTRAIT",
   "GENERATED_TOKEN_SOURCE",
   "MAP_STAMP",
+  "MEMBER_DICE_FRAME",
+  "SKILL_DICE_FRAME",
 ]);
 export type AssetUsageKind = z.infer<typeof assetUsageKindSchema>;
 
@@ -2430,6 +2438,8 @@ export interface MembershipDto {
   defaultThemeRevision?: number;
   /** UIX-509: own membership and the GM's member list only; `null` = hashed fallback. */
   rulerColor?: RulerColorKey | null;
+  /** UIX-457: own membership only — личная рамка бросков, `null` = без рамки. */
+  diceFrameAssetId?: string | null;
 }
 
 export interface PublishedPlayerThemeDto {
@@ -2514,6 +2524,8 @@ export interface CatalogEntryDto {
   description: string;
   data: z.infer<typeof entryDataSchema>;
   revision: number;
+  /** UIX-457: GM-only каталог; рамка бросков навыка. */
+  diceFrameAssetId?: string | null;
 }
 export interface CharacterCatalogEntryDto extends CatalogEntryDto {
   sourceCatalogEntryId: string | null;
@@ -2853,6 +2865,11 @@ export interface DiceFrameChoice {
   source: DiceFrameSource;
 }
 
+/** UIX-457: игрок выбирает свою рамку; `null` снимает выбор. */
+export const memberDiceFrameUpdateSchema = z
+  .object({ diceFrameAssetId: z.string().uuid().nullable() })
+  .strict();
+
 /**
  * Первый непустой источник по порядку. `null` — рамки нет вовсе, и это
  * нормальное состояние: до UIX-457 её не было ни у кого.
@@ -2885,6 +2902,12 @@ export interface DiceResult {
   semanticOutcome?: DiceSemanticOutcome;
   /** Immutable curated frame reference stored with chat history. */
   frame?: DiceFrameReference | null;
+  /**
+   * UIX-457: оформление броска, выбранное сервером в момент броска. Отдельно
+   * от `frame`: критическая рамка — смысл результата, эта — вкус игрока или
+   * мастера, и при крите показывается критическая.
+   */
+  styleFrame?: DiceFrameChoice | null;
 }
 
 export interface SkillCardEntrySnapshot {

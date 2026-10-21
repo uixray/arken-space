@@ -40,8 +40,11 @@ import {
   renderTokenAsset,
   storeGeneratedToken,
   prepareUpload,
+  storeDiceFrame,
   storePreparedUpload,
+  type StoredUpload,
 } from "./storage.js";
+import { prepareDiceFrame } from "./dice-frame-codec.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -256,18 +259,41 @@ export function registerAssetRoutes(
     const reservationKey = `asset-upload:${actionId}`;
     let reserved = false;
     try {
-      const prepared = await prepareUpload(
-        buffer,
-        query.kind === "AUDIO" ? "audio" : "image",
-      );
-      await reserveCampaignMediaBytes(
-        db,
-        auth.campaignId,
-        reservationKey,
-        prepared.upload.sizeBytes,
-      );
-      reserved = true;
-      const stored = await storePreparedUpload(prepared);
+      // UIX-457: рамка броска идёт своим конвейером — общий теряет анимацию.
+      let stored: StoredUpload;
+      let poster: { posterStorageKey: string; posterSizeBytes: number } | null =
+        null;
+      if (query.kind === "DICE_FRAME") {
+        if (buffer.length > env.MAX_IMAGE_BYTES)
+          throw new Error("IMAGE_TOO_LARGE");
+        const encoded = await prepareDiceFrame(buffer);
+        await reserveCampaignMediaBytes(
+          db,
+          auth.campaignId,
+          reservationKey,
+          encoded.animated.length + encoded.poster.length,
+        );
+        reserved = true;
+        const frame = await storeDiceFrame(encoded);
+        stored = frame.upload;
+        poster = {
+          posterStorageKey: frame.posterStorageKey,
+          posterSizeBytes: frame.posterSizeBytes,
+        };
+      } else {
+        const prepared = await prepareUpload(
+          buffer,
+          query.kind === "AUDIO" ? "audio" : "image",
+        );
+        await reserveCampaignMediaBytes(
+          db,
+          auth.campaignId,
+          reservationKey,
+          prepared.upload.sizeBytes,
+        );
+        reserved = true;
+        stored = await storePreparedUpload(prepared);
+      }
       const asset = await db
         .transaction(async (tx) => {
           await lockCampaignMediaQuota(tx, auth.campaignId);
@@ -275,7 +301,7 @@ export function registerAssetRoutes(
             tx,
             auth.campaignId,
             reservationKey,
-            stored!.sizeBytes,
+            stored.sizeBytes,
           );
           const [created] = await tx
             .insert(assets)
@@ -287,6 +313,7 @@ export function registerAssetRoutes(
                 query.kind === "AUDIO" ? (query.audioPurpose ?? "MUSIC") : null,
               name: displayNameFromUpload(file.filename),
               ...stored,
+              ...poster,
             })
             .returning();
           if (!created) throw new Error("ASSET_CREATE_FAILED");
@@ -307,6 +334,7 @@ export function registerAssetRoutes(
         })
         .catch(async (error) => {
           await removeStoredUpload(stored.storageKey);
+          if (poster) await removeStoredUpload(poster.posterStorageKey);
           throw error;
         });
       await broadcast(auth.campaignId);
@@ -325,12 +353,20 @@ export function registerAssetRoutes(
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const { variant } = z
+      .object({ variant: z.literal("poster").optional() })
+      .passthrough()
+      .parse(request.query);
     const [asset] = await db
       .select()
       .from(assets)
       .where(and(eq(assets.id, id), eq(assets.campaignId, auth.campaignId)))
       .limit(1);
     if (!asset) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
+    // UIX-457: постер есть только у рамки броска; остальным — честный 404.
+    const storageKey =
+      variant === "poster" ? asset.posterStorageKey : asset.storageKey;
+    if (!storageKey) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
     if (auth.role !== "GM") {
       const [soundUse] = await db
         .select({ id: campaignSounds.id })
@@ -372,11 +408,8 @@ export function registerAssetRoutes(
         return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
     }
     try {
-      const file = await openStoredFile(
-        asset.storageKey,
-        request.headers.range,
-      );
-      const etag = assetContentVersion(asset.storageKey);
+      const file = await openStoredFile(storageKey, request.headers.range);
+      const etag = assetContentVersion(storageKey);
       reply.header("ETag", etag);
       reply.header("Cache-Control", "private, no-cache");
       if (request.headers["if-none-match"] === etag) {
@@ -404,7 +437,7 @@ export function registerAssetRoutes(
       // браузере: снаружи оба ответа выглядели одинаково.
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         request.log.warn(
-          { assetId: asset.id, storageKey: asset.storageKey },
+          { assetId: asset.id, storageKey },
           "asset.content_missing",
         );
         return reply.code(404).send({ error: "ASSET_CONTENT_NOT_FOUND" });
@@ -413,7 +446,7 @@ export function registerAssetRoutes(
       // Раньше всё это превращалось в 404, и авария хранилища выглядела
       // потерянным ассетом: чинили бы не то.
       request.log.error(
-        { assetId: asset.id, storageKey: asset.storageKey, error },
+        { assetId: asset.id, storageKey, error },
         "asset.content_unreadable",
       );
       return reply.code(500).send({ error: "ASSET_CONTENT_UNREADABLE" });

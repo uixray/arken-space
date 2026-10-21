@@ -902,6 +902,9 @@ export async function buildSnapshot(
       : assetRows.filter(
           (asset) =>
             visibleAssetIds.has(asset.id) ||
+            // UIX-457: рамки — общая палитра кампании: игрок выбирает из них
+            // свою и видит чужие на бросках в ленте.
+            asset.kind === "DICE_FRAME" ||
             (asset.uploadedByMembershipId === auth.membershipId &&
               (asset.kind === "TOKEN" || asset.kind === "PORTRAIT")),
         );
@@ -994,6 +997,7 @@ export async function buildSnapshot(
       characterId: characterByOwner.get(me.id) ?? null,
       revision: me.revision,
       rulerColor: rulerColorKey(me.rulerColor),
+      diceFrameAssetId: me.diceFrameAssetId,
     },
     personalTheme: personalThemeDto(me),
     members: (auth.role === "GM"
@@ -1061,6 +1065,7 @@ export async function buildSnapshot(
               entry.data,
             ) as CatalogEntryDto["data"],
             revision: entry.revision,
+            diceFrameAssetId: entry.diceFrameAssetId,
           }))
         : [],
     tokens: projectedTokens,

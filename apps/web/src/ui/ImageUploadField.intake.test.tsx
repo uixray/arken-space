@@ -361,3 +361,38 @@ describe("UIX-612 — единый intake изображения", () => {
     clickSpy.mockRestore();
   });
 });
+
+describe("UIX-457 accept-driven intake", () => {
+  it("accepts GIF and APNG only where the field declares them", async () => {
+    // Диалог выбора можно обойти перетаскиванием, поэтому проверка живёт в
+    // самом поле: `applyAccept: false` отключает фильтр системного диалога.
+    const user = userEvent.setup({ applyAccept: false });
+    const onUpdate = vi.fn();
+    const { rerender } = renderComponent(
+      <ImageUploadField label="Рамка" onUpdate={onUpdate} />,
+    );
+    const gif = new File(["gif"], "frame.gif", { type: "image/gif" });
+    await user.upload(screen.getByLabelText<HTMLInputElement>("Рамка"), gif);
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Поддерживаются только PNG, JPEG и WebP."),
+    ).toBeInTheDocument();
+
+    rerender(
+      <ImageUploadField
+        label="Рамка"
+        accept=".png,.apng,.gif,.webp,image/png,image/apng,image/gif,image/webp"
+        onUpdate={onUpdate}
+      />,
+    );
+    const input = screen.getByLabelText<HTMLInputElement>("Рамка");
+    await user.upload(input, gif);
+    expect(onUpdate).toHaveBeenLastCalledWith(gif);
+    const jpeg = new File(["jpg"], "frame.jpg", { type: "image/jpeg" });
+    await user.upload(input, jpeg);
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByText("Поддерживаются только PNG, APNG, GIF и WebP."),
+    ).toBeInTheDocument();
+  });
+});

@@ -26,6 +26,7 @@ import {
 } from "@arken/db";
 import { requireAuth } from "./auth.js";
 import { DiceFormulaError, rollFormulaWithMode } from "./dice.js";
+import { selectDiceFrame } from "./dice-frame-selection.js";
 import { resolveStatLayout } from "./snapshot.js";
 import {
   characterDto,
@@ -613,13 +614,20 @@ export function registerCharacterPlayRoutes(
             formulaParts.push(key);
           }
           formula = formulaParts.join(" + ");
-          result = rollFormulaWithMode(
-            formula,
-            values,
-            body.rollMode ?? (action.advantage ? "ADVANTAGE" : "NORMAL"),
-            randomInt,
-            action.label,
-          );
+          result = {
+            ...rollFormulaWithMode(
+              formula,
+              values,
+              body.rollMode ?? (action.advantage ? "ADVANTAGE" : "NORMAL"),
+              randomInt,
+              action.label,
+            ),
+            styleFrame: await selectDiceFrame(db, {
+              campaignId: auth.campaignId,
+              membershipId: auth.membershipId,
+              sourceCatalogEntryId: row.entry.sourceCatalogEntryId,
+            }),
+          };
           if (
             action.consumeUse &&
             (!parsedData.data.uses || parsedData.data.uses.current < 1)
@@ -921,18 +929,25 @@ export function registerCharacterPlayRoutes(
             ? "помеха"
             : null;
       const rollLabel = `${body.label ?? body.formula}${modeLabel ? ` · ${modeLabel}` : ""}`;
-      const result = rollFormulaWithMode(
-        normalizedFormula,
-        character
-          ? characterRollStats(
-              character,
-              await campaignDefaultStatLayout(db, auth.campaignId),
-            )
-          : normalizeLegacyStats(undefined),
-        body.rollMode ?? "NORMAL",
-        randomInt,
-        rollLabel,
-      );
+      const result = {
+        ...rollFormulaWithMode(
+          normalizedFormula,
+          character
+            ? characterRollStats(
+                character,
+                await campaignDefaultStatLayout(db, auth.campaignId),
+              )
+            : normalizeLegacyStats(undefined),
+          body.rollMode ?? "NORMAL",
+          randomInt,
+          rollLabel,
+        ),
+        // UIX-457: у чистого броска нет навыка — только рамка игрока.
+        styleFrame: await selectDiceFrame(db, {
+          campaignId: auth.campaignId,
+          membershipId: auth.membershipId,
+        }),
+      };
       const saved = await db.transaction(async (tx) => {
         const [row] = await tx
           .insert(chatMessages)

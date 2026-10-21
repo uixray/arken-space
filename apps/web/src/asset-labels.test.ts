@@ -13,6 +13,7 @@ describe("asset kind labels", () => {
       PORTRAIT: "Портрет персонажа",
       IMAGE: "Изображение",
       AUDIO: "Аудиофайл",
+      DICE_FRAME: "Рамка бросков",
     });
   });
 });

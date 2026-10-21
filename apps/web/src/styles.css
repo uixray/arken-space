@@ -7701,6 +7701,27 @@ html[data-player-theme="classic-v1"] .asset-picker__tile:focus-visible {
   }
 }
 
+/* UIX-457: рамка игрока или навыка — оформление, а не сигнал, поэтому без
+   свечения крита; в истории она остаётся цветной, но статичной (постер). */
+.outcome-frame--style {
+  width: 64px;
+  height: 64px;
+}
+
+.outcome-frame--style picture {
+  display: contents;
+}
+
+.outcome-frame--style-history img {
+  opacity: 0.75;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .outcome-frame--style img {
+    opacity: 1;
+  }
+}
+
 .skill-chat-card,
 .roll-result {
   position: relative;
@@ -7900,4 +7921,96 @@ button:not([role="tab"]),
   .character-workspace__header
   h2 {
   margin: 0;
+}
+
+/* UIX-457: выбор рамки бросков — сетка постеров с подписью. В диалоге
+   «Оформление» блок отделён от темы: тема применяется кнопкой, рамка — сразу. */
+.personal-dice-frame {
+  display: grid;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--line);
+}
+
+.personal-dice-frame p {
+  margin: 0;
+}
+/* UIX-457: выбор рамки бросков — сетка постеров с подписью. */
+.dice-frame-picker {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.dice-frame-picker legend {
+  font-weight: 600;
+  margin-bottom: var(--space-sm);
+}
+
+.dice-frame-picker__options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: var(--space-sm);
+}
+
+.dice-frame-picker__option {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: center;
+}
+
+.dice-frame-picker__option:has(input:checked) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.dice-frame-picker__option:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Невидимый input накрывает всю карточку: клик в любую её точку — выбор. */
+.dice-frame-picker__option input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.dice-frame-picker__preview {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--line) 40%, transparent);
+}
+
+.dice-frame-picker__preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.dice-frame-picker__label {
+  font-size: 0.8125rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.dice-frame-picker:disabled .dice-frame-picker__option {
+  cursor: progress;
+  opacity: 0.7;
 }

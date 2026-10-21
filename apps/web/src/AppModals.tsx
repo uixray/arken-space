@@ -1,5 +1,5 @@
 import { memo } from "react";
-import type { GameSnapshot } from "@arken/contracts";
+import type { AssetDto, GameSnapshot } from "@arken/contracts";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { TextPromptDialog } from "./ui/TextPromptDialog";
 import { ShortcutsDialog } from "./ShortcutsDialog";
@@ -7,6 +7,7 @@ import { workspaceNavItems, type WorkspaceId } from "./workspace-nav";
 import { resolvePlayerThemeId } from "./design-system/player-themes";
 import { PlayerThemeSettings } from "./design-system/PlayerThemeSettings";
 import type { PlayerThemePreferenceController } from "./design-system/usePlayerThemePreference";
+import { PersonalDiceFrameSettings } from "./DiceFramePicker";
 
 export interface AppModalsProps {
   personalTheme?: GameSnapshot["personalTheme"];
@@ -14,6 +15,10 @@ export interface AppModalsProps {
   publishedThemeIds: readonly string[];
   themeSettingsOpen: boolean;
   onCloseThemeSettings: () => void;
+  /** UIX-457: рамки кампании и личный выбор; `null` в списке — превью. */
+  diceFrames: readonly AssetDto[] | null;
+  diceFrameAssetId: string | null;
+  onSaveDiceFrame: (assetId: string | null) => Promise<void>;
 
   compact: boolean;
   compactSectionsOpen: boolean;
@@ -43,6 +48,9 @@ export const AppModals = memo(function AppModals({
   publishedThemeIds,
   themeSettingsOpen,
   onCloseThemeSettings,
+  diceFrames,
+  diceFrameAssetId,
+  onSaveDiceFrame,
 
   compact,
   compactSectionsOpen,
@@ -100,6 +108,13 @@ export const AppModals = memo(function AppModals({
               onCloseThemeSettings();
             }}
           />
+          {diceFrames ? (
+            <PersonalDiceFrameSettings
+              frames={diceFrames}
+              value={diceFrameAssetId}
+              onSave={onSaveDiceFrame}
+            />
+          ) : null}
         </ArkenDialog>
       ) : null}
 
