@@ -397,6 +397,9 @@ function composeEnvironment() {
     ...process.env,
     RESTORE_POSTGRES_PASSWORD: restorePassword,
     RESTORE_BUILD_REVISION: buildRevision,
+    // Health reports SCHEMA_VERSION from the environment, as production does.
+    // Restored DB schema is proven separately by the migration ledger.
+    RESTORE_SCHEMA_VERSION: String(serviceSnapshot?.schemaVersion ?? 2),
     RESTORE_MEDIA_HOST_PATH: expectedMediaSource,
     RESTORE_MEDIA_CONTAINER_PATH: mediaTarget,
     RESTORE_DATABASE_NAME: databaseName,
@@ -710,6 +713,8 @@ try {
     report.captureReceiptSha256 = restoreRequest.receiptSha256;
     report.sourceSnapshotId = restoreRequest.sourceSnapshotId;
     report.expectedSourceRevision = restoreRequest.expectedSourceRevision;
+    report.legacyReceiptWithoutSourceRevision =
+      restoreRequest.legacyReceiptWithoutSourceRevision;
     report.copyReceiptSha256 = restoreRequest.copyReceiptSha256;
     report.recoveryMode =
       "captured server and PostgreSQL images; no source-build equivalence claim";
