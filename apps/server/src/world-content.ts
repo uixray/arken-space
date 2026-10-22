@@ -1,5 +1,5 @@
-import { and, desc, eq, sql, type SQL } from "drizzle-orm";
-import { worldContent } from "@arken/db";
+import { and, desc, eq, exists, or, sql, type SQL } from "drizzle-orm";
+import { worldContent, worldContentInstances } from "@arken/db";
 import type { WorldContentDto, WorldContentPlayerDto } from "@arken/contracts";
 
 /**
@@ -13,14 +13,38 @@ import type { WorldContentDto, WorldContentPlayerDto } from "@arken/contracts";
  * been loaded.
  *
  * World Content has no `campaignId` (see `worldContent` in
- * `packages/db/src/schema.ts`), so authorization here keys only on the
- * requester's role — not on any campaign membership. A later, blocked stage
- * layers campaign-scoped discovery on top of this without ever widening
- * what a non-GM can see here.
+ * `packages/db/src/schema.ts`). A player sees PUBLISHED canon everywhere and,
+ * since UIX-245 step 5, a DRAFT entity only in a campaign where the GM marked
+ * one of its instances as discovered (owner decision 22.10.2026: a discovered
+ * entity is fully visible to that campaign's players). GM-only fields
+ * (`gmOnlyText`, instance `gmNotes`) never reach a player either way.
  */
 
 export interface WorldContentAuthContext {
   role: "GM" | "PLAYER";
+  /** Without it a player sees PUBLISHED canon only (no discovery). */
+  campaignId?: string;
+}
+
+/** UIX-245: the entity has an instance discovered in this campaign. */
+export function worldContentDiscoveredIn(campaignId: string): SQL {
+  return exists(
+    sql`(SELECT 1 FROM ${worldContentInstances} WHERE ${worldContentInstances.campaignId} = ${campaignId} AND ${worldContentInstances.worldContentId} = ${worldContent.id} AND ${worldContentInstances.discovered})`,
+  );
+}
+
+/**
+ * Player-visible canon in one campaign: PUBLISHED, or a DRAFT discovered
+ * there. ARCHIVED is retired canon and stays hidden even when discovered.
+ */
+export function worldContentPlayerVisibleIn(campaignId: string): SQL {
+  return or(
+    eq(worldContent.lifecycle, "PUBLISHED"),
+    and(
+      eq(worldContent.lifecycle, "DRAFT"),
+      worldContentDiscoveredIn(campaignId),
+    ),
+  )!;
 }
 
 /** The minimal shape needed to decide access to one canonical entity. */
@@ -52,6 +76,7 @@ export function canViewWorldContent(
  */
 export function worldContentVisibility(auth: WorldContentAuthContext): SQL {
   if (auth.role === "GM") return sql`true`;
+  if (auth.campaignId) return worldContentPlayerVisibleIn(auth.campaignId);
   return eq(worldContent.lifecycle, "PUBLISHED");
 }
 
