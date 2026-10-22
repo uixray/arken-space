@@ -119,6 +119,10 @@ Verified 2026-07-13 after the production disk expansion: the host booted kernel 
 
 ## Backup
 
+If the production host itself is lost, follow
+[disaster-recovery.md](disaster-recovery.md): it rebuilds the service on a new
+host from the independent local copy in `D:\ArkenBackups`.
+
 `infra/backup/backup.sh` reads PostgreSQL through the exact production Compose project, creates a custom-format dump, records its SHA-256 checksum, captures per-table row counts and records checksums for every media file. It sends the dump, manifests and media directory to the configured encrypted restic repository.
 
 Required environment variables:
