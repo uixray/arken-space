@@ -949,3 +949,28 @@ describe("world content HTTP: media", () => {
     expect(missing.statusCode).toBe(404);
   });
 });
+
+describe("world content HTTP: import provenance (UIX-263)", () => {
+  it("stores provenance on create and returns it to the GM only", async () => {
+    const provenance = {
+      sourceUrl: "https://arc.framer.photos/#panteon",
+      sourceExternalId: "artbook-yaro",
+      retrievedAt: "2026-10-22T00:00:00.000Z",
+      rawContentHash: "sha256:abc",
+      attribution: "Вселенная — автор",
+      rightsReviewStatus: "APPROVED",
+      editorialApprovalStatus: "PENDING",
+    } as const;
+    const created = await createEntity(secrets.gm, { provenance });
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json()).toMatchObject({ lifecycle: "DRAFT", provenance });
+    await publish(created.json().id, created.json().revision);
+    const player = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${created.json().id}`,
+      headers: headers(secrets.player),
+    });
+    expect(player.statusCode).toBe(200);
+    expect(player.body).not.toContain("arc.framer.photos");
+  });
+});

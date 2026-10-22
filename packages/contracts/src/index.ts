@@ -3488,6 +3488,8 @@ export const createWorldContentSchema = z
     gmOnlyText: z.string().max(50000).optional(),
     tags: worldContentTagsSchema.optional(),
     coverAssetId: z.string().uuid().nullable().optional(),
+    /** UIX-263: import provenance (source, retrieval, hash, rights, editorial). */
+    provenance: worldContentProvenanceSchema.optional(),
   })
   .strict();
 export type CreateWorldContent = z.infer<typeof createWorldContentSchema>;
