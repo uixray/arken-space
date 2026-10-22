@@ -443,13 +443,16 @@ describe("world content instances HTTP: list/get", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it("forbids a non-GM from listing", async () => {
+  it("lists only discovered instances to a non-GM (UIX-245 step 5)", async () => {
+    await createInstance(secrets.gm);
     const res = await app.inject({
       method: "GET",
       url: "/api/world-content-instances",
       headers: headers(secrets.player),
     });
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(200);
+    // Not discovered yet — nothing exists for the player.
+    expect(res.json()).toEqual([]);
   });
 });
 

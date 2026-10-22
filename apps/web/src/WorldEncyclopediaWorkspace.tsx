@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from "react";
 import type {
   AssetDto,
+  WorldContentInstancePlayerDto,
   WorldContentMediaDto,
   WorldContentPlayerDto,
   WorldContentRelationEdgeDto,
@@ -20,6 +21,7 @@ import {
   fetchWorldContentRelations,
   parseTagList,
 } from "./world-content-client";
+import { fetchWorldContentInstances } from "./world-content-instances-client";
 import "./WorldEncyclopediaWorkspace.css";
 
 const safeError = "Не удалось загрузить справочник. Попробуйте ещё раз.";
@@ -48,8 +50,10 @@ const notFoundError =
  * list/detail visibility gate is server-side and role-independent for
  * *this* stage — see the module doc comment on `world-content.ts`).
  *
- * No campaign discovery/overrides here (Delivery Plan step 5) — this shows
- * the full PUBLISHED canon to every caller unconditionally.
+ * UIX-245 step 5: the server also lists a DRAFT entity once the GM marks one
+ * of its campaign instances as discovered, and each article shows the
+ * discovered instances under «В этой кампании». A GM previewing here sees the
+ * same discovered instances a player would.
  */
 /**
  * UIX-395: memoized — self-fetches its own list/detail data (see the module
@@ -273,6 +277,9 @@ function EntityPage({
   const [entity, setEntity] = useState<WorldContentPlayerDto | null>(null);
   const [media, setMedia] = useState<WorldContentMediaDto[]>([]);
   const [relations, setRelations] = useState<WorldContentRelationEdgeDto[]>([]);
+  const [instances, setInstances] = useState<WorldContentInstancePlayerDto[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -283,6 +290,7 @@ function EntityPage({
     setEntity(null);
     setMedia([]);
     setRelations([]);
+    setInstances([]);
     (async () => {
       try {
         // A player must never reach a DRAFT/ARCHIVED entity's page, even by
@@ -291,15 +299,19 @@ function EntityPage({
         // `worldContentByIdVisibleTo` in `apps/server/src/world-content.ts`),
         // so a missing/hidden id surfaces here as an ApiError with
         // status 404, handled below — never a crash.
-        const [detail, mediaList, relationEdges] = await Promise.all([
-          fetchWorldContentPlayerDetail(id),
-          fetchWorldContentMedia(id),
-          fetchWorldContentRelations(id),
-        ]);
+        const [detail, mediaList, relationEdges, instanceList] =
+          await Promise.all([
+            fetchWorldContentPlayerDetail(id),
+            fetchWorldContentMedia(id),
+            fetchWorldContentRelations(id),
+            // An older server answers 403 to players here: no instances.
+            fetchWorldContentInstances(id).catch(() => []),
+          ]);
         if (!active) return;
         setEntity(detail);
         setMedia(mediaList);
         setRelations(relationEdges);
+        setInstances(instanceList.filter((instance) => instance.discovered));
       } catch (reason) {
         if (!active) return;
         if (reason instanceof ApiError && reason.status === 404) {
@@ -397,6 +409,38 @@ function EntityPage({
                   alt={item.caption ?? ""}
                 />
                 {item.caption && <p>{item.caption}</p>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {instances.length > 0 && (
+        <section aria-label="В этой кампании">
+          <h3>В этой кампании</h3>
+          <ul className="world-encyclopedia-workspace__instances">
+            {instances.map((instance) => (
+              <li key={instance.id}>
+                {instance.portraitAssetId && (
+                  <img
+                    src={
+                      assets.find(
+                        (asset) => asset.id === instance.portraitAssetId,
+                      )?.url ??
+                      `/api/assets/${instance.portraitAssetId}/content`
+                    }
+                    alt=""
+                  />
+                )}
+                <div>
+                  <strong>{instance.displayNameOverride ?? entity.name}</strong>
+                  {instance.condition && (
+                    <span className="muted"> · {instance.condition}</span>
+                  )}
+                  {instance.quantity != null && (
+                    <span className="muted"> · ×{instance.quantity}</span>
+                  )}
+                  {instance.currentState && <p>{instance.currentState}</p>}
+                </div>
               </li>
             ))}
           </ul>

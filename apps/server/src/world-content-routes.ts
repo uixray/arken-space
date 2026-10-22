@@ -201,7 +201,10 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
     if (!parsedQuery.success)
       return fail(reply, 400, "WORLD_CONTENT_QUERY_INVALID");
     const query = parsedQuery.data;
-    const authCtx: WorldContentAuthContext = { role: auth.role };
+    const authCtx: WorldContentAuthContext = {
+      role: auth.role,
+      campaignId: auth.campaignId,
+    };
     const conditions: SQL[] = [worldContentVisibility(authCtx)];
     if (query.relatedTo) {
       // Match the relation-detail endpoint's subject 404 before inspecting
@@ -277,7 +280,10 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     const { id } = idParams.parse(request.params);
-    const authCtx: WorldContentAuthContext = { role: auth.role };
+    const authCtx: WorldContentAuthContext = {
+      role: auth.role,
+      campaignId: auth.campaignId,
+    };
     if (auth.role === "GM") {
       const [row] = await db
         .select()
@@ -312,7 +318,10 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     const { id } = idParams.parse(request.params);
-    const authCtx: WorldContentAuthContext = { role: auth.role };
+    const authCtx: WorldContentAuthContext = {
+      role: auth.role,
+      campaignId: auth.campaignId,
+    };
     const [subject] = await db
       .select({ id: worldContent.id })
       .from(worldContent)
@@ -382,7 +391,10 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     const { id } = idParams.parse(request.params);
-    const authCtx: WorldContentAuthContext = { role: auth.role };
+    const authCtx: WorldContentAuthContext = {
+      role: auth.role,
+      campaignId: auth.campaignId,
+    };
     const [subject] = await db
       .select({ id: worldContent.id })
       .from(worldContent)
