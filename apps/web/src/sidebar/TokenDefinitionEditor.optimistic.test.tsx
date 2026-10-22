@@ -165,6 +165,7 @@ const unusedCampaignActions: Omit<CampaignActions, "token"> = {
     onSelectStoryEra: unusedAction,
     onLoadStoryEventSources: unusedAction,
     onCreateStoryFromEvent: unusedAction,
+    onSearchStoryLinkTargets: unusedAction,
   },
   playerRequest: {
     onOpenPlayerRequestCreate: unusedAction,

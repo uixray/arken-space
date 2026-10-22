@@ -217,6 +217,7 @@ export function useCampaignActionsValue(
         onSelectStoryEra: actions.story.onSelectStoryEra,
         onLoadStoryEventSources: actions.story.onLoadStoryEventSources,
         onCreateStoryFromEvent: actions.story.onCreateStoryFromEvent,
+        onSearchStoryLinkTargets: actions.story.onSearchStoryLinkTargets,
       },
       playerRequest: {
         onOpenPlayerRequestCreate:
@@ -331,6 +332,7 @@ export function useCampaignActionsValue(
       actions.story.onSelectStoryEra,
       actions.story.onLoadStoryEventSources,
       actions.story.onCreateStoryFromEvent,
+      actions.story.onSearchStoryLinkTargets,
       actions.playerRequest.onOpenPlayerRequestCreate,
       actions.playerRequest.onCreatePlayerRequest,
       actions.playerRequest.onUpdatePlayerRequest,

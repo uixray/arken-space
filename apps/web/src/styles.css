@@ -5742,6 +5742,85 @@ body:has(.landing-shell) {
 .story-event-sources p {
   margin: 0;
 }
+/* UIX-245: связи записи летописи с сущностями мира, местами и сценами. */
+.story-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.story-links__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  padding: 2px var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-1);
+  font-size: max(12px, 0.78rem);
+  overflow-wrap: anywhere;
+}
+.story-links__kind,
+.story-links__hidden {
+  color: var(--muted);
+}
+.story-links__hidden {
+  font-style: italic;
+}
+.story-links__remove {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border-radius: 999px;
+  line-height: 1;
+}
+.story-links-picker {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.story-links-picker legend {
+  padding: 0 var(--space-xs);
+  color: var(--muted);
+  font-size: max(12px, 0.78rem);
+}
+.story-links-picker__search {
+  display: flex;
+  gap: var(--space-xs);
+}
+.story-links-picker__search input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.story-links-picker__results {
+  display: grid;
+  gap: var(--space-xs);
+  max-height: 220px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.story-links-picker__results li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.story-links-picker__results button {
+  text-align: start;
+}
+.story-links-picker__empty {
+  margin: 0;
+  color: var(--muted);
+}
 @media (min-width: 960px) and (max-width: 1279px) {
   .story-post {
     max-width: none;

@@ -104,6 +104,7 @@ function actions(
       onSelectStoryEra: unexpectedAction,
       onLoadStoryEventSources: unexpectedAction,
       onCreateStoryFromEvent: unexpectedAction,
+      onSearchStoryLinkTargets: unexpectedAction,
     },
     playerRequest: {
       onOpenPlayerRequestCreate: unexpectedAction,

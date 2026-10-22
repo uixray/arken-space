@@ -27,6 +27,7 @@ const post = (
   gmNotes: "",
   worldDay: 12,
   era: "Эпоха пепла",
+  linkTargets: [],
   createdAt: "2026-10-21T10:00:00.000Z",
   updatedAt: "2026-10-21T10:00:00.000Z",
   ...overrides,

@@ -1,4 +1,8 @@
-import type { StoryPostAdminDto } from "@arken/contracts";
+import type {
+  StoryEntityLinkKind,
+  StoryLinkTargetDto,
+  StoryPostAdminDto,
+} from "@arken/contracts";
 import type { StoryMediaDraft, StoryPostView } from "./StoryChannel";
 
 export function isStoryAdminPost(
@@ -44,4 +48,26 @@ export function storyWorldTimeLabel(post: StoryPostView) {
   // `== null`: старые записи и ответы без поля тоже идут как «без дня».
   const day = post.worldDay == null ? "" : `День ${post.worldDay}`;
   return [day, post.era ?? ""].filter(Boolean).join(" \u00b7 ");
+}
+
+/** UIX-245: ссылки записи летописи на сущности мира, места, карты и сцены. */
+export const STORY_LINK_KIND_LABELS: Record<StoryEntityLinkKind, string> = {
+  WORLD_ENTITY: "Сущность мира",
+  LOCATION: "Место",
+  WORLD_MAP: "Карта мира",
+  SCENE: "Сцена",
+  CHRONICLE: "Запись летописи",
+};
+
+/** Подписанные ссылки записи; старые ответы без `linkTargets` — без подписей. */
+export function storyPostLinkTargets(post: {
+  entityLinks: readonly { kind: StoryEntityLinkKind; entityId: string }[];
+  linkTargets?: readonly StoryLinkTargetDto[];
+}): StoryLinkTargetDto[] {
+  if (post.linkTargets) return [...post.linkTargets];
+  return post.entityLinks.map((link) => ({
+    ...link,
+    label: null,
+    playerVisible: false,
+  }));
 }

@@ -161,6 +161,7 @@ function adminPost(
     gmNotes: "GM-only preparation note",
     worldDay: null,
     era: null,
+    linkTargets: [],
   };
 }
 

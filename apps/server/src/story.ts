@@ -18,6 +18,7 @@ import {
   createStoryFromEventSchema,
   createStoryPostSchema,
   dryRunTelegramStoryImportSchema,
+  listStoryLinkTargetsSchema,
   listStoryPostsSchema,
   storyPostTransitionSchema,
   updateStoryPostSchema,
@@ -25,6 +26,7 @@ import {
   type ServerToClientEvents,
   type StoryEntityLink,
   type StoryEventSourceDto,
+  type StoryLinkTargetDto,
   type StoryPostAdminDto,
   type StoryPostDto,
 } from "@arken/contracts";
@@ -41,6 +43,11 @@ import {
 import type { AuthContext } from "./auth.js";
 import { requireAuth } from "./auth.js";
 import { ensureStreamThread } from "./chat.js";
+import {
+  assertStoryLinkTargets,
+  searchStoryLinkTargets,
+  storyLinkTargetsFor,
+} from "./story-links.js";
 import { openStoredFile } from "./storage.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
@@ -262,6 +269,7 @@ function dto(
   mediaRows: Awaited<ReturnType<typeof mediaForRevision>>,
   admin: boolean,
   source?: typeof storyImportSources.$inferSelect | null,
+  linkTargets: StoryLinkTargetDto[] = [],
 ): StoryPostDto | StoryPostAdminDto {
   const base = {
     id: post.id,
@@ -270,7 +278,11 @@ function dto(
     title: post.title,
     body: post.body,
     revision: post.revision,
-    entityLinks: post.entityLinks as StoryEntityLink[],
+    // Игроку — только ссылки на видимые ему цели (UIX-245).
+    entityLinks: admin
+      ? (post.entityLinks as StoryEntityLink[])
+      : linkTargets.map(({ kind, entityId }) => ({ kind, entityId })),
+    linkTargets,
     media: mediaRows.map(({ media, upload }) => ({
       contentId: media.contentId,
       order: media.sortOrder,
@@ -544,6 +556,7 @@ export function registerStoryRoutes(
     const sourceByPost = new Map(
       sources.map((source) => [source.postId, source]),
     );
+    const targetsByPost = await storyLinkTargetsFor(db, auth, page);
     const entries = await Promise.all(
       page.map(async (post) =>
         dto(
@@ -551,6 +564,7 @@ export function registerStoryRoutes(
           await mediaForRevision(db, auth.campaignId, post.id, post.revision),
           auth.role === "GM",
           sourceByPost.get(post.id),
+          targetsByPost.get(post.id),
         ),
       ),
     );
@@ -587,6 +601,7 @@ export function registerStoryRoutes(
         body.worldDay === undefined
           ? await currentCampaignDay(db, auth.campaignId)
           : body.worldDay;
+      await assertStoryLinkTargets(db, auth.campaignId, body.entityLinks);
       const saved = await db.transaction(async (tx) => {
         const [post] = await tx
           .insert(storyPosts)
@@ -618,6 +633,8 @@ export function registerStoryRoutes(
           post,
           await mediaForRevision(tx, auth.campaignId, post.id, 0),
           true,
+          null,
+          (await storyLinkTargetsFor(tx, auth, [post])).get(post.id),
         );
         const event = await recordEvent(
           tx,
@@ -651,6 +668,19 @@ export function registerStoryRoutes(
         code === "STORY_MEDIA_NOT_FOUND" ? 404 : 400,
       );
     }
+  });
+
+  // UIX-245: кандидаты для ссылок записи — сущности мира, точки и карты,
+  // сцены и другие записи. Только мастеру; у каждого видно, увидят ли его
+  // игроки.
+  app.get("/api/story/link-targets", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM") return storyError(reply, "GM_REQUIRED", 403);
+    const query = listStoryLinkTargetsSchema.parse(request.query);
+    return {
+      targets: await searchStoryLinkTargets(db, auth.campaignId, query.q),
+    };
   });
 
   // UIX-245: недавние сюжетные события. Отдаются только тип, подпись и время —
@@ -824,6 +854,12 @@ export function registerStoryRoutes(
         caption: media.caption,
       }));
       const content = mergedContent(current, body, currentMedia);
+      await assertStoryLinkTargets(
+        db,
+        auth.campaignId,
+        content.entityLinks,
+        current.entityLinks as StoryEntityLink[],
+      );
 
       const nextRevision = current.revision + 1;
       const nextLifecycle =
@@ -865,6 +901,8 @@ export function registerStoryRoutes(
           post,
           await mediaForRevision(tx, auth.campaignId, post.id, nextRevision),
           true,
+          null,
+          (await storyLinkTargetsFor(tx, auth, [post])).get(post.id),
         );
         const event = await recordEvent(
           tx,
@@ -1008,6 +1046,8 @@ export function registerStoryRoutes(
             post,
             await mediaForRevision(tx, auth.campaignId, post.id, nextRevision),
             true,
+            null,
+            (await storyLinkTargetsFor(tx, auth, [post])).get(post.id),
           );
           const event = await recordEvent(
             tx,

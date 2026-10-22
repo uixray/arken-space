@@ -4,9 +4,11 @@ import type {
   ChatMessageDto,
   StoryEntityLink,
   StoryEventSourceDto,
+  StoryLinkTargetDto,
   StoryPostAdminDto,
   StoryPostDto,
 } from "@arken/contracts";
+import { StoryLinkChips, StoryLinkPicker } from "./StoryLinkPicker";
 
 export type StoryPostView = StoryPostDto | StoryPostAdminDto;
 export type StoryMediaDraft = {
@@ -36,6 +38,7 @@ import {
   isStoryAdminPost,
   parseStoryWorldDay,
   storyPostMedia,
+  storyPostLinkTargets,
   storyPostStatus,
   storyWorldTimeLabel,
 } from "./story-channel-helpers";
@@ -52,6 +55,7 @@ export function StoryPost({
   onUpdate,
   onUploadImage,
   mediaUrl = imageUrl,
+  onSearchLinkTargets,
 }: {
   post: StoryPostView;
   isGm: boolean;
@@ -60,6 +64,8 @@ export function StoryPost({
   onUpdate?: (post: StoryPostAdminDto, input: StoryDraftInput) => Promise<void>;
   onUploadImage?: (file: File) => Promise<ChatAttachmentMetadata>;
   mediaUrl?: (contentId: string) => string;
+  /** UIX-245: GM-only поиск целей для связей записи. */
+  onSearchLinkTargets?: (q: string) => Promise<StoryLinkTargetDto[]>;
 }) {
   const [pending, setPending] = useState<
     "publish" | "archive" | "update" | null
@@ -76,6 +82,7 @@ export function StoryPost({
     post.worldDay == null ? "" : String(post.worldDay),
   );
   const [draftEra, setDraftEra] = useState(post.era ?? "");
+  const [draftLinks, setDraftLinks] = useState<StoryLinkTargetDto[]>([]);
   const [draftMedia, setDraftMedia] = useState<StoryMediaDraft[]>(() =>
     storyPostMedia(post).map((item) => ({
       contentId: item.contentId,
@@ -152,6 +159,7 @@ export function StoryPost({
       adminPost.worldDay == null ? "" : String(adminPost.worldDay),
     );
     setDraftEra(adminPost.era ?? "");
+    setDraftLinks(storyPostLinkTargets(adminPost));
     setDraftMedia(
       storyPostMedia(adminPost).map((item) => ({
         contentId: item.contentId,
@@ -188,7 +196,10 @@ export function StoryPost({
           altText: item.altText.trim() || item.fileName,
           caption: item.caption.trim(),
         })),
-        entityLinks: adminPost.entityLinks,
+        entityLinks: draftLinks.map(({ kind, entityId }) => ({
+          kind,
+          entityId,
+        })),
         gmNotes: draftGmNotes,
         worldDay,
         era: draftEra.trim() || null,
@@ -273,6 +284,14 @@ export function StoryPost({
               />
             </label>
           </div>
+          {onSearchLinkTargets && (
+            <StoryLinkPicker
+              value={draftLinks}
+              onChange={setDraftLinks}
+              onSearch={onSearchLinkTargets}
+              disabled={pending !== null}
+            />
+          )}
           {draftMedia.length > 0 && (
             <ul className="story-composer__attachments">
               {draftMedia.map((item) => (
@@ -382,6 +401,9 @@ export function StoryPost({
         </div>
       ) : (
         post.body && <p className="story-post__body">{post.body}</p>
+      )}
+      {!editing && (
+        <StoryLinkChips targets={post.linkTargets ?? []} isGm={isGm} />
       )}
       {!editing &&
         storyPostMedia(post).map((media) =>
@@ -504,6 +526,7 @@ export function StoryChannel({
   onSelectEra,
   onLoadEventSources,
   onCreateFromEvent,
+  onSearchLinkTargets,
 }: {
   posts: readonly StoryPostView[];
   legacyMessages?: readonly ChatMessageDto[];
@@ -523,8 +546,10 @@ export function StoryChannel({
   onSelectEra?: (era: string | null) => Promise<void>;
   onLoadEventSources?: () => Promise<StoryEventSourceDto[]>;
   onCreateFromEvent?: (eventSequence: number) => Promise<void>;
+  onSearchLinkTargets?: (q: string) => Promise<StoryLinkTargetDto[]>;
 }) {
   const [title, setTitle] = useState("");
+  const [links, setLinks] = useState<StoryLinkTargetDto[]>([]);
   const [worldDayText, setWorldDayText] = useState("");
   const [era, setEra] = useState("");
   const [eventSources, setEventSources] = useState<
@@ -590,7 +615,7 @@ export function StoryChannel({
           altText: item.altText.trim() || item.fileName,
           caption: item.caption.trim(),
         })),
-        entityLinks: [],
+        entityLinks: links.map(({ kind, entityId }) => ({ kind, entityId })),
         gmNotes,
         // Пустое поле дня — текущий день кампании на сервере.
         ...(worldDay === null ? {} : { worldDay }),
@@ -601,6 +626,7 @@ export function StoryChannel({
       setGmNotes("");
       setWorldDayText("");
       setEra("");
+      setLinks([]);
       setMedia([]);
     } catch (reason) {
       setError(
@@ -728,6 +754,7 @@ export function StoryChannel({
               onUpdate={onUpdate}
               onUploadImage={onUploadImage}
               mediaUrl={mediaUrl}
+              onSearchLinkTargets={isGm ? onSearchLinkTargets : undefined}
             />
           ))
         )}
@@ -792,6 +819,14 @@ export function StoryChannel({
               />
             </label>
           </div>
+          {onSearchLinkTargets && (
+            <StoryLinkPicker
+              value={links}
+              onChange={setLinks}
+              onSearch={onSearchLinkTargets}
+              disabled={busy}
+            />
+          )}
           {media.length > 0 && (
             <ul
               className="story-composer__attachments"
