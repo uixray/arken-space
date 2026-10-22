@@ -17,6 +17,7 @@ import {
   canViewWorldMap,
   canViewWorldMapLocation,
 } from "./world-map-access.js";
+import { worldContentPlayerVisibleIn } from "./world-content.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -155,12 +156,14 @@ async function resolveTargets(
         id: worldContent.id,
         name: worldContent.name,
         lifecycle: worldContent.lifecycle,
+        // UIX-245 step 5: a DRAFT discovered in this campaign is visible too.
+        playerVisible: worldContentPlayerVisibleIn(campaignId),
       })
       .from(worldContent)
       .where(inArray(worldContent.id, entityIds)))
       put("WORLD_ENTITY", entity.id, {
         label: entity.name,
-        playerVisible: entity.lifecycle === "PUBLISHED",
+        playerVisible: Boolean(entity.playerVisible),
       });
 
   return resolved;

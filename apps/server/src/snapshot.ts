@@ -41,6 +41,7 @@ import {
   tokenControllers,
   tokenDefinitions,
   worldContent,
+  worldContentInstances,
   worldContentMedia,
 } from "@arken/db";
 import type { AuthContext } from "./auth.js";
@@ -63,6 +64,7 @@ import { listEncounters } from "./encounters.js";
 import { normalizeSystemRegenStatRows } from "./stat-layout.js";
 import { canViewCharacterMedia } from "./character-media.js";
 import { personalThemeDto } from "./player-themes.js";
+import { worldContentPlayerVisibleIn } from "./world-content.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -314,15 +316,17 @@ const loadCharacterMedia = (db: Database, campaignId: string) =>
       ),
     );
 
+// UIX-245: pictures of canon a player can read in this campaign — PUBLISHED,
+// or discovered here — plus portraits of discovered campaign instances.
 const loadPublishedWorldAssets = async (db: Database, campaignId: string) => {
-  const [coverRows, mediaRows] = await Promise.all([
+  const [coverRows, mediaRows, portraitRows] = await Promise.all([
     db
       .select({ assetId: worldContent.coverAssetId })
       .from(worldContent)
       .innerJoin(assets, eq(worldContent.coverAssetId, assets.id))
       .where(
         and(
-          eq(worldContent.lifecycle, "PUBLISHED"),
+          worldContentPlayerVisibleIn(campaignId),
           eq(assets.campaignId, campaignId),
         ),
       ),
@@ -336,12 +340,28 @@ const loadPublishedWorldAssets = async (db: Database, campaignId: string) => {
       .innerJoin(assets, eq(worldContentMedia.assetId, assets.id))
       .where(
         and(
-          eq(worldContent.lifecycle, "PUBLISHED"),
+          worldContentPlayerVisibleIn(campaignId),
+          eq(assets.campaignId, campaignId),
+        ),
+      ),
+    db
+      .select({ assetId: worldContentInstances.portraitAssetId })
+      .from(worldContentInstances)
+      .innerJoin(
+        worldContent,
+        eq(worldContentInstances.worldContentId, worldContent.id),
+      )
+      .innerJoin(assets, eq(worldContentInstances.portraitAssetId, assets.id))
+      .where(
+        and(
+          eq(worldContentInstances.campaignId, campaignId),
+          eq(worldContentInstances.discovered, true),
+          worldContentPlayerVisibleIn(campaignId),
           eq(assets.campaignId, campaignId),
         ),
       ),
   ]);
-  return [...coverRows, ...mediaRows];
+  return [...coverRows, ...mediaRows, ...portraitRows];
 };
 
 const loadAssets = (db: Database, campaignId: string) =>
