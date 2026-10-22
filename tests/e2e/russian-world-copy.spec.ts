@@ -314,6 +314,10 @@ async function captureCopy(
   try {
     await expect
       .poll(async () => {
+        // Firefox may pull a modal back to a just-edited field after a late
+        // re-render; scroll again on every attempt instead of trusting the
+        // first scroll (UIX-245 #116 CI: Save measured unscrolled at y=1483).
+        await target.scrollIntoViewIfNeeded();
         geometry = await textGeometry(target);
         return geometry.boxInside && geometry.hitValid;
       })
