@@ -419,6 +419,20 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
             gmOnlyText: body.gmOnlyText ?? "",
             tags: body.tags ?? [],
             coverAssetId: body.coverAssetId ?? null,
+            ...(body.provenance
+              ? {
+                  sourceUrl: body.provenance.sourceUrl,
+                  sourceExternalId: body.provenance.sourceExternalId,
+                  retrievedAt: body.provenance.retrievedAt
+                    ? new Date(body.provenance.retrievedAt)
+                    : null,
+                  rawContentHash: body.provenance.rawContentHash,
+                  attribution: body.provenance.attribution,
+                  rightsReviewStatus: body.provenance.rightsReviewStatus,
+                  editorialApprovalStatus:
+                    body.provenance.editorialApprovalStatus,
+                }
+              : {}),
           })
           .returning();
         if (!row) throw new Error("WORLD_CONTENT_CREATE_FAILED");

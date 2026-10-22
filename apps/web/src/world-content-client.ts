@@ -3,6 +3,7 @@ import type {
   WorldContentLifecycle,
   WorldContentMediaDto,
   WorldContentPlayerDto,
+  WorldContentProvenance,
   WorldContentRelationDto,
   WorldContentRelationEdgeDto,
   WorldContentType,
@@ -215,6 +216,8 @@ export type CreateWorldContentInput = {
   gmOnlyText?: string;
   tags?: string[];
   coverAssetId?: string | null;
+  /** UIX-263: set only by imports. */
+  provenance?: WorldContentProvenance;
 };
 
 export const createWorldContent = (input: CreateWorldContentInput) =>
