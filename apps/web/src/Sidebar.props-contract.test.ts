@@ -9,6 +9,8 @@ const expectedSidebarDataProps = [
   "presence",
   "storyPosts",
   "storyNextCursor",
+  "storyEras",
+  "storyEraFilter",
   "viewedSceneId",
   "sceneDialogRequest",
   "requestedSceneEditId",

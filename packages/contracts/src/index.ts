@@ -1628,12 +1628,26 @@ export const storyPostMediaInputSchema = z
   .strict();
 export type StoryPostMediaInput = z.infer<typeof storyPostMediaInputSchema>;
 
+/**
+ * UIX-245: время игрового мира. День кампании совпадает с часами кампании
+ * (`campaign.day`); эпоха — свободная подпись для фильтра летописи. Пустая
+ * эпоха — это «без эпохи», а не пустая строка.
+ */
+export const storyWorldDaySchema = z.number().int().min(1).max(1_000_000);
+export const storyEraSchema = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? null : value),
+  z.string().trim().min(1).max(80).nullable(),
+);
+
 const storyPostContentSchema = z
   .object({
     title: z.string().trim().max(160).default(""),
     body: z.string().trim().max(20000).default(""),
     entityLinks: z.array(storyEntityLinkSchema).max(20).default([]),
     media: z.array(storyPostMediaInputSchema).max(10).default([]),
+    /** Не указан — сервер берёт текущий день часов кампании. */
+    worldDay: storyWorldDaySchema.nullable().optional(),
+    era: storyEraSchema.optional(),
   })
   .strict()
   .superRefine((post, context) => {
@@ -1684,6 +1698,8 @@ export const updateStoryPostSchema = z
     entityLinks: z.array(storyEntityLinkSchema).max(20).optional(),
     media: z.array(storyPostMediaInputSchema).max(10).optional(),
     gmNotes: z.string().max(10000).optional(),
+    worldDay: storyWorldDaySchema.nullable().optional(),
+    era: storyEraSchema.optional(),
   })
   .strict()
   .refine(
@@ -1692,7 +1708,9 @@ export const updateStoryPostSchema = z
       command.body !== undefined ||
       command.entityLinks !== undefined ||
       command.media !== undefined ||
-      command.gmNotes !== undefined,
+      command.gmNotes !== undefined ||
+      command.worldDay !== undefined ||
+      command.era !== undefined,
     "At least one story post field is required",
   );
 export type UpdateStoryPost = z.infer<typeof updateStoryPostSchema>;
@@ -1833,11 +1851,34 @@ export type CommitTelegramStoryImport = z.infer<
 
 export const listStoryPostsSchema = z
   .object({
-    /** Opaque {updatedAt,id} cursor, encoded by the server. */
+    /** Opaque {worldDay,updatedAt,id} cursor, encoded by the server. */
     cursor: z.string().min(1).max(256).optional(),
     limit: z.coerce.number().int().min(1).max(50).default(20),
+    /** UIX-245: только записи этой эпохи. */
+    era: z.string().trim().min(1).max(80).optional(),
   })
   .strict();
+
+/**
+ * UIX-245: GM создаёт черновик летописи из технического события игры. Сервер
+ * берёт только тип и время события; сырое содержимое события в запись не
+ * попадает и игроку не публикуется.
+ */
+export const createStoryFromEventSchema = z
+  .object({
+    actionId: actionIdSchema,
+    eventSequence: z.number().int().positive(),
+  })
+  .strict();
+export type CreateStoryFromEvent = z.infer<typeof createStoryFromEventSchema>;
+
+/** GM-only: недавние события, из которых можно начать черновик летописи. */
+export interface StoryEventSourceDto {
+  sequence: number;
+  type: string;
+  label: string;
+  createdAt: string;
+}
 export type ListStoryPosts = z.infer<typeof listStoryPostsSchema>;
 
 export const chatAttachmentContentIdSchema = z.string().uuid();
@@ -2720,8 +2761,18 @@ export interface StoryPostDto {
   >;
   publishedAt: string;
   correctedAt: string | null;
+  /** UIX-245: день кампании; `null` — вне хронологии. */
+  worldDay: number | null;
+  era: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** UIX-245: страница летописи; `eras` — эпохи, видимые этому участнику. */
+export interface StoryPostPageDto {
+  posts: Array<StoryPostDto | StoryPostAdminDto>;
+  nextCursor: string | null;
+  eras: string[];
 }
 
 /** GM-only editing projection. Do not reuse it in player snapshots or realtime events. */

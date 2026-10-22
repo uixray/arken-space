@@ -19,6 +19,7 @@ import type {
   PersonalThemeDto,
   StoryPostAdminDto,
   StoryPostDto,
+  StoryPostPageDto,
   TokenDto,
   AudioPurpose,
 } from "@arken/contracts";
@@ -264,6 +265,11 @@ export function App() {
     Array<StoryPostDto | StoryPostAdminDto>
   >([]);
   const [storyNextCursor, setStoryNextCursor] = useState<string | null>(null);
+  // UIX-245: фильтр летописи по эпохе. Ref нужен, чтобы обновление по
+  // `story:changed` перезагружало ту же выборку, а не всю летопись.
+  const [storyEras, setStoryEras] = useState<string[]>([]);
+  const [storyEraFilter, setStoryEraFilter] = useState<string | null>(null);
+  const storyEraFilterRef = useRef<string | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
   const [presence, setPresence] = useState<
     Array<{ membershipId: string; online: boolean }>
@@ -514,10 +520,11 @@ export function App() {
   const loadStoryPosts = useCallback(async (cursor?: string) => {
     const query = new URLSearchParams({ limit: "50" });
     if (cursor) query.set("cursor", cursor);
-    const page = await api<{
-      posts: Array<StoryPostDto | StoryPostAdminDto>;
-      nextCursor: string | null;
-    }>(`/api/story/posts?${query.toString()}`);
+    const era = storyEraFilterRef.current;
+    if (era) query.set("era", era);
+    const page = await api<StoryPostPageDto>(
+      `/api/story/posts?${query.toString()}`,
+    );
     setStoryPosts((current) => {
       if (!cursor) return page.posts;
       const byId = new Map(current.map((post) => [post.id, post]));
@@ -525,7 +532,16 @@ export function App() {
       return [...byId.values()];
     });
     setStoryNextCursor(page.nextCursor);
+    setStoryEras(page.eras ?? []);
   }, []);
+  const selectStoryEra = useCallback(
+    async (era: string | null) => {
+      storyEraFilterRef.current = era;
+      setStoryEraFilter(era);
+      await loadStoryPosts();
+    },
+    [loadStoryPosts],
+  );
 
   const { socket, setSocket, connection, setConnection } =
     useGameSocketSubscriptions({
@@ -591,6 +607,9 @@ export function App() {
     void load();
   }, [load]);
   useEffect(() => {
+    storyEraFilterRef.current = null;
+    setStoryEraFilter(null);
+    setStoryEras([]);
     if (!campaignId) {
       setStoryPosts([]);
       setStoryNextCursor(null);
@@ -897,6 +916,7 @@ export function App() {
   const storyActions = useStoryActions({
     loadStoryPosts,
     storyNextCursorRef,
+    selectStoryEra,
   });
   const chatActions = useChatActions({
     run,
@@ -2075,6 +2095,8 @@ export function App() {
                 operatorFeedbackAllowed={operatorFeedbackAllowed}
                 storyPosts={storyPosts}
                 storyNextCursor={storyNextCursor}
+                storyEras={storyEras}
+                storyEraFilter={storyEraFilter}
                 sceneDialogRequest={sceneDialogRequest}
                 requestedSceneEditId={requestedSceneEditId}
                 viewedSceneId={activeScene?.id ?? null}

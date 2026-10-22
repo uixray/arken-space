@@ -1,6 +1,6 @@
 import { useMemo, type MutableRefObject } from "react";
 import { api } from "./api";
-import type { StoryPostAdminDto } from "@arken/contracts";
+import type { StoryEventSourceDto, StoryPostAdminDto } from "@arken/contracts";
 import type { StoryDraftInput } from "./StoryChannel";
 
 /**
@@ -25,6 +25,10 @@ export interface StoryActions {
   ) => Promise<void>;
   onPublishStoryPost: (post: StoryPostAdminDto) => Promise<void>;
   onArchiveStoryPost: (post: StoryPostAdminDto) => Promise<void>;
+  /** UIX-245: показать летопись одной эпохи; `null` — все эпохи. */
+  onSelectStoryEra: (era: string | null) => Promise<void>;
+  onLoadStoryEventSources: () => Promise<StoryEventSourceDto[]>;
+  onCreateStoryFromEvent: (eventSequence: number) => Promise<void>;
 }
 
 const withAction = (body: Record<string, unknown> = {}) =>
@@ -34,8 +38,9 @@ export function useStoryActions(dependencies: {
   /** Stable — `useCallback` with an empty dependency list in App. */
   loadStoryPosts: (cursor?: string) => Promise<void>;
   storyNextCursorRef: MutableRefObject<string | null>;
+  selectStoryEra: (era: string | null) => Promise<void>;
 }): StoryActions {
-  const { loadStoryPosts, storyNextCursorRef } = dependencies;
+  const { loadStoryPosts, storyNextCursorRef, selectStoryEra } = dependencies;
 
   return useMemo<StoryActions>(
     () => ({
@@ -75,7 +80,24 @@ export function useStoryActions(dependencies: {
         });
         await loadStoryPosts();
       },
+
+      onSelectStoryEra: selectStoryEra,
+
+      onLoadStoryEventSources: async () =>
+        (
+          await api<{ sources: StoryEventSourceDto[] }>(
+            "/api/story/event-sources",
+          )
+        ).sources,
+
+      onCreateStoryFromEvent: async (eventSequence) => {
+        await api("/api/story/posts/from-event", {
+          method: "POST",
+          body: withAction({ eventSequence }),
+        });
+        await loadStoryPosts();
+      },
     }),
-    [loadStoryPosts, storyNextCursorRef],
+    [loadStoryPosts, storyNextCursorRef, selectStoryEra],
   );
 }

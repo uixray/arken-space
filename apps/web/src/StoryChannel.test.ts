@@ -16,6 +16,8 @@ const post: StoryPostAdminDto = {
   lifecycle: "DRAFT",
   revision: 1,
   entityLinks: [],
+  worldDay: 12,
+  era: "Эпоха пепла",
   media: [
     {
       contentId: "00000000-0000-4000-8000-000000000004",

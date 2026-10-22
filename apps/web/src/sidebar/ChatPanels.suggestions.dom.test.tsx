@@ -101,6 +101,9 @@ function actions(
       onUpdateStoryPost: unexpectedAction,
       onPublishStoryPost: unexpectedAction,
       onArchiveStoryPost: unexpectedAction,
+      onSelectStoryEra: unexpectedAction,
+      onLoadStoryEventSources: unexpectedAction,
+      onCreateStoryFromEvent: unexpectedAction,
     },
     playerRequest: {
       onOpenPlayerRequestCreate: unexpectedAction,

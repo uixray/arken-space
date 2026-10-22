@@ -161,6 +161,9 @@ const actions: CampaignActions = {
     onUpdateStoryPost: unexpectedAction,
     onPublishStoryPost: unexpectedAction,
     onArchiveStoryPost: unexpectedAction,
+    onSelectStoryEra: unexpectedAction,
+    onLoadStoryEventSources: unexpectedAction,
+    onCreateStoryFromEvent: unexpectedAction,
   },
   playerRequest: {
     onOpenPlayerRequestCreate: unexpectedAction,

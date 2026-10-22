@@ -75,6 +75,9 @@ export type Props = {
   presence: Array<{ membershipId: string; online: boolean }>;
   storyPosts: Array<StoryPostDto | StoryPostAdminDto>;
   storyNextCursor: string | null;
+  /** UIX-245: эпохи летописи и выбранный фильтр. */
+  storyEras?: readonly string[];
+  storyEraFilter?: string | null;
   viewedSceneId: string | null;
   sceneDialogRequest: number;
   requestedSceneEditId?: string | null;
@@ -486,6 +489,15 @@ function SidebarContent(props: Props) {
               onArchive={isGm ? storyActions.onArchiveStoryPost : undefined}
               onUploadImage={
                 isGm ? chatActions.onUploadChatAttachment : undefined
+              }
+              eras={props.storyEras ?? []}
+              eraFilter={props.storyEraFilter ?? null}
+              onSelectEra={storyActions.onSelectStoryEra}
+              onLoadEventSources={
+                isGm ? storyActions.onLoadStoryEventSources : undefined
+              }
+              onCreateFromEvent={
+                isGm ? storyActions.onCreateStoryFromEvent : undefined
               }
             />
           </ArkenDialog>

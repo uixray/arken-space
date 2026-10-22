@@ -1,9 +1,21 @@
 import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
-import { and, desc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import {
   commitTelegramStoryImportSchema,
+  createStoryFromEventSchema,
   createStoryPostSchema,
   dryRunTelegramStoryImportSchema,
   listStoryPostsSchema,
@@ -12,10 +24,12 @@ import {
   type ClientToServerEvents,
   type ServerToClientEvents,
   type StoryEntityLink,
+  type StoryEventSourceDto,
   type StoryPostAdminDto,
   type StoryPostDto,
 } from "@arken/contracts";
 import {
+  campaigns,
   chatAttachmentUploads,
   gameEvents,
   storyImportBatches,
@@ -126,12 +140,21 @@ function decodeStoryCursor(cursor: string) {
   try {
     const value = JSON.parse(
       Buffer.from(cursor, "base64url").toString("utf8"),
-    ) as { updatedAt?: unknown; id?: unknown };
+    ) as { worldDay?: unknown; updatedAt?: unknown; id?: unknown };
     if (typeof value.updatedAt !== "string" || typeof value.id !== "string")
+      throw new Error("invalid cursor");
+    if (
+      value.worldDay !== null &&
+      !(typeof value.worldDay === "number" && Number.isInteger(value.worldDay))
+    )
       throw new Error("invalid cursor");
     const updatedAt = new Date(value.updatedAt);
     if (Number.isNaN(updatedAt.getTime())) throw new Error("invalid cursor");
-    return { updatedAt, id: value.id };
+    return {
+      worldDay: value.worldDay as number | null,
+      updatedAt,
+      id: value.id,
+    };
   } catch {
     throw new Error("STORY_CURSOR_INVALID");
   }
@@ -139,8 +162,33 @@ function decodeStoryCursor(cursor: string) {
 
 function encodeStoryCursor(post: Post) {
   return Buffer.from(
-    JSON.stringify({ updatedAt: post.updatedAt.toISOString(), id: post.id }),
+    JSON.stringify({
+      worldDay: post.worldDay,
+      updatedAt: post.updatedAt.toISOString(),
+      id: post.id,
+    }),
   ).toString("base64url");
+}
+
+/**
+ * UIX-245: летопись идёт по дню кампании (поздние дни сверху), записи без дня
+ * — в конце; внутри дня — по времени правки. Курсор повторяет этот порядок.
+ */
+function afterStoryCursor(cursor: ReturnType<typeof decodeStoryCursor>) {
+  const sameDayTail = or(
+    lt(storyPosts.updatedAt, cursor.updatedAt),
+    and(
+      eq(storyPosts.updatedAt, cursor.updatedAt),
+      lt(storyPosts.id, cursor.id),
+    ),
+  )!;
+  if (cursor.worldDay === null)
+    return and(isNull(storyPosts.worldDay), sameDayTail)!;
+  return or(
+    lt(storyPosts.worldDay, cursor.worldDay),
+    and(eq(storyPosts.worldDay, cursor.worldDay), sameDayTail),
+    isNull(storyPosts.worldDay),
+  )!;
 }
 
 export function mergedContent(
@@ -150,6 +198,8 @@ export function mergedContent(
     body?: string;
     entityLinks?: StoryEntityLink[];
     media?: MediaInput[];
+    worldDay?: number | null;
+    era?: string | null;
   },
   currentMedia: MediaInput[],
 ) {
@@ -158,6 +208,9 @@ export function mergedContent(
     body: patch.body ?? post.body,
     entityLinks: patch.entityLinks ?? (post.entityLinks as StoryEntityLink[]),
     media: patch.media ?? currentMedia,
+    // `undefined` — поле не трогали, `null` — сознательно убрали.
+    worldDay: patch.worldDay === undefined ? post.worldDay : patch.worldDay,
+    era: patch.era === undefined ? post.era : patch.era,
   };
   if (!next.body.trim() && !next.media.length)
     throw new Error("STORY_POST_EMPTY");
@@ -230,6 +283,8 @@ function dto(
       height: upload.height,
       createdAt: upload.createdAt.toISOString(),
     })),
+    worldDay: post.worldDay,
+    era: post.era,
     createdAt: post.createdAt.toISOString(),
     updatedAt: post.updatedAt.toISOString(),
   };
@@ -272,6 +327,45 @@ async function loadPost(db: Database, auth: AuthContext, postId: string) {
     )
     .limit(1);
   return post;
+}
+
+/**
+ * UIX-245: события, из которых имеет смысл начать запись летописи. Остальное —
+ * технические правки (токены, рисунки, доступы) и в летопись не предлагается.
+ */
+const STORY_SEED_EVENT_LABELS: Record<string, string> = {
+  "dice.created": "Бросок кубиков",
+  "entry.roll": "Применение способности",
+  "entry.shared": "Способность показана игрокам",
+  "scene.activated": "Смена сцены",
+  "campaign.clock": "Течение времени кампании",
+  "world_map.party_position_set": "Отряд на карте мира",
+};
+
+export function storySeedEventLabel(type: string) {
+  return (
+    STORY_SEED_EVENT_LABELS[type] ??
+    (type.startsWith("encounter.") ? "Столкновение" : null)
+  );
+}
+
+const storySeedEventTypes = Object.keys(STORY_SEED_EVENT_LABELS);
+
+function storySeedEventFilter() {
+  return or(
+    inArray(gameEvents.type, storySeedEventTypes),
+    sql`${gameEvents.type} LIKE 'encounter.%'`,
+  )!;
+}
+
+/** UIX-245: день часов кампании — игровое время новой записи по умолчанию. */
+async function currentCampaignDay(db: StoryDatabase, campaignId: string) {
+  const [campaign] = await db
+    .select({ day: campaigns.day })
+    .from(campaigns)
+    .where(eq(campaigns.id, campaignId))
+    .limit(1);
+  return campaign?.day ?? 1;
 }
 
 async function assertStoryThread(db: Database, campaignId: string) {
@@ -333,6 +427,9 @@ async function persistRevision(
     body: values.body,
     gmNotes: values.gmNotes,
     entityLinks: values.entityLinks,
+    // Строка поста уже записана: день и эпоха ревизии — её текущие значения.
+    worldDay: post.worldDay,
+    era: post.era,
     changedByMembershipId,
   });
   if (values.media.length)
@@ -410,21 +507,23 @@ export function registerStoryRoutes(
         )!,
       );
     }
-    if (cursor)
-      clauses.push(
-        or(
-          lt(storyPosts.updatedAt, cursor.updatedAt),
-          and(
-            eq(storyPosts.updatedAt, cursor.updatedAt),
-            lt(storyPosts.id, cursor.id),
-          ),
-        )!,
-      );
+    // Эпохи считаются по всем видимым записям, до фильтра и курсора.
+    const eraRows = await db
+      .selectDistinct({ era: storyPosts.era })
+      .from(storyPosts)
+      .where(and(...clauses, isNotNull(storyPosts.era)))
+      .orderBy(storyPosts.era);
+    if (query.era) clauses.push(eq(storyPosts.era, query.era));
+    if (cursor) clauses.push(afterStoryCursor(cursor));
     const posts = await db
       .select()
       .from(storyPosts)
       .where(and(...clauses))
-      .orderBy(desc(storyPosts.updatedAt), desc(storyPosts.id))
+      .orderBy(
+        sql`${storyPosts.worldDay} DESC NULLS LAST`,
+        desc(storyPosts.updatedAt),
+        desc(storyPosts.id),
+      )
       .limit(query.limit + 1);
     const page = posts.slice(0, query.limit);
     const sources =
@@ -461,6 +560,7 @@ export function registerStoryRoutes(
         posts.length > query.limit && page.at(-1)
           ? encodeStoryCursor(page.at(-1)!)
           : null,
+      eras: eraRows.flatMap((row) => (row.era ? [row.era] : [])),
     };
   });
 
@@ -483,6 +583,10 @@ export function registerStoryRoutes(
     try {
       const thread = await assertStoryThread(db, auth.campaignId);
       const now = new Date();
+      const worldDay =
+        body.worldDay === undefined
+          ? await currentCampaignDay(db, auth.campaignId)
+          : body.worldDay;
       const saved = await db.transaction(async (tx) => {
         const [post] = await tx
           .insert(storyPosts)
@@ -494,6 +598,8 @@ export function registerStoryRoutes(
             body: body.body,
             gmNotes: body.gmNotes,
             entityLinks: body.entityLinks,
+            worldDay,
+            era: body.era ?? null,
             createdAt: now,
             updatedAt: now,
           })
@@ -543,6 +649,137 @@ export function registerStoryRoutes(
         reply,
         code,
         code === "STORY_MEDIA_NOT_FOUND" ? 404 : 400,
+      );
+    }
+  });
+
+  // UIX-245: недавние сюжетные события. Отдаются только тип, подпись и время —
+  // ни payload, ни идентификаторы сущностей до мастера тоже не доходят.
+  app.get("/api/story/event-sources", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM") return storyError(reply, "GM_REQUIRED", 403);
+    const rows = await db
+      .select({
+        sequence: gameEvents.sequence,
+        type: gameEvents.type,
+        createdAt: gameEvents.createdAt,
+      })
+      .from(gameEvents)
+      .where(
+        and(eq(gameEvents.campaignId, auth.campaignId), storySeedEventFilter()),
+      )
+      .orderBy(desc(gameEvents.sequence))
+      .limit(20);
+    const sources: StoryEventSourceDto[] = rows.map((row) => ({
+      sequence: row.sequence,
+      type: row.type,
+      label: storySeedEventLabel(row.type) ?? row.type,
+      createdAt: row.createdAt.toISOString(),
+    }));
+    return { sources };
+  });
+
+  // UIX-245: черновик летописи из события. В текст попадают только подпись
+  // типа и игровой день; сырой payload события не копируется никуда, а
+  // ссылка на событие остаётся в заметках мастера.
+  app.post("/api/story/posts/from-event", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM") return storyError(reply, "GM_REQUIRED", 403);
+    const body = createStoryFromEventSchema.parse(request.body);
+    const commandHash = storyCommandHash("story.created", body);
+    const replay = await actionReplay(
+      db,
+      auth,
+      body.actionId,
+      "story.created",
+      commandHash,
+    );
+    if (replay.kind === "MATCH") return reply.code(200).send(replay.payload);
+    if (replay.kind === "CONFLICT")
+      return storyError(reply, "ACTION_ID_CONFLICT", 409);
+    const [source] = await db
+      .select({
+        sequence: gameEvents.sequence,
+        type: gameEvents.type,
+        createdAt: gameEvents.createdAt,
+      })
+      .from(gameEvents)
+      .where(
+        and(
+          eq(gameEvents.campaignId, auth.campaignId),
+          eq(gameEvents.sequence, body.eventSequence),
+        ),
+      )
+      .limit(1);
+    const label = source ? storySeedEventLabel(source.type) : null;
+    if (!source || !label)
+      return storyError(reply, "STORY_EVENT_NOT_FOUND", 404);
+    try {
+      const thread = await assertStoryThread(db, auth.campaignId);
+      const worldDay = await currentCampaignDay(db, auth.campaignId);
+      const now = new Date();
+      const saved = await db.transaction(async (tx) => {
+        const [post] = await tx
+          .insert(storyPosts)
+          .values({
+            campaignId: auth.campaignId,
+            threadId: thread.id,
+            authorMembershipId: auth.membershipId,
+            title: label,
+            body: `${label}. Черновик летописи: опишите, что произошло.`,
+            gmNotes: `Источник: событие игры #${source.sequence} (${source.type}) от ${source.createdAt.toISOString()}. Исходные данные события в запись не копируются.`,
+            entityLinks: [],
+            worldDay,
+            era: null,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning();
+        if (!post) throw new Error("STORY_POST_CREATE_FAILED");
+        await persistRevision(
+          tx,
+          post,
+          auth.membershipId,
+          {
+            title: post.title,
+            body: post.body,
+            gmNotes: post.gmNotes,
+            entityLinks: [],
+            lifecycle: "DRAFT",
+            media: [],
+          },
+          0,
+        );
+        const result = dto(post, [], true);
+        const event = await recordEvent(
+          tx,
+          auth,
+          body.actionId,
+          "story.created",
+          post,
+          result,
+          commandHash,
+        );
+        return { post, result, event };
+      });
+      emitStory(io, saved.post);
+      return reply.code(201).send(saved.result);
+    } catch (error) {
+      const retry = await actionReplay(
+        db,
+        auth,
+        body.actionId,
+        "story.created",
+        commandHash,
+      );
+      if (retry.kind === "MATCH") return reply.code(200).send(retry.payload);
+      if (retry.kind === "CONFLICT")
+        return storyError(reply, "ACTION_ID_CONFLICT", 409);
+      return storyError(
+        reply,
+        error instanceof Error ? error.message : "STORY_POST_CREATE_FAILED",
       );
     }
   });
@@ -599,6 +836,8 @@ export function registerStoryRoutes(
             title: content.title,
             body: content.body,
             entityLinks: content.entityLinks,
+            worldDay: content.worldDay,
+            era: content.era,
             gmNotes: body.gmNotes ?? current.gmNotes,
             lifecycle: nextLifecycle,
             correctedAt:

@@ -214,6 +214,9 @@ export function useCampaignActionsValue(
         onUpdateStoryPost: actions.story.onUpdateStoryPost,
         onPublishStoryPost: actions.story.onPublishStoryPost,
         onArchiveStoryPost: actions.story.onArchiveStoryPost,
+        onSelectStoryEra: actions.story.onSelectStoryEra,
+        onLoadStoryEventSources: actions.story.onLoadStoryEventSources,
+        onCreateStoryFromEvent: actions.story.onCreateStoryFromEvent,
       },
       playerRequest: {
         onOpenPlayerRequestCreate:
@@ -325,6 +328,9 @@ export function useCampaignActionsValue(
       actions.story.onUpdateStoryPost,
       actions.story.onPublishStoryPost,
       actions.story.onArchiveStoryPost,
+      actions.story.onSelectStoryEra,
+      actions.story.onLoadStoryEventSources,
+      actions.story.onCreateStoryFromEvent,
       actions.playerRequest.onOpenPlayerRequestCreate,
       actions.playerRequest.onCreatePlayerRequest,
       actions.playerRequest.onUpdatePlayerRequest,

@@ -174,7 +174,7 @@ multi-campaign provisioning service.
 
 ### HTTP API по доменам
 
-Всего **208** HTTP-маршрутов во всех server route-модулях: 85 остаются в
+Всего **210** HTTP-маршрутов во всех server route-модулях: 85 остаются в
 `routes.ts`, остальные разделены по персонажам, столкновениям, паузе кампании,
 operator feedback, заявкам игроков, сюжетному каналу, картам, магии и
 содержимому мира.
@@ -190,7 +190,7 @@ operator feedback, заявкам игроков, сюжетному канал�
 | Содержимое мира    | `world-content-routes.ts` — шаблоны сущностей мира, экземпляры, действия, связи                                                                                                                                                                                                                                     |
 | Кампания           | переименование, часы, server-authoritative pause (`/api/campaign/pause`), раскладка характеристик (`/api/campaign/stat-layout`), очередь ходов (`/api/campaign/initiative` — мастер, `/api/campaign/initiative/self` — своё значение), зона боя (`/api/campaign/battle-zone`, `/api/campaign/initiative/from-zone`) |
 | Общение            | чат (общий, треды, история с пагинацией, вложения, курсоры прочтения), стикеры, кубы, синхронная музыка                                                                                                                                                                                                             |
-| Сюжетный канал     | посты, ревизии, публикация, архив, пагинация                                                                                                                                                                                                                                                                        |
+| Сюжетный канал     | посты, ревизии, публикация, архив; летопись по дню кампании и эпохе (UIX-245), черновик из события игры                                                                                                                                                                                                             |
 | Заявки игроков     | создание, редактирование, переходы состояний                                                                                                                                                                                                                                                                        |
 | Магия              | `spell-pack-routes.ts` — GM validation, review-only import preview, create, draft version, lifecycle promotion и archive; `spell-assignment-routes.ts` — GM-only назначение школы/узла и append следующего состояния; `spell-projection-routes.ts` — раздельные player-safe и полная GM-проекции                    |
 
@@ -460,7 +460,7 @@ Drizzle schema содержит **71** прикладных таблиц.
   удалении меняйте content version и не считайте browser cache persistence;
 - `game_events` и `action_journal` обеспечивают разные виды истории.
 
-Миграции `0000`–`0063` (64 SQL files) применяются при старте server-контейнера
+Миграции `0000`–`0064` (65 SQL files) применяются при старте server-контейнера
 до запуска Fastify. Изменение schema обязано сопровождаться migration, тестами, обновлением
 backup/restore manifests и проверкой role-filtered snapshot.
 
