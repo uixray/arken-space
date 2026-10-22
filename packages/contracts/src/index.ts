@@ -91,6 +91,8 @@ export const storyEntityLinkKindSchema = z.enum([
   "LOCATION",
   "SCENE",
   "CHRONICLE",
+  /** UIX-245: каноническая сущность энциклопедии мира. */
+  "WORLD_ENTITY",
 ]);
 export const storyImportProviderSchema = z.literal("TELEGRAM");
 
@@ -1872,6 +1874,22 @@ export const createStoryFromEventSchema = z
   .strict();
 export type CreateStoryFromEvent = z.infer<typeof createStoryFromEventSchema>;
 
+/** GM-only: поиск целей для ссылок записи летописи. */
+export const listStoryLinkTargetsSchema = z
+  .object({ q: z.string().trim().max(80).optional() })
+  .strict();
+export type ListStoryLinkTargets = z.infer<typeof listStoryLinkTargetsSchema>;
+
+/**
+ * UIX-245: ссылка записи летописи с подписью для этого участника. Игрок
+ * получает только видимые ему цели; у мастера `label: null` значит, что цель
+ * удалена, а `playerVisible` — увидят ли её игроки.
+ */
+export interface StoryLinkTargetDto extends StoryEntityLink {
+  label: string | null;
+  playerVisible: boolean;
+}
+
 /** GM-only: недавние события, из которых можно начать черновик летописи. */
 export interface StoryEventSourceDto {
   sequence: number;
@@ -2764,6 +2782,8 @@ export interface StoryPostDto {
   /** UIX-245: день кампании; `null` — вне хронологии. */
   worldDay: number | null;
   era: string | null;
+  /** UIX-245: подписанные ссылки, видимые этому участнику, в порядке `entityLinks`. */
+  linkTargets: StoryLinkTargetDto[];
   createdAt: string;
   updatedAt: string;
 }

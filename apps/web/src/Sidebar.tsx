@@ -499,6 +499,9 @@ function SidebarContent(props: Props) {
               onCreateFromEvent={
                 isGm ? storyActions.onCreateStoryFromEvent : undefined
               }
+              onSearchLinkTargets={
+                isGm ? storyActions.onSearchStoryLinkTargets : undefined
+              }
             />
           </ArkenDialog>
         )}

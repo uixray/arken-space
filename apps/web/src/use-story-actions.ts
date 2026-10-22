@@ -1,6 +1,10 @@
 import { useMemo, type MutableRefObject } from "react";
 import { api } from "./api";
-import type { StoryEventSourceDto, StoryPostAdminDto } from "@arken/contracts";
+import type {
+  StoryEventSourceDto,
+  StoryLinkTargetDto,
+  StoryPostAdminDto,
+} from "@arken/contracts";
 import type { StoryDraftInput } from "./StoryChannel";
 
 /**
@@ -29,6 +33,8 @@ export interface StoryActions {
   onSelectStoryEra: (era: string | null) => Promise<void>;
   onLoadStoryEventSources: () => Promise<StoryEventSourceDto[]>;
   onCreateStoryFromEvent: (eventSequence: number) => Promise<void>;
+  /** UIX-245: GM-only поиск целей для связей записи. */
+  onSearchStoryLinkTargets: (q: string) => Promise<StoryLinkTargetDto[]>;
 }
 
 const withAction = (body: Record<string, unknown> = {}) =>
@@ -97,6 +103,13 @@ export function useStoryActions(dependencies: {
         });
         await loadStoryPosts();
       },
+
+      onSearchStoryLinkTargets: async (q) =>
+        (
+          await api<{ targets: StoryLinkTargetDto[] }>(
+            `/api/story/link-targets${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+          )
+        ).targets,
     }),
     [loadStoryPosts, storyNextCursorRef, selectStoryEra],
   );

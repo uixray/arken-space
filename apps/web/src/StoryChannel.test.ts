@@ -17,6 +17,7 @@ const post: StoryPostAdminDto = {
   revision: 1,
   entityLinks: [],
   worldDay: 12,
+  linkTargets: [],
   era: "Эпоха пепла",
   media: [
     {
