@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { AssetDto, WorldContentType } from "@arken/contracts";
+import type { AssetDto } from "@arken/contracts";
 import { api, formatApiError } from "./api";
 import { Button } from "./design-system/Button";
 import {
@@ -8,36 +8,7 @@ import {
   fetchWorldContentList,
   updateWorldContent,
 } from "./world-content-client";
-
-/** UIX-263: bundled artbook reference (`docs/content/world-artbook.json`). */
-export type ArtbookRecord = {
-  slug: string;
-  type: WorldContentType;
-  name: string;
-  summary: string;
-  cover: string | null;
-  gallery: string[];
-  sourceUrl: string;
-  rawContentHash: string;
-};
-export type ArtbookSource = {
-  источник: {
-    получено: string;
-    атрибуция: string;
-  };
-  записи: ArtbookRecord[];
-  картинкиБезТекста: string[];
-};
-
-/** Loaded on demand: only the GM import needs it. */
-const loadArtbook = async () =>
-  (await import("../../../docs/content/world-artbook.json"))
-    .default as unknown as ArtbookSource;
-
-/** Path of a picked file inside the chosen artbook folder, without the folder itself. */
-export const artbookRelativePath = (file: File) =>
-  (file.webkitRelativePath || file.name).split("/").slice(1).join("/") ||
-  file.name;
+import { artbookRelativePath, loadArtbook } from "./world-artbook";
 
 async function uploadImage(file: File) {
   const form = new FormData();

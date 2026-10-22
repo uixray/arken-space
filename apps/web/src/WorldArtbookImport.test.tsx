@@ -15,7 +15,8 @@ vi.mock("./api", () => ({
   formatApiError: (_: unknown, fallback: string) => fallback,
 }));
 
-import { WorldArtbookImport, artbookRelativePath } from "./WorldArtbookImport";
+import { WorldArtbookImport } from "./WorldArtbookImport";
+import { artbookRelativePath } from "./world-artbook";
 
 /** UIX-263: artbook import creates DRAFT canon with provenance, never overwrites. */
 beforeEach(() => {
