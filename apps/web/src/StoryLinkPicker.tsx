@@ -1,6 +1,8 @@
 import { useState, type KeyboardEvent } from "react";
 import type { StoryLinkTargetDto } from "@arken/contracts";
 import { STORY_LINK_KIND_LABELS } from "./story-channel-helpers";
+import { AppIcon } from "./ui/AppIcon";
+import { CloseIcon } from "./ui/icons";
 
 const MAX_STORY_LINKS = 20;
 
@@ -105,7 +107,7 @@ export function StoryLinkPicker({
                   )
                 }
               >
-                ×
+                <AppIcon icon={CloseIcon} />
               </button>
             </li>
           ))}
