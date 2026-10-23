@@ -1,5 +1,7 @@
 import type {
   CreateSpellAssignmentCommand,
+  PreviewSpellReferenceImportCommand,
+  SpellReferenceImportPreviewResponse,
   SpellAssignmentVersionDto,
   SpellPackLifecycle,
   SpellPackValidationResponse,
@@ -127,5 +129,18 @@ export const assignSpellSchool = (
 ) =>
   api<SpellAssignmentVersionDto>(
     `/api/characters/${encodeURIComponent(characterId)}/spell-assignments`,
+    { method: "POST", body: JSON.stringify(command) },
+  );
+
+/**
+ * UIX-458: GM-only server preview of the bundled reference schools. The
+ * server turns the transcribed source into a REFERENCE graph and validates it;
+ * nothing is stored until `createSpellPackDraft` is called with that graph.
+ */
+export const previewSpellReferenceImport = (
+  command: PreviewSpellReferenceImportCommand,
+) =>
+  api<SpellReferenceImportPreviewResponse>(
+    "/api/spell-packs/imports/reference/preview",
     { method: "POST", body: JSON.stringify(command) },
   );

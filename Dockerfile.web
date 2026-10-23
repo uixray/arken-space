@@ -13,6 +13,8 @@ RUN pnpm install --frozen-lockfile
 COPY apps/web apps/web
 COPY packages/contracts packages/contracts
 COPY packages/system packages/system
+# Reference content the GM imports on demand (UIX-458/UIX-263); bundled as a lazy chunk.
+COPY docs/content docs/content
 COPY scripts/font-release-preflight.mjs scripts/font-release-preflight.mjs
 RUN pnpm --filter @arken/contracts build && pnpm --filter @arken/system build && pnpm --filter @arken/web build && pnpm release:font:preflight
 
