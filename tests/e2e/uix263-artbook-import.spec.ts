@@ -1,5 +1,13 @@
 import { expect, test } from "./react-console-guard";
 import {
+  addWorldContentMediaSchema,
+  createWorldContentSchema,
+  updateWorldContentSchema,
+  type AssetDto,
+  type WorldContentDto,
+  type WorldContentMediaDto,
+} from "@arken/contracts";
+import {
   gmSnapshot,
   playerSnapshot,
 } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -19,9 +27,9 @@ for (const width of [390, 1280]) {
       schemaVersion: 2,
       campaign: { ...gmSnapshot().campaign, id: campaignId },
     });
-    const entities = new Map<string, Record<string, any>>();
-    const media = new Map<string, Record<string, any>[]>();
-    const assetsByAction = new Map<string, Record<string, any>>();
+    const entities = new Map<string, WorldContentDto>();
+    const media = new Map<string, WorldContentMediaDto[]>();
+    const assetsByAction = new Map<string, AssetDto>();
     const assetLookups: string[] = [];
     const mediaActions = new Set<string>();
     const writes: { method: string; path: string; actionId?: string }[] = [];
@@ -40,9 +48,19 @@ for (const width of [390, 1280]) {
       const { pathname } = new URL(request.url());
       const method = request.method();
       if (method !== "GET" && pathname !== "/api/chat/read") {
-        const actionId =
-          request.headers()["x-action-id"] ??
-          (request.postDataJSON?.() as Record<string, string> | null)?.actionId;
+        const headerActionId = request.headers()["x-action-id"];
+        let bodyActionId: string | undefined;
+        if (!headerActionId) {
+          const payload: unknown = request.postDataJSON?.();
+          bodyActionId =
+            typeof payload === "object" &&
+            payload !== null &&
+            "actionId" in payload &&
+            typeof payload.actionId === "string"
+              ? payload.actionId
+              : undefined;
+        }
+        const actionId = headerActionId ?? bodyActionId;
         writes.push({ method, path: pathname, actionId });
       }
       if (pathname === "/api/bootstrap")
@@ -67,7 +85,7 @@ for (const width of [390, 1280]) {
           : route.fulfill({ status: 404, json: { error: "ASSET_NOT_FOUND" } });
       }
       if (pathname === "/api/world-content" && method === "POST") {
-        const body = request.postDataJSON() as Record<string, any>;
+        const body = createWorldContentSchema.parse(request.postDataJSON());
         const prior = [...entities.values()].find(
           (item) => item.slug === body.slug,
         );
@@ -76,20 +94,26 @@ for (const width of [390, 1280]) {
             status: 409,
             json: { error: "WORLD_CONTENT_SLUG_CONFLICT" },
           });
-        const row = {
+        const provenance = body.provenance;
+        if (!provenance)
+          return route.fulfill({
+            status: 400,
+            json: { error: "ARTBOOK_PROVENANCE_REQUIRED" },
+          });
+        const row: WorldContentDto = {
           id: `cccccccc-cccc-4ccc-8ccc-${String(nextId++).padStart(12, "0")}`,
           slug: body.slug,
           type: body.type,
           subtype: null,
           name: body.name,
           aliases: [],
-          summary: body.summary,
+          summary: body.summary ?? "",
           publicText: "",
           gmOnlyText: "",
           tags: [],
           lifecycle: "DRAFT",
           coverAssetId: null,
-          provenance: body.provenance,
+          provenance,
           revision: 0,
           createdAt: date,
           updatedAt: date,
@@ -119,15 +143,16 @@ for (const width of [390, 1280]) {
             status: 404,
             json: { error: "WORLD_CONTENT_NOT_FOUND" },
           });
-        const body = request.postDataJSON() as Record<string, any>;
-        Object.assign(row, body, {
+        const body = updateWorldContentSchema.parse(request.postDataJSON());
+        const { actionId: _actionId, revision: _revision, ...patch } = body;
+        Object.assign(row, patch, {
           revision: row.revision + 1,
           updatedAt: new Date().toISOString(),
         });
         return route.fulfill({ json: row });
       }
       if (match && method === "POST" && match[2] === "media") {
-        const body = request.postDataJSON() as Record<string, any>;
+        const body = addWorldContentMediaSchema.parse(request.postDataJSON());
         const entity = entities.get(match[1]!);
         const condition = body.importPrecondition;
         if (

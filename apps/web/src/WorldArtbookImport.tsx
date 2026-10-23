@@ -13,7 +13,6 @@ import {
 import {
   artbookActionId,
   inspectArtbookImage,
-  artbookProvenance,
   artbookRelativePath,
   loadArtbook,
   planArtbookTextImport,
