@@ -75,7 +75,10 @@ function artbookImageFile(path: string, variant = 0, type = "image/png") {
 }
 
 function dto(
-  input: Record<string, any>,
+  input: Pick<
+    WorldContentDto,
+    "slug" | "type" | "name" | "summary" | "provenance"
+  >,
   id = crypto.randomUUID(),
 ): WorldContentDto {
   return {
@@ -91,11 +94,11 @@ function dto(
     tags: [],
     lifecycle: "DRAFT",
     coverAssetId: null,
-    provenance: input.provenance,
+    provenance: input.provenance ?? null,
     revision: 0,
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString(),
-  } as WorldContentDto;
+  };
 }
 
 beforeEach(() => {
@@ -1160,12 +1163,17 @@ describe("WorldArtbookImport", () => {
         count + (candidate.cover === null ? 0 : 1) + candidate.gallery.length,
       0,
     );
+    const imageOnlyPaths = source.картинкиБезТекста;
     expect(sourceProposalCount).toBe(86);
-    expect(reportRows).toHaveLength(sourceProposalCount);
+    expect(imageOnlyPaths).toHaveLength(7);
+    expect(reportRows).toHaveLength(
+      sourceProposalCount + imageOnlyPaths.length,
+    );
 
     const amberRows = reportRows.filter((row) =>
       row.textContent?.startsWith(`${record.slug} / `),
     );
+    expect(amberRows).toHaveLength(2);
     expect(amberRows).toHaveLength(
       (record.cover === null ? 0 : 1) + record.gallery.length,
     );
@@ -1176,9 +1184,30 @@ describe("WorldArtbookImport", () => {
       );
     }
 
-    const otherRows = reportRows.filter(
+    const imageOnlyRows = reportRows.filter((row) =>
+      row.textContent?.startsWith("(image-only) / "),
+    );
+    expect(imageOnlyRows).toHaveLength(imageOnlyPaths.length);
+    for (const path of imageOnlyPaths) {
+      const row = imageOnlyRows.find((candidate) =>
+        candidate.textContent?.startsWith(`(image-only) / ${path}: `),
+      );
+      if (!row) throw new Error(`Missing image-only inventory row: ${path}`);
+      expect(row).toHaveTextContent(
+        `(image-only) / ${path}: blocked, этап inventory`,
+      );
+      expect(row).toHaveTextContent(
+        "Картинка без текстовой записи; не создаём новую сущность.",
+      );
+    }
+    const proposalRows = reportRows.filter(
+      (row) => !row.textContent?.startsWith("(image-only) / "),
+    );
+    expect(proposalRows).toHaveLength(sourceProposalCount);
+    const otherRows = proposalRows.filter(
       (row) => !row.textContent?.startsWith(`${record.slug} / `),
     );
+    expect(otherRows).toHaveLength(84);
     expect(otherRows).toHaveLength(sourceProposalCount - amberRows.length);
     for (const row of otherRows) {
       expect(row).toHaveTextContent("conflict, этап read-only-preflight");
