@@ -211,6 +211,115 @@ for (const width of [390, 1280]) {
   });
 }
 
+for (const width of [390, 1280]) {
+  test(`UIX-458 GM explicitly imports the lazy 2024 reference at ${width}px (mock API)`, async ({
+    page,
+  }) => {
+    const snapshot = gmSnapshot({ schemaVersion: 2 });
+    const previewRequests: Array<Record<string, unknown>> = [];
+    const createRequests: Array<Record<string, unknown>> = [];
+    const lifecycleRequests: string[] = [];
+    await page.route("**/api/**", async (route) => {
+      const request = route.request();
+      const { pathname } = new URL(request.url());
+      if (pathname === "/api/bootstrap")
+        return route.fulfill({ json: snapshot });
+      if (pathname === "/api/soundpad")
+        return route.fulfill({
+          json: { packs: [], playerPlaybackEnabled: true },
+        });
+      if (pathname === "/api/spell-packs" && request.method() === "GET")
+        return route.fulfill({ json: { packs: [] } });
+      if (pathname === "/api/spell-packs/imports/reference/preview") {
+        const body = request.postDataJSON() as Record<string, unknown> & {
+          source: {
+            школы: Array<{ ключ: string; узлы: Array<{ название: string }> }>;
+            требуетУточнения: unknown[];
+          };
+        };
+        previewRequests.push(body);
+        expect(body.source.школы).toHaveLength(13);
+        expect(body.source.школы[0]).toMatchObject({
+          ключ: "sumrak",
+          узлы: expect.arrayContaining([
+            expect.objectContaining({ название: "ТЕНЕВОЙ ШАГ" }),
+          ]),
+        });
+        expect(body.source.требуетУточнения).toHaveLength(31);
+        const graph = {
+          packId: body.packId,
+          versionId: body.versionId,
+          version: 1,
+          title: "Школы магии Аркен-Хара — референс 2024",
+          lifecycle: "REFERENCE",
+          schools: Array.from({ length: 13 }, (_, index) => ({ id: index })),
+          nodes: Array.from({ length: 145 }, (_, index) => ({ id: index })),
+          edges: Array.from({ length: 114 }, (_, index) => ({ id: index })),
+          importWarnings: Array.from({ length: 31 }, (_, index) => ({
+            id: index,
+            status: "OPEN",
+          })),
+        };
+        return route.fulfill({
+          json: {
+            graph,
+            validation: { valid: true, errors: [], warnings: [] },
+          },
+        });
+      }
+      if (pathname === "/api/spell-packs" && request.method() === "POST") {
+        const body = request.postDataJSON() as {
+          actionId: string;
+          expectedVersion: number;
+          graph: { packId: string; versionId: string; lifecycle: string };
+        };
+        createRequests.push(body);
+        expect(body.expectedVersion).toBe(0);
+        expect(body.graph.lifecycle).toBe("REFERENCE");
+        return route.fulfill({
+          status: 201,
+          json: { packId: body.graph.packId, versionId: body.graph.versionId },
+        });
+      }
+      if (pathname.includes("/lifecycle")) lifecycleRequests.push(pathname);
+      if (pathname === "/api/client-logs")
+        return route.fulfill({ json: { ok: true } });
+      return fulfillUnmocked(route, pathname);
+    });
+
+    await page.setViewportSize({ width, height: 850 });
+    await mockAuthenticatedGameCapabilities(page);
+    await page.goto("/");
+    await expect(page.locator(".app-shell")).toBeVisible();
+    await openWorkspaceSection(page, "Школы заклинаний");
+    await page.getByRole("button", { name: "Посмотреть справочник" }).click();
+    await expect(
+      page.getByText("Школ: 13, узлов: 145, связей: 114."),
+    ).toBeVisible();
+    await expect(page.getByText(/Требуют уточнения: 31/)).toBeVisible();
+    expect(previewRequests).toHaveLength(1);
+    expect(createRequests).toHaveLength(0);
+
+    await page.getByRole("button", { name: "Загрузить справочник" }).click();
+    await expect(
+      page.getByText("Справочник школ Аркен-Хара загружен как референс."),
+    ).toBeVisible();
+    expect(createRequests).toHaveLength(1);
+    expect(createRequests[0]!.graph).toMatchObject({
+      title: "Школы магии Аркен-Хара — референс 2024",
+      lifecycle: "REFERENCE",
+      schools: { length: 13 },
+      nodes: { length: 145 },
+      edges: { length: 114 },
+      importWarnings: { length: 31 },
+    });
+    expect(lifecycleRequests).toEqual([]);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+  });
+}
+
 test("UIX-458 PLAYER cannot open or preload the GM spell-school editor", async ({
   page,
 }) => {
