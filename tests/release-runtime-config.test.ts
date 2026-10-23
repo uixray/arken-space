@@ -78,4 +78,15 @@ describe("release container configuration", () => {
     expect(webBuild).toBeGreaterThan(-1);
     expect(fontCheck).toBeGreaterThan(webBuild);
   });
+
+  it("copies the lazy GM reference content into the web build but not the server image", () => {
+    const referenceContentCopy = webDockerfile.indexOf(
+      "COPY docs/content docs/content",
+    );
+    const webBuild = webDockerfile.indexOf("pnpm --filter @arken/web build");
+
+    expect(referenceContentCopy).toBeGreaterThan(-1);
+    expect(webBuild).toBeGreaterThan(referenceContentCopy);
+    expect(serverDockerfile).not.toMatch(/^COPY\s+docs(?:\/|\s)/mu);
+  });
 });
