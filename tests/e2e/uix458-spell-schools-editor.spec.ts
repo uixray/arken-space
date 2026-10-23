@@ -1,7 +1,9 @@
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import type { SpellProgressionGraph } from "@arken/contracts";
+import type { PreviewSpellReferenceImportCommand } from "@arken/contracts";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import { previewSpellReferenceImport } from "../../apps/server/src/spell-reference-import.js";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 import { fulfillUnmocked } from "./mock-api-contract";
 
@@ -216,9 +218,14 @@ for (const width of [390, 1280]) {
     page,
   }) => {
     const snapshot = gmSnapshot({ schemaVersion: 2 });
-    const previewRequests: Array<Record<string, unknown>> = [];
-    const createRequests: Array<Record<string, unknown>> = [];
+    const previewRequests: PreviewSpellReferenceImportCommand[] = [];
+    const createRequests: Array<{
+      actionId: string;
+      expectedVersion: number;
+      graph: SpellProgressionGraph;
+    }> = [];
     const lifecycleRequests: string[] = [];
+    const importedVersions: SpellProgressionGraph[] = [];
     await page.route("**/api/**", async (route) => {
       const request = route.request();
       const { pathname } = new URL(request.url());
@@ -229,14 +236,21 @@ for (const width of [390, 1280]) {
           json: { packs: [], playerPlaybackEnabled: true },
         });
       if (pathname === "/api/spell-packs" && request.method() === "GET")
-        return route.fulfill({ json: { packs: [] } });
+        return route.fulfill({
+          json: {
+            packs: importedVersions.map((graph) => ({
+              id: graph.packId,
+              latestVersionId: graph.versionId,
+              latestVersion: graph.version,
+              lifecycle: graph.lifecycle,
+              title: graph.title,
+              createdAt: "2026-10-09T00:00:00.000Z",
+            })),
+          },
+        });
       if (pathname === "/api/spell-packs/imports/reference/preview") {
-        const body = request.postDataJSON() as Record<string, unknown> & {
-          source: {
-            школы: Array<{ ключ: string; узлы: Array<{ название: string }> }>;
-            требуетУточнения: unknown[];
-          };
-        };
+        const body =
+          request.postDataJSON() as PreviewSpellReferenceImportCommand;
         previewRequests.push(body);
         expect(body.source.школы).toHaveLength(13);
         expect(body.source.школы[0]).toMatchObject({
@@ -246,40 +260,59 @@ for (const width of [390, 1280]) {
           ]),
         });
         expect(body.source.требуетУточнения).toHaveLength(31);
-        const graph = {
-          packId: body.packId,
-          versionId: body.versionId,
-          version: 1,
-          title: "Школы магии Аркен-Хара — референс 2024",
-          lifecycle: "REFERENCE",
-          schools: Array.from({ length: 13 }, (_, index) => ({ id: index })),
-          nodes: Array.from({ length: 145 }, (_, index) => ({ id: index })),
-          edges: Array.from({ length: 114 }, (_, index) => ({ id: index })),
-          importWarnings: Array.from({ length: 31 }, (_, index) => ({
-            id: index,
-            status: "OPEN",
-          })),
-        };
+        const preview = previewSpellReferenceImport(body);
         return route.fulfill({
-          json: {
-            graph,
-            validation: { valid: true, errors: [], warnings: [] },
-          },
+          json: preview,
         });
       }
       if (pathname === "/api/spell-packs" && request.method() === "POST") {
         const body = request.postDataJSON() as {
           actionId: string;
           expectedVersion: number;
-          graph: { packId: string; versionId: string; lifecycle: string };
+          graph: SpellProgressionGraph;
         };
         createRequests.push(body);
         expect(body.expectedVersion).toBe(0);
         expect(body.graph.lifecycle).toBe("REFERENCE");
+        const preview = previewSpellReferenceImport(previewRequests[0]!);
+        expect(body.graph).toEqual(preview.graph);
+        importedVersions.push(body.graph);
         return route.fulfill({
           status: 201,
-          json: { packId: body.graph.packId, versionId: body.graph.versionId },
+          json: {
+            packId: body.graph.packId,
+            versionId: body.graph.versionId,
+            version: body.graph.version,
+            lifecycle: body.graph.lifecycle,
+            graph: body.graph,
+            warnings: [],
+            createdAt: "2026-10-09T00:00:00.000Z",
+          },
         });
+      }
+      const versionPath = pathname.match(
+        /^\/api\/spell-packs\/([^/]+)\/versions\/([^/]+)$/,
+      );
+      if (versionPath && request.method() === "GET") {
+        const graph = importedVersions.find(
+          (version) => version.versionId === versionPath[2],
+        );
+        return graph
+          ? route.fulfill({
+              json: {
+                packId: graph.packId,
+                versionId: graph.versionId,
+                version: graph.version,
+                lifecycle: graph.lifecycle,
+                graph,
+                warnings: [],
+                createdAt: "2026-10-09T00:00:00.000Z",
+              },
+            })
+          : route.fulfill({
+              status: 404,
+              json: { error: "SPELL_PACK_VERSION_NOT_FOUND" },
+            });
       }
       if (pathname.includes("/lifecycle")) lifecycleRequests.push(pathname);
       if (pathname === "/api/client-logs")
@@ -301,18 +334,45 @@ for (const width of [390, 1280]) {
     expect(createRequests).toHaveLength(0);
 
     await page.getByRole("button", { name: "Загрузить справочник" }).click();
+    const dialog = page.getByRole("dialog", {
+      name: "Школы заклинаний",
+      exact: true,
+    });
     await expect(
-      page.getByText("Справочник школ Аркен-Хара загружен как референс."),
+      dialog
+        .getByRole("complementary", {
+          name: "Наборы заклинаний",
+          exact: true,
+        })
+        .getByRole("button", { name: /Школы магии Аркен-Хара/ }),
     ).toBeVisible();
     expect(createRequests).toHaveLength(1);
-    expect(createRequests[0]!.graph).toMatchObject({
-      title: "Школы магии Аркен-Хара — референс 2024",
-      lifecycle: "REFERENCE",
-      schools: { length: 13 },
-      nodes: { length: 145 },
-      edges: { length: 114 },
-      importWarnings: { length: 31 },
+    expect(importedVersions).toHaveLength(1);
+    expect(importedVersions[0]).toEqual(createRequests[0]!.graph);
+    const loadedEditor = dialog.getByRole("group", {
+      name: "Поля черновика школы и веток",
+      exact: true,
     });
+    await expect(
+      loadedEditor.getByRole("textbox", {
+        name: "Название набора",
+        exact: true,
+      }),
+    ).toHaveValue("Школы магии Аркен-Хара — референс 2024");
+    await expect(
+      loadedEditor.getByText("Редактируется версия 1", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole("button", {
+        name: "Проверить и сохранить новую версию",
+        exact: true,
+      }),
+    ).toBeDisabled();
+    await expect(
+      dialog.getByText("Можно редактировать только черновую версию.", {
+        exact: true,
+      }),
+    ).toBeVisible();
     expect(lifecycleRequests).toEqual([]);
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),

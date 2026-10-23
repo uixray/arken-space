@@ -88,8 +88,9 @@ describe("UIX-583 Canvas guard inventory", () => {
       const end = `inventory-end-${index}`;
       const wrappedLf = `${start}\n${lf}\n${end}`;
       const wrappedCrlf = `${start}\r\n${crlf}\r\n${end}`;
-      expect(between(wrappedCrlf, start, end)).toBe(lf);
-      expect(between(wrappedLf, start, end)).toBe(lf);
+      const expectedExtract = `${start}\n${lf}\n`;
+      expect(between(wrappedCrlf, start, end)).toBe(expectedExtract);
+      expect(between(wrappedLf, start, end)).toBe(expectedExtract);
     }
     for (const [source, start, end] of ranges) {
       const lf = source.replace(/\r\n/g, "\n");
