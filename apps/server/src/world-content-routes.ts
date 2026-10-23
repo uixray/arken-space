@@ -15,6 +15,7 @@ import {
   worldContentActions,
   worldContentMedia,
   worldContentRelations,
+  assets,
 } from "@arken/db";
 import {
   addWorldContentMediaSchema,
@@ -64,6 +65,11 @@ type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type RequestDb = Database | Transaction;
 type WorldContentMediaRow = typeof worldContentMedia.$inferSelect;
 type WorldContentRelationRow = typeof worldContentRelations.$inferSelect;
+type ImportMediaCreateResult =
+  | { kind: "not-found" }
+  | { kind: "precondition-failed" }
+  | { kind: "duplicate" }
+  | { kind: "created"; row: WorldContentMediaRow };
 
 function fail(
   reply: { code: (n: number) => { send: (b: unknown) => unknown } },
@@ -178,6 +184,31 @@ function isLegalTransition(
   return LEGAL_LIFECYCLE_TRANSITIONS[from].includes(to);
 }
 
+function isImageCompatibleAsset(asset: typeof assets.$inferSelect) {
+  // Preserve existing image-kind consumers while excluding audio/unknown data.
+  return (
+    asset.kind !== "AUDIO" &&
+    ["image/png", "image/jpeg", "image/webp"].includes(asset.mimeType)
+  );
+}
+
+async function findImageAssetForCampaign(
+  db: RequestDb,
+  assetId: string,
+  campaignId: string,
+) {
+  const [asset] = await db
+    .select()
+    .from(assets)
+    .where(eq(assets.id, assetId))
+    .limit(1);
+  return asset &&
+    asset.campaignId === campaignId &&
+    isImageCompatibleAsset(asset)
+    ? asset
+    : null;
+}
+
 const idParams = z.object({ id: z.string().uuid() }).strict();
 const mediaParams = z
   .object({ id: z.string().uuid(), mediaId: z.string().uuid() })
@@ -193,7 +224,14 @@ const listQuerySchema = z
   .partial()
   .passthrough();
 
-export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
+export function registerWorldContentRoutes(
+  app: FastifyInstance,
+  db: Database,
+  testHooks: {
+    /** Non-HTTP scheduling seam for deterministic pre-transaction integration coverage. */
+    beforeImporterMediaTransaction?: () => Promise<void> | void;
+  } = {},
+) {
   app.get("/api/world-content", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
@@ -404,6 +442,11 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
     const body = createWorldContentSchema.parse(request.body);
     if (await findAction(db, body.actionId))
       return reply.code(200).send({ duplicate: true });
+    if (
+      body.coverAssetId &&
+      !(await findImageAssetForCampaign(db, body.coverAssetId, auth.campaignId))
+    )
+      return fail(reply, 422, "WORLD_CONTENT_ASSET_INVALID");
     try {
       const created = await db.transaction(async (tx) => {
         const [row] = await tx
@@ -463,6 +506,12 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
     const body = updateWorldContentSchema.parse(request.body);
     if (await findAction(db, body.actionId))
       return reply.code(200).send({ duplicate: true });
+    if (
+      body.coverAssetId !== undefined &&
+      body.coverAssetId !== null &&
+      !(await findImageAssetForCampaign(db, body.coverAssetId, auth.campaignId))
+    )
+      return fail(reply, 422, "WORLD_CONTENT_ASSET_INVALID");
     const existing = await findEntity(db, id);
     if (!existing) return fail(reply, 404, "WORLD_CONTENT_NOT_FOUND");
     if (existing.revision !== body.revision)
@@ -692,39 +741,89 @@ export function registerWorldContentRoutes(app: FastifyInstance, db: Database) {
     const body = addWorldContentMediaSchema.parse(request.body);
     if (await findAction(db, body.actionId))
       return reply.code(200).send({ duplicate: true });
-    const entity = await findEntity(db, id);
-    if (!entity) return fail(reply, 404, "WORLD_CONTENT_NOT_FOUND");
+    if (!(await findImageAssetForCampaign(db, body.assetId, auth.campaignId)))
+      return fail(reply, 422, "WORLD_CONTENT_ASSET_INVALID");
+    if (body.importPrecondition)
+      await testHooks.beforeImporterMediaTransaction?.();
+    if (!body.importPrecondition) {
+      const entity = await findEntity(db, id);
+      if (!entity) return fail(reply, 404, "WORLD_CONTENT_NOT_FOUND");
+    }
     try {
-      const created = await db.transaction(async (tx) => {
-        const [orderingRow] = await tx
-          .select({
-            nextOrdering: sql<number>`coalesce(max(${worldContentMedia.ordering}), -1) + 1`,
-          })
-          .from(worldContentMedia)
-          .where(eq(worldContentMedia.worldContentId, id));
-        const nextOrdering = orderingRow?.nextOrdering ?? 0;
-        const [row] = await tx
-          .insert(worldContentMedia)
-          .values({
-            worldContentId: id,
-            assetId: body.assetId,
-            caption: body.caption ?? null,
-            ordering: nextOrdering,
-          })
-          .returning();
-        if (!row) throw new Error("WORLD_CONTENT_MEDIA_CREATE_FAILED");
-        await tx.insert(worldContentActions).values({
-          actionId: body.actionId,
-          type: "world_content.media_added",
-          entityType: "world_content_media",
-          entityId: row.id,
-          entityRevision: 0,
-          actorMembershipId: auth.membershipId,
-          payload: row,
-        });
-        return row;
-      });
-      return reply.code(201).send(mediaDto(created));
+      const created: ImportMediaCreateResult = await db.transaction(
+        async (tx) => {
+          if (body.importPrecondition) {
+            const [current] = await tx
+              .select()
+              .from(worldContent)
+              .where(eq(worldContent.id, id))
+              .for("update")
+              .limit(1);
+            if (!current) return { kind: "not-found" };
+            const expected = body.importPrecondition;
+            if (
+              current.lifecycle !== "DRAFT" ||
+              current.revision !== expected.expectedRevision ||
+              current.slug !== expected.slug ||
+              current.type !== expected.type ||
+              current.name !== expected.name ||
+              current.summary !== expected.summary ||
+              current.sourceUrl !== expected.provenance.sourceUrl ||
+              current.sourceExternalId !==
+                expected.provenance.sourceExternalId ||
+              (current.retrievedAt
+                ? current.retrievedAt.toISOString()
+                : null) !== expected.provenance.retrievedAt ||
+              current.rawContentHash !== expected.provenance.rawContentHash ||
+              current.attribution !== expected.provenance.attribution ||
+              current.rightsReviewStatus !==
+                expected.provenance.rightsReviewStatus ||
+              current.editorialApprovalStatus !==
+                expected.provenance.editorialApprovalStatus
+            )
+              return { kind: "precondition-failed" };
+            if (await findAction(tx, body.actionId))
+              return { kind: "duplicate" };
+          }
+          const [orderingRow] = await tx
+            .select({
+              nextOrdering: sql<number>`coalesce(max(${worldContentMedia.ordering}), -1) + 1`,
+            })
+            .from(worldContentMedia)
+            .where(eq(worldContentMedia.worldContentId, id));
+          const nextOrdering = orderingRow?.nextOrdering ?? 0;
+          const [row] = await tx
+            .insert(worldContentMedia)
+            .values({
+              worldContentId: id,
+              assetId: body.assetId,
+              caption: body.caption ?? null,
+              ordering: nextOrdering,
+            })
+            .returning();
+          if (!row) throw new Error("WORLD_CONTENT_MEDIA_CREATE_FAILED");
+          await tx.insert(worldContentActions).values({
+            actionId: body.actionId,
+            type: "world_content.media_added",
+            entityType: "world_content_media",
+            entityId: row.id,
+            entityRevision: 0,
+            actorMembershipId: auth.membershipId,
+            payload: row,
+          });
+          return { kind: "created", row };
+        },
+      );
+      switch (created.kind) {
+        case "not-found":
+          return fail(reply, 404, "WORLD_CONTENT_NOT_FOUND");
+        case "precondition-failed":
+          return fail(reply, 409, "IMPORT_PRECONDITION_FAILED");
+        case "duplicate":
+          return reply.code(200).send({ duplicate: true });
+        case "created":
+          return reply.code(201).send(mediaDto(created.row));
+      }
     } catch (error) {
       if (isUniqueViolation(error, "world_content_media_entity_asset_idx"))
         return fail(reply, 409, "WORLD_CONTENT_MEDIA_ALREADY_ATTACHED");

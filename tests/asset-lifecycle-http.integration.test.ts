@@ -35,7 +35,11 @@ const ids = {
   unused: crypto.randomUUID(),
   foreign: crypto.randomUUID(),
 };
-const secrets = { gm: "g".repeat(40), player: "p".repeat(40) };
+const secrets = {
+  gm: "g".repeat(40),
+  player: "p".repeat(40),
+  foreignGm: "f".repeat(40),
+};
 const headers = (secret: string) => ({
   cookie: `${env.SESSION_COOKIE_NAME}=${secret}`,
 });
@@ -135,6 +139,11 @@ beforeEach(async () => {
       tokenHash: hashToken(secrets.player),
       expiresAt: new Date(Date.now() + 60_000),
     },
+    {
+      membershipId: ids.foreignGm,
+      tokenHash: hashToken(secrets.foreignGm),
+      expiresAt: new Date(Date.now() + 60_000),
+    },
   ]);
   await db.insert(schema.assets).values([
     {
@@ -206,6 +215,188 @@ afterEach(async () => {
 });
 
 describe("UIX-293 asset lifecycle HTTP", () => {
+  it("resolves only same-campaign IMAGE upload actions for authenticated GMs", async () => {
+    const actionId = crypto.randomUUID();
+    const form = multipartFile(tinyPng, "lookup.png", "image/png");
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/assets?kind=IMAGE",
+      payload: form.body,
+      headers: {
+        ...headers(secrets.gm),
+        "x-action-id": actionId,
+        "content-type": form.contentType,
+      },
+    });
+    expect(upload.statusCode).toBe(201);
+    const lookup = (secret: string, id = actionId) =>
+      app.inject({
+        method: "GET",
+        url: `/api/assets/upload-actions/${id}`,
+        headers: headers(secret),
+      });
+    const resolved = await lookup(secrets.gm);
+    expect(resolved.statusCode).toBe(200);
+    expect(resolved.json()).toMatchObject({
+      id: upload.json().id,
+      kind: "IMAGE",
+    });
+    expect(resolved.json()).not.toHaveProperty("storageKey");
+    expect((await lookup(secrets.player)).statusCode).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/assets/upload-actions/${actionId}`,
+        })
+      ).statusCode,
+    ).toBe(401);
+
+    const foreignActionId = crypto.randomUUID();
+    const foreignForm = multipartFile(tinyPng, "lookup.png", "image/png");
+    const foreign = await app.inject({
+      method: "POST",
+      url: "/api/assets?kind=IMAGE",
+      payload: foreignForm.body,
+      headers: {
+        ...headers(secrets.foreignGm),
+        "x-action-id": foreignActionId,
+        "content-type": foreignForm.contentType,
+      },
+    });
+    expect(foreign.statusCode).toBe(201);
+    const foreignLookup = await lookup(secrets.gm, foreignActionId);
+    expect(foreignLookup.statusCode).toBe(404);
+    expect(foreignLookup.json()).toEqual({ error: "ASSET_NOT_FOUND" });
+    expect((await lookup(secrets.gm, crypto.randomUUID())).statusCode).toBe(
+      404,
+    );
+    const wrongKindAction = crypto.randomUUID();
+    await db.insert(schema.gameEvents).values({
+      campaignId: ids.campaign,
+      actionId: wrongKindAction,
+      membershipId: ids.gm,
+      type: "asset.created",
+      entityType: "asset",
+      entityId: ids.used,
+      entityRevision: 0,
+      payload: { assetId: ids.used, kind: "MAP" },
+    });
+    expect((await lookup(secrets.gm, wrongKindAction)).statusCode).toBe(404);
+    const wrongMimeAssetId = crypto.randomUUID();
+    const wrongMimeAction = crypto.randomUUID();
+    await db.insert(schema.assets).values({
+      id: wrongMimeAssetId,
+      campaignId: ids.campaign,
+      uploadedByMembershipId: ids.gm,
+      kind: "IMAGE",
+      name: "Invalid MIME fixture",
+      storageKey: `uix293-invalid-mime/${wrongMimeAssetId}`,
+      mimeType: "application/pdf",
+      sizeBytes: 9,
+    });
+    await db.insert(schema.gameEvents).values({
+      campaignId: ids.campaign,
+      actionId: wrongMimeAction,
+      membershipId: ids.gm,
+      type: "asset.created",
+      entityType: "asset",
+      entityId: wrongMimeAssetId,
+      entityRevision: 0,
+      payload: { assetId: wrongMimeAssetId, kind: "IMAGE" },
+    });
+    expect((await lookup(secrets.gm, wrongMimeAction)).statusCode).toBe(404);
+    const nonAssetAction = crypto.randomUUID();
+    await db.insert(schema.gameEvents).values({
+      campaignId: ids.campaign,
+      actionId: nonAssetAction,
+      membershipId: ids.gm,
+      type: "world_content.updated",
+      entityType: "world_content",
+      entityId: ids.used,
+      entityRevision: 1,
+      payload: { kind: "IMAGE" },
+    });
+    expect((await lookup(secrets.gm, nonAssetAction)).statusCode).toBe(404);
+    const deletedAction = crypto.randomUUID();
+    const deletedAssetId = crypto.randomUUID();
+    await db.insert(schema.gameEvents).values({
+      campaignId: ids.campaign,
+      actionId: deletedAction,
+      membershipId: ids.gm,
+      type: "asset.created",
+      entityType: "asset",
+      entityId: deletedAssetId,
+      entityRevision: 0,
+      payload: { assetId: deletedAssetId, kind: "IMAGE" },
+    });
+    expect((await lookup(secrets.gm, deletedAction)).statusCode).toBe(404);
+    const eventCount = await db.select().from(schema.gameEvents);
+    const assetCount = await db.select().from(schema.assets);
+    const storageBefore = await fileInventory();
+    await lookup(secrets.gm, actionId);
+    expect(await db.select().from(schema.gameEvents)).toHaveLength(
+      eventCount.length,
+    );
+    expect(await db.select().from(schema.assets)).toHaveLength(
+      assetCount.length,
+    );
+    expect(await fileInventory()).toEqual(storageBefore);
+  });
+
+  it("replays the same campaign image upload action and preserves prepared image content", async () => {
+    const actionId = crypto.randomUUID();
+    const upload = () => {
+      const form = multipartFile(tinyPng, "artbook.png", "image/png");
+      return app.inject({
+        method: "POST",
+        url: "/api/assets?kind=IMAGE",
+        payload: form.body,
+        headers: {
+          ...headers(secrets.gm),
+          "x-action-id": actionId,
+          "content-type": form.contentType,
+        },
+      });
+    };
+    const created = await upload();
+    expect(created.statusCode, created.body).toBe(201);
+    const replay = await upload();
+    expect(replay.statusCode, replay.body).toBe(200);
+    expect(replay.json().id).toBe(created.json().id);
+    expect(
+      await db
+        .select()
+        .from(schema.assets)
+        .where(eq(schema.assets.id, created.json().id)),
+    ).toHaveLength(1);
+    const content = await app.inject({
+      method: "GET",
+      url: `/api/assets/${created.json().id}/content`,
+      headers: headers(secrets.gm),
+    });
+    expect(content.statusCode, content.body).toBe(200);
+    expect(content.headers["content-type"]).toBe("image/webp");
+    expect(content.rawPayload.length).toBeGreaterThan(0);
+    expect(content.rawPayload.subarray(0, 4).toString()).toBe("RIFF");
+    expect(content.rawPayload.subarray(8, 12).toString()).toBe("WEBP");
+
+    const foreignForm = multipartFile(tinyPng, "artbook.png", "image/png");
+    const foreignUpload = await app.inject({
+      method: "POST",
+      url: "/api/assets?kind=IMAGE",
+      payload: foreignForm.body,
+      headers: {
+        ...headers(secrets.foreignGm),
+        "x-action-id": actionId,
+        "content-type": foreignForm.contentType,
+      },
+    });
+    expect(foreignUpload.statusCode, foreignUpload.body).toBe(201);
+    expect(foreignUpload.json().id).not.toBe(created.json().id);
+    expect(foreignUpload.json().campaignId).toBe(ids.foreignCampaign);
+  });
+
   it("reserves encoded WebP growth and rejects over-quota upload without creating blobs", async () => {
     const { source, encoded } = await growingJpeg();
     env.MEDIA_QUOTA_BYTES = 20 + encoded.length;

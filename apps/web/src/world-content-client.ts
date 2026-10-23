@@ -221,9 +221,15 @@ export type CreateWorldContentInput = {
 };
 
 export const createWorldContent = (input: CreateWorldContentInput) =>
+  createWorldContentWithActionId(input, crypto.randomUUID());
+
+export const createWorldContentWithActionId = (
+  input: CreateWorldContentInput,
+  actionId: string,
+) =>
   api<WorldContentDto>("/api/world-content", {
     method: "POST",
-    body: JSON.stringify({ ...input, actionId: crypto.randomUUID() }),
+    body: JSON.stringify({ ...input, actionId }),
   });
 
 export type UpdateWorldContentInput = {
@@ -308,13 +314,25 @@ export const deleteWorldContentRelation = (relationId: string) =>
 
 export const addWorldContentMedia = (
   id: string,
-  input: { assetId: string; caption?: string | null },
+  input: {
+    assetId: string;
+    caption?: string | null;
+    importPrecondition?: {
+      expectedRevision: number;
+      slug: string;
+      type: WorldContentDto["type"];
+      name: string;
+      summary: string;
+      provenance: NonNullable<WorldContentDto["provenance"]>;
+    };
+  },
+  actionId: string = crypto.randomUUID(),
 ) =>
   api<WorldContentMediaDto>(
     `/api/world-content/${encodeURIComponent(id)}/media`,
     {
       method: "POST",
-      body: JSON.stringify({ ...input, actionId: crypto.randomUUID() }),
+      body: JSON.stringify({ ...input, actionId }),
     },
   );
 
