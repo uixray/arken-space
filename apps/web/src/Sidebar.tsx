@@ -577,6 +577,7 @@ function SidebarContent(props: Props) {
         {props.workspace === "world-encyclopedia" && isGm && (
           <WorldContentWorkspace
             open
+            campaignId={props.snapshot.campaign.id}
             assets={props.snapshot.assets}
             members={props.snapshot.members}
             worldMaps={props.snapshot.worldMaps}

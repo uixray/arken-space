@@ -100,6 +100,7 @@ type CanonicalConflict = {
  */
 export const WorldContentWorkspace = memo(function WorldContentWorkspace({
   open,
+  campaignId,
   assets,
   members = [],
   worldMaps,
@@ -107,6 +108,7 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
   onClose,
 }: {
   open: boolean;
+  campaignId?: string;
   assets: AssetDto[];
   members?: readonly MembershipDto[];
   worldMaps?: WorldMapsSnapshotDto;
@@ -319,7 +321,10 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
               </Button>
             </div>
             {artbookOpen && (
-              <WorldArtbookImport onChanged={() => void load()} />
+              <WorldArtbookImport
+                campaignId={campaignId}
+                onChanged={() => void load()}
+              />
             )}
             {listError && (
               <p className="field-error" role="alert">
