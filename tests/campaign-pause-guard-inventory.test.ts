@@ -48,6 +48,9 @@ beforeAll(async () => {
 });
 
 function between(source: string, start: string, end: string) {
+  // Git's Windows checkout may materialize LF blobs as CRLF. Match markers
+  // against a stable representation without changing the checked boundaries.
+  source = source.replace(/\r\n/g, "\n");
   const startAt = source.indexOf(start);
   const endAt = source.indexOf(end, startAt + start.length);
   expect(startAt, `missing inventory marker: ${start}`).toBeGreaterThanOrEqual(
@@ -57,7 +60,56 @@ function between(source: string, start: string, end: string) {
   return source.slice(startAt, endAt);
 }
 
+function expectDurableGuard(source: string, start: string, end: string) {
+  expect(between(source, start, end)).toContain("canvasTx(");
+}
+
+const inventorySources = () => [
+  routes,
+  realtime,
+  encounters,
+  drawingRoutes,
+  tokenRoutes,
+  sceneRoutes,
+  canvasRoutes,
+];
+
 describe("UIX-583 Canvas guard inventory", () => {
+  it("extracts identical route regions from LF and CRLF source text", () => {
+    const ranges: Array<[string, string, string]> = [
+      [canvasRoutes, 'app.patch("/api/scenes/:id/canvas",', "\n}\n"],
+      [tokenRoutes, 'app.patch("/api/tokens/:id/layer",', "\n}\n"],
+      [drawingRoutes, 'app.delete("/api/drawings/:id",', "\n}\n"],
+    ];
+    for (const [index, source] of inventorySources().entries()) {
+      const lf = source.replace(/\r\n/g, "\n");
+      const crlf = lf.replace(/\n/g, "\r\n");
+      const start = `inventory-start-${index}`;
+      const end = `inventory-end-${index}`;
+      const wrappedLf = `${start}\n${lf}\n${end}`;
+      const wrappedCrlf = `${start}\r\n${crlf}\r\n${end}`;
+      expect(between(wrappedCrlf, start, end)).toBe(lf);
+      expect(between(wrappedLf, start, end)).toBe(lf);
+    }
+    for (const [source, start, end] of ranges) {
+      const lf = source.replace(/\r\n/g, "\n");
+      const crlf = lf.replace(/\n/g, "\r\n");
+      expect(between(crlf, start, end)).toBe(between(lf, start, end));
+    }
+  });
+
+  it.each(["\n", "\r\n"])(
+    "keeps missing boundaries and missing guards failing for %s input",
+    (newline) => {
+      const guarded = `route${newline}canvasTx(() => save())${newline}end`;
+      expect(() => between(guarded, "missing start", "end")).toThrow();
+      expect(() => between(guarded, "route", "missing end")).toThrow();
+
+      const unguarded = `route${newline}save()${newline}end`;
+      expect(() => expectDurableGuard(unguarded, "route", "end")).toThrow();
+    },
+  );
+
   // Scene and fog routes live in scene-routes.ts, canvas operations in
   // canvas-routes.ts; both receive the same canvasTx from routes.ts.
   it.each([
