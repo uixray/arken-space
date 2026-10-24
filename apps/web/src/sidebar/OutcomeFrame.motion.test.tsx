@@ -258,6 +258,25 @@ describe("UIX-289 bundled critical-frame lifecycle", () => {
     expect(pending).not.toBe(resumed);
   });
 
+  it("publishes exhaustion when pause cleanup reaches zero before timer delivery", async () => {
+    installMotionApis();
+    const { container } = renderComponent(
+      <OutcomeFrame {...criticalProps()} />,
+    );
+    await intersect();
+    fireEvent.load(image(container)!);
+    expect(vi.getTimerCount()).toBe(1);
+
+    // Move the monotonic clock without delivering its queued deadline callback.
+    now = 2200;
+    await intersect(false);
+    expect(image(container)).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+
+    await intersect();
+    expect(image(container)).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it("does not replenish on duplicate load, duplicate IO, or same-props rerender", async () => {
     installMotionApis();
     const { container, rerender } = renderComponent(
