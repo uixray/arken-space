@@ -38,10 +38,12 @@ function ActiveCriticalImage({
   const readBudgetRef = useRef(readBudget);
   const chargeElapsedRef = useRef(chargeElapsed);
   const onErrorRef = useRef(onError);
-  registerSessionRef.current = registerSession;
-  readBudgetRef.current = readBudget;
-  chargeElapsedRef.current = chargeElapsed;
-  onErrorRef.current = onError;
+  useLayoutEffect(() => {
+    registerSessionRef.current = registerSession;
+    readBudgetRef.current = readBudget;
+    chargeElapsedRef.current = chargeElapsed;
+    onErrorRef.current = onError;
+  }, [registerSession, readBudget, chargeElapsed, onError]);
 
   useLayoutEffect(() => {
     aliveRef.current = true;
@@ -137,7 +139,7 @@ function BundledCriticalFrame({
   );
   const [pageActive, setPageActive] = useState(true);
   const [failed, setFailed] = useState(false);
-  const [, setRemaining] = useState(CRITICAL_VISIBLE_BUDGET_MS);
+  const [remaining, setRemaining] = useState(CRITICAL_VISIBLE_BUDGET_MS);
   const browserApisAvailable =
     reducedMotion !== null &&
     typeof IntersectionObserver !== "undefined" &&
@@ -231,7 +233,7 @@ function BundledCriticalFrame({
     documentVisible &&
     pageActive &&
     !failed &&
-    remainingRef.current > 0;
+    remaining > 0;
 
   const registerSession = () => {
     const session = ++sessionIdRef.current;
@@ -253,7 +255,7 @@ function BundledCriticalFrame({
       return;
     const nextRemaining = Math.max(0, remainingRef.current - elapsed);
     remainingRef.current = nextRemaining;
-    if (rerender) setRemaining(nextRemaining);
+    if (rerender || nextRemaining <= 0) setRemaining(nextRemaining);
   };
   const markFailed = () => {
     if (failedRef.current) return;
