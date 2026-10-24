@@ -1,4 +1,4 @@
-import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
+import { installMockedChatTransport } from "./mocked-chat-app";
 import type { Locator } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -85,7 +85,6 @@ for (const role of ["GM", "PLAYER"] as const)
             json: { error: "READ_ONLY_FIXTURE" },
           });
         }
-        if (path === "/api/bootstrap") return route.fulfill({ json: snapshot });
         if (path === "/api/story/posts")
           return route.fulfill({ json: { posts: [], nextCursor: null } });
         if (path === "/api/stickers")
@@ -99,17 +98,12 @@ for (const role of ["GM", "PLAYER"] as const)
           return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
         return fulfillUnmocked(route, path);
       });
-      await page.routeWebSocket(/\/socket\.io\//, (s) => {
-        s.onMessage((m) => {
-          if (m.toString() === "40") s.send('40{"sid":"chat-icons"}');
-        });
-        s.send(
-          '0{"sid":"chat-icons","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
-        );
+      await installMockedChatTransport(page, {
+        getSnapshot: () => snapshot,
+        socketId: "chat-icons",
       });
       try {
         await page.setViewportSize({ width, height: 850 });
-        await mockAuthenticatedGameCapabilities(page);
         await page.goto("/");
         if (width === 360) await page.locator("#compact-nav-journal").click();
         await expect(page.locator("#chat-panel-activity")).toBeVisible();

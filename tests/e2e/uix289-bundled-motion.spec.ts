@@ -9,7 +9,7 @@ import type { Page } from "@playwright/test";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { expect, test } from "./react-console-guard";
 import { fulfillUnmocked } from "./mock-api-contract";
-import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
+import { installMockedChatTransport } from "./mocked-chat-app";
 
 const STYLE_FRAME_ID = "11111111-2222-4333-8444-555555555555";
 const FRAME_PREFIX = "/assets/frames/";
@@ -136,8 +136,6 @@ async function installStrictAppFixture(
     const request = route.request();
     const url = new URL(request.url());
     const { pathname, searchParams } = url;
-    if (pathname === "/api/bootstrap" && request.method() === "GET")
-      return route.fulfill({ json: getSnapshot() });
     if (
       pathname === "/api/assets/" + STYLE_FRAME_ID + "/content" &&
       request.method() === "GET" &&
@@ -201,18 +199,14 @@ async function installStrictAppFixture(
     }
     return fulfillUnmocked(route, pathname);
   });
-  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
-    emitSnapshot = (snapshot) =>
-      socket.send(`42["game:snapshot",${JSON.stringify(snapshot)}]`);
-    socket.onMessage((message) => {
-      if (message.toString() === "40") {
-        socket.send('40{"sid":"uix289-bundled-motion"}');
-        resolveSocketReady();
-      }
-    });
-    socket.send(
-      '0{"sid":"uix289-bundled-motion","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
-    );
+  await installMockedChatTransport(page, {
+    getSnapshot,
+    socketId: "uix289-bundled-motion",
+    onSocket: (socket) => {
+      emitSnapshot = (snapshot) =>
+        socket.send('42["game:snapshot",' + JSON.stringify(snapshot) + "]");
+    },
+    onReady: resolveSocketReady,
   });
   return {
     pushSnapshot(snapshot: GameSnapshot) {
@@ -268,7 +262,6 @@ async function startApp(
     requests,
     unexpectedWrites,
   );
-  await mockAuthenticatedGameCapabilities(page);
   await page.setViewportSize({ width, height: 850 });
   await page.emulateMedia({
     reducedMotion: reduced ? "reduce" : "no-preference",
