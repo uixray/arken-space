@@ -3,12 +3,19 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { betaPlayers } from "../packages/contracts/src/beta-players.js";
 import { players } from "../infra/static/players/player-pages.data.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const playersDir = join(root, "infra", "static", "players");
 const nginxConfPath = join(root, "infra", "nginx", "arken-khar.space.conf");
+const requiredPublicPlayerHandles = [
+  "archinamon",
+  "IRAKLY123",
+  "DaryaSteel",
+  "VeePeeK",
+  "Zheludock",
+  "uixray",
+] as const;
 
 describe("UIX-364 — Персональные страницы игроков (player pages)", () => {
   describe("целостность данных в player-pages.data.mjs", () => {
@@ -37,14 +44,13 @@ describe("UIX-364 — Персональные страницы игроков (
       expect(new Set(handles).size).toBe(handles.length);
     });
 
-    it("все основные игроки из betaPlayers зарегистрированы", () => {
+    it("сохраняет опубликованные персональные страницы основного состава", () => {
       const playerHandles = new Set(
-        players.map((p) => p.handle.replace(/^@/, "").toLowerCase()),
+        players.map((player) => player.handle.replace(/^@/, "").toLowerCase()),
       );
 
-      for (const beta of betaPlayers) {
-        expect(playerHandles).toContain(beta.handle.toLowerCase());
-      }
+      for (const handle of requiredPublicPlayerHandles)
+        expect(playerHandles).toContain(handle.toLowerCase());
     });
   });
 

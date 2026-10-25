@@ -15,12 +15,6 @@ import { fogGeometrySchema } from "./fog-geometry.js";
 export * from "./ruler-geometry.js";
 export { PUBLISHED_PLAYER_THEME_DEFINITIONS } from "./player-themes.generated.js";
 import { rulerUpdateSchema, type RulerColorKey } from "./ruler-geometry.js";
-export {
-  betaPlayerByHandle,
-  betaPlayers,
-  matchesBetaPlayerIdentity,
-  uniqueBetaPlayerIdentity,
-} from "./beta-players.js";
 
 export const roleSchema = z.enum(["GM", "PLAYER"]);
 export const projectionSchema = z.enum([

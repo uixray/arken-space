@@ -14,7 +14,7 @@ import {
   tokenDefinitions,
   tokens,
 } from "@arken/db";
-import { betaPlayers } from "@arken/contracts";
+import { developmentDemoPlayers } from "./demo-players.js";
 import { createStarterCharacter } from "@arken/system";
 import { env } from "./env.js";
 import { hashToken } from "./security.js";
@@ -617,7 +617,7 @@ export async function seedDevelopmentDemoContent(
     },
   };
 
-  for (const player of betaPlayers) {
+  for (const player of developmentDemoPlayers) {
     let [member] = await db
       .select()
       .from(memberships)

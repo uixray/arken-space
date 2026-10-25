@@ -4,7 +4,6 @@ import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "@arken/db";
-import { betaPlayerByHandle } from "@arken/contracts";
 import { hashToken } from "./security.js";
 import { registerRoutes } from "./routes.js";
 import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
@@ -13,6 +12,10 @@ let database: PGlite;
 let app: ReturnType<typeof Fastify>;
 let db: ReturnType<typeof drizzle<typeof schema>>;
 const campaignId = crypto.randomUUID();
+const syntheticAliasPlayer = {
+  name: "Synthetic Player",
+  handle: "synthetic-alias",
+} as const;
 
 beforeEach(async () => {
   database = await createMigratedPglite();
@@ -56,7 +59,7 @@ async function addIdentity(
   return membershipId;
 }
 
-async function login(handle = "archinamon") {
+async function login(handle: string = syntheticAliasPlayer.handle) {
   return app.inject({ method: "POST", url: `/api/auth/player/${handle}` });
 }
 
@@ -74,7 +77,7 @@ async function counts() {
 
 describe("public alias authentication is disabled", () => {
   it("rejects a nickname even when the alias has an active PLAYER grant", async () => {
-    const player = betaPlayerByHandle("archinamon")!;
+    const player = syntheticAliasPlayer;
     const membershipId = await addIdentity(
       "PLAYER",
       player.name,
@@ -95,7 +98,7 @@ describe("public alias authentication is disabled", () => {
     "GM collision",
     "ambiguous grants",
   ])("fails closed without writes for %s", async (scenario) => {
-    const player = betaPlayerByHandle("archinamon")!;
+    const player = syntheticAliasPlayer;
     if (scenario === "revoked grant")
       await addIdentity("PLAYER", player.name, player.handle, true);
     if (scenario === "GM collision")
@@ -106,7 +109,9 @@ describe("public alias authentication is disabled", () => {
     }
     const before = await counts();
     const response = await login(
-      scenario === "unknown handle" ? "not-a-player" : "archinamon",
+      scenario === "unknown handle"
+        ? "not-a-player"
+        : syntheticAliasPlayer.handle,
     );
     expect(response.statusCode).toBe(410);
     expect(await counts()).toEqual(before);
