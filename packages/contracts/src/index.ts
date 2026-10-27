@@ -548,6 +548,11 @@ export const modifierSourceSchema = z.discriminatedUnion("type", [
     key: z.string().regex(/^[a-z][a-z0-9_]{0,39}$/),
   }),
   z.object({
+    type: z.literal("SKILL"),
+    scope: z.enum(["CATALOG", "CHARACTER_ENTRY", "LEGACY"]),
+    key: z.string().min(1).max(40),
+  }),
+  z.object({
     type: z.literal("CONSTANT"),
     value: z.number().int().min(-1000).max(1000),
   }),
@@ -616,6 +621,13 @@ export const entryDataSchema = z
       })
       .optional(),
     values: z.record(z.string(), z.number().finite()).optional(),
+    /** Numeric value for simple catalog skills; legacy skills remain separate. */
+    // The roll parser accepts integer literals only; keep the simple skill
+    // value aligned with that expression contract instead of emitting invalid
+    // decimal roll formulas.
+    skillValue: z.number().int().min(-1000).max(1000).optional(),
+    /** undefined preserves legacy per-action/activation costs; null is explicitly free. */
+    usageCost: resourceCostSchema.nullable().optional(),
     uses: abilityUsesSchema.optional(),
     notes: z.string().max(10000).optional(),
   })
@@ -2962,6 +2974,8 @@ export interface DiceResult {
   /** Whole-pool selection metadata; absent on legacy stored results. */
   rollMode?: "NORMAL" | "ADVANTAGE" | "DISADVANTAGE";
   poolTotals?: [number, number];
+  /** Raw dice terms for both advantage/disadvantage pools, in total order. */
+  poolTerms?: [DiceTerm[], DiceTerm[]];
   selectedPool?: 0 | 1;
   /** Authoritative server outcome; absent only on legacy history rows. */
   semanticOutcome?: DiceSemanticOutcome;

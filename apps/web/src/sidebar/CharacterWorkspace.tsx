@@ -76,6 +76,7 @@ import {
   CloseIcon,
   CollapseCharacterRailIcon,
   DecreaseIcon,
+  DiceTrayIcon,
   DrawIcon,
   ExpandCharacterRailIcon,
 } from "../ui/icons";
@@ -1329,6 +1330,47 @@ export function CharacterPanel({
     character.entries,
     "ABILITY",
   );
+  const catalogSkillModifiers = snapshot.catalogEntries
+    .filter(
+      (entry) =>
+        entry.kind === "SKILL" &&
+        character.entries.some(
+          (assigned) => assigned.sourceCatalogEntryId === entry.id,
+        ),
+    )
+    .map((entry) => {
+      const assigned = character.entries.find(
+        (candidate) => candidate.sourceCatalogEntryId === entry.id,
+      );
+      return {
+        scope: "CATALOG" as const,
+        key: entry.id,
+        name: entry.name,
+        value: assigned?.data.skillValue,
+      };
+    })
+    .filter((option) => Number.isFinite(option.value));
+  const characterSkillModifiers = [
+    ...character.entries
+      .filter(
+        (entry) =>
+          entry.kind === "SKILL" && Number.isFinite(entry.data.skillValue),
+      )
+      .map((entry) => ({
+        scope: "CHARACTER_ENTRY" as const,
+        key: entry.id,
+        name: entry.name,
+        value: entry.data.skillValue,
+      })),
+    ...character.skills
+      .filter((skill) => Number.isFinite(skill.rank))
+      .map((skill) => ({
+      scope: "LEGACY" as const,
+      key: skill.key,
+      name: skill.name,
+      value: skill.rank,
+      })),
+  ];
   const saveStandardSkill = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editable || !editingStandardSkill || standardSkillPendingRef.current)
@@ -1888,6 +1930,9 @@ export function CharacterPanel({
                         <CharacterActionCard
                           entry={entry}
                           disabled={!editable}
+                          draftScopeKey={`${snapshot.campaign.id}:${snapshot.me.id}:${character.id}`}
+                          characterStats={character.stats}
+                          skillModifiers={characterSkillModifiers}
                           onAction={(input) =>
                             catalogActions.onRollEntry(character.id, entry.id, {
                               ...input,
@@ -1966,6 +2011,7 @@ export function CharacterPanel({
                               )
                             }
                           >
+                            <AppIcon icon={DiceTrayIcon} />
                             Бросить {humanizeFormula(spell.formula, statLabels)}
                           </Button>
                         )}
@@ -1977,6 +2023,9 @@ export function CharacterPanel({
                         <CharacterActionCard
                           entry={entry}
                           disabled={!editable}
+                          draftScopeKey={`${snapshot.campaign.id}:${snapshot.me.id}:${character.id}`}
+                          characterStats={character.stats}
+                          skillModifiers={characterSkillModifiers}
                           onAction={(input) =>
                             catalogActions.onRollEntry(character.id, entry.id, {
                               ...input,
@@ -2039,6 +2088,11 @@ export function CharacterPanel({
         <CatalogEntryPicker
           statLabels={statLabels}
           resourceLabels={resourceLabels}
+          skillModifiers={
+            snapshot.me.role === "PLAYER"
+              ? [...catalogSkillModifiers, ...characterSkillModifiers]
+              : catalogSkillModifiers
+          }
           open
           kind={catalogPicker}
           options={
@@ -2162,6 +2216,10 @@ export function CharacterPanel({
           onClose={() => setEntryEditor(null)}
         >
           <CatalogEntryForm
+            skillModifiers={[
+              ...catalogSkillModifiers,
+              ...characterSkillModifiers,
+            ]}
             statLabels={statLabels}
             resourceLabels={resourceLabels}
             key={entryEditor.id}

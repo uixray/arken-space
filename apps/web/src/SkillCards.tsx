@@ -1,9 +1,17 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useState, type ReactNode } from "react";
-import type { CharacterCatalogEntryDto } from "@arken/contracts";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { CharacterCatalogEntryDto, DiceResult } from "@arken/contracts";
 import type { DiceCritical } from "./dice-critical";
+import { DicePoolFaces } from "./DicePoolFaces";
+import { normalizeClientDiceResult } from "./dice-result";
 import { humanizeFormula } from "./formula-display";
 import { useCampaignStatLabels } from "./campaign-stat-labels-context";
+import {
+  previewRollActionFormula,
+  type CatalogEntryPreviewContext,
+} from "./sidebar/catalog-entry-preview";
+import { AppIcon } from "./ui/AppIcon";
+import { DiceTrayIcon } from "./ui/icons";
 
 export type SkillCard = {
   version: 1;
@@ -25,7 +33,11 @@ export type SkillCard = {
     formula: string;
     modifiers: string[];
   } | null;
-  result: { total: number; breakdown: string } | null;
+  result:
+    | Pick<DiceResult, "total" | "rollMode" | "poolTerms" | "selectedPool"> & {
+        breakdown: string;
+      }
+    | null;
   uses: { before: number; after: number; max: number; recharge: string } | null;
   activationCost: {
     type: "physical" | "magic";
@@ -115,6 +127,7 @@ export function parseSkillCard(dice: unknown): SkillCard | null {
         }
       : null;
   const rawResult = record(raw.result);
+  const normalizedResult = normalizeClientDiceResult(rawResult);
   const total =
     finite(rawResult?.total) ?? finite(root.total) ?? finite(raw.resultTotal);
   const actor = record(raw.actor);
@@ -162,31 +175,32 @@ export function parseSkillCard(dice: unknown): SkillCard | null {
               pickText(rawResult ?? {}, "resolvedFormula") ??
               pickText(raw, "breakdown", "resolvedFormula", "formula") ??
               "",
+            ...(normalizedResult
+              ? {
+                  rollMode: normalizedResult.rollMode,
+                  poolTerms: normalizedResult.poolTerms,
+                  selectedPool: normalizedResult.selectedPool,
+                }
+              : {}),
           },
     uses,
     activationCost,
   };
 }
 
-function actionFormula(action: {
-  dice?: string;
-  modifiers?: readonly unknown[];
-  formula?: string;
-}) {
-  if (action.formula) return action.formula;
-  if (Array.isArray(action.modifiers) && action.modifiers.length > 0) {
-    return `${action.dice ?? ""} + модификаторы`.trim();
-  }
-  return action.dice ?? "—";
-}
-
 export function CharacterActionCard({
   entry,
   disabled,
+  draftScopeKey = entry.id,
+  characterStats,
+  skillModifiers,
   onAction,
 }: {
   entry: CharacterCatalogEntryDto;
   disabled: boolean;
+  draftScopeKey?: string;
+  characterStats?: Readonly<Record<string, number>>;
+  skillModifiers?: CatalogEntryPreviewContext["skillModifiers"];
   onAction: (input: {
     mode: "EXECUTE" | "SHARE";
     rollActionId?: string;
@@ -196,6 +210,18 @@ export function CharacterActionCard({
   const statLabels = useCampaignStatLabels();
   const [pending, setPending] = useState<"EXECUTE" | "SHARE" | null>(null);
   const [error, setError] = useState("");
+  const pendingRef = useRef(false);
+  const [prepared, setPrepared] = useState<{
+    id: string;
+    scope: string;
+    revision: number;
+    actionId?: string;
+    intent: "ROLL_ACTION" | "SIMPLE_SKILL" | "ABILITY_ACTIVATION";
+    label: string;
+  } | null>(null);
+  const draftScopeRef = useRef(draftScopeKey);
+  draftScopeRef.current = draftScopeKey;
+  useEffect(() => setPrepared(null), [draftScopeKey]);
   const actions = [...(entry.data.rollActions ?? [])].sort(
     (a, b) =>
       ((a as { order?: number }).order ?? 0) -
@@ -221,20 +247,61 @@ export function CharacterActionCard({
     : undefined;
   const exhausted = Boolean(uses && uses.current < 1);
 
-  async function submit(mode: "EXECUTE" | "SHARE", rollActionId?: string) {
+  async function submit(mode: "EXECUTE" | "SHARE", rollActionId?: string): Promise<boolean> {
+    if (pendingRef.current) return false;
+    pendingRef.current = true;
     setPending(mode);
     setError("");
     try {
       await onAction({ mode, rollActionId, entryRevision: entry.revision });
+      return true;
     } catch (reason) {
       setError(
         reason instanceof Error
           ? reason.message
           : "Не удалось отправить карточку способности.",
       );
+      return false;
     } finally {
+      pendingRef.current = false;
       setPending(null);
     }
+  }
+  const prepare = (
+    intent: NonNullable<typeof prepared>["intent"],
+    actionId: string | undefined,
+    label: string,
+  ) => {
+    if (disabled) return;
+    setPrepared({
+      id: `${entry.id}:${intent}:${actionId ?? "simple"}:${Date.now()}`,
+      scope: draftScopeKey,
+      revision: entry.revision,
+      actionId,
+      intent,
+      label,
+    });
+  };
+  const isPreparedCurrent = Boolean(
+    prepared && prepared.scope === draftScopeKey &&
+      prepared.revision === entry.revision &&
+      (prepared.intent === "SIMPLE_SKILL"
+        ? entry.kind === "SKILL" && Number.isInteger(entry.data.skillValue)
+        : prepared.intent === "ABILITY_ACTIVATION"
+          ? entry.kind === "ABILITY" && !entry.data.rollActions?.length
+          : entry.data.rollActions?.some((action) => action.id === prepared.actionId)),
+  );
+  async function executePrepared() {
+    if (!prepared || !isPreparedCurrent || disabled) return;
+    const current = prepared;
+    const currentScope = draftScopeKey;
+    if (
+      await submit(
+        "EXECUTE",
+        current.intent === "ROLL_ACTION" ? current.actionId : undefined,
+      ) && draftScopeRef.current === currentScope
+    )
+      setPrepared((value) => value?.id === current.id ? null : value);
   }
 
   return (
@@ -252,24 +319,57 @@ export function CharacterActionCard({
           </span>
         )}
       </div>
+      {entry.kind === "SKILL" &&
+        typeof entry.data.skillValue === "number" &&
+        Number.isFinite(entry.data.skillValue) && (
+          <div className="character-action-card__action">
+            <span>
+              <b>Проверка навыка</b>
+              <code>
+                1d20 {entry.data.skillValue < 0 ? "−" : "+"}{" "}
+                {Math.abs(entry.data.skillValue)}
+              </code>
+            </span>
+            <button
+              type="button"
+              disabled={disabled || pending !== null}
+              onClick={() => void submit("EXECUTE")}
+            >
+              <AppIcon icon={DiceTrayIcon} />
+              Бросить
+            </button>
+            <button type="button" disabled={disabled || pending !== null} onClick={() => prepare("SIMPLE_SKILL", undefined, `Проверка: ${entry.name}`)}>Подготовить</button>
+          </div>
+        )}
       {actions.map((action) => (
         <div className="character-action-card__action" key={action.id}>
           <span>
             <b>{action.label}</b>
-            <code>{humanizeFormula(actionFormula(action), statLabels)}</code>
+            <code>
+              {humanizeFormula(
+                previewRollActionFormula(action, entry.data.values, {
+                  characterStats,
+                  statLabels,
+                  skillModifiers,
+                }),
+                statLabels,
+              )}
+            </code>
           </span>
           <button
             type="button"
-            disabled={
-              disabled || pending !== null || (action.consumeUse && exhausted)
-            }
+            disabled={disabled || pending !== null || (action.consumeUse && exhausted)}
             onClick={() => void submit("EXECUTE", action.id)}
           >
-            {pending === "EXECUTE"
-              ? "Выполняем…"
-              : action.consumeUse
-                ? "Выполнить · 1 использование"
-                : "Выполнить"}
+            <AppIcon icon={DiceTrayIcon} />
+            {pending === "EXECUTE" ? "Выполняем…" : action.consumeUse ? "Выполнить · 1 использование" : "Выполнить"}
+          </button>
+          <button
+            type="button"
+            disabled={disabled || pending !== null}
+            onClick={() => prepare("ROLL_ACTION", action.id, `${entry.name} · ${action.label}`)}
+          >
+            Подготовить
           </button>
         </div>
       ))}
@@ -299,11 +399,34 @@ export function CharacterActionCard({
             >
               {pending === "EXECUTE" ? "Выполняем…" : "Активировать"}
             </button>
+            <button type="button" disabled={disabled || pending !== null} onClick={() => prepare("ABILITY_ACTIVATION", undefined, entry.name)}>
+              Подготовить активацию
+            </button>
           </div>
-        ) : (
+        ) : !(typeof entry.data.skillValue === "number" &&
+          Number.isFinite(entry.data.skillValue)) ? (
           <p className="muted">Нет выполняемых действий.</p>
-        ))}
+        ) : null)}
       <div className="character-action-card__controls">
+        {prepared && (
+          <div className="character-action-card__prepared" role="status">
+            <strong>Подготовлено для хода: {prepared.label}</strong>
+            {!isPreparedCurrent && (
+              <span className="muted">Действие изменилось или удалено. Выберите его заново или очистите.</span>
+            )}
+            <button
+              type="button"
+              disabled={disabled || pending !== null || !isPreparedCurrent}
+              onClick={() => void executePrepared()}
+            >
+              {pending === "EXECUTE" ? "Выполняем…" : "Выполнить сейчас"}
+            </button>
+            <button type="button" disabled={pending !== null} onClick={() => setPrepared(null)}>
+              Очистить
+            </button>
+            <span className="muted">Выполняйте вручную, когда наступит ваш ход.</span>
+          </div>
+        )}
         <button
           type="button"
           disabled={disabled || pending !== null}
@@ -372,12 +495,18 @@ export function SkillChatCard({
         <div className="skill-chat-card__result">
           {card.result && (
             <div className="roll-total-wrap">
+              <AppIcon icon={DiceTrayIcon} />
               {outcomeFrame}
-              <strong aria-label="Итог броска">{card.result.total}</strong>
+              <strong className="roll-total__value" aria-label="Итог броска">
+                {card.result.total}
+              </strong>
             </div>
           )}
           <span>
-            <b>{card.action.label}</b>
+            <b>
+              {card.result && <AppIcon icon={DiceTrayIcon} />}
+              {card.action.label}
+            </b>
             <code>{visibleFormula}</code>
             {critical && (
               <span className="roll-critical-label">{critical.label}</span>
@@ -393,6 +522,7 @@ export function SkillChatCard({
           {card.uses.recharge ? ` · ${card.uses.recharge}` : ""}
         </p>
       )}
+      {card.result && <DicePoolFaces dice={card.result} />}
       {card.activationCost && (
         <p className="skill-chat-card__uses">
           Стоимость: {card.activationCost.before} → {card.activationCost.after}{" "}

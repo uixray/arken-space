@@ -1,5 +1,5 @@
 import "./roll-controls.css";
-import { useId, useState, type ReactElement, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
 import type { CharacterCatalogEntryDto, CharacterDto } from "@arken/contracts";
 import { STAT_VALUE_RANGE } from "@arken/system";
@@ -15,6 +15,7 @@ import type { RollMode } from "../roll-mode";
 import { AppIcon } from "../ui/AppIcon";
 import {
   CollapseSectionIcon,
+  DiceTrayIcon,
   ExpandSectionIcon,
   SecretRollIcon,
 } from "../ui/icons";
@@ -22,6 +23,16 @@ import { useRepeatRoll } from "./use-repeat-roll";
 
 const signedBonus = (bonus: number) =>
   new Intl.NumberFormat("en-US", { signDisplay: "always" }).format(bonus);
+
+type PreparedCatalogAction = {
+  scope: string;
+  id: string;
+  entryId: string;
+  entryRevision: number;
+  actionId?: string;
+  intent: "SIMPLE_SKILL" | "ROLL_ACTION" | "ABILITY_ACTIVATION";
+  label: string;
+};
 
 function QuickRollTooltip({
   content,
@@ -62,6 +73,7 @@ export function QuickRollPanel({
   membershipId,
   rows,
   quickRollPending,
+  canControlCharacter = false,
   gmOnly,
   physicalDiceControl,
   onQuickRoll,
@@ -77,6 +89,7 @@ export function QuickRollPanel({
    */
   rows: readonly { key: string; label: string; group?: string }[];
   quickRollPending: boolean;
+  canControlCharacter?: boolean;
   /**
    * Mirrors the dice tray's shared GM-only toggle (see `ActivityPanel`). The
    * control itself lives next door, so without this the player would have no
@@ -123,15 +136,25 @@ export function QuickRollPanel({
   const tabsId = useId();
   const [activeTab, setActiveTab] = useState("stats");
   const [entryPending, setEntryPending] = useState<string | null>(null);
+  const entryPendingRef = useRef(false);
   const [entryError, setEntryError] = useState("");
+  const [preparedAction, setPreparedAction] = useState<PreparedCatalogAction | null>(null);
   const { onRollClick, popover } = useRepeatRoll();
   const entries = rollCharacter.entries ?? [];
   const ordinaryRows = rows.filter(
     (row) => !row.group || row.group === "characteristics",
   );
   const combatRows = rows.filter((row) => row.group === "combat");
-  // UIX-706: строки навыков — во вкладке «Способности», рядом с прежними навыками.
+  // UIX-766: skills are stat-like quick rolls, not ability activations.
   const skillRows = rows.filter((row) => row.group === "skills");
+  const skillEntries = entries.filter((entry) => entry.kind === "SKILL");
+  const abilityEntries = entries.filter((entry) => entry.kind === "ABILITY");
+  const draftScope = `${campaignId}:${membershipId}:${rollCharacter.id}`;
+  const draftScopeRef = useRef(draftScope);
+  draftScopeRef.current = draftScope;
+  useEffect(() => {
+    setPreparedAction(null);
+  }, [draftScope]);
   const otherRows = rows.filter(
     (row) =>
       row.group && !["characteristics", "combat", "skills"].includes(row.group),
@@ -140,8 +163,9 @@ export function QuickRollPanel({
     entry: CharacterCatalogEntryDto,
     mode: "EXECUTE" | "SHARE",
     rollActionId?: string,
-  ) => {
-    if (!onEntryAction || entryPending) return;
+  ): Promise<boolean> => {
+    if (!onEntryAction || entryPendingRef.current) return false;
+    entryPendingRef.current = true;
     setEntryPending(entry.id);
     setEntryError("");
     try {
@@ -149,52 +173,110 @@ export function QuickRollPanel({
       // fall back to the explicit, no-cost SHARE path.
       await onEntryAction(
         entry,
-        mode === "EXECUTE" && !rollActionId && entry.kind !== "ABILITY"
+        mode === "EXECUTE" &&
+          !rollActionId &&
+          entry.kind !== "ABILITY" &&
+          !Number.isFinite(entry.data.skillValue)
           ? "SHARE"
           : mode,
         rollActionId,
       );
+      return true;
     } catch (reason) {
       setEntryError(
         reason instanceof Error
           ? reason.message
           : "Не удалось отправить действие.",
       );
+      return false;
     } finally {
+      entryPendingRef.current = false;
       setEntryPending(null);
+    }
+  };
+  const prepareEntryAction = (
+    entry: CharacterCatalogEntryDto,
+    intent: PreparedCatalogAction["intent"],
+    actionId?: string,
+    label = entry.name,
+  ) => {
+    if (!canControlCharacter) return;
+    setPreparedAction({
+      scope: draftScope,
+      id: `${entry.id}:${intent}:${actionId ?? "simple"}:${Date.now()}`,
+      entryId: entry.id,
+      entryRevision: entry.revision,
+      actionId,
+      intent,
+      label,
+    });
+  };
+  const preparedEntry = preparedAction?.scope === draftScope
+    ? entries.find((entry) => entry.id === preparedAction.entryId)
+    : undefined;
+  const preparedIsCurrent = Boolean(
+    preparedAction && preparedEntry &&
+      preparedEntry.revision === preparedAction.entryRevision &&
+      (preparedAction.intent === "SIMPLE_SKILL"
+        ? preparedEntry.kind === "SKILL" && Number.isInteger(preparedEntry.data.skillValue)
+        : preparedAction.intent === "ABILITY_ACTIVATION"
+          ? preparedEntry.kind === "ABILITY" && !(preparedEntry.data.rollActions?.length)
+          : preparedEntry.data.rollActions?.some((action) => action.id === preparedAction.actionId)),
+  );
+  const executePreparedAction = async () => {
+    if (!preparedAction || !preparedEntry || !preparedIsCurrent || !canControlCharacter) return;
+    const submitted = preparedAction;
+    const submittedScope = draftScope;
+    const success = await submitEntry(
+      preparedEntry,
+      "EXECUTE",
+      submitted.intent === "ROLL_ACTION" ? submitted.actionId : undefined,
+    );
+    if (success && draftScopeRef.current === submittedScope) {
+      setPreparedAction((current) => current?.id === submitted.id ? null : current);
     }
   };
   const statButtons = (
     groupRows: typeof rows,
     variant: "ordinary" | "combat" | "skill" = "ordinary",
   ) =>
-    groupRows.map((stat) => (
-      <QuickRollTooltip
-        key={stat.key}
-        content={`1d20${signedBonus(rollCharacter.stats[stat.key] ?? STAT_VALUE_RANGE.defaultValue)}\nCtrl — Преимущество\nAlt — Помеха`}
-        trigger={
-          <Button
-            className={`quick-roll-button quick-roll-button--${variant}`}
-            disabled={quickRollPending}
-            onClick={(event) => {
-              const mode = rollModeFromEvent(event.nativeEvent);
-              onRollClick(event, (count) =>
-                onQuickRoll(
-                  `1d20 + ${stat.key}`,
-                  stat.label,
-                  rollCharacter.stats[stat.key] ??
-                    STAT_VALUE_RANGE.defaultValue,
-                  mode,
-                  count,
-                ),
-              );
-            }}
-          >
-            {stat.label}
-          </Button>
-        }
-      />
-    ));
+    groupRows.map((stat) => {
+      const statValue = rollCharacter.stats[stat.key];
+      const hasVisibleValue =
+        typeof statValue === "number" && Number.isFinite(statValue);
+      return (
+        <QuickRollTooltip
+          key={stat.key}
+          content={`1d20${signedBonus(statValue ?? STAT_VALUE_RANGE.defaultValue)}\nCtrl — Преимущество\nAlt — Помеха`}
+          trigger={
+            <Button
+              className={`quick-roll-button quick-roll-button--${variant}`}
+              disabled={quickRollPending}
+              onClick={(event) => {
+                const mode = rollModeFromEvent(event.nativeEvent);
+                onRollClick(event, (count) =>
+                  onQuickRoll(
+                    `1d20 + ${stat.key}`,
+                    stat.label,
+                    statValue ?? STAT_VALUE_RANGE.defaultValue,
+                    mode,
+                    count,
+                  ),
+                );
+              }}
+            >
+              <span className="quick-roll-button__name">
+                <AppIcon icon={DiceTrayIcon} />
+                {stat.label}
+              </span>
+              {hasVisibleValue && (
+                <span className="quick-roll-button__value">{statValue}</span>
+              )}
+            </Button>
+          }
+        />
+      );
+    });
 
   return (
     <section
@@ -266,10 +348,38 @@ export function QuickRollPanel({
               aria-selected={activeTab === tab}
               onClick={() => setActiveTab(tab)}
             >
-              {tab === "stats" ? "Характеристики" : "Способности"}
+              {tab === "stats" ? "Характеристики и навыки" : "Способности"}
             </button>
           ))}
         </div>
+        {preparedAction && (
+          <div className="quick-roll-prepared-action" role="status">
+            <strong>Подготовлено для хода</strong>
+            <span>{preparedAction.label}</span>
+            <span className="muted">Панель не отслеживает активный ход. Нажмите вручную, когда наступит ваш ход.</span>
+            {!preparedIsCurrent && (
+              <span className="muted">
+                Действие изменилось или больше недоступно. Выберите его заново.
+              </span>
+            )}
+            <Button
+              disabled={!preparedIsCurrent || !canControlCharacter || entryPending !== null}
+              onClick={() => void executePreparedAction()}
+            >
+              {entryPending ? "Выполняем…" : "Выполнить сейчас"}
+            </Button>
+            <Button
+              type="button"
+              disabled={entryPending !== null}
+              onClick={() => setPreparedAction(null)}
+            >
+              Очистить
+            </Button>
+            {!canControlCharacter && (
+              <span className="muted">Нет права управлять этим персонажем.</span>
+            )}
+          </div>
+        )}
         <div
           role="tabpanel"
           id={`${tabsId}-stats-panel`}
@@ -280,25 +390,10 @@ export function QuickRollPanel({
             {statButtons(ordinaryRows, "ordinary")}
             {statButtons(combatRows, "combat")}
             {statButtons(otherRows, "ordinary")}
+            {statButtons(skillRows, "skill")}
           </div>
-        </div>
-        <div
-          role="tabpanel"
-          id={`${tabsId}-abilities-panel`}
-          aria-labelledby={`${tabsId}-abilities`}
-          hidden={activeTab !== "abilities"}
-        >
-          {skillRows.length > 0 && (
-            <div className="activity-quick-rolls" aria-busy={quickRollPending}>
-              {statButtons(skillRows, "skill")}
-            </div>
-          )}
-          {(rollCharacter.skills.length > 0 ||
-            entries.some((entry) => entry.kind === "SKILL")) && (
-            <div
-              className="activity-quick-rolls quick-roll-panel__ability-group"
-              aria-busy={quickRollPending}
-            >
+          {(rollCharacter.skills.length > 0 || skillEntries.length > 0) && (
+            <div className="activity-quick-rolls quick-roll-panel__ability-group" aria-busy={entryPending !== null}>
               {rollCharacter.skills.map((skill) => (
                 <QuickRollTooltip
                   key={skill.key}
@@ -316,61 +411,119 @@ export function QuickRollPanel({
                         )
                       }
                     >
+                      <AppIcon icon={DiceTrayIcon} />
                       {skill.name}
+                      {Number.isFinite(skill.rank) && (
+                        <span className="quick-roll-button__value">{skill.rank}</span>
+                      )}
                     </Button>
                   }
                 />
               ))}
-              {entries
-                .filter((entry) => entry.kind === "SKILL")
-                .map((entry) => (
-                  <div className="quick-roll-panel__entry" key={entry.id}>
+              {skillEntries.map((entry) => (
+                <div className="quick-roll-panel__entry" key={entry.id}>
+                  {Number.isInteger(entry.data.skillValue) && (
                     <Button
-                      disabled={entryPending !== null || !onEntryAction}
+                      className="quick-roll-button quick-roll-button--skill"
+                      disabled={!canControlCharacter || entryPending !== null || !onEntryAction}
                       onClick={() =>
-                        void submitEntry(
-                          entry,
-                          "EXECUTE",
-                          entry.data.rollActions?.[0]?.id,
-                        )
+                        void submitEntry(entry, "EXECUTE")
                       }
                     >
+                      <AppIcon icon={DiceTrayIcon} />
                       {entry.name}
+                      <span className="quick-roll-button__value">{entry.data.skillValue}</span>
                     </Button>
-                    <button
-                      type="button"
-                      disabled={entryPending !== null || !onEntryAction}
-                      aria-label={`Показать без выполнения: ${entry.name}`}
-                      title="Показать описание без выполнения и расхода"
-                      onClick={() => void submitEntry(entry, "SHARE")}
-                    >
-                      i
-                    </button>
-                  </div>
-                ))}
+                  )}
+                  {Number.isInteger(entry.data.skillValue) && (
+                    <Button type="button" disabled={!canControlCharacter || entryPending !== null} onClick={() => prepareEntryAction(entry, "SIMPLE_SKILL", undefined, entry.name)}>
+                      Подготовить
+                    </Button>
+                  )}
+                  {entry.data.rollActions?.map((action) => (
+                    <div key={action.id}>
+                      <Button
+                        key={action.id}
+                        disabled={!canControlCharacter || entryPending !== null || !onEntryAction}
+                        onClick={() => void submitEntry(entry, "EXECUTE", action.id)}
+                      >
+                        <AppIcon icon={DiceTrayIcon} />
+                        {action.label}
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={!canControlCharacter || entryPending !== null}
+                        onClick={() =>
+                          prepareEntryAction(entry, "ROLL_ACTION", action.id, `${entry.name} · ${action.label}`)
+                        }
+                      >
+                        Подготовить
+                      </Button>
+                    </div>
+                  ))}
+                  {!Number.isInteger(entry.data.skillValue) && !entry.data.rollActions?.length && (
+                    <span className="muted">Навык не настроен для броска.</span>
+                  )}
+                  <button
+                    type="button"
+                    disabled={entryPending !== null || !onEntryAction}
+                    aria-label={`Показать без выполнения: ${entry.name}`}
+                    title="Показать описание без выполнения и расхода"
+                    onClick={() => void submitEntry(entry, "SHARE")}
+                  >
+                    i
+                  </button>
+                </div>
+              ))}
             </div>
           )}
-          {entries.some((entry) => entry.kind === "ABILITY") && (
+          {ordinaryRows.length + combatRows.length + otherRows.length + skillRows.length === 0 &&
+            rollCharacter.skills.length === 0 && skillEntries.length === 0 && (
+              <p className="muted">Нет характеристик и навыков.</p>
+            )}
+        </div>
+        <div
+          role="tabpanel"
+          id={`${tabsId}-abilities-panel`}
+          aria-labelledby={`${tabsId}-abilities`}
+          hidden={activeTab !== "abilities"}
+        >
+          {abilityEntries.length > 0 && (
             <div
               className="activity-quick-rolls quick-roll-panel__ability-group"
               aria-busy={entryPending !== null}
             >
-              {entries
-                .filter((entry) => entry.kind === "ABILITY")
-                .map((entry) => (
-                  <div className="quick-roll-panel__entry" key={entry.id}>
-                    <Button
-                      disabled={entryPending !== null || !onEntryAction}
-                      onClick={() =>
-                        void submitEntry(
-                          entry,
-                          "EXECUTE",
-                          entry.data.rollActions?.[0]?.id,
-                        )
-                      }
-                    >
-                      {entry.name}
-                    </Button>
+              {abilityEntries.map((entry) => (
+                <div className="quick-roll-panel__entry" key={entry.id}>
+                  {entry.data.rollActions?.length ? (
+                    entry.data.rollActions.map((action) => (
+                      <div key={action.id}>
+                        <Button
+                          disabled={!canControlCharacter || entryPending !== null || !onEntryAction}
+                          onClick={() => void submitEntry(entry, "EXECUTE", action.id)}
+                        >
+                          <AppIcon icon={DiceTrayIcon} />
+                          {action.label}
+                        </Button>
+                        <Button
+                          type="button"
+                          disabled={!canControlCharacter || entryPending !== null}
+                          onClick={() => prepareEntryAction(entry, "ROLL_ACTION", action.id, `${entry.name} · ${action.label}`)}
+                        >
+                          Подготовить
+                        </Button>
+                      </div>
+                    ))
+                  ) : (
+                    <>
+                      <Button disabled={!canControlCharacter || entryPending !== null || !onEntryAction} onClick={() => void submitEntry(entry, "EXECUTE")}>
+                        {entry.name} · Активировать
+                      </Button>
+                      <Button type="button" disabled={!canControlCharacter || entryPending !== null} onClick={() => prepareEntryAction(entry, "ABILITY_ACTIVATION", undefined, entry.name)}>
+                        Подготовить активацию
+                      </Button>
+                    </>
+                  )}
                     <button
                       type="button"
                       disabled={entryPending !== null || !onEntryAction}
@@ -384,11 +537,9 @@ export function QuickRollPanel({
                 ))}
             </div>
           )}
-          {rollCharacter.skills.length === 0 &&
-            skillRows.length === 0 &&
-            !entries.some((entry) =>
-              ["SKILL", "ABILITY"].includes(entry.kind),
-            ) && <p className="muted">Нет навыков и способностей.</p>}
+          {abilityEntries.length === 0 && (
+            <p className="muted">Нет способностей.</p>
+          )}
         </div>
         {entryError && <p role="alert">{entryError}</p>}
       </div>

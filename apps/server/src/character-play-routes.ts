@@ -18,6 +18,7 @@ import {
 } from "@arken/contracts";
 import {
   characterCatalogEntries,
+  catalogEntries,
   characterControllers,
   campaigns,
   characters,
@@ -66,6 +67,15 @@ import {
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type RealtimeServer = Server<ClientToServerEvents, ServerToClientEvents>;
+
+function numericSkillValue(data: unknown): number | undefined {
+  if (!data || typeof data !== "object" || !("skillValue" in data))
+    return undefined;
+  const value = data.skillValue;
+  return typeof value === "number" && Number.isInteger(value) && value >= -1000 && value <= 1000
+    ? value
+    : undefined;
+}
 
 /**
  * Character play: counters (HP, resources, wallet, rests), ability recharge
@@ -545,7 +555,8 @@ export function registerCharacterPlayRoutes(
       );
       let action:
         NonNullable<typeof parsedData.data.rollActions>[number] | undefined;
-      const noRollActivation = mode === "EXECUTE" && !body.rollActionId;
+      const noRollRequest = mode === "EXECUTE" && !body.rollActionId;
+      const noRollActivation = noRollRequest && row.entry.kind === "ABILITY";
       const activationConfig = parsedData.data.activation ?? {
         // Existing use counters are an explicit structured limit. Legacy
         // abilities without one remain free activations (never parse prose).
@@ -555,10 +566,23 @@ export function registerCharacterPlayRoutes(
       let result: ReturnType<typeof rollFormulaWithMode> | null = null;
       if (mode === "EXECUTE") {
         if (noRollActivation) {
-          if (row.entry.kind !== "ABILITY")
-            return reply
-              .code(400)
-              .send({ error: "ABILITY_ACTIVATION_NOT_CONFIGURED" });
+          // No-roll ability activation remains a distinct path.
+        } else if (noRollRequest && row.entry.kind === "SKILL") {
+          const value = parsedData.data.skillValue;
+          if (typeof value !== "number" || !Number.isFinite(value))
+            return reply.code(400).send({ error: "SKILL_VALUE_NOT_CONFIGURED" });
+          action = {
+            id: "simple-skill-roll",
+            kind: "CUSTOM",
+            label: row.entry.name,
+            dice: "1d20",
+            modifiers: [{ type: "CONSTANT", value }],
+            order: 0,
+            advantage: false,
+            consumeUse: false,
+          };
+        } else if (noRollRequest) {
+          return reply.code(400).send({ error: "ENTRY_ROLL_NOT_CONFIGURED" });
         } else {
           action = parsedData.data.rollActions?.find(
             (candidate) => candidate.id === body.rollActionId,
@@ -602,10 +626,65 @@ export function registerCharacterPlayRoutes(
               continue;
             }
             const key = `modifier_${index}`;
-            const value =
-              source.type === "CHARACTERISTIC"
-                ? characterStats[source.key]
-                : parsedData.data.values?.[source.key];
+            let value: number | undefined;
+            if (source.type === "CHARACTERISTIC") {
+              value = characterStats[source.key];
+            } else if (source.type === "ENTRY_VALUE") {
+              value = parsedData.data.values?.[source.key];
+            } else if (source.type === "SKILL") {
+              if (source.scope === "LEGACY") {
+                const legacySkills = Array.isArray(row.character.skills)
+                  ? row.character.skills.filter(
+                      (candidate): candidate is { key: string; rank: number } => {
+                        if (!candidate || typeof candidate !== "object")
+                          return false;
+                        const skill = candidate as Record<string, unknown>;
+                        return (
+                          skill.key === source.key &&
+                          typeof skill.rank === "number" &&
+                          Number.isFinite(skill.rank)
+                        );
+                      },
+                    )
+                  : [];
+                if (legacySkills.length === 1) value = legacySkills[0]!.rank;
+              } else if (source.scope === "CHARACTER_ENTRY") {
+                const [referenced] = await db
+                  .select({ entry: characterCatalogEntries })
+                  .from(characterCatalogEntries)
+                  .where(
+                    and(
+                      eq(characterCatalogEntries.id, source.key),
+                      eq(characterCatalogEntries.characterId, row.character.id),
+                      eq(characterCatalogEntries.kind, "SKILL"),
+                    ),
+                  )
+                  .limit(1);
+                value = numericSkillValue(referenced?.entry.data);
+              } else {
+                const [assigned] = await db
+                  .select({ entry: characterCatalogEntries })
+                  .from(characterCatalogEntries)
+                  .innerJoin(
+                    catalogEntries,
+                    eq(
+                      characterCatalogEntries.sourceCatalogEntryId,
+                      catalogEntries.id,
+                    ),
+                  )
+                  .where(
+                    and(
+                      eq(characterCatalogEntries.characterId, row.character.id),
+                      eq(characterCatalogEntries.sourceCatalogEntryId, source.key),
+                      eq(characterCatalogEntries.kind, "SKILL"),
+                      eq(catalogEntries.kind, "SKILL"),
+                      eq(catalogEntries.campaignId, auth.campaignId),
+                    ),
+                  )
+                  .limit(1);
+                value = numericSkillValue(assigned?.entry.data);
+              }
+            }
             if (value === undefined || !Number.isFinite(value))
               return reply
                 .code(400)
@@ -635,11 +714,15 @@ export function registerCharacterPlayRoutes(
             return reply.code(409).send({ error: "NO_ABILITY_USES" });
         }
       }
+      const entryUsageCost =
+        row.entry.kind === "ABILITY" ? parsedData.data.usageCost : undefined;
       const cost =
         mode === "EXECUTE"
-          ? noRollActivation
-            ? activationConfig.cost
-            : action?.cost
+          ? entryUsageCost !== undefined
+            ? entryUsageCost ?? undefined
+            : noRollActivation
+              ? activationConfig.cost
+              : action?.cost
           : undefined;
       const resourceKey =
         cost?.type === "physical"

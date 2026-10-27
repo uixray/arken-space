@@ -28,6 +28,7 @@ export function CatalogEntryPicker({
   options,
   statLabels,
   resourceLabels,
+  skillModifiers,
   onClose,
   onAssign,
   onCreate,
@@ -39,6 +40,7 @@ export function CatalogEntryPicker({
   /** UIX-424: подписи характеристик из раскладки, для формы создания. */
   statLabels: Record<string, string>;
   resourceLabels: { physical: string; magic: string };
+  skillModifiers?: readonly import("../CatalogEntryForm").SkillModifierOption[];
   /** Already filtered to this kind and excluding entries already assigned to the character. */
   options: CatalogEntryDto[];
   onClose: () => void;
@@ -125,8 +127,9 @@ export function CatalogEntryPicker({
               <RollButton
                 key={entry.id}
                 name={entry.name}
-                formula={previewFormula(entry)}
+                formula={previewFormula(entry, { skillModifiers })}
                 statLabels={statLabels}
+                showDiceIcon={false}
                 disabled={assigningId !== null}
                 onClick={() => void assign(entry.id)}
               />
@@ -141,17 +144,17 @@ export function CatalogEntryPicker({
         </div>
       ) : (
         <CatalogEntryForm
+          initialKind={kind}
           resourceLabels={resourceLabels}
+          skillModifiers={skillModifiers}
           statLabels={statLabels}
           onCancel={() => setMode("SELECT")}
           onSubmit={async (input) => {
             // Creation itself may throw — CatalogEntryForm's own catch shows
             // that error and keeps CREATE mode open for retry, per the
-            // "reuse CatalogEntryForm as-is" constraint. Note: input.kind is
-            // whatever the form's own Type selector says, not necessarily
-            // this picker's `kind` — CatalogEntryForm defaults it to SKILL
-            // and lets the GM change it, and that choice is respected as-is
-            // rather than silently overridden here.
+            // "reuse CatalogEntryForm as-is" constraint. The requested picker
+            // kind seeds the form, while its Type selector remains available
+            // when the user intentionally wants a different kind.
             const created = await onCreate(input);
             if (createAlreadyAssigned) {
               reset();

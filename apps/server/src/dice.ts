@@ -159,6 +159,7 @@ export function rollFormulaWithMode(
     ...selected,
     rollMode,
     poolTotals: [first.total, second.total],
+    poolTerms: [first.terms, second.terms],
     selectedPool,
   });
 }

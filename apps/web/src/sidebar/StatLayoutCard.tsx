@@ -13,6 +13,7 @@ import { AppIcon } from "../ui/AppIcon";
 import {
   AddIcon,
   DecreaseIcon,
+  DiceTrayIcon,
   DeleteIcon,
   MoveDownIcon,
   MoveUpIcon,
@@ -411,6 +412,7 @@ export function StatLayoutCard({
                   )
                 }
               >
+                <AppIcon icon={DiceTrayIcon} />
                 {row.label}
               </Button>
             )}

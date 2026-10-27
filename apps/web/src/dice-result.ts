@@ -9,6 +9,17 @@ const finiteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 const boundedString = (value: unknown, max: number): value is string =>
   typeof value === "string" && value.length <= max;
+const validTerm = (term: unknown) => {
+  if (!term || typeof term !== "object" || Array.isArray(term)) return false;
+  const candidate = term as Record<string, unknown>;
+  return (
+    boundedString(candidate.notation, 16) &&
+    Array.isArray(candidate.rolls) &&
+    candidate.rolls.length <= 100 &&
+    candidate.rolls.every(finiteNumber) &&
+    finiteNumber(candidate.subtotal)
+  );
+};
 
 export function normalizeClientDiceResult(value: unknown): DiceResult | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -30,6 +41,13 @@ export function normalizeClientDiceResult(value: unknown): DiceResult | null {
       (!Array.isArray(dice.poolTotals) ||
         dice.poolTotals.length !== 2 ||
         !dice.poolTotals.every(finiteNumber))) ||
+    (dice.poolTerms !== undefined &&
+      (!Array.isArray(dice.poolTerms) ||
+        dice.poolTerms.length !== 2 ||
+        !dice.poolTerms.every(
+          (pool) =>
+            Array.isArray(pool) && pool.length <= 80 && pool.every(validTerm),
+        ))) ||
     (dice.selectedPool !== undefined &&
       dice.selectedPool !== 0 &&
       dice.selectedPool !== 1)
@@ -43,17 +61,7 @@ export function normalizeClientDiceResult(value: unknown): DiceResult | null {
   if (dice.semanticOutcome !== undefined && semanticOutcome === null)
     return null;
 
-  const terms = dice.terms.every((term) => {
-    if (!term || typeof term !== "object" || Array.isArray(term)) return false;
-    const candidate = term as Record<string, unknown>;
-    return (
-      boundedString(candidate.notation, 16) &&
-      Array.isArray(candidate.rolls) &&
-      candidate.rolls.length <= 100 &&
-      candidate.rolls.every(finiteNumber) &&
-      finiteNumber(candidate.subtotal)
-    );
-  });
+  const terms = dice.terms.every(validTerm);
   const modifiers = dice.modifiers.every((modifier) => {
     if (!modifier || typeof modifier !== "object" || Array.isArray(modifier))
       return false;

@@ -1,22 +1,116 @@
 import type { CatalogEntryDto } from "@arken/contracts";
 
+type RollAction = NonNullable<
+  CatalogEntryDto["data"]["rollActions"]
+>[number];
+
+export type CatalogEntryPreviewContext = {
+  characterStats?: Readonly<Record<string, number>>;
+  statLabels?: Readonly<Record<string, string>>;
+  skillModifiers?: readonly {
+    scope: "CATALOG" | "CHARACTER_ENTRY" | "LEGACY";
+    key: string;
+    name: string;
+    value?: number;
+  }[];
+};
+
+function modifierName(
+  modifier: RollAction["modifiers"][number],
+  context: CatalogEntryPreviewContext,
+): string {
+  switch (modifier.type) {
+    case "CHARACTERISTIC":
+      return context.statLabels?.[modifier.key] ?? modifier.key;
+    case "ENTRY_VALUE":
+      return modifier.key;
+    case "SKILL":
+      return (
+        context.skillModifiers?.find(
+          (skill) =>
+            skill.scope === modifier.scope && skill.key === modifier.key,
+        )?.name ?? `навык ${modifier.key}`
+      );
+    case "CONSTANT":
+      return String(modifier.value);
+    case "FORMULA":
+      return `формула ${modifier.formula}`;
+  }
+}
+
 /**
- * UIX-391: builds a two-line RollButton-style preview formula for a catalog
- * entry's first roll action, reusing the same raw-stat-key convention
- * humanizeFormula() already understands (see formula-display.ts) — this way
- * a picker row and an assigned entry's roll button read identically.
- *
- * Kept dependency-free (no React/UI imports) so it can be unit tested
- * in vitest's node environment.
+ * Shared card preview contract. It only aggregates modifier values whose
+ * source is already available to the viewer; unresolved sources stay named
+ * rather than being guessed as zero. FORMULA sources deliberately remain
+ * descriptive here—the server remains the execution resolver.
  */
-export function previewFormula(entry: CatalogEntryDto): string {
+export function previewRollActionFormula(
+  action: RollAction,
+  entryValues: Readonly<Record<string, number>> | undefined,
+  context: CatalogEntryPreviewContext = {},
+): string {
+  if (!action.modifiers.length) return action.dice;
+
+  const resolved = action.modifiers.map((modifier) => {
+    switch (modifier.type) {
+      case "CHARACTERISTIC": {
+        const value = context.characterStats?.[modifier.key];
+        return typeof value === "number" && Number.isFinite(value)
+          ? value
+          : undefined;
+      }
+      case "ENTRY_VALUE": {
+        const value = entryValues?.[modifier.key];
+        return typeof value === "number" && Number.isFinite(value)
+          ? value
+          : undefined;
+      }
+      case "SKILL": {
+        const value = context.skillModifiers?.find(
+          (skill) =>
+            skill.scope === modifier.scope && skill.key === modifier.key,
+        )?.value;
+        return typeof value === "number" && Number.isFinite(value)
+          ? value
+          : undefined;
+      }
+      case "CONSTANT":
+        return Number.isFinite(modifier.value) ? modifier.value : undefined;
+      case "FORMULA":
+        return undefined;
+    }
+  });
+
+  if (resolved.every((value): value is number => value !== undefined)) {
+    const total = resolved.reduce((sum, value) => sum + value, 0);
+    return `${action.dice} ${total < 0 ? "−" : "+"} ${Math.abs(total)}`;
+  }
+
+  return `${action.dice} + ${action.modifiers
+    .map((modifier) => modifierName(modifier, context))
+    .join(" + ")}`;
+}
+
+/**
+ * UIX-391: preview the first roll action in the catalog picker. The character
+ * sheet can pass its existing stat values; without that context the shared
+ * preview leaves source names visible instead of guessing a numeric bonus.
+ */
+export function previewFormula(
+  entry: CatalogEntryDto,
+  context: CatalogEntryPreviewContext = {},
+): string {
+  if (
+    entry.kind === "SKILL" &&
+    typeof entry.data.skillValue === "number" &&
+    Number.isFinite(entry.data.skillValue)
+  ) {
+    const value = entry.data.skillValue;
+    return `1d20 ${value < 0 ? "−" : "+"} ${Math.abs(value)}`;
+  }
   const actions = entry.data.rollActions;
   if (!actions || actions.length === 0) return "Без броска";
   const [first] = [...actions].sort((a, b) => a.order - b.order);
   if (!first) return "Без броска";
-  const modifier = first.modifiers[0];
-  if (modifier?.type === "CHARACTERISTIC")
-    return `${first.dice} + ${modifier.key}`;
-  if (first.modifiers.length) return `${first.dice} + модификаторы`;
-  return first.dice;
+  return previewRollActionFormula(first, entry.data.values, context);
 }

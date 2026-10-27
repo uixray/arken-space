@@ -1939,6 +1939,9 @@ html[data-player-theme="light"] .character-card--combat {
   white-space: normal;
 }
 .roll-button__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-weight: 700;
 }
 .roll-button__formula {
@@ -2232,6 +2235,10 @@ html[data-player-theme="light"] .character-card--combat {
   font-size: 1.6rem;
   line-height: 1;
 }
+.roll-total__value {
+  position: relative;
+  z-index: 3;
+}
 .roll-result__numbers {
   display: grid;
   grid-column: 2;
@@ -2278,6 +2285,64 @@ html[data-player-theme="light"] .character-card--combat {
 }
 .roll-details__math-right small {
   padding-left: 0;
+}
+.dice-pool-faces {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px 8px 6px;
+}
+.dice-pool-faces__pool {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--surface-1, var(--surface));
+}
+.dice-pool-faces__pool.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft, var(--surface-2));
+}
+.dice-pool-faces__pool.is-discarded {
+  color: var(--muted);
+  border-style: dashed;
+}
+.dice-pool-faces__pool > strong {
+  font-size: max(11px, 0.72rem);
+}
+.dice-pool-faces__terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.dice-pool-faces__term {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.dice-pool-faces__term > small {
+  color: var(--muted);
+  font-size: max(10px, 0.68rem);
+}
+.dice-pool-faces__face {
+  display: inline-grid;
+  min-width: 18px;
+  min-height: 18px;
+  place-items: center;
+  padding: 0 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: max(11px, 0.72rem);
+  font-weight: 700;
+  line-height: 1;
+}
+.dice-pool-faces__pool.is-selected .dice-pool-faces__face {
+  border-color: var(--accent);
+  color: var(--text);
 }
 /* UIX-706 п.4: формула без бонуса — единственный элемент строки; она всегда
  * слева, вправо уходит только второй элемент. */
@@ -5238,6 +5303,11 @@ body:has(.landing-shell) {
   gap: 2px;
   min-width: 0;
 }
+.character-action-card__action > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .character-action-card code,
 .skill-chat-card code {
   overflow: hidden;
@@ -5296,6 +5366,10 @@ body:has(.landing-shell) {
   background: var(--surface-3, var(--surface-1));
 }
 .skill-chat-card__result .roll-total-wrap > strong {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  place-items: center;
   min-width: 0;
   width: 58px;
   height: 58px;
@@ -5306,6 +5380,11 @@ body:has(.landing-shell) {
 .skill-chat-card__result code {
   overflow-wrap: anywhere;
   white-space: normal;
+}
+.skill-chat-card__result > span > b {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .skill-chat-card__heading {
   min-width: 0;
@@ -6228,6 +6307,22 @@ body:has(.landing-shell) {
   flex: 0 0 auto;
   color: currentColor;
 }
+.map-toolbar .map-tool[data-tool="PING"] > .arken-icon {
+  box-sizing: content-box;
+  padding: 2px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface-2) 82%, var(--accent));
+  filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 2px #111827);
+}
+.map-toolbar .map-tool[data-tool="PING"][aria-pressed="true"] {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, #fff);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px #111827;
+}
+.map-toolbar .map-tool[data-tool="PING"][aria-pressed="true"] > .arken-icon {
+  background: var(--accent);
+  color: var(--text);
+}
 .map-toolbar .map-tool__label {
   margin: 0;
   padding: 0;
@@ -6759,6 +6854,31 @@ body:has(.landing-shell) {
   position: relative;
   border: 0 !important;
   box-shadow: none;
+}
+.quick-roll-panel .quick-roll-button .arken-button__text {
+  width: 100%;
+  justify-content: space-between;
+  gap: 6px;
+}
+.quick-roll-button__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.quick-roll-button__value {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--surface-1) 72%, transparent);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.quick-roll-panel__entry .arken-button__text,
+.stat-field__roll-name .arken-button__text,
+.plain-row .arken-button__text {
+  gap: 6px;
 }
 .quick-roll-tooltip-positioner {
   z-index: var(--arken-layer-workspace-popup, 1999);
@@ -7630,6 +7750,9 @@ html[data-player-theme="classic-v1"] .asset-picker__tile:focus-visible {
   gap: 4px;
 }
 .dice-tray-panel__toolbar > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   min-width: 28px;
   min-height: 32px;
   padding: 3px 5px;

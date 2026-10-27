@@ -39,6 +39,7 @@ import { useDismissibleDetails } from "../ui/dismissible-details";
 import { AppIcon } from "../ui/AppIcon";
 import {
   DecreaseIcon,
+  DiceTrayIcon,
   SelectedOptionIcon,
   SendIcon,
   SettingsIcon,
@@ -56,6 +57,7 @@ import { createRollAvatarSource } from "../roll-avatar-source";
 import { createRollCharacterNameSource } from "../roll-character-name";
 import { buildChatTimeline } from "../chat-date";
 import { normalizeClientDiceResult } from "../dice-result";
+import { DicePoolFaces } from "../DicePoolFaces";
 import { getDiceCritical } from "../dice-critical";
 import { OutcomeFrame } from "./OutcomeFrame";
 import { parseSkillCard, SkillChatCard } from "../SkillCards";
@@ -359,6 +361,7 @@ function ChatMessageBodyComponent({
             </div>
             <div className="roll-details__math">
               <small>
+                <AppIcon icon={DiceTrayIcon} />
                 {!presentation || presentation.mode === "NORMAL"
                   ? "d20"
                   : "2d20"}{" "}
@@ -404,7 +407,9 @@ function ChatMessageBodyComponent({
           <span>{pureRollHeading}</span>
         </div>
         <div className="roll-details__math">
-          <small>{details.diceLabel}</small>
+          <small>
+            <AppIcon icon={DiceTrayIcon} /> {details.diceLabel}
+          </small>
           {(critical ||
             details.calculation ||
             (dice.rollMode && dice.rollMode !== "NORMAL")) && (
@@ -423,6 +428,7 @@ function ChatMessageBodyComponent({
             </span>
           )}
         </div>
+        <DicePoolFaces dice={dice} />
       </div>
       <div className="roll-result__numbers">
         <strong className="roll-total" aria-label="Итог броска">
@@ -442,7 +448,7 @@ function ChatMessageBodyComponent({
             styleFrame={dice?.styleFrame ?? null}
             active={isActive ?? false}
           />
-          {dice.total}
+          <span className="roll-total__value">{dice.total}</span>
         </strong>
       </div>
     </div>
@@ -881,6 +887,7 @@ export function ActivityPanel({
                 ),
               )}
               quickRollPending={pendingQuickRoll !== null}
+              canControlCharacter={canSpendResources}
               gmOnly={rollVisibility === "GM_ONLY"}
               physicalDiceControl={
                 <FormInput

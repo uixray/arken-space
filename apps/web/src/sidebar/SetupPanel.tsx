@@ -161,6 +161,14 @@ export function SetupPanel(props: Props) {
                     <span className="eyebrow">
                       {entry.kind === "SKILL" ? "Навык" : "Способность"}
                     </span>
+                    {entry.kind === "SKILL" &&
+                      typeof entry.data.skillValue === "number" &&
+                      Number.isFinite(entry.data.skillValue) && (
+                        <span className="muted">
+                          Бонус: {entry.data.skillValue > 0 ? "+" : ""}
+                          {entry.data.skillValue}
+                        </span>
+                      )}
                     {entry.description && <p>{entry.description}</p>}
                     <div className="inline-fields">
                       <Button onClick={() => setCatalogEditor(entry)}>
@@ -195,6 +203,18 @@ export function SetupPanel(props: Props) {
             onClose={() => setCatalogEditor(null)}
           >
             <CatalogEntryForm
+              skillModifiers={props.snapshot.catalogEntries
+                .filter(
+                  (entry) =>
+                    entry.kind === "SKILL" &&
+                    Number.isFinite(entry.data.skillValue),
+                )
+                .map((entry) => ({
+                  scope: "CATALOG" as const,
+                  key: entry.id,
+                  name: entry.name,
+                  value: entry.data.skillValue,
+                }))}
               resourceLabels={resourceCostLabels(
                 props.snapshot.campaign.statLayout,
               )}

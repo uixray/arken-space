@@ -25,7 +25,7 @@ import useImage from "use-image";
 import Konva from "konva";
 import { TokenConditionMenu } from "./TokenConditionMenu";
 import type { SceneRendererProps } from "./SceneRenderer";
-import type { DrawingDto } from "@arken/contracts";
+import type { DrawingDto, TokenDto } from "@arken/contracts";
 import { rulerPolylineDistance } from "@arken/contracts";
 import { shouldIgnoreGlobalShortcut } from "../input-diagnostics";
 import { fogHiddenTokenIds, isRectFullyRevealed } from "./fog";
@@ -102,6 +102,12 @@ import {
   type TokenImageAvailability,
 } from "./token-image-state";
 import { resolveResizeHandleDataAttributes } from "./resize-handle";
+
+type PendingSingleTokenMove = {
+  latest: { intentId: number; x: number; y: number };
+  inFlight: { intentId: number; actionId: string; revision: number } | null;
+  onAuthoritative?: (actionId: string, token: TokenDto) => void;
+};
 
 function TerrainStampImage({
   packId,
@@ -671,8 +677,44 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     });
   }, [props.assets, props.tokens]);
   const [dragPositions, setDragPositions] = useState<
-    Record<string, { x: number; y: number; revision: number }>
+    Record<
+      string,
+      {
+        x: number;
+        y: number;
+        revision: number;
+        intentId?: number;
+        dragging?: boolean;
+      }
+    >
   >({});
+  const pendingSingleTokenMovesRef = useRef(
+    new Map<string, PendingSingleTokenMove>(),
+  );
+  const latestCanonicalTokenRef = useRef(new Map<string, TokenDto>());
+  const singleTokenMoveIntentRef = useRef(0);
+  const singleTokenMoveGenerationRef = useRef(0);
+  useEffect(() => {
+    const generation = ++singleTokenMoveGenerationRef.current;
+    const onTokenMoved = (event: { actionId: string; data: TokenDto }) => {
+      if (pendingSingleTokenMovesRef.current.has(event.data.id))
+        latestCanonicalTokenRef.current.set(event.data.id, event.data);
+      pendingSingleTokenMovesRef.current
+        .get(event.data.id)
+        ?.onAuthoritative?.(event.actionId, event.data);
+    };
+    props.socket?.on("token:moved", onTokenMoved);
+    return () => {
+      if (singleTokenMoveGenerationRef.current === generation)
+        singleTokenMoveGenerationRef.current++;
+      pendingSingleTokenMovesRef.current.clear();
+      latestCanonicalTokenRef.current.clear();
+      props.socket?.off("token:moved", onTokenMoved);
+    };
+  }, [props.scene.id, props.socket]);
+  useEffect(() => {
+    setDragPositions({});
+  }, [props.scene.id, props.socket]);
   const [resizeDrafts, setResizeDrafts] = useState<
     Record<string, { width: number; height: number; revision: number }>
   >({});
@@ -1087,7 +1129,15 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       let changed = false;
       const next = { ...current };
       for (const token of props.tokens) {
+        const canonical = latestCanonicalTokenRef.current.get(token.id);
+        if (canonical && token.revision >= canonical.revision)
+          latestCanonicalTokenRef.current.delete(token.id);
         const pending = next[token.id];
+        if (
+          pending?.dragging ||
+          pendingSingleTokenMovesRef.current.has(token.id)
+        )
+          continue;
         if (
           pending &&
           (token.revision > pending.revision ||
@@ -1099,7 +1149,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       }
       return changed ? next : current;
     });
-  }, [props.tokens]);
+  }, [props.tokens, dragPositions]);
   useEffect(() => {
     setResizeDrafts((current) => {
       let changed = false;
@@ -2638,8 +2688,148 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     const restoreDragPosition = (origin: { x: number; y: number }) => {
       setDragPositions((current) => ({
         ...current,
-        [token.id]: { ...origin, revision: token.revision },
+        [token.id]: {
+          ...origin,
+          revision: token.revision,
+          dragging: false,
+        },
       }));
+    };
+    const sendPendingTokenMove = (base: TokenDto) => {
+      const pending = pendingSingleTokenMovesRef.current.get(token.id);
+      const socket = props.socket;
+      if (!pending || pending.inFlight || !socket) return;
+
+      const intent = pending.latest;
+      const generation = singleTokenMoveGenerationRef.current;
+      const actionId = crypto.randomUUID();
+      pending.inFlight = {
+        intentId: intent.intentId,
+        actionId,
+        revision: base.revision,
+      };
+      const acceptAuthoritativeMove = (
+        responseActionId: string,
+        authoritative: TokenDto,
+      ) => {
+        if (generation !== singleTokenMoveGenerationRef.current) return;
+        const current = pendingSingleTokenMovesRef.current.get(token.id);
+        if (!current || current.inFlight?.actionId !== responseActionId) return;
+        const newerCanonical = latestCanonicalTokenRef.current.get(token.id);
+        if (
+          newerCanonical &&
+          newerCanonical.revision > authoritative.revision
+        ) {
+          const supersededIntentId = current.latest.intentId;
+          pendingSingleTokenMovesRef.current.delete(token.id);
+          setDragPositions((positions) => {
+            const preview = positions[token.id];
+            if (preview?.intentId !== supersededIntentId) return positions;
+            const next = { ...positions };
+            delete next[token.id];
+            return next;
+          });
+          return;
+        }
+        latestCanonicalTokenRef.current.set(token.id, authoritative);
+        current.inFlight = null;
+        current.onAuthoritative = undefined;
+        if (current.latest.intentId !== intent.intentId) {
+          sendPendingTokenMove(authoritative);
+          return;
+        }
+        pendingSingleTokenMovesRef.current.delete(token.id);
+        setDragPositions((positions) => {
+          const preview = positions[token.id];
+          if (preview?.intentId !== intent.intentId) return positions;
+          return {
+            ...positions,
+            [token.id]: {
+              x: authoritative.x,
+              y: authoritative.y,
+              revision: authoritative.revision,
+              dragging: false,
+            },
+          };
+        });
+      };
+      pending.onAuthoritative = (responseActionId, authoritative) => {
+        if (responseActionId === actionId)
+          acceptAuthoritativeMove(responseActionId, authoritative);
+      };
+      setDragPositions((positions) => {
+        const preview = positions[token.id];
+        if (preview?.intentId !== intent.intentId) return positions;
+        return {
+          ...positions,
+          [token.id]: { ...preview, revision: base.revision },
+        };
+      });
+      socket.emit(
+        "token:moved",
+        {
+          actionId,
+          tokenId: token.id,
+          x: intent.x,
+          y: intent.y,
+          z: base.z,
+          levelId: base.levelId,
+          revision: base.revision,
+        },
+        (ack) => {
+          if (generation !== singleTokenMoveGenerationRef.current) return;
+          const current = pendingSingleTokenMovesRef.current.get(token.id);
+          if (!current || current.inFlight?.actionId !== actionId) return;
+          if (!ack.ok) {
+            const failedIntentId = current.latest.intentId;
+            const newerIntentWasQueued =
+              current.latest.intentId !== intent.intentId;
+            const cachedCanonical = latestCanonicalTokenRef.current.get(
+              token.id,
+            );
+            const failureCanonical =
+              (ack.data as TokenDto | undefined) ?? cachedCanonical;
+            const hasNewerAuthoritativeRevision = Boolean(
+              newerIntentWasQueued &&
+                failureCanonical &&
+                failureCanonical.revision > current.inFlight.revision,
+            );
+            pendingSingleTokenMovesRef.current.delete(token.id);
+            if (
+              ack.data &&
+              (!cachedCanonical ||
+                ack.data.revision >= cachedCanonical.revision)
+            )
+              latestCanonicalTokenRef.current.set(
+                token.id,
+                ack.data as TokenDto,
+              );
+            setDragPositions((positions) => {
+              const preview = positions[token.id];
+              if (hasNewerAuthoritativeRevision) {
+                if (preview?.intentId !== failedIntentId) return positions;
+                return {
+                  ...positions,
+                  [token.id]: {
+                    ...preview,
+                    revision: current.inFlight!.revision,
+                    intentId: undefined,
+                    dragging: false,
+                  },
+                };
+              }
+              if (preview?.intentId !== failedIntentId) return positions;
+              const next = { ...positions };
+              delete next[token.id];
+              return next;
+            });
+            socket.emit("game:resync", ack.sequence);
+            return;
+          }
+          if (ack.data)
+            acceptAuthoritativeMove(actionId, ack.data as TokenDto);
+        },
+      );
     };
     const onDragMove = (event: Konva.KonvaEventObject<DragEvent>) => {
       tokenDragGuard.run(
@@ -2651,6 +2841,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
               x: event.target.x(),
               y: event.target.y(),
               revision: token.revision,
+              dragging: true,
             },
           }));
           // A mixed/group move is committed atomically by the bulk command.
@@ -2700,30 +2891,39 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           event.target.position({ x, y });
           setDragPositions((current) => ({
             ...current,
-            [token.id]: { x, y, revision: token.revision },
-          }));
-          props.socket?.emit(
-            "token:moved",
-            {
-              actionId: crypto.randomUUID(),
-              tokenId: token.id,
+            [token.id]: {
               x,
               y,
-              z: token.z,
-              levelId: token.levelId,
               revision: token.revision,
+              intentId: undefined,
+              dragging: false,
             },
-            (ack) => {
-              if (!ack.ok) {
-                setDragPositions((current) => {
-                  const next = { ...current };
-                  delete next[token.id];
-                  return next;
-                });
-                props.socket?.emit("game:resync", ack.sequence);
-              }
+          }));
+          if (!props.socket) return;
+          const intentId = ++singleTokenMoveIntentRef.current;
+          const pending =
+            pendingSingleTokenMovesRef.current.get(token.id) ?? {
+              latest: { intentId, x, y },
+              inFlight: null,
+            };
+          pending.latest = { intentId, x, y };
+          pendingSingleTokenMovesRef.current.set(token.id, pending);
+          const base = latestCanonicalTokenRef.current.get(token.id);
+          const revision = Math.max(token.revision, base?.revision ?? 0);
+          setDragPositions((current) => ({
+            ...current,
+            [token.id]: {
+              x,
+              y,
+              revision: pending.inFlight?.revision ?? revision,
+              intentId,
+              dragging: false,
             },
-          );
+          }));
+          if (!pending.inFlight)
+            sendPendingTokenMove(
+              base && base.revision >= token.revision ? base : token,
+            );
         },
         restoreDragPosition,
       );

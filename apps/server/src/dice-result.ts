@@ -5,18 +5,16 @@ import {
   type SkillCardSnapshot,
 } from "@arken/contracts";
 
+const diceTermSchema = z.object({
+  notation: z.string().max(16),
+  rolls: z.array(z.number().finite()).max(100),
+  subtotal: z.number().finite(),
+});
+
 const diceResultSchema = z.object({
   formula: z.string().max(160),
   resolvedFormula: z.string().max(512),
-  terms: z
-    .array(
-      z.object({
-        notation: z.string().max(16),
-        rolls: z.array(z.number().finite()).max(100),
-        subtotal: z.number().finite(),
-      }),
-    )
-    .max(80),
+  terms: z.array(diceTermSchema).max(80),
   modifiers: z
     .array(
       z.object({
@@ -29,6 +27,9 @@ const diceResultSchema = z.object({
   label: z.string().max(100).optional(),
   rollMode: z.enum(["NORMAL", "ADVANTAGE", "DISADVANTAGE"]).optional(),
   poolTotals: z.tuple([z.number().finite(), z.number().finite()]).optional(),
+  poolTerms: z
+    .tuple([z.array(diceTermSchema).max(80), z.array(diceTermSchema).max(80)])
+    .optional(),
   selectedPool: z.union([z.literal(0), z.literal(1)]).optional(),
   semanticOutcome: z
     .object({

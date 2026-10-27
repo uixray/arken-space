@@ -51,10 +51,12 @@ export function AnimatedMapPing({
     () => cursorColorForMembership(ping.membershipId),
     [ping.membershipId],
   );
+  const inverseScale = 1 / (Number.isFinite(scale) && scale > 0 ? scale : 1);
   const reduced = useReducedMotionPreference();
   const groupRef = useRef<Konva.Group>(null);
   const ringRefs = useRef<Array<Konva.Circle | null>>([null, null, null]);
   const haloRef = useRef<Konva.Circle>(null);
+  const coreBackplateRef = useRef<Konva.Circle>(null);
   const coreRef = useRef<Konva.Circle>(null);
   const nameRef = useRef<Konva.Text>(null);
 
@@ -75,6 +77,9 @@ export function AnimatedMapPing({
         .forEach((shape) => shape?.visible(false));
       haloRef.current?.radius(g.haloRadius);
       haloRef.current?.opacity(g.haloOpacity);
+      coreBackplateRef.current?.radius(g.coreRadius + 2 * inverseScale);
+      coreBackplateRef.current?.strokeWidth(1.5 * inverseScale);
+      coreBackplateRef.current?.opacity(g.coreOpacity);
       coreRef.current?.radius(g.coreRadius);
       coreRef.current?.strokeWidth(g.coreStrokeWidth);
       coreRef.current?.opacity(g.coreOpacity);
@@ -84,7 +89,7 @@ export function AnimatedMapPing({
       nameRef.current?.opacity(g.coreOpacity);
       groupRef.current?.visible(mapPingIsActive(ping.createdAt, Date.now()));
     },
-    [ping.createdAt, scale, reduced],
+    [ping.createdAt, scale, reduced, inverseScale],
   );
 
   // Konva visibility and geometry are imperative so a rerender after expiry
@@ -149,6 +154,15 @@ export function AnimatedMapPing({
         listening={false}
       />
       <Circle
+        ref={coreBackplateRef}
+        radius={initial.coreRadius + 2 * inverseScale}
+        fill="#fff"
+        stroke="#111827"
+        strokeWidth={1.5 * inverseScale}
+        opacity={initial.coreOpacity}
+        listening={false}
+      />
+      <Circle
         ref={coreRef}
         radius={initial.coreRadius}
         fill={color}
@@ -163,6 +177,11 @@ export function AnimatedMapPing({
         y={initial.nameY}
         text={ping.displayName}
         fill={color}
+        stroke="#fff"
+        strokeWidth={3 * inverseScale}
+        shadowColor="#111827"
+        shadowBlur={2 * inverseScale}
+        shadowOpacity={0.9}
         fontSize={initial.nameFontSize}
         fontStyle="bold"
         opacity={initial.coreOpacity}
