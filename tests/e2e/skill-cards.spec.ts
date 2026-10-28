@@ -590,7 +590,13 @@ for (const owner of ["edit", "picker", "setup"] as const) {
           }),
         ).toBeChecked();
         await form
-          .getByRole("button", { name: "Добавить бросок", exact: true })
+          .getByRole("button", {
+            name:
+              owner === "setup"
+                ? "Добавить дополнительный бросок"
+                : "Добавить бросок",
+            exact: true,
+          })
           .click();
       }
       const description = form.getByRole("textbox", {

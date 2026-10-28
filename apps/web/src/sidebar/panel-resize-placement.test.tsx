@@ -134,9 +134,7 @@ it("keeps quick roll groups visually distinct without redundant headings and sha
   );
   expect(screen.queryByRole("heading", { name: "Обычные" })).toBeNull();
   expect(screen.queryByRole("heading", { name: "Боевые" })).toBeNull();
-  expect(
-    screen.getByRole("button", { name: /^Ближний бой\s*0$/ }),
-  ).toHaveClass(
+  expect(screen.getByRole("button", { name: /^Ближний бой\s*0$/ })).toHaveClass(
     "quick-roll-button--skill",
   );
   expect(
