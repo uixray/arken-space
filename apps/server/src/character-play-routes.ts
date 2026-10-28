@@ -72,7 +72,10 @@ function numericSkillValue(data: unknown): number | undefined {
   if (!data || typeof data !== "object" || !("skillValue" in data))
     return undefined;
   const value = data.skillValue;
-  return typeof value === "number" && Number.isInteger(value) && value >= -1000 && value <= 1000
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= -1000 &&
+    value <= 1000
     ? value
     : undefined;
 }
@@ -570,7 +573,9 @@ export function registerCharacterPlayRoutes(
         } else if (noRollRequest && row.entry.kind === "SKILL") {
           const value = parsedData.data.skillValue;
           if (typeof value !== "number" || !Number.isFinite(value))
-            return reply.code(400).send({ error: "SKILL_VALUE_NOT_CONFIGURED" });
+            return reply
+              .code(400)
+              .send({ error: "SKILL_VALUE_NOT_CONFIGURED" });
           action = {
             id: "simple-skill-roll",
             kind: "CUSTOM",
@@ -634,18 +639,16 @@ export function registerCharacterPlayRoutes(
             } else if (source.type === "SKILL") {
               if (source.scope === "LEGACY") {
                 const legacySkills = Array.isArray(row.character.skills)
-                  ? row.character.skills.filter(
-                      (candidate): candidate is { key: string; rank: number } => {
-                        if (!candidate || typeof candidate !== "object")
-                          return false;
-                        const skill = candidate as Record<string, unknown>;
-                        return (
-                          skill.key === source.key &&
-                          typeof skill.rank === "number" &&
-                          Number.isFinite(skill.rank)
-                        );
-                      },
-                    )
+                  ? row.character.skills.filter((candidate): boolean => {
+                      if (!candidate || typeof candidate !== "object")
+                        return false;
+                      const skill = candidate as Record<string, unknown>;
+                      return (
+                        skill.key === source.key &&
+                        typeof skill.rank === "number" &&
+                        Number.isFinite(skill.rank)
+                      );
+                    })
                   : [];
                 if (legacySkills.length === 1) value = legacySkills[0]!.rank;
               } else if (source.scope === "CHARACTER_ENTRY") {
@@ -675,7 +678,10 @@ export function registerCharacterPlayRoutes(
                   .where(
                     and(
                       eq(characterCatalogEntries.characterId, row.character.id),
-                      eq(characterCatalogEntries.sourceCatalogEntryId, source.key),
+                      eq(
+                        characterCatalogEntries.sourceCatalogEntryId,
+                        source.key,
+                      ),
                       eq(characterCatalogEntries.kind, "SKILL"),
                       eq(catalogEntries.kind, "SKILL"),
                       eq(catalogEntries.campaignId, auth.campaignId),
@@ -719,7 +725,7 @@ export function registerCharacterPlayRoutes(
       const cost =
         mode === "EXECUTE"
           ? entryUsageCost !== undefined
-            ? entryUsageCost ?? undefined
+            ? (entryUsageCost ?? undefined)
             : noRollActivation
               ? activationConfig.cost
               : action?.cost

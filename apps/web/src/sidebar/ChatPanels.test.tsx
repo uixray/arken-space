@@ -313,7 +313,7 @@ describe("dice presentation boundary (UIX-289)", () => {
     );
     const document = new DOMParser().parseFromString(markup, "text/html");
     const math = document.querySelector(".roll-details__math");
-    expect(math?.textContent).toBe("1d20Крит. успех");
+    expect(math?.textContent?.trim()).toBe("1d20Крит. успех");
     expect(math?.querySelectorAll("small")).toHaveLength(1);
     expect(
       document.querySelector(".roll-details__heading .roll-critical-label"),
@@ -350,7 +350,9 @@ describe("dice presentation boundary (UIX-289)", () => {
         badge,
       );
       expect(
-        document.querySelector(".roll-details__math > small")?.textContent,
+        document
+          .querySelector(".roll-details__math > small")
+          ?.textContent?.trim(),
       ).toBe("1d100");
     },
   );

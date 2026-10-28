@@ -704,6 +704,121 @@ test("cold token resize conflict keeps socket authority and exposes only safe co
   expect(bootstrapRequests).toBe(coldBootstrapRequests);
 });
 
+test("rapid single-token drags serialize and resync after a newer revision", async ({
+  page,
+}) => {
+  let socketConnected = false;
+  let gameSocket: { send: (message: string) => void } | null = null;
+  const moves: Array<{
+    ackId: string;
+    payload: Record<string, unknown>;
+  }> = [];
+  const resyncRequests: unknown[] = [];
+  await page.routeWebSocket(/\/socket\.io\//, (socket) => {
+    gameSocket = socket;
+    socket.onMessage((message) => {
+      const packet = message.toString();
+      if (packet === "40") {
+        socketConnected = true;
+        socket.send('40{"sid":"rapid-token-move-socket"}');
+        return;
+      }
+      if (!packet.startsWith("42")) return;
+      const payloadStart = packet.indexOf("[");
+      if (payloadStart < 0) return;
+      const payload = JSON.parse(packet.slice(payloadStart)) as [
+        string,
+        Record<string, unknown> | undefined,
+      ];
+      if (payload[0] === "token:moved")
+        moves.push({
+          ackId: packet.slice(2, payloadStart),
+          payload: payload[1]!,
+        });
+      else if (payload[0] === "game:resync") resyncRequests.push(payload[1]);
+    });
+    socket.send(
+      '0{"sid":"rapid-token-move-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
+    );
+  });
+  await installCanvasReviewRoutes(page);
+  await mockAuthenticatedGameCapabilities(page);
+  await page.goto("/");
+  await expect.poll(() => socketConnected).toBe(true);
+
+  const map = page.locator(".map-viewport");
+  const bounds = await map.boundingBox();
+  expect(bounds).not.toBeNull();
+  const drag = async (
+    fromX: number,
+    fromY: number,
+    toX: number,
+    toY: number,
+  ) => {
+    await page.mouse.move(bounds!.x + fromX, bounds!.y + fromY);
+    await page.mouse.down();
+    await page.mouse.move(bounds!.x + toX, bounds!.y + toY, { steps: 4 });
+    await page.mouse.up();
+  };
+
+  await drag(416, 352, 480, 416);
+  await expect.poll(() => moves.length).toBe(1);
+  expect(moves[0]!.payload).toMatchObject({
+    tokenId,
+    x: 448,
+    y: 384,
+    revision: 0,
+  });
+
+  // Keep the first acknowledgement pending while the user supplies a newer
+  // destination. It must remain queued rather than racing the same revision.
+  await drag(480, 416, 544, 480);
+  await expect.poll(() => moves.length).toBe(1);
+  expect(gameSocket).not.toBeNull();
+  const firstAckToken = { ...snapshot.tokens[0]!, x: 448, y: 384, revision: 1 };
+  gameSocket!.send(
+    `43${moves[0]!.ackId}${JSON.stringify([{ ok: true, data: firstAckToken }])}`,
+  );
+
+  await expect.poll(() => moves.length).toBe(2);
+  expect(moves[1]!.payload).toMatchObject({
+    tokenId,
+    x: 512,
+    y: 448,
+    revision: 1,
+  });
+
+  // Queue another destination, then let a newer remote revision overtake the
+  // in-flight request. A stale failure must request resync and must not emit
+  // the queued intent against an obsolete revision.
+  await drag(544, 480, 608, 544);
+  const remoteToken = {
+    ...snapshot.tokens[0]!,
+    x: 640,
+    y: 576,
+    revision: 3,
+  };
+  gameSocket!.send(
+    `42${JSON.stringify([
+      "token:moved",
+      { actionId: "remote-newer-revision", sequence: 1, data: remoteToken },
+    ])}`,
+  );
+  const staleFailureToken = {
+    ...snapshot.tokens[0]!,
+    x: 512,
+    y: 448,
+    revision: 2,
+  };
+  gameSocket!.send(
+    `43${moves[1]!.ackId}${JSON.stringify([
+      { ok: false, data: staleFailureToken, sequence: 1 },
+    ])}`,
+  );
+  await expect.poll(() => resyncRequests.length).toBe(1);
+  await expect.poll(() => moves.length).toBe(2);
+});
+
 test("GM stack semantics follow authoritative movement and deletion", async ({
   page,
 }) => {

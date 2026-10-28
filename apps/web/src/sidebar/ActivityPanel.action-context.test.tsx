@@ -117,7 +117,10 @@ function renderActivity(
   };
 }
 
-const rollButton = () => screen.getByRole("button", { name: "Ловкость" });
+const rollButton = (value = 7) =>
+  screen.getByRole("button", {
+    name: new RegExp(`^Ловкость\\s*${value}$`),
+  });
 const resourceInput = () =>
   screen.getByRole("spinbutton", { name: "Очки: Выносливость" });
 const composerInput = () =>
@@ -204,13 +207,13 @@ describe("ActivityPanel action context (UIX-621)", () => {
     const pending = deferred();
     const onRoll = vi.fn(() => pending.promise);
     const { rerender } = renderActivity(snapshot(a.id), { onRoll });
-    fireEvent.click(rollButton());
+    fireEvent.click(rollButton(3));
     rerender(snapshot(null));
     expect(
       screen.queryByText("Бросаем… Альфа · Ловкость"),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Ловкость" }),
+      screen.queryByRole("button", { name: /^Ловкость\s*\d+$/ }),
     ).not.toBeInTheDocument();
     await act(async () => pending.resolve());
     expect(
@@ -227,7 +230,7 @@ describe("ActivityPanel action context (UIX-621)", () => {
       .mockImplementationOnce(() => first.promise)
       .mockResolvedValue(undefined);
     const { rerender } = renderActivity(snapshot(a.id), { onRoll });
-    const button = rollButton();
+    const button = rollButton(3);
     act(() => {
       button.click();
       button.click();
@@ -333,7 +336,7 @@ describe("ActivityPanel action context (UIX-621)", () => {
         screen.getByText("Нет доступного персонажа для броска."),
       ).toBeVisible();
       expect(
-        screen.queryByRole("button", { name: "Ловкость" }),
+        screen.queryByRole("button", { name: /^Ловкость\s*\d+$/ }),
       ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("spinbutton", { name: "Очки: Выносливость" }),

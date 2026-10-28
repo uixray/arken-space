@@ -1,8 +1,6 @@
 import type { CatalogEntryDto } from "@arken/contracts";
 
-type RollAction = NonNullable<
-  CatalogEntryDto["data"]["rollActions"]
->[number];
+type RollAction = NonNullable<CatalogEntryDto["data"]["rollActions"]>[number];
 
 export type CatalogEntryPreviewContext = {
   characterStats?: Readonly<Record<string, number>>;
@@ -49,9 +47,12 @@ export function previewRollActionFormula(
   entryValues: Readonly<Record<string, number>> | undefined,
   context: CatalogEntryPreviewContext = {},
 ): string {
-  if (!action.modifiers.length) return action.dice;
+  // Older saved entries may predate `modifiers`; treat that shape like an
+  // empty list rather than crashing card previews while preserving other data.
+  const modifiers = Array.isArray(action.modifiers) ? action.modifiers : [];
+  if (!modifiers.length) return action.dice;
 
-  const resolved = action.modifiers.map((modifier) => {
+  const resolved = modifiers.map((modifier) => {
     switch (modifier.type) {
       case "CHARACTERISTIC": {
         const value = context.characterStats?.[modifier.key];
@@ -83,10 +84,10 @@ export function previewRollActionFormula(
 
   if (resolved.every((value): value is number => value !== undefined)) {
     const total = resolved.reduce((sum, value) => sum + value, 0);
-    return `${action.dice} ${total < 0 ? "−" : "+"} ${Math.abs(total)}`;
+    return `${action.dice} ${total < 0 ? "-" : "+"} ${Math.abs(total)}`;
   }
 
-  return `${action.dice} + ${action.modifiers
+  return `${action.dice} + ${modifiers
     .map((modifier) => modifierName(modifier, context))
     .join(" + ")}`;
 }
@@ -106,7 +107,7 @@ export function previewFormula(
     Number.isFinite(entry.data.skillValue)
   ) {
     const value = entry.data.skillValue;
-    return `1d20 ${value < 0 ? "−" : "+"} ${Math.abs(value)}`;
+    return `1d20 ${value < 0 ? "-" : "+"} ${Math.abs(value)}`;
   }
   const actions = entry.data.rollActions;
   if (!actions || actions.length === 0) return "Без броска";

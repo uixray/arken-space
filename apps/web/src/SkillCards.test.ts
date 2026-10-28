@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { CharacterCatalogEntryDto } from "@arken/contracts";
+import type { CharacterCatalogEntryDto, DiceResult } from "@arken/contracts";
 import {
   CharacterActionCard,
   parseSkillCard,
@@ -190,6 +190,43 @@ describe("SkillChatCard (UIX-389 formula humanization)", () => {
     });
     expect(html).toContain("2d6 +17");
     expect(html).not.toContain("modifier_0");
+  });
+
+  it("renders both advantage and disadvantage dice pools and tolerates legacy results", () => {
+    const poolTerms: NonNullable<DiceResult["poolTerms"]> = [
+      [{ notation: "1d20", rolls: [2], subtotal: 2 }],
+      [{ notation: "1d20", rolls: [19], subtotal: 19 }],
+    ];
+    const advantage = renderCard({
+      ...baseCard,
+      result: {
+        total: 20,
+        breakdown: "1d20 + 3",
+        rollMode: "ADVANTAGE",
+        poolTerms,
+        selectedPool: 1,
+      },
+    });
+    expect(advantage).toContain("Значения кубиков в обоих пулах");
+    expect(advantage).toContain("2");
+    expect(advantage).toContain("19");
+    expect(advantage).toContain("is-discarded");
+    expect(advantage).toContain("is-selected");
+
+    const disadvantage = renderCard({
+      ...baseCard,
+      result: {
+        total: 2,
+        breakdown: "1d20 + 3",
+        rollMode: "DISADVANTAGE",
+        poolTerms,
+        selectedPool: 0,
+      },
+    });
+    expect(disadvantage).toContain("Пул 1 · выбран");
+    expect(disadvantage).toContain("Пул 2 · не выбран");
+
+    expect(renderCard(baseCard)).not.toContain("dice-pool-faces");
   });
 
   it("omits a duplicate resolved formula but keeps distinct breakdown detail", () => {

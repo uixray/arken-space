@@ -527,43 +527,60 @@ export function formulaReferencesStatKey(
 
 export const catalogEntryKindSchema = z.enum(["SKILL", "ABILITY"]);
 export const rollActionKindSchema = z.enum(["HIT", "DAMAGE", "CUSTOM"]);
-export const modifierSourceSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("CHARACTERISTIC"),
-    /**
-     * UIX-424: раньше здесь были восемь литералов — пятая копия списка
-     * характеристик, и именно она делала форму способности неполной: мастер не
-     * мог сослаться на реакцию, внимательность и силу магии, хотя система их
-     * определяла.
-     *
-     * Теперь это ключ раскладки. Проверять его существование здесь нечем:
-     * раскладка принадлежит кампании, а схема о кампании не знает. Существование
-     * проверяет тот, кто применяет модификатор, — и уже проверяет: движок
-     * бросков отвечает «стат не найден».
-     */
-    key: z.string().regex(STAT_KEY_PATTERN).max(40),
-  }),
-  z.object({
-    type: z.literal("ENTRY_VALUE"),
-    key: z.string().regex(/^[a-z][a-z0-9_]{0,39}$/),
-  }),
-  z.object({
-    type: z.literal("SKILL"),
-    scope: z.enum(["CATALOG", "CHARACTER_ENTRY", "LEGACY"]),
-    key: z.string().min(1).max(40),
-  }),
-  z.object({
-    type: z.literal("CONSTANT"),
-    value: z.number().int().min(-1000).max(1000),
-  }),
-  z.object({
-    type: z.literal("FORMULA"),
-    formula: z
-      .string()
-      .regex(/^[+-]?\d+(?:[+-]\d+){0,9}$/)
-      .max(80),
-  }),
-]);
+export const modifierSourceSchema = z
+  .discriminatedUnion("type", [
+    z.object({
+      type: z.literal("CHARACTERISTIC"),
+      /**
+       * UIX-424: раньше здесь были восемь литералов — пятая копия списка
+       * характеристик, и именно она делала форму способности неполной: мастер не
+       * мог сослаться на реакцию, внимательность и силу магии, хотя система их
+       * определяла.
+       *
+       * Теперь это ключ раскладки. Проверять его существование здесь нечем:
+       * раскладка принадлежит кампании, а схема о кампании не знает. Существование
+       * проверяет тот, кто применяет модификатор, — и уже проверяет: движок
+       * бросков отвечает «стат не найден».
+       */
+      key: z.string().regex(STAT_KEY_PATTERN).max(40),
+    }),
+    z.object({
+      type: z.literal("ENTRY_VALUE"),
+      key: z.string().regex(/^[a-z][a-z0-9_]{0,39}$/),
+    }),
+    z.object({
+      type: z.literal("SKILL"),
+      scope: z.enum(["CATALOG", "CHARACTER_ENTRY", "LEGACY"]),
+      key: z.string().min(1).max(40),
+    }),
+    z.object({
+      type: z.literal("CONSTANT"),
+      value: z.number().int().min(-1000).max(1000),
+    }),
+    z.object({
+      type: z.literal("FORMULA"),
+      formula: z
+        .string()
+        .regex(/^[+-]?\d+(?:[+-]\d+){0,9}$/)
+        .max(80),
+    }),
+  ])
+  .superRefine((source, context) => {
+    // Catalogue and character-entry references are UUID-backed database IDs.
+    // LEGACY keys come from the pre-catalog character.skills model and remain
+    // arbitrary stable strings for backwards compatibility.
+    if (
+      source.type === "SKILL" &&
+      source.scope !== "LEGACY" &&
+      !z.string().uuid().safeParse(source.key).success
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "catalog skill references must be UUIDs",
+        path: ["key"],
+      });
+    }
+  });
 /**
  * Стоимость применения в ресурсах персонажа.
  *

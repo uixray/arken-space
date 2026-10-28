@@ -109,8 +109,7 @@ export function DiceTrayPanel({
                 });
               }}
             >
-              <AppIcon icon={DiceTrayIcon} />
-              d{sides}
+              <AppIcon icon={DiceTrayIcon} />d{sides}
             </button>
           ))}
 

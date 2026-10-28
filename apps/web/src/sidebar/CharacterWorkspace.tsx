@@ -1365,11 +1365,17 @@ export function CharacterPanel({
     ...character.skills
       .filter((skill) => Number.isFinite(skill.rank))
       .map((skill) => ({
-      scope: "LEGACY" as const,
-      key: skill.key,
-      name: skill.name,
-      value: skill.rank,
+        scope: "LEGACY" as const,
+        key: skill.key,
+        name: skill.name,
+        value: skill.rank,
       })),
+  ];
+  // Only assigned catalogue skills plus this character's own and legacy
+  // skills are valid modifier sources for these cards.
+  const availableCharacterSkillModifiers = [
+    ...catalogSkillModifiers,
+    ...characterSkillModifiers,
   ];
   const saveStandardSkill = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1932,7 +1938,7 @@ export function CharacterPanel({
                           disabled={!editable}
                           draftScopeKey={`${snapshot.campaign.id}:${snapshot.me.id}:${character.id}`}
                           characterStats={character.stats}
-                          skillModifiers={characterSkillModifiers}
+                          skillModifiers={availableCharacterSkillModifiers}
                           onAction={(input) =>
                             catalogActions.onRollEntry(character.id, entry.id, {
                               ...input,
@@ -2025,7 +2031,7 @@ export function CharacterPanel({
                           disabled={!editable}
                           draftScopeKey={`${snapshot.campaign.id}:${snapshot.me.id}:${character.id}`}
                           characterStats={character.stats}
-                          skillModifiers={characterSkillModifiers}
+                          skillModifiers={availableCharacterSkillModifiers}
                           onAction={(input) =>
                             catalogActions.onRollEntry(character.id, entry.id, {
                               ...input,

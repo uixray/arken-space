@@ -407,10 +407,10 @@
     {
       "file": "apps/web/src/CatalogEntryForm.tsx",
       "kind": "tag:FormSelect",
-      "count": 8,
+      "count": 12,
       "status": "BLOCKED",
-      "classification": "current-source-runtime-evidence-pending",
-      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "classification": "current-source-static-inventory-reconciled-runtime-blocked",
+      "scope": "Current TSX source inventory: 12 FormSelect occurrences. Runtime placement, keyboard, focus, lifecycle and hit-test acceptance remains unverified; no PASS copied.",
       "evidence": [],
       "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
     },

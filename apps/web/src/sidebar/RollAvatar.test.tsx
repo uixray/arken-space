@@ -149,9 +149,9 @@ describe("строка броска", () => {
     renderComponent(<ChatMessageBody message={diceMessage} />);
     expect(order()).toEqual(["roll-details", "roll-result__numbers"]);
     expect(screen.getByLabelText("Итог броска").textContent).toBe("17");
-    expect(document.querySelector(".roll-details__math")?.textContent).toBe(
-      "1d2013+4",
-    );
+    expect(
+      document.querySelector(".roll-details__math")?.textContent?.trim(),
+    ).toBe("1d2013+4");
     expect(document.querySelector(".roll-result__die")).toBeNull();
     expect(document.querySelector(".roll-result__bonus")).toBeNull();
   });

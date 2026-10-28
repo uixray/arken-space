@@ -2786,6 +2786,276 @@ describe("Pool B HTTP boundaries", () => {
     expect(failureEvents).toHaveLength(0);
   });
 
+  it("treats absent and null ability costs as free, shares free, and debits an explicit cost once", async () => {
+    await db
+      .update(schema.characters)
+      .set({ resources: { physicalPower: { current: 5, maximum: 5 } } })
+      .where(eq(schema.characters.id, ids.character));
+
+    const createAssignedAbility = async (
+      name: string,
+      usageCost?: { type: "physical"; amount: number } | null,
+    ) => {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/catalog",
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: crypto.randomUUID(),
+          kind: "ABILITY",
+          name,
+          description: "A no-roll activation",
+          data: usageCost === undefined ? {} : { usageCost },
+        },
+      });
+      expect(created.statusCode).toBe(201);
+      const assigned = await app.inject({
+        method: "POST",
+        url: `/api/characters/${ids.character}/catalog`,
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: crypto.randomUUID(),
+          catalogEntryId: created.json().id,
+        },
+      });
+      expect(assigned.statusCode).toBe(201);
+      return assigned.json() as { id: string; revision: number };
+    };
+    const currentPhysical = async () => {
+      const [character] = await db
+        .select({ resources: schema.characters.resources })
+        .from(schema.characters)
+        .where(eq(schema.characters.id, ids.character));
+      return character!.resources;
+    };
+
+    for (const [name, usageCost] of [
+      ["Cost omitted", undefined],
+      ["Null cost", null],
+    ] as const) {
+      const entry = await createAssignedAbility(name, usageCost);
+      const shared = await app.inject({
+        method: "POST",
+        url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+        headers: headers(secrets.player),
+        payload: {
+          actionId: crypto.randomUUID(),
+          mode: "SHARE",
+          entryRevision: entry.revision,
+          visibility: "PUBLIC",
+        },
+      });
+      expect(shared.statusCode).toBe(201);
+      expect(shared.json().skillCard).toMatchObject({
+        execution: "SHARED",
+        activationCost: null,
+      });
+      const executed = await app.inject({
+        method: "POST",
+        url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+        headers: headers(secrets.player),
+        payload: {
+          actionId: crypto.randomUUID(),
+          visibility: "PUBLIC",
+        },
+      });
+      expect(executed.statusCode).toBe(201);
+      expect(executed.json().skillCard).toMatchObject({
+        execution: "EXECUTED",
+        activationCost: null,
+      });
+      expect(await currentPhysical()).toMatchObject({
+        physicalPower: { current: 5, maximum: 5 },
+      });
+    }
+
+    const paid = await createAssignedAbility("Paid activation", {
+      type: "physical",
+      amount: 2,
+    });
+    const shared = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${paid.id}/roll`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        mode: "SHARE",
+        entryRevision: paid.revision,
+        visibility: "PUBLIC",
+      },
+    });
+    expect(shared.statusCode).toBe(201);
+    expect(shared.json().skillCard.activationCost).toBeNull();
+    expect(await currentPhysical()).toMatchObject({
+      physicalPower: { current: 5, maximum: 5 },
+    });
+
+    const actionId = crypto.randomUUID();
+    const execute = () =>
+      app.inject({
+        method: "POST",
+        url: `/api/characters/${ids.character}/catalog/${paid.id}/roll`,
+        headers: headers(secrets.player),
+        payload: { actionId, visibility: "PUBLIC" },
+      });
+    const executed = await execute();
+    expect(executed.statusCode).toBe(201);
+    expect(executed.json().skillCard).toMatchObject({
+      execution: "EXECUTED",
+      activationCost: { type: "physical", amount: 2, before: 5, after: 3 },
+    });
+    expect((await execute()).json()).toEqual({ duplicate: true });
+    expect(await currentPhysical()).toMatchObject({
+      physicalPower: { current: 3, maximum: 5 },
+    });
+    const receipts = await db
+      .select()
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.actionId, actionId));
+    expect(receipts).toHaveLength(1);
+  });
+
+  it("resolves a catalog SKILL modifier from the character's own assignment only", async () => {
+    const source = await app.inject({
+      method: "POST",
+      url: "/api/catalog",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        kind: "SKILL",
+        name: "Catalog stealth",
+        data: { skillValue: 3 },
+      },
+    });
+    expect(source.statusCode).toBe(201);
+    const sourceId = source.json().id as string;
+    const sourceAssignment = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog`,
+      headers: headers(secrets.gm),
+      payload: { actionId: crypto.randomUUID(), catalogEntryId: sourceId },
+    });
+    expect(sourceAssignment.statusCode).toBe(201);
+
+    const createAbility = async (
+      name: string,
+      skillKey: string,
+      skillScope: "CATALOG" | "CHARACTER_ENTRY" = "CATALOG",
+    ) => {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/catalog",
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: crypto.randomUUID(),
+          kind: "ABILITY",
+          name,
+          data: {
+            rollActions: [
+              {
+                id: "probe",
+                kind: "HIT",
+                label: "Probe",
+                dice: "1d20",
+                modifiers: [
+                  { type: "SKILL", scope: skillScope, key: skillKey },
+                ],
+                order: 0,
+                advantage: false,
+                consumeUse: false,
+              },
+            ],
+          },
+        },
+      });
+      expect(created.statusCode).toBe(201);
+      const assigned = await app.inject({
+        method: "POST",
+        url: `/api/characters/${ids.character}/catalog`,
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: crypto.randomUUID(),
+          catalogEntryId: created.json().id,
+        },
+      });
+      expect(assigned.statusCode).toBe(201);
+      return assigned.json().id as string;
+    };
+
+    const ownReference = await createAbility("Own source", sourceId);
+    const ownRoll = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${ownReference}/roll`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        rollActionId: "probe",
+        visibility: "PUBLIC",
+      },
+    });
+    expect(ownRoll.statusCode).toBe(201);
+    expect(ownRoll.json()).toMatchObject({
+      formula: "1d20 + modifier_0",
+      resolvedFormula: "1d20 + 3",
+      modifiers: [expect.objectContaining({ value: 3 })],
+    });
+
+    const assignedSkillId = sourceAssignment.json().id as string;
+    const characterSkillReference = await createAbility(
+      "Character-entry source",
+      assignedSkillId,
+      "CHARACTER_ENTRY",
+    );
+    const characterSkillRoll = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${characterSkillReference}/roll`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        rollActionId: "probe",
+        visibility: "PUBLIC",
+      },
+    });
+    expect(characterSkillRoll.statusCode).toBe(201);
+    expect(characterSkillRoll.json()).toMatchObject({
+      formula: "1d20 + modifier_0",
+      resolvedFormula: "1d20 + 3",
+      modifiers: [expect.objectContaining({ value: 3 })],
+    });
+
+    const foreignSource = crypto.randomUUID();
+    await db.insert(schema.catalogEntries).values({
+      id: foreignSource,
+      campaignId: ids.foreignCampaign,
+      kind: "SKILL",
+      name: "Foreign stealth",
+      data: { skillValue: 9 },
+    });
+    await db.insert(schema.characterCatalogEntries).values({
+      characterId: ids.foreignCharacter,
+      sourceCatalogEntryId: foreignSource,
+      kind: "SKILL",
+      name: "Foreign stealth",
+      data: { skillValue: 9 },
+    });
+    const foreignReference = await createAbility("Foreign source", foreignSource);
+    const foreignRoll = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${foreignReference}/roll`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        rollActionId: "probe",
+        visibility: "PUBLIC",
+      },
+    });
+    expect(foreignRoll.statusCode).toBe(400);
+    expect(foreignRoll.json()).toMatchObject({
+      error: "MISSING_MODIFIER_SOURCE",
+      source: { type: "SKILL", scope: "CATALOG", key: foreignSource },
+    });
+  });
+
   it("returns one canonical DTO to concurrent counter action replays", async () => {
     const actionId = crypto.randomUUID();
     const request = () =>

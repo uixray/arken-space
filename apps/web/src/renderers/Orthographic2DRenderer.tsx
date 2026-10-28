@@ -692,13 +692,18 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     new Map<string, PendingSingleTokenMove>(),
   );
   const latestCanonicalTokenRef = useRef(new Map<string, TokenDto>());
+  const rememberCanonicalToken = useCallback((token: TokenDto) => {
+    const current = latestCanonicalTokenRef.current.get(token.id);
+    if (!current || token.revision > current.revision)
+      latestCanonicalTokenRef.current.set(token.id, token);
+  }, []);
   const singleTokenMoveIntentRef = useRef(0);
   const singleTokenMoveGenerationRef = useRef(0);
   useEffect(() => {
     const generation = ++singleTokenMoveGenerationRef.current;
     const onTokenMoved = (event: { actionId: string; data: TokenDto }) => {
       if (pendingSingleTokenMovesRef.current.has(event.data.id))
-        latestCanonicalTokenRef.current.set(event.data.id, event.data);
+        rememberCanonicalToken(event.data);
       pendingSingleTokenMovesRef.current
         .get(event.data.id)
         ?.onAuthoritative?.(event.actionId, event.data);
@@ -711,7 +716,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       latestCanonicalTokenRef.current.clear();
       props.socket?.off("token:moved", onTokenMoved);
     };
-  }, [props.scene.id, props.socket]);
+  }, [props.scene.id, props.socket, rememberCanonicalToken]);
   useEffect(() => {
     setDragPositions({});
   }, [props.scene.id, props.socket]);
@@ -2731,7 +2736,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           });
           return;
         }
-        latestCanonicalTokenRef.current.set(token.id, authoritative);
+        rememberCanonicalToken(authoritative);
         current.inFlight = null;
         current.onAuthoritative = undefined;
         if (current.latest.intentId !== intent.intentId) {
@@ -2791,19 +2796,11 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
               (ack.data as TokenDto | undefined) ?? cachedCanonical;
             const hasNewerAuthoritativeRevision = Boolean(
               newerIntentWasQueued &&
-                failureCanonical &&
-                failureCanonical.revision > current.inFlight.revision,
+              failureCanonical &&
+              failureCanonical.revision > current.inFlight.revision,
             );
             pendingSingleTokenMovesRef.current.delete(token.id);
-            if (
-              ack.data &&
-              (!cachedCanonical ||
-                ack.data.revision >= cachedCanonical.revision)
-            )
-              latestCanonicalTokenRef.current.set(
-                token.id,
-                ack.data as TokenDto,
-              );
+            if (ack.data) rememberCanonicalToken(ack.data as TokenDto);
             setDragPositions((positions) => {
               const preview = positions[token.id];
               if (hasNewerAuthoritativeRevision) {
@@ -2826,8 +2823,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
             socket.emit("game:resync", ack.sequence);
             return;
           }
-          if (ack.data)
-            acceptAuthoritativeMove(actionId, ack.data as TokenDto);
+          if (ack.data) acceptAuthoritativeMove(actionId, ack.data as TokenDto);
         },
       );
     };
@@ -2901,11 +2897,10 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           }));
           if (!props.socket) return;
           const intentId = ++singleTokenMoveIntentRef.current;
-          const pending =
-            pendingSingleTokenMovesRef.current.get(token.id) ?? {
-              latest: { intentId, x, y },
-              inFlight: null,
-            };
+          const pending = pendingSingleTokenMovesRef.current.get(token.id) ?? {
+            latest: { intentId, x, y },
+            inFlight: null,
+          };
           pending.latest = { intentId, x, y };
           pendingSingleTokenMovesRef.current.set(token.id, pending);
           const base = latestCanonicalTokenRef.current.get(token.id);

@@ -30,6 +30,9 @@ it("explains machine keys in Russian without translating submitted keys", async 
     </>,
   );
   const user = userEvent.setup();
+  await user.click(
+    screen.getByRole("button", { name: "Дополнительные настройки" }),
+  );
   await user.type(
     screen.getByLabelText("Название *", { exact: true }),
     "Искра",
@@ -78,6 +81,9 @@ it("keeps numeric ENTRY_VALUE modifiers separate from resource costs", async () 
     </>,
   );
   const user = userEvent.setup();
+  await user.click(
+    screen.getByRole("button", { name: "Дополнительные настройки" }),
+  );
   await user.type(
     screen.getByLabelText("Название *", { exact: true }),
     "Искра",
@@ -87,11 +93,10 @@ it("keeps numeric ENTRY_VALUE modifiers separate from resource costs", async () 
   await user.type(screen.getByLabelText("Ключ", { exact: true }), "focus");
   await user.clear(screen.getByLabelText("Значение", { exact: true }));
   await user.type(screen.getByLabelText("Значение", { exact: true }), "3");
-  await user.click(screen.getByRole("button", { name: "Добавить бросок" }));
-  await user.type(
-    screen.getAllByLabelText("Название", { exact: true }).at(-1)!,
-    "Усиление",
+  await user.click(
+    screen.getByRole("button", { name: "Добавить дополнительный бросок" }),
   );
+  await user.type(screen.getByLabelText(/^Название броска/), "Усиление");
   await user.click(screen.getByLabelText("Источник модификатора"));
   await user.click(screen.getByRole("option", { name: "Значение записи" }));
   await user.click(screen.getByLabelText("Ключ значения"));
@@ -116,7 +121,7 @@ it("keeps numeric ENTRY_VALUE modifiers separate from resource costs", async () 
   });
 });
 
-it("stores explicit no-roll activation cost separately from description prose", async () => {
+it("stores the shared usage cost for a no-roll ability separately from its description", async () => {
   vi.stubGlobal("matchMedia", (media: string) => ({
     matches: false,
     media,
@@ -131,6 +136,7 @@ it("stores explicit no-roll activation cost separately from description prose", 
   renderComponent(
     <>
       <CatalogEntryForm
+        initialKind="ABILITY"
         statLabels={{}}
         resourceLabels={{ physical: "Выносливость", magic: "Мана" }}
         onSubmit={onSubmit}
@@ -143,10 +149,6 @@ it("stores explicit no-roll activation cost separately from description prose", 
     screen.getByLabelText("Название *", { exact: true }),
     "Световой прыжок",
   );
-  await user.click(screen.getByLabelText("Тип"));
-  await user.click(
-    screen.getByRole("option", { name: "Способность / заклинание" }),
-  );
   await user.click(screen.getByLabelText("Стоимость"));
   await user.click(screen.getByRole("option", { name: "Выносливость" }));
   await user.clear(screen.getByLabelText("Количество ресурса"));
@@ -155,9 +157,7 @@ it("stores explicit no-roll activation cost separately from description prose", 
   expect(onSubmit).toHaveBeenCalledOnce();
   expect(onSubmit.mock.calls[0]![0]).toMatchObject({
     kind: "ABILITY",
-    data: {
-      activation: { consumeUse: false, cost: { type: "physical", amount: 2 } },
-    },
+    data: { usageCost: { type: "physical", amount: 2 } },
   });
 });
 
@@ -176,6 +176,7 @@ it("saves an unlimited no-roll ability with cost after turning off its use limit
   renderComponent(
     <>
       <CatalogEntryForm
+        initialKind="ABILITY"
         statLabels={{}}
         resourceLabels={{ physical: "Выносливость", magic: "Мана" }}
         onSubmit={onSubmit}
@@ -184,18 +185,16 @@ it("saves an unlimited no-roll ability with cost after turning off its use limit
     </>,
   );
   const user = userEvent.setup();
+  await user.click(
+    screen.getByRole("button", { name: "Дополнительные настройки" }),
+  );
   await user.type(
     screen.getByLabelText("Название *", { exact: true }),
     "Световой прыжок",
   );
-  await user.click(screen.getByLabelText("Тип"));
-  await user.click(
-    screen.getByRole("option", { name: "Способность / заклинание" }),
-  );
   await user.click(
     screen.getByLabelText("Ограничить количество использований"),
   );
-  await user.click(screen.getByLabelText("Списывать одно использование"));
   await user.click(
     screen.getByLabelText("Ограничить количество использований"),
   );
@@ -210,7 +209,7 @@ it("saves an unlimited no-roll ability with cost after turning off its use limit
     kind: "ABILITY",
     data: {
       uses: undefined,
-      activation: { consumeUse: false, cost: { type: "magic", amount: 2 } },
+      usageCost: { type: "magic", amount: 2 },
     },
   });
 });
@@ -298,15 +297,14 @@ it("maps safe server field errors and keeps the submitted draft", async () => {
       undefined,
       undefined,
       {
-        fieldErrors: [
-          { path: "data.activation.cost.amount", code: "too_small" },
-        ],
+        fieldErrors: [{ path: "data.usageCost.amount", code: "too_small" }],
       },
     ),
   );
   renderComponent(
     <>
       <CatalogEntryForm
+        initialKind="ABILITY"
         statLabels={{}}
         resourceLabels={{ physical: "Выносливость", magic: "Мана" }}
         onSubmit={onSubmit}
@@ -318,10 +316,6 @@ it("maps safe server field errors and keeps the submitted draft", async () => {
   await user.type(
     screen.getByLabelText("Название *", { exact: true }),
     "Искра",
-  );
-  await user.click(screen.getByLabelText("Тип"));
-  await user.click(
-    screen.getByRole("option", { name: "Способность / заклинание" }),
   );
   await user.click(screen.getByLabelText("Стоимость"));
   await user.click(screen.getByRole("option", { name: "Мана" }));
@@ -360,18 +354,28 @@ it("keeps technical values behind an accessible closed disclosure", async () => 
       />
     </>,
   );
+  expect(screen.queryByText("Дополнительные числовые параметры")).toBeNull();
+  expect(screen.queryByRole("combobox", { name: "Тип" })).toBeNull();
+  const user = userEvent.setup();
+  await user.click(
+    screen.getByRole("button", { name: "Дополнительные настройки" }),
+  );
   const details = screen
     .getByText("Дополнительные числовые параметры")
     .closest("details");
   expect(details).not.toBeNull();
   expect(details).not.toHaveAttribute("open");
   expect(
+    screen.getByRole("combobox", { name: "Тип записи" }),
+  ).toBeInTheDocument();
+  await user.click(screen.getByText("Дополнительные числовые параметры"));
+  expect(details).toHaveAttribute("open");
+  expect(
     screen
       .getByRole("button", { name: "Добавить значение" })
       .closest("details"),
   ).toBe(details);
   expect(screen.getByText(/Обычно заполнять не нужно/)).toBeInTheDocument();
-  expect(screen.getByRole("combobox", { name: "Тип" })).toBeInTheDocument();
   expect(screen.getByText("Лимит использований")).toBeInTheDocument();
   expect(screen.getByText("Броски")).toBeInTheDocument();
 });

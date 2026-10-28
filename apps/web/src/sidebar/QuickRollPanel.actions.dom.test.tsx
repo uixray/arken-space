@@ -59,13 +59,30 @@ for (const kind of ["ABILITY", "SKILL"] as const) {
           membershipId="member"
           rows={[]}
           quickRollPending={false}
+          canControlCharacter
           gmOnly={false}
           onQuickRoll={() => {}}
           onEntryAction={onEntryAction}
         />,
       );
-      fireEvent.click(screen.getByRole("tab", { name: "Способности" }));
-      fireEvent.click(screen.getByRole("button", { name: "Теневой шаг" }));
+      fireEvent.click(
+        screen.getByRole("tab", {
+          name: kind === "SKILL" ? "Характеристики и навыки" : "Способности",
+        }),
+      );
+      if (executable) {
+        fireEvent.click(screen.getByRole("button", { name: "Удар" }));
+      } else if (kind === "ABILITY") {
+        fireEvent.click(
+          screen.getByRole("button", { name: "Теневой шаг · Активировать" }),
+        );
+      } else {
+        fireEvent.click(
+          screen.getByRole("button", {
+            name: "Показать без выполнения: Теневой шаг",
+          }),
+        );
+      }
       await waitFor(() => expect(onEntryAction).toHaveBeenCalledOnce());
       const [, mode, rollActionId] = onEntryAction.mock.calls[0]!;
       const expectedMode =
@@ -85,7 +102,119 @@ for (const kind of ["ABILITY", "SKILL"] as const) {
   }
 }
 
-it("UIX-706: skill rows roll 1d20 + bonus from the abilities tab, not the stats tab", () => {
+it("prepares a no-roll ability without writing and executes only on manual confirmation", async () => {
+  const entry = {
+    id: "prepared-ability",
+    kind: "ABILITY" as const,
+    name: "Теневой шаг",
+    description: "Описание",
+    sourceCatalogEntryId: null,
+    revision: 3,
+    data: { usageCost: { type: "physical", amount: 1 }, rollActions: [] },
+  };
+  const onEntryAction = vi.fn().mockResolvedValue(undefined);
+  renderComponent(
+    <QuickRollPanel
+      rollCharacter={
+        { stats: {}, skills: [], entries: [entry] } as unknown as CharacterDto
+      }
+      campaignId="campaign"
+      membershipId="member"
+      rows={[]}
+      quickRollPending={false}
+      canControlCharacter
+      gmOnly={false}
+      onQuickRoll={() => {}}
+      onEntryAction={onEntryAction}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("tab", { name: "Способности" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Подготовить активацию" }),
+  );
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "Подготовлено для хода",
+  );
+  expect(onEntryAction).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Выполнить сейчас" }));
+  await waitFor(() => expect(onEntryAction).toHaveBeenCalledOnce());
+  expect(onEntryAction).toHaveBeenCalledWith(entry, "EXECUTE", undefined);
+});
+
+it("blocks a prepared action after its entry revision changes", () => {
+  const entry = {
+    id: "prepared-ability-stale",
+    kind: "ABILITY" as const,
+    name: "Теневой шаг",
+    description: "Описание",
+    sourceCatalogEntryId: null,
+    revision: 3,
+    data: {
+      rollActions: [
+        {
+          id: "strike",
+          kind: "HIT",
+          label: "Удар",
+          dice: "1d20",
+          modifiers: [],
+        },
+      ],
+    },
+  };
+  const onEntryAction = vi.fn().mockResolvedValue(undefined);
+  const view = renderComponent(
+    <QuickRollPanel
+      rollCharacter={
+        { stats: {}, skills: [], entries: [entry] } as unknown as CharacterDto
+      }
+      campaignId="campaign"
+      membershipId="member"
+      rows={[]}
+      quickRollPending={false}
+      canControlCharacter
+      gmOnly={false}
+      onQuickRoll={() => {}}
+      onEntryAction={onEntryAction}
+    />,
+  );
+  fireEvent.click(screen.getByRole("tab", { name: "Способности" }));
+  fireEvent.click(screen.getByRole("button", { name: "Подготовить" }));
+  expect(onEntryAction).not.toHaveBeenCalled();
+
+  const changedEntry = { ...entry, revision: 4 };
+  view.rerender(
+    <QuickRollPanel
+      rollCharacter={
+        {
+          stats: {},
+          skills: [],
+          entries: [changedEntry],
+        } as unknown as CharacterDto
+      }
+      campaignId="campaign"
+      membershipId="member"
+      rows={[]}
+      quickRollPending={false}
+      canControlCharacter
+      gmOnly={false}
+      onQuickRoll={() => {}}
+      onEntryAction={onEntryAction}
+    />,
+  );
+  expect(
+    screen.getByText(
+      "Действие изменилось или больше недоступно. Выберите его заново.",
+    ),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Выполнить сейчас" }),
+  ).toBeDisabled();
+  expect(onEntryAction).not.toHaveBeenCalled();
+});
+
+it("keeps numeric skill rows with characteristics and gives explicit control access", () => {
   const onQuickRoll = vi.fn();
   renderComponent(
     <QuickRollPanel
@@ -103,16 +232,19 @@ it("UIX-706: skill rows roll 1d20 + bonus from the abilities tab, not the stats 
         { key: "stealth", label: "Скрытность", group: "skills" },
       ]}
       quickRollPending={false}
+      canControlCharacter
       gmOnly={false}
       onQuickRoll={onQuickRoll}
     />,
   );
-  // Not among the visible stats-tab buttons.
-  expect(screen.queryByRole("button", { name: "Скрытность" })).toBeNull();
-  expect(screen.getByRole("button", { name: "Сила" })).toBeVisible();
-  fireEvent.click(screen.getByRole("tab", { name: "Способности" }));
-  expect(screen.queryByText("Нет навыков и способностей.")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Скрытность" }));
+  expect(
+    screen.getByRole("tab", { name: "Характеристики и навыки" }),
+  ).toHaveAttribute("aria-selected", "true");
+  expect(
+    screen.getByRole("button", { name: /^Скрытность\s*3$/ }),
+  ).toBeVisible();
+  expect(screen.getByRole("button", { name: /^Сила\s*1$/ })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: /^Скрытность\s*3$/ }));
   expect(onQuickRoll).toHaveBeenCalledWith(
     "1d20 + stealth",
     "Скрытность",
@@ -146,6 +278,7 @@ it("posts the info control as SHARE without activating the ability name", async 
       membershipId="member"
       rows={[]}
       quickRollPending={false}
+      canControlCharacter
       gmOnly={false}
       onQuickRoll={() => {}}
       onEntryAction={onEntryAction}
@@ -189,9 +322,10 @@ it("предлагает число бросков характеристики 
       onQuickRoll={onQuickRoll}
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: "Сила воли" }), {
-    shiftKey: true,
-  });
+  fireEvent.click(
+    screen.getByRole("button", { name: /^Сила воли\s*3$/ }),
+    { shiftKey: true },
+  );
   expect(onQuickRoll).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "4" }));
   expect(onQuickRoll).toHaveBeenCalledWith(

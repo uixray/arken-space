@@ -1,5 +1,11 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { CharacterCatalogEntryDto, DiceResult } from "@arken/contracts";
 import type { DiceCritical } from "./dice-critical";
 import { DicePoolFaces } from "./DicePoolFaces";
@@ -34,9 +40,9 @@ export type SkillCard = {
     modifiers: string[];
   } | null;
   result:
-    | Pick<DiceResult, "total" | "rollMode" | "poolTerms" | "selectedPool"> & {
+    | (Pick<DiceResult, "total" | "rollMode" | "poolTerms" | "selectedPool"> & {
         breakdown: string;
-      }
+      })
     | null;
   uses: { before: number; after: number; max: number; recharge: string } | null;
   activationCost: {
@@ -220,7 +226,9 @@ export function CharacterActionCard({
     label: string;
   } | null>(null);
   const draftScopeRef = useRef(draftScopeKey);
-  draftScopeRef.current = draftScopeKey;
+  useLayoutEffect(() => {
+    draftScopeRef.current = draftScopeKey;
+  }, [draftScopeKey]);
   useEffect(() => setPrepared(null), [draftScopeKey]);
   const actions = [...(entry.data.rollActions ?? [])].sort(
     (a, b) =>
@@ -247,7 +255,10 @@ export function CharacterActionCard({
     : undefined;
   const exhausted = Boolean(uses && uses.current < 1);
 
-  async function submit(mode: "EXECUTE" | "SHARE", rollActionId?: string): Promise<boolean> {
+  async function submit(
+    mode: "EXECUTE" | "SHARE",
+    rollActionId?: string,
+  ): Promise<boolean> {
     if (pendingRef.current) return false;
     pendingRef.current = true;
     setPending(mode);
@@ -283,25 +294,29 @@ export function CharacterActionCard({
     });
   };
   const isPreparedCurrent = Boolean(
-    prepared && prepared.scope === draftScopeKey &&
-      prepared.revision === entry.revision &&
-      (prepared.intent === "SIMPLE_SKILL"
-        ? entry.kind === "SKILL" && Number.isInteger(entry.data.skillValue)
-        : prepared.intent === "ABILITY_ACTIVATION"
-          ? entry.kind === "ABILITY" && !entry.data.rollActions?.length
-          : entry.data.rollActions?.some((action) => action.id === prepared.actionId)),
+    prepared &&
+    prepared.scope === draftScopeKey &&
+    prepared.revision === entry.revision &&
+    (prepared.intent === "SIMPLE_SKILL"
+      ? entry.kind === "SKILL" && Number.isInteger(entry.data.skillValue)
+      : prepared.intent === "ABILITY_ACTIVATION"
+        ? entry.kind === "ABILITY" && !entry.data.rollActions?.length
+        : entry.data.rollActions?.some(
+            (action) => action.id === prepared.actionId,
+          )),
   );
   async function executePrepared() {
     if (!prepared || !isPreparedCurrent || disabled) return;
     const current = prepared;
     const currentScope = draftScopeKey;
     if (
-      await submit(
+      (await submit(
         "EXECUTE",
         current.intent === "ROLL_ACTION" ? current.actionId : undefined,
-      ) && draftScopeRef.current === currentScope
+      )) &&
+      draftScopeRef.current === currentScope
     )
-      setPrepared((value) => value?.id === current.id ? null : value);
+      setPrepared((value) => (value?.id === current.id ? null : value));
   }
 
   return (
@@ -326,7 +341,7 @@ export function CharacterActionCard({
             <span>
               <b>Проверка навыка</b>
               <code>
-                1d20 {entry.data.skillValue < 0 ? "−" : "+"}{" "}
+                1d20 {entry.data.skillValue < 0 ? "-" : "+"}{" "}
                 {Math.abs(entry.data.skillValue)}
               </code>
             </span>
@@ -338,7 +353,15 @@ export function CharacterActionCard({
               <AppIcon icon={DiceTrayIcon} />
               Бросить
             </button>
-            <button type="button" disabled={disabled || pending !== null} onClick={() => prepare("SIMPLE_SKILL", undefined, `Проверка: ${entry.name}`)}>Подготовить</button>
+            <button
+              type="button"
+              disabled={disabled || pending !== null}
+              onClick={() =>
+                prepare("SIMPLE_SKILL", undefined, `Проверка: ${entry.name}`)
+              }
+            >
+              Подготовить
+            </button>
           </div>
         )}
       {actions.map((action) => (
@@ -358,16 +381,28 @@ export function CharacterActionCard({
           </span>
           <button
             type="button"
-            disabled={disabled || pending !== null || (action.consumeUse && exhausted)}
+            disabled={
+              disabled || pending !== null || (action.consumeUse && exhausted)
+            }
             onClick={() => void submit("EXECUTE", action.id)}
           >
             <AppIcon icon={DiceTrayIcon} />
-            {pending === "EXECUTE" ? "Выполняем…" : action.consumeUse ? "Выполнить · 1 использование" : "Выполнить"}
+            {pending === "EXECUTE"
+              ? "Выполняем…"
+              : action.consumeUse
+                ? "Выполнить · 1 использование"
+                : "Выполнить"}
           </button>
           <button
             type="button"
             disabled={disabled || pending !== null}
-            onClick={() => prepare("ROLL_ACTION", action.id, `${entry.name} · ${action.label}`)}
+            onClick={() =>
+              prepare(
+                "ROLL_ACTION",
+                action.id,
+                `${entry.name} · ${action.label}`,
+              )
+            }
           >
             Подготовить
           </button>
@@ -399,12 +434,20 @@ export function CharacterActionCard({
             >
               {pending === "EXECUTE" ? "Выполняем…" : "Активировать"}
             </button>
-            <button type="button" disabled={disabled || pending !== null} onClick={() => prepare("ABILITY_ACTIVATION", undefined, entry.name)}>
+            <button
+              type="button"
+              disabled={disabled || pending !== null}
+              onClick={() =>
+                prepare("ABILITY_ACTIVATION", undefined, entry.name)
+              }
+            >
               Подготовить активацию
             </button>
           </div>
-        ) : !(typeof entry.data.skillValue === "number" &&
-          Number.isFinite(entry.data.skillValue)) ? (
+        ) : !(
+            typeof entry.data.skillValue === "number" &&
+            Number.isFinite(entry.data.skillValue)
+          ) ? (
           <p className="muted">Нет выполняемых действий.</p>
         ) : null)}
       <div className="character-action-card__controls">
@@ -412,7 +455,10 @@ export function CharacterActionCard({
           <div className="character-action-card__prepared" role="status">
             <strong>Подготовлено для хода: {prepared.label}</strong>
             {!isPreparedCurrent && (
-              <span className="muted">Действие изменилось или удалено. Выберите его заново или очистите.</span>
+              <span className="muted">
+                Действие изменилось или удалено. Выберите его заново или
+                очистите.
+              </span>
             )}
             <button
               type="button"
@@ -421,10 +467,16 @@ export function CharacterActionCard({
             >
               {pending === "EXECUTE" ? "Выполняем…" : "Выполнить сейчас"}
             </button>
-            <button type="button" disabled={pending !== null} onClick={() => setPrepared(null)}>
+            <button
+              type="button"
+              disabled={pending !== null}
+              onClick={() => setPrepared(null)}
+            >
               Очистить
             </button>
-            <span className="muted">Выполняйте вручную, когда наступит ваш ход.</span>
+            <span className="muted">
+              Выполняйте вручную, когда наступит ваш ход.
+            </span>
           </div>
         )}
         <button

@@ -386,7 +386,11 @@ for (const width of [1280, 360]) {
     await mockAuthenticatedGameCapabilities(page);
     await page.goto("/");
     await openCharacterWorkspace(page);
-    await page.locator(".character-action-card__action button").click();
+    await page
+      .locator(".character-action-card__action")
+      .getByRole("button", { name: /^Выполнить/ })
+      .first()
+      .click();
     await expect.poll(() => postCount).toBe(1);
     await expect(page.locator(".character-action-card__uses")).toHaveText(
       "1/2",
@@ -572,6 +576,9 @@ for (const owner of ["edit", "picker", "setup"] as const) {
             ? "Редактирование записи каталога"
             : "Новая запись каталога",
       });
+      await form
+        .getByRole("button", { name: "Дополнительные настройки", exact: true })
+        .click();
       if (owner !== "edit") {
         await form
           .locator("label.arken-checkbox")
@@ -635,7 +642,7 @@ for (const owner of ["edit", "picker", "setup"] as const) {
         await expect(dialog).toBeVisible();
       }
       await choose(
-        form.getByRole("combobox", { name: "Тип", exact: true }).first(),
+        form.getByRole("combobox", { name: "Тип записи", exact: true }),
         "Навык",
       );
       await choose(

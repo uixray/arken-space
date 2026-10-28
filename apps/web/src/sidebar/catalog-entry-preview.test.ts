@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { CatalogEntryDto } from "@arken/contracts";
-import { previewFormula } from "./catalog-entry-preview";
+import {
+  previewFormula,
+  previewRollActionFormula,
+} from "./catalog-entry-preview";
 
 function catalogEntry(data: CatalogEntryDto["data"]): CatalogEntryDto {
   return {
@@ -21,6 +24,24 @@ describe("previewFormula (UIX-391 catalog picker row preview)", () => {
     );
   });
 
+  it("formats negative skill values with an ASCII minus", () => {
+    expect(previewFormula(catalogEntry({ skillValue: -3 }))).toBe("1d20 - 3");
+  });
+
+  it("formats negative resolved modifier totals with an ASCII minus", () => {
+    const action = {
+      id: "hit",
+      kind: "HIT",
+      label: "Попадание",
+      dice: "1d20",
+      order: 0,
+      advantage: false,
+      consumeUse: false,
+      modifiers: [{ type: "CONSTANT", value: -2 }],
+    } as Parameters<typeof previewRollActionFormula>[0];
+    expect(previewRollActionFormula(action, undefined)).toBe("1d20 - 2");
+  });
+
   it("previews a CHARACTERISTIC modifier as a humanizable raw stat-key formula", () => {
     const entry = catalogEntry({
       rollActions: [
@@ -39,7 +60,7 @@ describe("previewFormula (UIX-391 catalog picker row preview)", () => {
     expect(previewFormula(entry)).toBe("1d20 + agility");
   });
 
-  it("falls back to a generic label for a non-characteristic modifier", () => {
+  it("keeps unresolved modifier names instead of inventing a generic value", () => {
     const entry = catalogEntry({
       rollActions: [
         {
@@ -54,7 +75,17 @@ describe("previewFormula (UIX-391 catalog picker row preview)", () => {
         },
       ],
     });
-    expect(previewFormula(entry)).toBe("1d20 + модификаторы");
+    expect(previewFormula(entry)).toBe("1d20 + magic");
+  });
+
+  it("treats a legacy roll action without modifiers as an empty modifier list", () => {
+    const legacyAction = {
+      id: "legacy-hit",
+      kind: "HIT",
+      label: "Попадание",
+      dice: "1d20",
+    } as Parameters<typeof previewRollActionFormula>[0];
+    expect(previewRollActionFormula(legacyAction, undefined)).toBe("1d20");
   });
 
   it("shows bare dice notation when there is no modifier", () => {
