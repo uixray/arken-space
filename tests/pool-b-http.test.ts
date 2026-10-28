@@ -2996,9 +2996,9 @@ describe("Pool B HTTP boundaries", () => {
     expect(ownRoll.statusCode).toBe(201);
     expect(ownRoll.json()).toMatchObject({
       formula: "1d20 + modifier_0",
-      resolvedFormula: "1d20 + 3",
-      modifiers: [expect.objectContaining({ value: 3 })],
     });
+    expect(ownRoll.json().resolvedFormula).toBe("1d20 +3");
+    expect(ownRoll.json().modifiers[0]).toMatchObject({ value: 3 });
 
     const assignedSkillId = sourceAssignment.json().id as string;
     const characterSkillReference = await createAbility(
@@ -3019,9 +3019,9 @@ describe("Pool B HTTP boundaries", () => {
     expect(characterSkillRoll.statusCode).toBe(201);
     expect(characterSkillRoll.json()).toMatchObject({
       formula: "1d20 + modifier_0",
-      resolvedFormula: "1d20 + 3",
-      modifiers: [expect.objectContaining({ value: 3 })],
     });
+    expect(characterSkillRoll.json().resolvedFormula).toBe("1d20 +3");
+    expect(characterSkillRoll.json().modifiers[0]).toMatchObject({ value: 3 });
 
     const foreignSource = crypto.randomUUID();
     await db.insert(schema.catalogEntries).values({
@@ -3038,7 +3038,10 @@ describe("Pool B HTTP boundaries", () => {
       name: "Foreign stealth",
       data: { skillValue: 9 },
     });
-    const foreignReference = await createAbility("Foreign source", foreignSource);
+    const foreignReference = await createAbility(
+      "Foreign source",
+      foreignSource,
+    );
     const foreignRoll = await app.inject({
       method: "POST",
       url: `/api/characters/${ids.character}/catalog/${foreignReference}/roll`,

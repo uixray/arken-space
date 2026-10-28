@@ -126,7 +126,7 @@ it("keeps quick roll groups visually distinct without redundant headings and sha
       onEntryAction={onEntryAction}
     />,
   );
-  expect(screen.getByRole("button", { name: "Сила" })).toHaveClass(
+  expect(screen.getByRole("button", { name: /^Сила\s*3$/ })).toHaveClass(
     "quick-roll-button--ordinary",
   );
   expect(screen.getByRole("button", { name: "Инициатива" })).toHaveClass(
@@ -139,7 +139,9 @@ it("keeps quick roll groups visually distinct without redundant headings and sha
     "true",
   );
   fireEvent.click(screen.getByRole("tab", { name: "Способности" }));
-  expect(screen.getByRole("button", { name: "Ближний бой" })).toHaveClass(
+  expect(
+    screen.getByRole("button", { name: /^Ближний бой\s*0$/ }),
+  ).toHaveClass(
     "quick-roll-button--skill",
   );
   expect(screen.getByRole("button", { name: "Огненная стрела" })).toBeTruthy();

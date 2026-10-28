@@ -133,9 +133,7 @@ it("prepares a no-roll ability without writing and executes only on manual confi
   fireEvent.click(
     screen.getByRole("button", { name: "Подготовить активацию" }),
   );
-  expect(screen.getByRole("status")).toHaveTextContent(
-    "Подготовлено для хода",
-  );
+  expect(screen.getByRole("status")).toHaveTextContent("Подготовлено для хода");
   expect(onEntryAction).not.toHaveBeenCalled();
 
   fireEvent.click(screen.getByRole("button", { name: "Выполнить сейчас" }));
@@ -322,10 +320,9 @@ it("предлагает число бросков характеристики 
       onQuickRoll={onQuickRoll}
     />,
   );
-  fireEvent.click(
-    screen.getByRole("button", { name: /^Сила воли\s*3$/ }),
-    { shiftKey: true },
-  );
+  fireEvent.click(screen.getByRole("button", { name: /^Сила воли\s*3$/ }), {
+    shiftKey: true,
+  });
   expect(onQuickRoll).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "4" }));
   expect(onQuickRoll).toHaveBeenCalledWith(
