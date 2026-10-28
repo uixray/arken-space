@@ -134,19 +134,20 @@ it("keeps quick roll groups visually distinct without redundant headings and sha
   );
   expect(screen.queryByRole("heading", { name: "Обычные" })).toBeNull();
   expect(screen.queryByRole("heading", { name: "Боевые" })).toBeNull();
-  expect(screen.getByRole("tab", { name: "Характеристики" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  fireEvent.click(screen.getByRole("tab", { name: "Способности" }));
   expect(
     screen.getByRole("button", { name: /^Ближний бой\s*0$/ }),
   ).toHaveClass(
     "quick-roll-button--skill",
   );
-  expect(screen.getByRole("button", { name: "Огненная стрела" })).toBeTruthy();
+  expect(
+    screen.getByRole("tab", { name: "Характеристики и навыки" }),
+  ).toHaveAttribute("aria-selected", "true");
   expect(screen.queryByRole("heading", { name: "Навыки" })).toBeNull();
   expect(screen.queryByRole("heading", { name: "Способности" })).toBeNull();
+  fireEvent.click(screen.getByRole("tab", { name: "Способности" }));
+  expect(
+    screen.getByRole("button", { name: "Огненная стрела · Активировать" }),
+  ).toBeTruthy();
   fireEvent.click(
     screen.getByRole("button", {
       name: "Показать без выполнения: Огненная стрела",
