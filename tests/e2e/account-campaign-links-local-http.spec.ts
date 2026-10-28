@@ -295,12 +295,9 @@ test("PLAYER creates personal skill and ability through the sheet, survives relo
       .click();
     await page.getByRole("button", { name: "+ Создать новую запись" }).click();
     const form = page.locator(".catalog-entry-form");
-    if (kind === "ABILITY") {
-      await form.getByRole("combobox").first().click();
-      await page
-        .getByRole("option", { name: "Способность / заклинание", exact: true })
-        .click();
-    }
+    // The sheet action supplies ABILITY as initialKind. Do not select the
+    // first combobox: in the simple form it is usage cost, while the type
+    // selector is only shown in advanced settings.
     await form
       .getByLabel("Название", { exact: false })
       .fill(`Personal ${kind}`);

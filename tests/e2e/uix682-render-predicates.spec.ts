@@ -153,13 +153,15 @@ for (const width of widths) {
     // C19: the skill rows and the character's skills are separate groups
     // with visible space between them.
     const panel = page.locator(".quick-roll-panel");
-    await panel.getByRole("tab", { name: "Способности" }).click();
-    const abilities = panel.getByRole("tabpanel", { name: "Способности" });
+    await panel.getByRole("tab", { name: "Характеристики и навыки" }).click();
+    const abilities = panel.getByRole("tabpanel", {
+      name: "Характеристики и навыки",
+    });
     await expect(
-      abilities.getByRole("button", { name: "Скрытность" }),
+      abilities.getByRole("button", { name: /^Скрытность\s*0$/ }),
     ).toBeVisible();
     await expect(
-      abilities.getByRole("button", { name: "Знание преданий" }),
+      abilities.getByRole("button", { name: /^Знание преданий\s*1$/ }),
     ).toBeVisible();
     const gap = await abilities.evaluate((node) => {
       const groups = [...node.querySelectorAll(".activity-quick-rolls")];
@@ -194,6 +196,9 @@ for (const width of widths) {
       .click();
     const form = page.getByRole("form", { name: "Новая запись каталога" });
     await expect(form).toBeVisible();
+    await form
+      .getByRole("button", { name: "Дополнительные настройки", exact: true })
+      .click();
 
     // C06: the checkbox and its text share one line.
     const toggle = form

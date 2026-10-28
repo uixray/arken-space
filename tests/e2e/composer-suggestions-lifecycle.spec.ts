@@ -410,7 +410,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         name: "Персонаж для броска",
         exact: true,
       });
-      await panel.getByRole("tab", { name: "Способности" }).click();
+      await panel.getByRole("tab", { name: "Характеристики и навыки" }).click();
       if (role === "GM") {
         await select.click();
         const option = page.getByRole("option", {
@@ -439,10 +439,10 @@ for (const role of ["GM", "PLAYER"] as const) {
         await option.click();
         await expect(select).toContainText("Следопыт");
         await expect(
-          panel.getByRole("button", { name: "Поиск следов", exact: true }),
+          panel.getByRole("button", { name: /^Поиск следов\s*1$/ }),
         ).toBeVisible();
         await expect(
-          panel.getByRole("button", { name: "Наблюдение", exact: true }),
+          panel.getByRole("button", { name: /^Наблюдение\s*1$/ }),
         ).toHaveCount(0);
         await expect(select).toBeFocused();
         await select.press("Enter");
@@ -452,7 +452,7 @@ for (const role of ["GM", "PLAYER"] as const) {
           .click();
         await expect(select).toContainText("Картограф");
         await expect(
-          panel.getByRole("button", { name: "Наблюдение", exact: true }),
+          panel.getByRole("button", { name: /^Наблюдение\s*1$/ }),
         ).toBeVisible();
         await select.press("Enter");
         await page.keyboard.press("Escape");
@@ -464,7 +464,7 @@ for (const role of ["GM", "PLAYER"] as const) {
           panel.getByRole("button", { name: "Наблюдение", exact: true }),
         ).toBeVisible();
         await expect(
-          panel.getByRole("button", { name: "Поиск следов", exact: true }),
+          panel.getByRole("button", { name: /^Поиск следов\s*1$/ }),
         ).toHaveCount(0);
       }
       const filters = panel.locator(".activity-filters-menu"),

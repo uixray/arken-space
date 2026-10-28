@@ -6311,8 +6311,8 @@ body:has(.landing-shell) {
   box-sizing: content-box;
   padding: 2px;
   border-radius: 50%;
+  border: 1px solid currentColor;
   background: color-mix(in srgb, var(--surface-2) 82%, var(--accent));
-  filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 2px #111827);
 }
 .map-toolbar .map-tool[data-tool="PING"][aria-pressed="true"] {
   outline: 2px solid color-mix(in srgb, var(--accent) 70%, #fff);
@@ -7848,6 +7848,10 @@ html[data-player-theme="classic-v1"] .asset-picker__tile:focus-visible {
 .map-dice-tray .dice-tray-panel__body {
   overflow-x: auto;
   overflow-y: hidden;
+}
+.map-dice-tray .dice-tray-panel__toolbar {
+  width: 100%;
+  flex-wrap: wrap;
 }
 .map-dice-tray .dice-tray-panel > p {
   margin: 4px 8px;
