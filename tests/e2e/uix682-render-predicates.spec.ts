@@ -143,7 +143,7 @@ for (const width of widths) {
         rowRight: box.right - Number.parseFloat(style.paddingRight),
         left: small.getBoundingClientRect().left,
         right: small.getBoundingClientRect().right,
-        text: small.textContent,
+        text: small.textContent?.trim(),
       };
     });
     expect(formula.text).toBe("1d20");
@@ -228,6 +228,8 @@ for (const width of widths) {
     expect(line.textLeft).toBeGreaterThan(line.boxRight);
 
     // C07: the roll fieldset keeps its content off the edges.
+    const kind = form.getByRole("combobox", { name: "Тип записи" });
+    await kind.selectOption({ label: "Способность / заклинание" });
     const rolls = form.locator("fieldset", {
       has: page.locator("legend", { hasText: /^Броски$/ }),
     });
