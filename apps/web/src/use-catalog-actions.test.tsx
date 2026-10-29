@@ -72,3 +72,29 @@ it("refreshes normally after a successful create", async () => {
   expect(f.load).toHaveBeenCalledOnce();
   expect(f.setError).toHaveBeenCalledExactlyOnceWith("");
 });
+
+it("transports execute-all and the entry revision in one catalog action request", async () => {
+  vi.mocked(api).mockResolvedValue({});
+  const f = fixture();
+  f.run.mockImplementation(async (action: () => Promise<unknown>) => {
+    await action();
+  });
+  await f.result.current.onRollEntry("character-1", "entry-1", {
+    mode: "EXECUTE",
+    executeAll: true,
+    entryRevision: 7,
+  });
+  expect(f.run).toHaveBeenCalledOnce();
+  expect(api).toHaveBeenCalledExactlyOnceWith(
+    "/api/characters/character-1/catalog/entry-1/roll",
+    expect.objectContaining({
+      method: "POST",
+      body: expect.any(String),
+    }),
+  );
+  const [, options] = vi.mocked(api).mock.calls[0]!;
+  const body = JSON.parse(options!.body as string);
+  expect(body).toMatchObject({ executeAll: true, entryRevision: 7 });
+  expect(body.rollActionId).toBeUndefined();
+  expect(body.actionId).toEqual(expect.any(String));
+});

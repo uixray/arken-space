@@ -108,6 +108,104 @@ describe("parseSkillCard", () => {
     expect(html).not.toContain("Итог броска");
   });
 
+  it("parses and renders an ordered multi-roll ability with each outcome", () => {
+    const result = (total: number) => ({
+      formula: "1d6",
+      resolvedFormula: `1d6(${total})`,
+      terms: [{ notation: "1d6", rolls: [total], subtotal: total }],
+      modifiers: [],
+      total,
+    });
+    const card = parseSkillCard({
+      skillCard: {
+        version: 1,
+        execution: "EXECUTED",
+        entry: { id: "ability", name: "Twin action", kind: "ABILITY" },
+        action: null,
+        formula: null,
+        result: null,
+        rolls: [
+          {
+            action: {
+              id: "hit",
+              kind: "HIT",
+              label: "Hit",
+              dice: "1d20",
+              advantage: false,
+              consumeUse: true,
+            },
+            formula: "1d20",
+            result: {
+              ...result(20),
+              formula: "1d20",
+              resolvedFormula: "1d20(20)",
+              terms: [{ notation: "1d20", rolls: [20], subtotal: 20 }],
+              rollMode: "ADVANTAGE",
+              poolTotals: [20, 8],
+              poolTerms: [
+                [{ notation: "1d20", rolls: [20], subtotal: 20 }],
+                [{ notation: "1d20", rolls: [8], subtotal: 8 }],
+              ],
+              selectedPool: 0,
+              semanticOutcome: {
+                kind: "CRITICAL_SUCCESS",
+                keptNaturalD20: 20,
+              },
+              frame: {
+                setKey: "ARKEN_CRITICAL_V1",
+                frameKey: "critical-success",
+              },
+            },
+          },
+          {
+            action: {
+              id: "damage",
+              kind: "DAMAGE",
+              label: "Damage",
+              dice: "1d6",
+              advantage: false,
+              consumeUse: false,
+            },
+            formula: "1d6",
+            result: {
+              ...result(4),
+              semanticOutcome: { kind: "NORMAL", keptNaturalD20: null },
+              styleFrame: {
+                assetId: "11111111-1111-4111-8111-111111111111",
+                source: "PLAYER",
+              },
+            },
+          },
+        ],
+        uses: { before: 2, after: 1, max: 2, recharge: "SHORT_REST" },
+        activationCost: { type: "physical", amount: 1, before: 5, after: 4 },
+      },
+    });
+    expect(card?.rolls?.map((roll) => roll.action.id)).toEqual([
+      "hit",
+      "damage",
+    ]);
+    expect(card?.rolls?.[0]?.result).toMatchObject({
+      total: 20,
+      rollMode: "ADVANTAGE",
+      selectedPool: 0,
+      frame: { frameKey: "critical-success" },
+      semanticOutcome: { kind: "CRITICAL_SUCCESS", keptNaturalD20: 20 },
+    });
+    expect(card?.rolls?.[1]?.result.styleFrame).toMatchObject({
+      source: "PLAYER",
+    });
+    const html = renderCard(card!);
+    expect(html).toContain("Hit");
+    expect(html).toContain("Damage");
+    expect(html).toContain(">20</strong>");
+    expect(html).toContain(">4</strong>");
+    expect(html).toContain(
+      "skill-chat-card__roll roll-result--critical-success",
+    );
+    expect(html).toContain("5 → 4");
+  });
+
   it("falls back for legacy, malformed, and unknown card versions", () => {
     expect(parseSkillCard({ total: 12 })).toBeNull();
     expect(parseSkillCard({ skillCard: { version: 2 } })).toBeNull();
@@ -332,7 +430,7 @@ it("keeps ability activation and passive share visible without a Details expande
     }),
   );
   expect(html).toContain("Активировать стойку");
-  expect(html).toContain("Выполнить · 1 использование");
+  expect(html).toContain("Выполнить способность");
   expect(html).toContain("Показать без выполнения");
   expect(html).not.toContain("Подробнее");
   expect(html).not.toContain(entry.description);

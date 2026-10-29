@@ -1941,7 +1941,10 @@ export function CharacterPanel({
                           skillModifiers={availableCharacterSkillModifiers}
                           onAction={(input) =>
                             catalogActions.onRollEntry(character.id, entry.id, {
-                              ...input,
+                              mode: input.mode,
+                              rollActionId: input.rollActionId,
+                              executeAll: input.executeAll,
+                              entryRevision: input.entryRevision,
                             })
                           }
                         />
@@ -2034,7 +2037,10 @@ export function CharacterPanel({
                           skillModifiers={availableCharacterSkillModifiers}
                           onAction={(input) =>
                             catalogActions.onRollEntry(character.id, entry.id, {
-                              ...input,
+                              mode: input.mode,
+                              rollActionId: input.rollActionId,
+                              executeAll: input.executeAll,
+                              entryRevision: input.entryRevision,
                             })
                           }
                         />

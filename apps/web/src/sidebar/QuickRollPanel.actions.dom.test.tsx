@@ -15,6 +15,29 @@ vi.mock("../use-panel-resize", () => ({
 
 beforeEach(() => window.localStorage.clear());
 
+it("requires a revision for whole-ability execution and rejects IDs or SHARE", () => {
+  const base = {
+    actionId: "11111111-1111-4111-8111-111111111111",
+    visibility: "PUBLIC" as const,
+    executeAll: true as const,
+  };
+  expect(entryRollRequestSchema.safeParse(base).success).toBe(false);
+  expect(
+    entryRollRequestSchema.safeParse({
+      ...base,
+      entryRevision: 3,
+      rollActionId: "strike",
+    }).success,
+  ).toBe(false);
+  expect(
+    entryRollRequestSchema.safeParse({
+      ...base,
+      entryRevision: 3,
+      mode: "SHARE",
+    }).success,
+  ).toBe(false);
+});
+
 for (const kind of ["ABILITY", "SKILL"] as const) {
   for (const executable of [false, true]) {
     it(`${kind} ${executable ? "executes its roll" : kind === "ABILITY" ? "activates without a roll" : "shares without an invalid execute request"}`, async () => {
@@ -41,6 +64,17 @@ for (const kind of ["ABILITY", "SKILL"] as const) {
                   dice: "1d20",
                   modifiers: [],
                 },
+                ...(kind === "ABILITY"
+                  ? [
+                      {
+                        id: "damage",
+                        kind: "DAMAGE",
+                        label: "Урон",
+                        dice: "1d6",
+                        modifiers: [],
+                      },
+                    ]
+                  : []),
               ]
             : [],
         },
@@ -86,17 +120,23 @@ for (const kind of ["ABILITY", "SKILL"] as const) {
         );
       }
       await waitFor(() => expect(onEntryAction).toHaveBeenCalledOnce());
-      const [, mode, rollActionId] = onEntryAction.mock.calls[0]!;
+      const [, mode, rollActionId, executeAll] = onEntryAction.mock.calls[0]!;
       const expectedMode =
         executable || kind === "ABILITY" ? "EXECUTE" : "SHARE";
       expect(mode).toBe(expectedMode);
-      expect(rollActionId).toBe(executable ? "strike" : undefined);
+      expect(rollActionId).toBe(
+        executable && kind === "SKILL" ? "strike" : undefined,
+      );
+      expect(executeAll).toBe(
+        executable && kind === "ABILITY" ? true : undefined,
+      );
       expect(
         entryRollRequestSchema.safeParse({
           actionId: "11111111-1111-4111-8111-111111111111",
           entryRevision: entry.revision,
           mode,
           rollActionId,
+          ...(executeAll ? { executeAll } : {}),
           visibility: "PUBLIC",
         }).success,
       ).toBe(true);
@@ -143,7 +183,69 @@ it("prepares a no-roll ability without writing and executes only on manual confi
 
   fireEvent.click(screen.getByRole("button", { name: "Выполнить сейчас" }));
   await waitFor(() => expect(onEntryAction).toHaveBeenCalledOnce());
-  expect(onEntryAction).toHaveBeenCalledWith(entry, "EXECUTE", undefined);
+  expect(onEntryAction).toHaveBeenCalledWith(
+    entry,
+    "EXECUTE",
+    undefined,
+    undefined,
+  );
+});
+
+it("prepares and executes a configured ability as one batch request", async () => {
+  const entry = {
+    id: "prepared-batch",
+    kind: "ABILITY" as const,
+    name: "Теневой шаг",
+    description: "Описание",
+    sourceCatalogEntryId: null,
+    revision: 3,
+    data: {
+      rollActions: [
+        { id: "hit", kind: "HIT", label: "Удар", dice: "1d20", modifiers: [] },
+        {
+          id: "damage",
+          kind: "DAMAGE",
+          label: "Урон",
+          dice: "1d6",
+          modifiers: [],
+        },
+      ],
+    },
+  };
+  const onEntryAction = vi.fn().mockResolvedValue(undefined);
+  renderComponent(
+    <QuickRollPanel
+      rollCharacter={
+        { stats: {}, skills: [], entries: [entry] } as unknown as CharacterDto
+      }
+      campaignId="campaign"
+      membershipId="member"
+      rows={[]}
+      quickRollPending={false}
+      canControlCharacter
+      gmOnly={false}
+      onQuickRoll={() => {}}
+      onEntryAction={onEntryAction}
+    />,
+  );
+  fireEvent.click(screen.getByRole("tab", { name: "Скилы" }));
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Подготовить способность: Теневой шаг",
+    }),
+  );
+  expect(onEntryAction).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Выполнить сейчас" }));
+  await waitFor(() => expect(onEntryAction).toHaveBeenCalledOnce());
+  expect(onEntryAction).toHaveBeenCalledWith(entry, "EXECUTE", undefined, true);
+  expect(
+    entryRollRequestSchema.safeParse({
+      actionId: "11111111-1111-4111-8111-111111111111",
+      entryRevision: 3,
+      executeAll: true,
+      visibility: "PUBLIC",
+    }).success,
+  ).toBe(true);
 });
 
 it("blocks a prepared action after its entry revision changes", () => {
@@ -185,7 +287,7 @@ it("blocks a prepared action after its entry revision changes", () => {
   fireEvent.click(screen.getByRole("tab", { name: "Скилы" }));
   fireEvent.click(
     screen.getByRole("button", {
-      name: "Подготовить действие: Теневой шаг · Удар",
+      name: "Подготовить способность: Теневой шаг",
     }),
   );
   expect(onEntryAction).not.toHaveBeenCalled();
@@ -299,8 +401,18 @@ it("posts the info control as SHARE without activating the ability name", async 
   );
 
   await waitFor(() => expect(onEntryAction).toHaveBeenCalledOnce());
-  expect(onEntryAction).toHaveBeenCalledWith(entry, "SHARE", undefined);
-  expect(onEntryAction).not.toHaveBeenCalledWith(entry, "EXECUTE", undefined);
+  expect(onEntryAction).toHaveBeenCalledWith(
+    entry,
+    "SHARE",
+    undefined,
+    undefined,
+  );
+  expect(onEntryAction).not.toHaveBeenCalledWith(
+    entry,
+    "EXECUTE",
+    undefined,
+    true,
+  );
   expect(
     entryRollRequestSchema.safeParse({
       actionId: "11111111-1111-4111-8111-111111111111",

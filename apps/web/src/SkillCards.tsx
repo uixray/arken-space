@@ -7,7 +7,9 @@ import {
   type ReactNode,
 } from "react";
 import type { CharacterCatalogEntryDto, DiceResult } from "@arken/contracts";
+import { CatalogActionIcon } from "./CatalogActionIcon";
 import type { DiceCritical } from "./dice-critical";
+import { getDiceCritical } from "./dice-critical";
 import { DicePoolFaces } from "./DicePoolFaces";
 import { normalizeClientDiceResult } from "./dice-result";
 import { humanizeFormula } from "./formula-display";
@@ -44,6 +46,18 @@ export type SkillCard = {
         breakdown: string;
       })
     | null;
+  rolls?: Array<{
+    action: {
+      id: string;
+      label: string;
+      kind: string;
+      dice: string;
+      advantage: boolean;
+      consumeUse: boolean;
+    };
+    formula: string;
+    result: DiceResult;
+  }>;
   uses: { before: number; after: number; max: number; recharge: string } | null;
   activationCost: {
     type: "physical" | "magic";
@@ -132,6 +146,46 @@ export function parseSkillCard(dice: unknown): SkillCard | null {
           recharge: pickText(rawUses!, "recharge", "rechargeLabel") ?? "",
         }
       : null;
+  const rawRolls = raw.rolls;
+  let rolls: SkillCard["rolls"];
+  if (rawRolls !== undefined) {
+    if (!Array.isArray(rawRolls) || rawRolls.length > 20) return null;
+    rolls = [];
+    for (const value of rawRolls) {
+      const snapshot = record(value);
+      const snapshotAction = record(snapshot?.action);
+      const actionId = pickText(snapshotAction ?? {}, "id");
+      const label = pickText(snapshotAction ?? {}, "label");
+      const kind = pickText(snapshotAction ?? {}, "kind");
+      const diceText = pickText(snapshotAction ?? {}, "dice");
+      const rollFormula = pickText(snapshot ?? {}, "formula");
+      const diceResult = normalizeClientDiceResult(snapshot?.result);
+      if (
+        !snapshot ||
+        !actionId ||
+        !label ||
+        !kind ||
+        !diceText ||
+        !rollFormula ||
+        !diceResult ||
+        typeof snapshotAction?.advantage !== "boolean" ||
+        typeof snapshotAction.consumeUse !== "boolean"
+      )
+        return null;
+      rolls.push({
+        action: {
+          id: actionId,
+          label,
+          kind,
+          dice: diceText,
+          advantage: snapshotAction.advantage,
+          consumeUse: snapshotAction.consumeUse,
+        },
+        formula: rollFormula,
+        result: diceResult,
+      });
+    }
+  }
   const rawResult = record(raw.result);
   const normalizedResult = normalizeClientDiceResult(rawResult);
   const total =
@@ -172,6 +226,7 @@ export function parseSkillCard(dice: unknown): SkillCard | null {
         raw.sourceAvailable === false,
     },
     action,
+    ...(rolls === undefined ? {} : { rolls }),
     result:
       total === null
         ? null
@@ -210,6 +265,7 @@ export function CharacterActionCard({
   onAction: (input: {
     mode: "EXECUTE" | "SHARE";
     rollActionId?: string;
+    executeAll?: true;
     entryRevision: number;
   }) => Promise<void>;
 }) {
@@ -222,7 +278,11 @@ export function CharacterActionCard({
     scope: string;
     revision: number;
     actionId?: string;
-    intent: "ROLL_ACTION" | "SIMPLE_SKILL" | "ABILITY_ACTIVATION";
+    intent:
+      | "ROLL_ACTION"
+      | "SIMPLE_SKILL"
+      | "ABILITY_ACTIVATION"
+      | "ABILITY_EXECUTE_ALL";
     label: string;
   } | null>(null);
   const draftScopeRef = useRef(draftScopeKey);
@@ -258,13 +318,19 @@ export function CharacterActionCard({
   async function submit(
     mode: "EXECUTE" | "SHARE",
     rollActionId?: string,
+    executeAll = false,
   ): Promise<boolean> {
     if (pendingRef.current) return false;
     pendingRef.current = true;
     setPending(mode);
     setError("");
     try {
-      await onAction({ mode, rollActionId, entryRevision: entry.revision });
+      await onAction({
+        mode,
+        rollActionId,
+        ...(executeAll ? { executeAll: true as const } : {}),
+        entryRevision: entry.revision,
+      });
       return true;
     } catch (reason) {
       setError(
@@ -301,9 +367,11 @@ export function CharacterActionCard({
       ? entry.kind === "SKILL" && Number.isInteger(entry.data.skillValue)
       : prepared.intent === "ABILITY_ACTIVATION"
         ? entry.kind === "ABILITY" && !entry.data.rollActions?.length
-        : entry.data.rollActions?.some(
-            (action) => action.id === prepared.actionId,
-          )),
+        : prepared.intent === "ABILITY_EXECUTE_ALL"
+          ? entry.kind === "ABILITY" && Boolean(entry.data.rollActions?.length)
+          : entry.data.rollActions?.some(
+              (action) => action.id === prepared.actionId,
+            )),
   );
   async function executePrepared() {
     if (!prepared || !isPreparedCurrent || disabled) return;
@@ -313,6 +381,7 @@ export function CharacterActionCard({
       (await submit(
         "EXECUTE",
         current.intent === "ROLL_ACTION" ? current.actionId : undefined,
+        current.intent === "ABILITY_EXECUTE_ALL",
       )) &&
       draftScopeRef.current === currentScope
     )
@@ -334,6 +403,57 @@ export function CharacterActionCard({
           </span>
         )}
       </div>
+      {entry.kind === "ABILITY" && (
+        <div className="character-action-card__action character-action-card__action--primary">
+          <span>
+            <b>{actions.length ? "Выполнить способность" : "Активировать"}</b>
+            <code>
+              {actions.length
+                ? `${actions.length} ${actions.length === 1 ? "бросок" : actions.length < 5 ? "броска" : "бросков"} · одно выполнение`
+                : (entry.data.activation?.consumeUse ?? Boolean(uses))
+                  ? "1 использование · без броска"
+                  : "Без броска"}
+              {!actions.length && entry.data.activation?.cost
+                ? ` · ${entry.data.activation.cost.amount} ${entry.data.activation.cost.type === "physical" ? "физической силы" : "магической силы"}`
+                : ""}
+            </code>
+          </span>
+          <button
+            type="button"
+            disabled={
+              disabled ||
+              pending !== null ||
+              (actions.length
+                ? actions.some((candidate) => candidate.consumeUse) && exhausted
+                : (entry.data.activation?.consumeUse ?? Boolean(uses)) &&
+                  exhausted)
+            }
+            onClick={() =>
+              void submit("EXECUTE", undefined, actions.length > 0)
+            }
+          >
+            <CatalogActionIcon kind="CUSTOM" semanticText={entry.name} />
+            {pending === "EXECUTE"
+              ? "Выполняем…"
+              : actions.length
+                ? "Выполнить способность"
+                : "Активировать"}
+          </button>
+          <button
+            type="button"
+            disabled={disabled || pending !== null}
+            onClick={() =>
+              prepare(
+                actions.length ? "ABILITY_EXECUTE_ALL" : "ABILITY_ACTIVATION",
+                undefined,
+                entry.name,
+              )
+            }
+          >
+            Подготовить
+          </button>
+        </div>
+      )}
       {entry.kind === "SKILL" &&
         typeof entry.data.skillValue === "number" &&
         Number.isFinite(entry.data.skillValue) && (
@@ -379,77 +499,47 @@ export function CharacterActionCard({
               )}
             </code>
           </span>
-          <button
-            type="button"
-            disabled={
-              disabled || pending !== null || (action.consumeUse && exhausted)
-            }
-            onClick={() => void submit("EXECUTE", action.id)}
-          >
-            <AppIcon icon={DiceTrayIcon} />
-            {pending === "EXECUTE"
-              ? "Выполняем…"
-              : action.consumeUse
-                ? "Выполнить · 1 использование"
-                : "Выполнить"}
-          </button>
-          <button
-            type="button"
-            disabled={disabled || pending !== null}
-            onClick={() =>
-              prepare(
-                "ROLL_ACTION",
-                action.id,
-                `${entry.name} · ${action.label}`,
-              )
-            }
-          >
-            Подготовить
-          </button>
+          {entry.kind !== "ABILITY" && (
+            <>
+              <button
+                type="button"
+                disabled={
+                  disabled ||
+                  pending !== null ||
+                  (action.consumeUse && exhausted)
+                }
+                onClick={() => void submit("EXECUTE", action.id)}
+              >
+                <AppIcon icon={DiceTrayIcon} />
+                {pending === "EXECUTE"
+                  ? "Выполняем…"
+                  : action.consumeUse
+                    ? "Выполнить · 1 использование"
+                    : "Выполнить"}
+              </button>
+              <button
+                type="button"
+                disabled={disabled || pending !== null}
+                onClick={() =>
+                  prepare(
+                    "ROLL_ACTION",
+                    action.id,
+                    `${entry.name} · ${action.label}`,
+                  )
+                }
+              >
+                Подготовить
+              </button>
+            </>
+          )}
         </div>
       ))}
-      {actions.length === 0 &&
-        (entry.kind === "ABILITY" ? (
-          <div className="character-action-card__action">
-            <span>
-              <b>Активировать</b>
-              <code>
-                {(entry.data.activation?.consumeUse ?? Boolean(uses))
-                  ? "1 использование"
-                  : "Без броска"}
-                {entry.data.activation?.cost
-                  ? ` · ${entry.data.activation.cost.amount} ${entry.data.activation.cost.type === "physical" ? "физической силы" : "магической силы"}`
-                  : ""}
-              </code>
-            </span>
-            <button
-              type="button"
-              disabled={
-                disabled ||
-                pending !== null ||
-                ((entry.data.activation?.consumeUse ?? Boolean(uses)) &&
-                  exhausted)
-              }
-              onClick={() => void submit("EXECUTE")}
-            >
-              {pending === "EXECUTE" ? "Выполняем…" : "Активировать"}
-            </button>
-            <button
-              type="button"
-              disabled={disabled || pending !== null}
-              onClick={() =>
-                prepare("ABILITY_ACTIVATION", undefined, entry.name)
-              }
-            >
-              Подготовить активацию
-            </button>
-          </div>
-        ) : !(
-            typeof entry.data.skillValue === "number" &&
-            Number.isFinite(entry.data.skillValue)
-          ) ? (
-          <p className="muted">Нет выполняемых действий.</p>
-        ) : null)}
+      {entry.kind === "SKILL" &&
+        actions.length === 0 &&
+        !(
+          typeof entry.data.skillValue === "number" &&
+          Number.isFinite(entry.data.skillValue)
+        ) && <p className="muted">Нет выполняемых действий.</p>}
       <div className="character-action-card__controls">
         {prepared && (
           <div className="character-action-card__prepared" role="status">
@@ -501,11 +591,13 @@ export function SkillChatCard({
   sourceRemoved = false,
   critical = null,
   outcomeFrame = null,
+  renderRollFrame,
 }: {
   card: SkillCard;
   sourceRemoved?: boolean;
   critical?: DiceCritical | null;
   outcomeFrame?: ReactNode;
+  renderRollFrame?: (result: DiceResult) => ReactNode;
 }) {
   const statLabels = useCampaignStatLabels();
   const actionFormula = card.action?.formula ?? "";
@@ -543,6 +635,46 @@ export function SkillChatCard({
       </div>
       {card.mode === "SHARE" ? (
         <p className="muted">Без броска и расходования ресурсов.</p>
+      ) : card.rolls?.length ? (
+        <div className="skill-chat-card__rolls">
+          {card.rolls.map((roll) => {
+            const hasInternalModifier = /\bmodifier_\d+\b/.test(roll.formula);
+            const formula = humanizeFormula(
+              hasInternalModifier ? roll.result.resolvedFormula : roll.formula,
+              statLabels,
+            );
+            const rollCritical = getDiceCritical(roll.result);
+            return (
+              <div
+                className={`skill-chat-card__roll${rollCritical ? ` roll-result--critical-${rollCritical.kind}` : ""}`}
+                key={roll.action.id}
+              >
+                <div className="skill-chat-card__result">
+                  <div className="roll-total-wrap">
+                    <AppIcon icon={DiceTrayIcon} />
+                    {renderRollFrame?.(roll.result)}
+                    <strong
+                      className="roll-total__value"
+                      aria-label={`Итог броска: ${roll.action.label}`}
+                    >
+                      {roll.result.total}
+                    </strong>
+                  </div>
+                  <span>
+                    <b>{roll.action.label}</b>
+                    <code>{formula}</code>
+                    {rollCritical && (
+                      <span className="roll-critical-label">
+                        {rollCritical.label}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <DicePoolFaces dice={roll.result} />
+              </div>
+            );
+          })}
+        </div>
       ) : card.action ? (
         <div className="skill-chat-card__result">
           {card.result && (

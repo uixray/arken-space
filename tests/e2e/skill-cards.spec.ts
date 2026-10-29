@@ -31,6 +31,7 @@ function entry(
   name: string,
   uses = 2,
   sourceCatalogEntryId: string | null = null,
+  includeSecondRoll = false,
 ) {
   return {
     id: ids.entry,
@@ -51,6 +52,20 @@ function entry(
           advantage: false,
           consumeUse: true,
         },
+        ...(includeSecondRoll
+          ? [
+              {
+                id: "damage",
+                kind: "DAMAGE" as const,
+                label: "Damage",
+                dice: "1d6",
+                modifiers: [],
+                order: 1,
+                advantage: false,
+                consumeUse: false,
+              },
+            ]
+          : []),
       ],
       uses: { current: uses, max: 2, recharge: "DAY" as const },
     },
@@ -210,6 +225,7 @@ function skillMessage(
   execution: "EXECUTED" | "SHARED",
   sourceCatalogEntryId: string | null,
   sequence: number,
+  includeBatch = false,
 ) {
   const executed = execution === "EXECUTED";
   return {
@@ -243,27 +259,85 @@ function skillMessage(
         characterId: ids.character,
         characterName: "Aster",
       },
-      action: executed
+      action:
+        executed && !includeBatch
+          ? {
+              id: "strike",
+              kind: "HIT",
+              label: "Strike",
+              dice: "1d20",
+              advantage: false,
+              consumeUse: true,
+            }
+          : null,
+      formula: executed && !includeBatch ? "1d20 + 2" : null,
+      result:
+        executed && !includeBatch
+          ? {
+              formula: "1d20 + 2",
+              resolvedFormula: "1d20(14) + 2",
+              terms: [{ notation: "1d20", rolls: [14], subtotal: 14 }],
+              modifiers: [{ source: "constant", value: 2 }],
+              total: 16,
+              label: "Strike",
+            }
+          : null,
+      ...(includeBatch && executed
         ? {
-            id: "strike",
-            kind: "HIT",
-            label: "Strike",
-            dice: "1d20",
-            advantage: false,
-            consumeUse: true,
+            rolls: [
+              {
+                action: {
+                  id: "strike",
+                  kind: "HIT",
+                  label: "Strike",
+                  dice: "1d20",
+                  advantage: false,
+                  consumeUse: true,
+                },
+                formula: "1d20 + 2",
+                result: {
+                  formula: "1d20 + 2",
+                  resolvedFormula: "1d20(20) + 2",
+                  terms: [{ notation: "1d20", rolls: [20], subtotal: 20 }],
+                  modifiers: [{ source: "constant", value: 2 }],
+                  total: 22,
+                  label: "Strike",
+                  semanticOutcome: {
+                    kind: "CRITICAL_SUCCESS",
+                    keptNaturalD20: 20,
+                  },
+                  frame: {
+                    setKey: "ARKEN_CRITICAL_V1",
+                    frameKey: "critical-success",
+                  },
+                },
+              },
+              {
+                action: {
+                  id: "damage",
+                  kind: "DAMAGE",
+                  label: "Damage",
+                  dice: "1d6",
+                  advantage: false,
+                  consumeUse: false,
+                },
+                formula: "1d6",
+                result: {
+                  formula: "1d6",
+                  resolvedFormula: "1d6(4)",
+                  terms: [{ notation: "1d6", rolls: [4], subtotal: 4 }],
+                  modifiers: [],
+                  total: 4,
+                  label: "Damage",
+                  styleFrame: {
+                    assetId: "11111111-1111-4111-8111-111111111111",
+                    source: "PLAYER",
+                  },
+                },
+              },
+            ],
           }
-        : null,
-      formula: executed ? "1d20 + 2" : null,
-      result: executed
-        ? {
-            formula: "1d20 + 2",
-            resolvedFormula: "1d20(14) + 2",
-            terms: [{ notation: "1d20", rolls: [14], subtotal: 14 }],
-            modifiers: [{ source: "constant", value: 2 }],
-            total: 16,
-            label: "Strike",
-          }
-        : null,
+        : {}),
       uses: { before: 2, after: executed ? 1 : 2, max: 2, recharge: "DAY" },
       visibility: "PUBLIC",
     },
@@ -345,7 +419,9 @@ for (const width of [1280, 360]) {
     await page.goto("/");
     await openCharacterWorkspace(page);
     await expect(
-      page.locator(".character-action-card__action code"),
+      page.locator(
+        ".character-action-card__action:not(.character-action-card__action--primary) code",
+      ),
     ).toHaveText("2d6 + Интеллект");
     await expect(page.locator(".character-action-card")).not.toContainText(
       "intelligence",
@@ -358,7 +434,7 @@ for (const width of [1280, 360]) {
     page,
   }) => {
     await page.setViewportSize({ width, height: width === 360 ? 640 : 900 });
-    let current = snapshotFor(entry("Arcane Shot"));
+    let current = snapshotFor(entry("Arcane Shot", 2, null, true));
     let postCount = 0;
     await mockApp(page, () => current);
     await page.route(
@@ -368,12 +444,12 @@ for (const width of [1280, 360]) {
         expect(route.request().method()).toBe("POST");
         expect(route.request().postDataJSON()).toMatchObject({
           entryRevision: 3,
-          rollActionId: "strike",
+          executeAll: true,
           visibility: "PUBLIC",
         });
         expect(route.request().postDataJSON().mode).toBeUndefined();
-        current = snapshotFor(entry("Arcane Shot", 1), [
-          skillMessage("Arcane Shot", "EXECUTED", null, 1),
+        current = snapshotFor(entry("Arcane Shot", 1, null, true), [
+          skillMessage("Arcane Shot", "EXECUTED", null, 1, true),
         ]);
         await route.fulfill({
           status: 200,
@@ -409,13 +485,30 @@ for (const width of [1280, 360]) {
     await expect(card.locator(".skill-chat-card__uses")).toContainText(
       /2.*1\/2/,
     );
-    await expect(card.getByLabel("Итог броска")).toHaveText("16");
+    await expect(card.locator(".roll-total__value")).toHaveText(["22", "4"]);
+    await expect(card.locator(".outcome-frame")).toHaveCount(2);
+    await expect(card.locator(".outcome-frame--critical-success")).toHaveCount(
+      1,
+    );
+    await expect(card.locator('[data-frame-source="PLAYER"]')).toHaveCount(1);
 
     await page.reload();
     await openJournal(page);
     await expect(
       page.locator(".skill-chat-card").filter({ hasText: "Arcane Shot" }),
     ).toHaveCount(1);
+    await expect(
+      page
+        .locator(".skill-chat-card")
+        .filter({ hasText: "Arcane Shot" })
+        .getByText("Damage"),
+    ).toBeVisible();
+    await expect(
+      page
+        .locator(".skill-chat-card")
+        .filter({ hasText: "Arcane Shot" })
+        .locator(".outcome-frame"),
+    ).toHaveCount(2);
     await openWorkspaceSection(page, "Персонажи");
     await expect(page.locator(".character-action-card__uses")).toHaveText(
       "1/2",

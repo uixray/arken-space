@@ -14,6 +14,7 @@ import { createPortal } from "react-dom";
 import type { CharacterCatalogEntryDto, CharacterDto } from "@arken/contracts";
 import { STAT_VALUE_RANGE } from "@arken/system";
 import { Button } from "../design-system/Button";
+import { CatalogActionIcon } from "../CatalogActionIcon";
 import { formulaBonus } from "../activity-roll-controls";
 import { usePanelResize } from "../use-panel-resize";
 import {
@@ -29,51 +30,11 @@ import {
   ExpandSectionIcon,
   SecretRollIcon,
   PreparedActionIcon,
-  BattleIcon,
-  DamageActionIcon,
-  CustomActionIcon,
-  HealingActionIcon,
-  DefenseActionIcon,
-  MovementActionIcon,
-  MagicActionIcon,
 } from "../ui/icons";
 import { useRepeatRoll } from "./use-repeat-roll";
 
 const signedBonus = (bonus: number) =>
   new Intl.NumberFormat("en-US", { signDisplay: "always" }).format(bonus);
-
-function CatalogActionIcon({
-  kind,
-  semanticText = "",
-}: {
-  kind: "HIT" | "DAMAGE" | "CUSTOM";
-  semanticText?: string;
-}) {
-  const normalized = semanticText.toLocaleLowerCase("ru");
-  const semanticIcons = [
-    CustomActionIcon,
-    MagicActionIcon,
-    DefenseActionIcon,
-    MovementActionIcon,
-    HealingActionIcon,
-  ];
-  let icon =
-    semanticIcons[
-      Array.from(semanticText).reduce(
-        (sum, char) => sum + char.charCodeAt(0),
-        0,
-      ) % semanticIcons.length
-    ]!;
-  if (/леч|исцел|здоров|восстанов/.test(normalized)) icon = HealingActionIcon;
-  else if (/защит|щит|брон|блок/.test(normalized)) icon = DefenseActionIcon;
-  else if (/движ|шаг|прыж|скорост|телепорт/.test(normalized))
-    icon = MovementActionIcon;
-  else if (/маг|заклин|чар|руна|огнен|ледян|молни/.test(normalized))
-    icon = MagicActionIcon;
-  else if (kind === "HIT") icon = BattleIcon;
-  else if (kind === "DAMAGE") icon = DamageActionIcon;
-  return <AppIcon icon={icon} />;
-}
 
 type PreparedCatalogAction = {
   scope: string;
@@ -81,7 +42,11 @@ type PreparedCatalogAction = {
   entryId: string;
   entryRevision: number;
   actionId?: string;
-  intent: "SIMPLE_SKILL" | "ROLL_ACTION" | "ABILITY_ACTIVATION";
+  intent:
+    | "SIMPLE_SKILL"
+    | "ROLL_ACTION"
+    | "ABILITY_ACTIVATION"
+    | "ABILITY_EXECUTE_ALL";
   label: string;
 };
 
@@ -161,6 +126,7 @@ export function QuickRollPanel({
     entry: CharacterCatalogEntryDto,
     mode: "EXECUTE" | "SHARE",
     rollActionId?: string,
+    executeAll?: true,
   ) => Promise<void>;
 }) {
   /**
@@ -219,6 +185,7 @@ export function QuickRollPanel({
     entry: CharacterCatalogEntryDto,
     mode: "EXECUTE" | "SHARE",
     rollActionId?: string,
+    executeAll = false,
   ): Promise<boolean> => {
     if (!onEntryAction || entryPendingRef.current) return false;
     entryPendingRef.current = true;
@@ -231,11 +198,13 @@ export function QuickRollPanel({
         entry,
         mode === "EXECUTE" &&
           !rollActionId &&
+          !executeAll &&
           entry.kind !== "ABILITY" &&
           !Number.isFinite(entry.data.skillValue)
           ? "SHARE"
           : mode,
         rollActionId,
+        executeAll ? true : undefined,
       );
       return true;
     } catch (reason) {
@@ -281,9 +250,12 @@ export function QuickRollPanel({
       : preparedAction.intent === "ABILITY_ACTIVATION"
         ? preparedEntry.kind === "ABILITY" &&
           !preparedEntry.data.rollActions?.length
-        : preparedEntry.data.rollActions?.some(
-            (action) => action.id === preparedAction.actionId,
-          )),
+        : preparedAction.intent === "ABILITY_EXECUTE_ALL"
+          ? preparedEntry.kind === "ABILITY" &&
+            Boolean(preparedEntry.data.rollActions?.length)
+          : preparedEntry.data.rollActions?.some(
+              (action) => action.id === preparedAction.actionId,
+            )),
   );
   const executePreparedAction = async () => {
     if (
@@ -299,6 +271,7 @@ export function QuickRollPanel({
       preparedEntry,
       "EXECUTE",
       submitted.intent === "ROLL_ACTION" ? submitted.actionId : undefined,
+      submitted.intent === "ABILITY_EXECUTE_ALL",
     );
     if (success && draftScopeRef.current === submittedScope) {
       setPreparedAction((current) =>
@@ -618,56 +591,45 @@ export function QuickRollPanel({
             >
               {abilityEntries.map((entry) => (
                 <div className="quick-roll-panel__entry" key={entry.id}>
-                  {(entry.data.rollActions?.length ?? 0) > 1 && (
-                    <strong className="quick-roll-panel__ability-name">
-                      <CatalogActionIcon
-                        kind={entry.data.rollActions?.[0]?.kind ?? "CUSTOM"}
-                        semanticText={entry.name}
-                      />
-                      {entry.name}
-                    </strong>
-                  )}
-                  {entry.data.rollActions?.length ? (
-                    entry.data.rollActions.map((action) => (
-                      <div key={action.id}>
-                        <Button
-                          disabled={
-                            !canControlCharacter ||
-                            entryPending !== null ||
-                            !onEntryAction
-                          }
-                          onClick={() =>
-                            void submitEntry(entry, "EXECUTE", action.id)
-                          }
-                        >
-                          <CatalogActionIcon
-                            kind={action.kind}
-                            semanticText={`${entry.name} ${action.label}`}
-                          />
-                          {(entry.data.rollActions?.length ?? 0) === 1
-                            ? entry.name
-                            : action.label}
-                        </Button>
-                        <Button
-                          type="button"
-                          aria-label={`Подготовить действие: ${entry.name} · ${action.label}`}
-                          title="Подготовить действие"
-                          disabled={
-                            !canControlCharacter || entryPending !== null
-                          }
-                          onClick={() =>
-                            prepareEntryAction(
-                              entry,
-                              "ROLL_ACTION",
-                              action.id,
-                              `${entry.name} · ${action.label}`,
-                            )
-                          }
-                        >
-                          Подготовить
-                        </Button>
-                      </div>
-                    ))
+                  {(entry.data.rollActions?.length ?? 0) > 0 ? (
+                    <>
+                      <Button
+                        disabled={
+                          !canControlCharacter ||
+                          entryPending !== null ||
+                          !onEntryAction ||
+                          (entry.data.rollActions?.some(
+                            (action) => action.consumeUse,
+                          ) === true &&
+                            entry.data.uses?.current === 0)
+                        }
+                        onClick={() =>
+                          void submitEntry(entry, "EXECUTE", undefined, true)
+                        }
+                      >
+                        <CatalogActionIcon
+                          kind="CUSTOM"
+                          semanticText={entry.name}
+                        />
+                        {entry.name}
+                      </Button>
+                      <Button
+                        type="button"
+                        aria-label={`Подготовить способность: ${entry.name}`}
+                        title="Подготовить способность"
+                        disabled={!canControlCharacter || entryPending !== null}
+                        onClick={() =>
+                          prepareEntryAction(
+                            entry,
+                            "ABILITY_EXECUTE_ALL",
+                            undefined,
+                            entry.name,
+                          )
+                        }
+                      >
+                        <AppIcon icon={PreparedActionIcon} />
+                      </Button>
+                    </>
                   ) : (
                     <>
                       <Button

@@ -55,6 +55,7 @@ export interface CatalogActions {
     input: {
       mode: "EXECUTE" | "SHARE";
       rollActionId?: string;
+      executeAll?: true;
       entryRevision: number;
       rollMode?: RollMode;
     },

@@ -558,8 +558,24 @@ export function registerCharacterPlayRoutes(
       );
       let action:
         NonNullable<typeof parsedData.data.rollActions>[number] | undefined;
-      const noRollRequest = mode === "EXECUTE" && !body.rollActionId;
-      const noRollActivation = noRollRequest && row.entry.kind === "ABILITY";
+      const executeAll = mode === "EXECUTE" && body.executeAll === true;
+      const orderedActions = executeAll
+        ? (parsedData.data.rollActions ?? [])
+            .map((candidate, index) => ({ candidate, index }))
+            .sort(
+              (a, b) =>
+                a.candidate.order - b.candidate.order || a.index - b.index,
+            )
+            .map(({ candidate }) => candidate)
+        : [];
+      if (executeAll && row.entry.kind !== "ABILITY")
+        return reply.code(400).send({ error: "EXECUTE_ALL_REQUIRES_ABILITY" });
+      const noRollRequest =
+        mode === "EXECUTE" && !body.rollActionId && !executeAll;
+      const noRollActivation =
+        mode === "EXECUTE" &&
+        row.entry.kind === "ABILITY" &&
+        (noRollRequest || (executeAll && orderedActions.length === 0));
       const activationConfig = parsedData.data.activation ?? {
         // Existing use counters are an explicit structured limit. Legacy
         // abilities without one remain free activations (never parse prose).
@@ -567,6 +583,11 @@ export function registerCharacterPlayRoutes(
       };
       let formula: string | null = null;
       let result: ReturnType<typeof rollFormulaWithMode> | null = null;
+      const rolledActions: Array<{
+        action: NonNullable<typeof parsedData.data.rollActions>[number];
+        formula: string;
+        result: ReturnType<typeof rollFormulaWithMode>;
+      }> = [];
       if (mode === "EXECUTE") {
         if (noRollActivation) {
           // No-roll ability activation remains a distinct path.
@@ -588,25 +609,33 @@ export function registerCharacterPlayRoutes(
           };
         } else if (noRollRequest) {
           return reply.code(400).send({ error: "ENTRY_ROLL_NOT_CONFIGURED" });
-        } else {
+        } else if (!executeAll) {
           action = parsedData.data.rollActions?.find(
             (candidate) => candidate.id === body.rollActionId,
           );
           if (!action)
             return reply.code(404).send({ error: "ROLL_ACTION_NOT_FOUND" });
         }
+        const consumesUse = noRollActivation
+          ? activationConfig.consumeUse
+          : executeAll
+            ? orderedActions.some((candidate) => candidate.consumeUse)
+            : Boolean(action?.consumeUse);
         if (
-          noRollActivation &&
-          activationConfig.consumeUse &&
+          consumesUse &&
           (!parsedData.data.uses || parsedData.data.uses.current < 1)
         )
           return reply.code(409).send({ error: "NO_ABILITY_USES" });
-        if (!action) {
-          // A configured no-roll activation has no dice/formula by design.
-        } else {
+
+        const actionsToRoll = executeAll
+          ? orderedActions
+          : action
+            ? [action]
+            : [];
+        for (const currentAction of actionsToRoll) {
           const values: Record<string, number> = {};
-          const formulaParts = [action.dice];
-          const characterStats = action.modifiers.some(
+          const formulaParts = [currentAction.dice];
+          const characterStats = currentAction.modifiers.some(
             (source) => source.type === "CHARACTERISTIC",
           )
             ? characterRollStats(
@@ -614,7 +643,7 @@ export function registerCharacterPlayRoutes(
                 await campaignDefaultStatLayout(db, auth.campaignId),
               )
             : {};
-          for (const [index, source] of action.modifiers.entries()) {
+          for (const [index, source] of currentAction.modifiers.entries()) {
             if (source.type === "CONSTANT") {
               formulaParts.push(String(source.value));
               continue;
@@ -698,14 +727,15 @@ export function registerCharacterPlayRoutes(
             values[key] = value;
             formulaParts.push(key);
           }
-          formula = formulaParts.join(" + ");
-          result = {
+          const currentFormula = formulaParts.join(" + ");
+          const currentResult = {
             ...rollFormulaWithMode(
-              formula,
+              currentFormula,
               values,
-              body.rollMode ?? (action.advantage ? "ADVANTAGE" : "NORMAL"),
+              body.rollMode ??
+                (currentAction.advantage ? "ADVANTAGE" : "NORMAL"),
               randomInt,
-              action.label,
+              currentAction.label,
             ),
             styleFrame: await selectDiceFrame(db, {
               campaignId: auth.campaignId,
@@ -713,23 +743,50 @@ export function registerCharacterPlayRoutes(
               sourceCatalogEntryId: row.entry.sourceCatalogEntryId,
             }),
           };
-          if (
-            action.consumeUse &&
-            (!parsedData.data.uses || parsedData.data.uses.current < 1)
-          )
-            return reply.code(409).send({ error: "NO_ABILITY_USES" });
+          rolledActions.push({
+            action: currentAction,
+            formula: currentFormula,
+            result: currentResult,
+          });
+        }
+        if (!executeAll && rolledActions[0]) {
+          formula = rolledActions[0].formula;
+          result = rolledActions[0].result;
         }
       }
       const entryUsageCost =
         row.entry.kind === "ABILITY" ? parsedData.data.usageCost : undefined;
-      const cost =
-        mode === "EXECUTE"
-          ? entryUsageCost !== undefined
-            ? (entryUsageCost ?? undefined)
-            : noRollActivation
-              ? activationConfig.cost
-              : action?.cost
-          : undefined;
+      let cost = undefined as
+        NonNullable<typeof parsedData.data.usageCost> | undefined;
+      if (mode === "EXECUTE") {
+        if (entryUsageCost !== undefined) {
+          cost = entryUsageCost ?? undefined;
+        } else if (noRollActivation) {
+          cost = activationConfig.cost;
+        } else if (executeAll) {
+          const actionCosts: Array<
+            NonNullable<(typeof orderedActions)[number]["cost"]>
+          > = orderedActions.flatMap((candidate) =>
+            candidate.cost ? [candidate.cost] : [],
+          );
+          const distinctCosts = actionCosts.filter(
+            (candidate, index) =>
+              actionCosts.findIndex(
+                (other) =>
+                  other.type === candidate.type &&
+                  other.amount === candidate.amount,
+              ) === index,
+          );
+          if (distinctCosts.length > 1)
+            return reply.code(400).send({
+              error: "ABILITY_ACTION_COST_MISMATCH",
+              message: "Укажите общую стоимость способности",
+            });
+          cost = distinctCosts[0];
+        } else {
+          cost = action?.cost;
+        }
+      }
       const resourceKey =
         cost?.type === "physical"
           ? "physicalPower"
@@ -760,7 +817,11 @@ export function registerCharacterPlayRoutes(
       const uses = parsedData.data.uses;
       const consumeUse =
         mode === "EXECUTE" &&
-        (noRollActivation ? activationConfig.consumeUse : action?.consumeUse);
+        (noRollActivation
+          ? activationConfig.consumeUse
+          : executeAll
+            ? orderedActions.some((candidate) => candidate.consumeUse)
+            : Boolean(action?.consumeUse));
       const afterUses =
         consumeUse && uses ? { ...uses, current: uses.current - 1 } : uses;
       const skillCard = {
@@ -795,6 +856,24 @@ export function registerCharacterPlayRoutes(
           : null,
         formula,
         result,
+        ...(executeAll && rolledActions.length > 0
+          ? {
+              rolls: rolledActions.map(
+                ({ action: rolledAction, formula, result }) => ({
+                  action: {
+                    id: rolledAction.id,
+                    kind: rolledAction.kind,
+                    label: rolledAction.label,
+                    dice: rolledAction.dice,
+                    advantage: rolledAction.advantage,
+                    consumeUse: rolledAction.consumeUse,
+                  },
+                  formula,
+                  result,
+                }),
+              ),
+            }
+          : {}),
         uses: uses
           ? {
               before: uses.current,
@@ -820,6 +899,24 @@ export function registerCharacterPlayRoutes(
       } | null;
       try {
         saved = await db.transaction(async (tx) => {
+          if (executeAll) {
+            // Keep the shared lock order consistent with existing rolls:
+            // character resources first, then the catalog entry.
+            await tx
+              .select({ id: characters.id })
+              .from(characters)
+              .where(eq(characters.id, row.character.id))
+              .for("update")
+              .limit(1);
+            const [currentEntry] = await tx
+              .select({ revision: characterCatalogEntries.revision })
+              .from(characterCatalogEntries)
+              .where(eq(characterCatalogEntries.id, row.entry.id))
+              .for("update")
+              .limit(1);
+            if (!currentEntry || currentEntry.revision !== row.entry.revision)
+              throw new Error("ENTRY_CONFLICT_TX");
+          }
           if (cost && resourceKey) {
             const [resourceUpdated] = await tx
               .update(characters)
@@ -928,8 +1025,11 @@ export function registerCharacterPlayRoutes(
           (await findAction(db, auth.campaignId, body.actionId))
         )
           return reply.code(200).send({ duplicate: true });
-        if (error instanceof Error && error.message === "ENTRY_CONFLICT_TX")
+        if (error instanceof Error && error.message === "ENTRY_CONFLICT_TX") {
+          if (await findAction(db, auth.campaignId, body.actionId))
+            return reply.code(200).send({ duplicate: true });
           return reply.code(409).send({ error: "ENTRY_CONFLICT" });
+        }
         throw error;
       }
       if (!saved) {

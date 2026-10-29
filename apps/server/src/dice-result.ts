@@ -63,6 +63,15 @@ export function normalizeDiceResult(value: unknown): DiceResult | null {
   return result.success ? result.data : null;
 }
 
+const skillCardActionSchema = z.object({
+  id: z.string().min(1).max(40),
+  kind: z.enum(["HIT", "DAMAGE", "CUSTOM"]),
+  label: z.string().min(1).max(100),
+  dice: z.string().max(16),
+  advantage: z.boolean(),
+  consumeUse: z.boolean(),
+});
+
 const skillCardSchema = z.object({
   version: z.literal(1),
   execution: z.enum(["EXECUTED", "SHARED"]),
@@ -81,24 +90,34 @@ const skillCardSchema = z.object({
     characterId: z.string().uuid(),
     characterName: z.string().min(1).max(80),
   }),
-  action: z
-    .object({
-      id: z.string().min(1).max(40),
-      kind: z.enum(["HIT", "DAMAGE", "CUSTOM"]),
-      label: z.string().min(1).max(100),
-      dice: z.string().max(16),
-      advantage: z.boolean(),
-      consumeUse: z.boolean(),
-    })
-    .nullable(),
+  action: skillCardActionSchema.nullable(),
   formula: z.string().max(160).nullable(),
   result: diceResultSchema.nullable(),
+  rolls: z
+    .array(
+      z.object({
+        action: skillCardActionSchema,
+        formula: z.string().max(160),
+        result: diceResultSchema,
+      }),
+    )
+    .max(20)
+    .optional(),
+  activationCost: z
+    .object({
+      type: z.enum(["physical", "magic"]),
+      amount: z.number().int().positive().max(100000),
+      before: z.number().finite(),
+      after: z.number().finite(),
+    })
+    .nullable()
+    .optional(),
   uses: z
     .object({
       before: z.number().int().nonnegative(),
       after: z.number().int().nonnegative(),
       max: z.number().int().positive(),
-      recharge: z.enum(["DAY", "BATTLE", "WEEK"]),
+      recharge: z.enum(["DAY", "BATTLE", "WEEK", "SHORT_REST"]),
     })
     .nullable(),
   visibility: z.enum(["PUBLIC", "GM_ONLY"]),

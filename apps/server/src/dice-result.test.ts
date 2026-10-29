@@ -78,7 +78,65 @@ describe("normalizeSkillCard", () => {
         },
         formula: "1d20",
         result,
-        uses: { before: 1, after: 0, max: 1, recharge: "DAY" },
+        rolls: [
+          {
+            action: {
+              id: "hit",
+              kind: "HIT",
+              label: "Hit",
+              dice: "1d20",
+              advantage: false,
+              consumeUse: true,
+            },
+            formula: "1d20",
+            result: {
+              ...result,
+              resolvedFormula: "1d20(20)",
+              terms: [{ notation: "1d20", rolls: [20], subtotal: 20 }],
+              total: 20,
+              rollMode: "ADVANTAGE",
+              poolTotals: [20, 7],
+              poolTerms: [
+                [{ notation: "1d20", rolls: [20], subtotal: 20 }],
+                [{ notation: "1d20", rolls: [7], subtotal: 7 }],
+              ],
+              selectedPool: 0,
+              semanticOutcome: {
+                kind: "CRITICAL_SUCCESS",
+                keptNaturalD20: 20,
+              },
+              frame: {
+                setKey: "ARKEN_CRITICAL_V1",
+                frameKey: "critical-success",
+              },
+            },
+          },
+          {
+            action: {
+              id: "damage",
+              kind: "DAMAGE",
+              label: "Damage",
+              dice: "1d6",
+              advantage: false,
+              consumeUse: false,
+            },
+            formula: "1d6",
+            result: {
+              ...result,
+              formula: "1d6",
+              resolvedFormula: "1d6(4)",
+              terms: [{ notation: "1d6", rolls: [4], subtotal: 4 }],
+              total: 4,
+              styleFrame: {
+                assetId: "11111111-1111-4111-8111-111111111111",
+                source: "PLAYER",
+              },
+              semanticOutcome: { kind: "NORMAL", keptNaturalD20: null },
+            },
+          },
+        ],
+        activationCost: { type: "physical", amount: 1, before: 3, after: 2 },
+        uses: { before: 1, after: 0, max: 1, recharge: "SHORT_REST" },
         visibility: "PUBLIC",
       },
     });
@@ -86,6 +144,28 @@ describe("normalizeSkillCard", () => {
       version: 1,
       execution: "EXECUTED",
       uses: { before: 1, after: 0 },
+      rolls: [
+        {
+          action: { id: "hit" },
+          result: {
+            total: 20,
+            rollMode: "ADVANTAGE",
+            poolTotals: [20, 7],
+            selectedPool: 0,
+            frame: { frameKey: "critical-success" },
+          },
+        },
+        {
+          action: { id: "damage" },
+          result: {
+            styleFrame: {
+              assetId: "11111111-1111-4111-8111-111111111111",
+              source: "PLAYER",
+            },
+          },
+        },
+      ],
+      activationCost: { before: 3, after: 2 },
     });
   });
 

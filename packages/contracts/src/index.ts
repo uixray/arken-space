@@ -2344,12 +2344,22 @@ const entryCardRequestBaseSchema = z.object({
 export const entryCardExecuteRequestSchema = entryCardRequestBaseSchema.extend({
   mode: z.literal("EXECUTE").optional(),
   rollActionId: z.string().min(1).max(40).optional(),
+  executeAll: z.never().optional(),
 });
+export const entryCardExecuteAllRequestSchema =
+  entryCardRequestBaseSchema.extend({
+    mode: z.literal("EXECUTE").optional(),
+    entryRevision: z.number().int().nonnegative(),
+    rollActionId: z.never().optional(),
+    executeAll: z.literal(true),
+  });
 export const entryCardShareRequestSchema = entryCardRequestBaseSchema.extend({
   mode: z.literal("SHARE"),
   rollActionId: z.never().optional(),
+  executeAll: z.never().optional(),
 });
 export const entryRollRequestSchema = z.union([
+  entryCardExecuteAllRequestSchema,
   entryCardExecuteRequestSchema,
   entryCardShareRequestSchema,
 ]);
@@ -3023,6 +3033,11 @@ export interface SkillCardActionSnapshot {
   advantage: boolean;
   consumeUse: boolean;
 }
+export interface SkillCardRollSnapshot {
+  action: SkillCardActionSnapshot;
+  formula: string;
+  result: DiceResult;
+}
 /** Stored with the message; never rebuilt from mutable catalog rows. */
 export interface SkillCardSnapshot {
   version: 1;
@@ -3037,6 +3052,15 @@ export interface SkillCardSnapshot {
   action: SkillCardActionSnapshot | null;
   formula: string | null;
   result: DiceResult | null;
+  /** Additive ordered multi-roll projection for one atomic ability activation. */
+  rolls?: SkillCardRollSnapshot[];
+  /** One shared resource debit for the complete activation, when applicable. */
+  activationCost?: {
+    type: "physical" | "magic";
+    amount: number;
+    before: number;
+    after: number;
+  } | null;
   uses: {
     before: number;
     after: number;
