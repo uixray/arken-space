@@ -3012,6 +3012,7 @@ describe("Pool B HTTP boundaries", () => {
           rollActions: [
             {
               id: "hit",
+              order: 0,
               kind: "HIT",
               label: "Hit",
               dice: "1d20",
@@ -3020,6 +3021,7 @@ describe("Pool B HTTP boundaries", () => {
             },
             {
               id: "damage",
+              order: 1,
               kind: "DAMAGE",
               label: "Damage",
               dice: "1d6",
@@ -3040,6 +3042,7 @@ describe("Pool B HTTP boundaries", () => {
         catalogEntryId: created.json().id,
       },
     });
+    expect(assigned.statusCode).toBe(201);
     const entry = assigned.json();
     const actionId = crypto.randomUUID();
     const response = await app.inject({
@@ -3078,6 +3081,7 @@ describe("Pool B HTTP boundaries", () => {
           rollActions: [
             {
               id: "hit",
+              order: 0,
               kind: "HIT",
               label: "Hit",
               dice: "1d20",
@@ -3086,6 +3090,7 @@ describe("Pool B HTTP boundaries", () => {
             },
             {
               id: "damage",
+              order: 1,
               kind: "DAMAGE",
               label: "Damage",
               dice: "1d6",
@@ -3106,6 +3111,7 @@ describe("Pool B HTTP boundaries", () => {
         catalogEntryId: freeCreated.json().id,
       },
     });
+    expect(freeAssigned.statusCode).toBe(201);
     const freeEntry = freeAssigned.json();
     const freeExecution = await app.inject({
       method: "POST",
@@ -3137,6 +3143,7 @@ describe("Pool B HTTP boundaries", () => {
           rollActions: [
             {
               id: "hit",
+              order: 0,
               kind: "HIT",
               label: "Hit",
               dice: "1d20",
@@ -3145,6 +3152,7 @@ describe("Pool B HTTP boundaries", () => {
             },
             {
               id: "damage",
+              order: 1,
               kind: "DAMAGE",
               label: "Damage",
               dice: "1d6",
