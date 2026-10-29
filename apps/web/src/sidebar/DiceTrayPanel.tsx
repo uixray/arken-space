@@ -3,7 +3,9 @@ import type { MessageVisibility } from "@arken/contracts";
 import { RollModeControl, type RollMode } from "../RollModeControl";
 import { ROLL_MODIFIER_HINT, rollModeFromEvent } from "../roll-modifier-keys";
 import { AppIcon } from "../ui/AppIcon";
-import { DiceTrayIcon, SecretRollIcon } from "../ui/icons";
+import { SecretRollIcon } from "../ui/icons";
+import { DiceShapeIcon } from "./DiceShapeIcon";
+import "./bugpool-ui2.css";
 import { useRepeatRoll } from "./use-repeat-roll";
 
 const pureRollNames: Record<number, string> = {
@@ -109,7 +111,8 @@ export function DiceTrayPanel({
                 });
               }}
             >
-              <AppIcon icon={DiceTrayIcon} />d{sides}
+              <DiceShapeIcon sides={sides} />
+              <span className="dice-tray-panel__label">d{sides}</span>
             </button>
           ))}
 

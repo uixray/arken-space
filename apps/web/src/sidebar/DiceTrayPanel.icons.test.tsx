@@ -9,6 +9,31 @@ import {
 import { DiceTrayPanel } from "./DiceTrayPanel";
 
 describe("UIX645 dice controls", () => {
+  it("gives every physical die its own decorative SVG silhouette", () => {
+    renderComponent(
+      <DiceTrayPanel
+        characterId="character-shapes"
+        visibility="PUBLIC"
+        onVisibilityChange={vi.fn()}
+        onRoll={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    const sides = [2, 4, 6, 8, 10, 12, 20, 100];
+    const silhouettes = sides.map((count) => {
+      const button = screen.getByRole("button", { name: `d${count}` });
+      const icon = button.querySelector("svg.dice-shape-icon");
+      expect(
+        icon,
+        `d${count} must use its dedicated dice silhouette`,
+      ).toBeTruthy();
+      expect(icon).toHaveAttribute("aria-hidden", "true");
+      expect(icon).toHaveAttribute("focusable", "false");
+      expect(icon!.querySelector("polygon, ellipse, path")).not.toBeNull();
+      return icon!.innerHTML;
+    });
+    expect(new Set(silhouettes).size).toBe(sides.length);
+  });
+
   it("keeps distinct decorative one-shot mode icons and pressed semantics", () => {
     renderComponent(
       <DiceTrayPanel

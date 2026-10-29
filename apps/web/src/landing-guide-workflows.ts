@@ -61,7 +61,8 @@ export const guideWorkflows: readonly GuideWorkflow[] = [
     id: "make-player-request",
     title: "Предложить действие мастеру",
     roles: ["Игрок"],
-    prerequisite: "Откройте раздел «Мои заявки».",
+    prerequisite:
+      "Для уже созданной заявки откройте её карточку в ленте и нажмите «Открыть заявки».",
     steps: [
       "Заполните «Название» и «Описание».",
       "Выберите срок и аудиторию; при желании укажите персонажа.",
@@ -71,7 +72,8 @@ export const guideWorkflows: readonly GuideWorkflow[] = [
       "Заявка появится в списке игрока; видимость зависит от выбранной аудитории.",
     helpHref: "#guide-чат-и-броски",
     sources: [
-      "apps/web/src/workspace-nav.ts — role-specific request section label",
+      "apps/web/src/player-request-chat.tsx — request-card open action",
+      "apps/web/src/Sidebar.tsx — Activity handoff to PlayerRequestsWorkspace",
       "apps/web/src/PlayerRequestsWorkspace.tsx — PLAYER form and submit",
       "apps/web/src/player-request-ui.ts — visibility and status rules",
     ],

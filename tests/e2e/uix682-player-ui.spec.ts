@@ -279,7 +279,7 @@ test("UIX-682 PLAYER owner layout CRUD/order survives reload; compact sheet is a
 
   await sheet.getByRole("tab", { name: "Показатели" }).click();
 
-  // C14: the player sees no campaign initiative when there is no active encounter.
+  // C14: the player sees no campaign initiative when battleActive is false.
   await expect(page.locator(".activity-initiative-panel")).toHaveCount(0);
 
   // C01: owner can create, reorder, rename, and delete a character-local row.
@@ -372,6 +372,7 @@ test("UIX-682 GM keeps campaign layout controls; non-owner PLAYER receives no la
     viewport: { width: 1280, height: 900 },
   });
   const gmSnapshot = snapshotFor("GM");
+  gmSnapshot.campaign.battleActive = true;
   const gmWrites: string[] = [];
   await mockApi(gmPage, gmSnapshot, (path) => gmWrites.push(path));
   await gmPage.goto("/");

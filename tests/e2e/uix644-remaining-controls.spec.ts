@@ -3,7 +3,6 @@ import type { Page } from "@playwright/test";
 import { starterStatLayout } from "@arken/system";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
-import { openWorkspaceSection } from "./workspace-nav-helper";
 import { fulfillUnmocked } from "./mock-api-contract";
 
 const scenes = ["Текущая", "Следующая"].map((name, index) => ({
@@ -146,6 +145,66 @@ test("UIX-644 PlayerRequests custom selectors retain keyboard focus and state at
       },
     ],
   });
+  const requestId = "64400000-0000-4000-8000-000000000001";
+  const threadId = "64400000-0000-4000-8000-000000000002";
+  const timestamp = "2026-10-20T10:00:00.000Z";
+  snapshot.playerRequests = [
+    {
+      id: requestId,
+      campaignId: snapshot.campaign.id,
+      authorMembershipId: snapshot.me.id,
+      authorDisplayName: snapshot.me.displayName,
+      characterId: null,
+      characterName: null,
+      audience: "PUBLIC",
+      horizon: "NOW",
+      status: "OPEN",
+      title: "Откройте заявки из ленты",
+      body: "Входная карточка для проверки полей.",
+      resolutionNote: null,
+      resolvedByMembershipId: null,
+      resolvedByDisplayName: null,
+      revision: 0,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+  ];
+  snapshot.chatThreads = [
+    {
+      id: threadId,
+      campaignId: snapshot.campaign.id,
+      type: "STREAM",
+      stream: "TABLE",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+  ];
+  snapshot.chatThreadStates = [
+    {
+      threadId,
+      stream: "TABLE",
+      lastReadSequence: 0,
+      latestSequence: 1,
+      unreadCount: 1,
+    },
+  ];
+  snapshot.messages = [
+    {
+      id: "64400000-0000-4000-8000-000000000003",
+      sequence: 1,
+      membershipId: snapshot.me.id,
+      displayName: snapshot.me.displayName,
+      characterId: null,
+      body: "",
+      playerRequestId: requestId,
+      visibility: "PUBLIC",
+      kind: "SYSTEM",
+      threadId,
+      stream: "TABLE",
+      dice: null,
+      createdAt: timestamp,
+    },
+  ];
   await page.route("**/api/**", (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/bootstrap") return route.fulfill({ json: snapshot });
@@ -169,7 +228,15 @@ test("UIX-644 PlayerRequests custom selectors retain keyboard focus and state at
   });
   await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
-  await openWorkspaceSection(page, "Мои заявки");
+  await page.locator("#compact-nav-menu").click();
+  const menu = page.getByRole("region", { name: "Меню кампании" });
+  await expect(menu.getByRole("button", { name: "Мои заявки" })).toHaveCount(0);
+  await page.locator("#compact-nav-journal").click();
+  const requestCard = page
+    .locator(".request-chat-card")
+    .filter({ hasText: "Откройте заявки из ленты" });
+  await expect(requestCard).toBeVisible();
+  await requestCard.getByRole("button", { name: "Открыть заявки" }).click();
   const dialog = page.getByRole("dialog", { name: "Мои заявки" });
   await expect(dialog).toBeVisible();
   const choices = [

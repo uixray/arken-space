@@ -7,9 +7,10 @@ import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot
 import { sidebarWidthStorageKey } from "../../apps/web/src/sidebar-width-preference";
 
 /**
- * UIX-505: the PLAYER sees the turn order only while an encounter is ACTIVE.
- * The block follows the authoritative snapshot — pushed over the socket and
- * re-read on reload — and leaves no gap above the quick controls when hidden.
+ * UIX-505: the PLAYER sees the turn order only while campaign battleActive is
+ * true, independent of encounter-record presence/status. The block follows
+ * the authoritative snapshot — pushed over the socket and re-read on reload —
+ * and leaves no gap above the quick controls when hidden.
  */
 function encounter(
   campaignId: string,

@@ -153,17 +153,17 @@ for (const width of widths) {
     // C19: the skill rows and the character's skills are separate groups
     // with visible space between them.
     const panel = page.locator(".quick-roll-panel");
-    await panel.getByRole("tab", { name: "Характеристики и навыки" }).click();
-    const abilities = panel.getByRole("tabpanel", {
-      name: "Характеристики и навыки",
+    await panel.getByRole("tab", { name: "Статы", exact: true }).click();
+    const statsPanel = panel.getByRole("tabpanel", {
+      name: "Статы",
     });
     await expect(
-      abilities.getByRole("button", { name: /^Скрытность\s*0$/ }),
+      statsPanel.getByRole("button", { name: /^Скрытность\s*0$/ }),
     ).toBeVisible();
     await expect(
-      abilities.getByRole("button", { name: /^Знание преданий\s*1$/ }),
+      statsPanel.getByRole("button", { name: /^Знание преданий\s*1$/ }),
     ).toBeVisible();
-    const gap = await abilities.evaluate((node) => {
+    const gap = await statsPanel.evaluate((node) => {
       const groups = [...node.querySelectorAll(".activity-quick-rolls")];
       return groups.length === 2
         ? groups[1]!.getBoundingClientRect().top -

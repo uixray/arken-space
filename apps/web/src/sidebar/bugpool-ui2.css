@@ -1,0 +1,113 @@
+/* UIX-2 compact/sidebar corrections; intentionally scoped to these panels. */
+.dice-tray-panel__toolbar > button {
+  flex: 0 0 auto;
+  min-width: max-content;
+  padding-inline: 0.35rem;
+  gap: 0.2rem;
+  white-space: nowrap;
+}
+
+.dice-tray-panel__toolbar > button .dice-tray-panel__label {
+  display: inline-block;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.dice-tray-panel__toolbar {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.dice-tray-panel__toolbar > button .dice-shape-icon {
+  flex: 0 0 16px;
+}
+
+.quick-roll-panel__tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.quick-roll-panel__tabs button {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.quick-roll-panel__ability-group {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.quick-roll-panel__ability-group .quick-roll-panel__entry {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.quick-roll-panel__ability-group .quick-roll-panel__entry > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.quick-roll-panel__ability-group .quick-roll-panel__entry button {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.quick-roll-panel__entry .arken-button__text {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.quick-roll-panel__ability-name {
+  flex: 1 1 100%;
+  overflow-wrap: anywhere;
+}
+
+.quick-roll-panel__ability-name .arken-icon {
+  margin-right: 0.35rem;
+  vertical-align: -0.15em;
+}
+
+.activity-prepared-actions-slot:empty {
+  display: none;
+}
+
+.activity-prepared-actions-slot:not(:empty) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.35rem;
+  padding: 0.35rem 0.6rem;
+}
+
+.activity-prepared-actions-slot .quick-roll-prepared-action {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.4rem;
+  border: 1px solid var(--border-subtle, currentColor);
+  border-radius: 0.5rem;
+}
+
+.activity-prepared-actions-slot .quick-roll-prepared-action > strong,
+.activity-prepared-actions-slot
+  .quick-roll-prepared-action
+  > span:first-of-type {
+  grid-column: 1 / -1;
+}
+
+.activity-prepared-actions-slot .quick-roll-prepared-action > strong,
+.activity-prepared-actions-slot .quick-roll-prepared-action > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.activity-prepared-actions-slot .quick-roll-prepared-action > .muted {
+  grid-column: 1 / -1;
+}

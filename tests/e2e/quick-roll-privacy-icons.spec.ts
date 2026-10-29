@@ -3,13 +3,27 @@ import type { CharacterDto } from "@arken/contracts";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
 import { fulfillUnmocked } from "./mock-api-contract";
+import { PLAYER_THEMES } from "../../apps/web/src/design-system/player-themes";
 
 for (const role of ["GM", "PLAYER"] as const)
-  for (const width of [1280, 360]) {
-    test(`UIX-645 quick roll privacy ${role} ${width}`, async ({
+  for (const [width, themeId] of [
+    [1280, "fire"],
+    [800, "light"],
+    [360, "forest"],
+  ] as const) {
+    test(`UIX-645 quick roll privacy ${role} ${width} ${themeId}`, async ({
       page,
     }, info) => {
       const snapshot = buildGameSnapshot(role, { schemaVersion: 2 });
+      snapshot.personalTheme = {
+        scopeKey: snapshot.me.id,
+        selectedThemeId: themeId,
+        defaultThemeId: "forest",
+        revision: 0,
+        publishedThemes: [...PLAYER_THEMES],
+      };
+      const longAbilityName =
+        "Гиперпространственное переплетение древних защитных рун и созвездий";
       const character: CharacterDto = {
         id: "69500000-0000-4000-8000-000000000001",
         name: "Хранитель",
@@ -20,7 +34,21 @@ for (const role of ["GM", "PLAYER"] as const)
         statLayout: structuredClone(snapshot.campaign.statLayout),
         skills: [],
         spells: [],
-        entries: [],
+        entries: [
+          {
+            id: "69500000-0000-4000-8000-000000000002",
+            kind: "ABILITY",
+            name: longAbilityName,
+            description: "Подготовленное действие для проверки переноса.",
+            sourceCatalogEntryId: null,
+            revision: 1,
+            data: {
+              activation: { consumeUse: false },
+              usageCost: null,
+              rollActions: [],
+            },
+          },
+        ],
         notes: "",
         backstory: "",
         inventory: [],
@@ -73,6 +101,27 @@ for (const role of ["GM", "PLAYER"] as const)
       const secret = page
         .locator(".dice-tray-panel")
         .getByRole("button", { name: "Только мастеру", exact: true });
+      const diceButtons = page.locator(
+        ".dice-tray-panel__toolbar > button:has(svg.dice-shape-icon)",
+      );
+      await expect(diceButtons).toHaveCount(8);
+      const diceLayout = await diceButtons.evaluateAll((buttons) => {
+        const shapes = buttons.map(
+          (button) => button.querySelector("svg.dice-shape-icon")!.innerHTML,
+        );
+        return {
+          uniqueShapes: new Set(shapes).size,
+          labelsFit: buttons.every((button) => {
+            const control = button.getBoundingClientRect();
+            const label = button
+              .querySelector(".dice-tray-panel__label")!
+              .getBoundingClientRect();
+            return label.left >= control.left && label.right <= control.right;
+          }),
+        };
+      });
+      expect(diceLayout.uniqueShapes).toBe(8);
+      expect(diceLayout.labelsFit).toBe(true);
       await expect(secret).toHaveAttribute("aria-pressed", "false");
       await secret.focus();
       await secret.press("Space");
@@ -97,6 +146,14 @@ for (const role of ["GM", "PLAYER"] as const)
         "aria-hidden",
         "true",
       );
+      const statsTab = quick.getByRole("tab", { name: "Статы", exact: true });
+      const skillsTab = quick.getByRole("tab", { name: "Скилы", exact: true });
+      await expect(statsTab).toHaveAttribute("aria-selected", "true");
+      await expect(skillsTab).toHaveAttribute("aria-selected", "false");
+      await skillsTab.click();
+      await expect(skillsTab).toHaveAttribute("aria-selected", "true");
+      await expect(statsTab).toHaveAttribute("aria-selected", "false");
+      await statsTab.click();
       const disclosure = quick.getByRole("button", {
         name: "Статы и скилы",
         exact: true,
@@ -111,9 +168,63 @@ for (const role of ["GM", "PLAYER"] as const)
       await disclosure.press("Enter");
       await expect(warning).toBeVisible();
       await expect(disclosure).toBeFocused();
+      const composer = page.getByRole("textbox", {
+        name: "Сообщение или бросок",
+        exact: true,
+      });
+      await composer.fill("Черновик сохранён при подготовке действия");
+      await skillsTab.click();
+      const longAbility = quick.getByText(longAbilityName, { exact: true });
+      await expect(longAbility).toBeVisible();
+      await quick
+        .getByRole("button", { name: /^Подготовить активацию:/ })
+        .click();
+      const preparedSlot = page.locator(".activity-prepared-actions-slot");
+      const prepared = preparedSlot.locator(".quick-roll-prepared-action");
+      await expect(prepared).toContainText(longAbilityName);
+      const layout = await quick
+        .locator(".quick-roll-panel__ability-group .quick-roll-panel__entry")
+        .filter({ hasText: longAbilityName })
+        .evaluate((entry) => {
+          const entryBox = entry.getBoundingClientRect();
+          const panelBox = entry
+            .closest(".quick-roll-panel")!
+            .getBoundingClientRect();
+          return {
+            left: entryBox.left,
+            right: entryBox.right,
+            panelLeft: panelBox.left,
+            panelRight: panelBox.right,
+            scrollWidth: entry.scrollWidth,
+            clientWidth: entry.clientWidth,
+          };
+        });
+      const noHorizontalPanelOverflow = await quick.evaluate(
+        (panel) => panel.scrollWidth <= panel.clientWidth + 1,
+      );
+      expect(layout.left).toBeGreaterThanOrEqual(layout.panelLeft - 1);
+      expect(layout.right).toBeLessThanOrEqual(layout.panelRight + 1);
+      expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth + 1);
+      expect(noHorizontalPanelOverflow).toBe(true);
+      const preparedBox = await prepared.boundingBox();
+      const composerBox = await page.locator(".chat-compose").boundingBox();
+      expect(preparedBox).not.toBeNull();
+      expect(composerBox).not.toBeNull();
+      const preparedBottom = preparedBox!.y + preparedBox!.height;
+      expect(preparedBottom).toBeLessThan(composerBox!.y);
+      expect(composerBox!.y - preparedBottom).toBeGreaterThan(0);
+      await disclosure.press("Enter");
+      await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+      await expect(prepared).toBeVisible();
+      await expect(composer).toHaveValue(
+        "Черновик сохранён при подготовке действия",
+      );
+      await disclosure.press("Enter");
+      await expect(disclosure).toHaveAttribute("aria-expanded", "true");
       await page.screenshot({
         path: info.outputPath(`private-quickroll-${role}-${width}.png`),
       });
+      await statsTab.click();
       if (width === 360) await page.locator("#compact-nav-map").click();
       await expect(secret).toHaveAttribute("aria-pressed", "true");
       await secret.focus();

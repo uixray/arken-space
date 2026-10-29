@@ -47,3 +47,16 @@ describe("story workspace navigation", () => {
     ).toBe(false);
   });
 });
+
+it("hides the player-request navigation entry without removing the workspace id", () => {
+  expect(
+    workspaceNavItems({ isGm: false, operatorFeedbackAllowed: false }).some(
+      (item) => item.id === "player-requests",
+    ),
+  ).toBe(false);
+  expect(
+    workspaceNavItems({ isGm: true, operatorFeedbackAllowed: false }).some(
+      (item) => item.id === "player-requests",
+    ),
+  ).toBe(true);
+});

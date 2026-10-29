@@ -95,17 +95,29 @@ function deferred<T>() {
 }
 
 describe("Activity initiative visibility and lifecycle", () => {
-  it("keeps initiative available to a GM for preparation without encounters", () => {
+  it("shows initiative only while the canonical campaign battle flag is active", () => {
     const snapshot = gmSnapshot({
       campaign: {
         ...gmSnapshot().campaign,
         id: ids.campaign,
-        initiative: [],
+        initiative: [participant()],
         battleActive: false,
       },
       encounters: [],
     });
-    renderComponent(view(snapshot, { selectedTokenIds: ["token-prep"] }));
+    const rendered = renderComponent(
+      view(snapshot, { selectedTokenIds: ["token-prep"] }),
+    );
+    expect(screen.queryByText("Очередь ходов")).not.toBeInTheDocument();
+    rendered.rerender(
+      view(
+        {
+          ...snapshot,
+          campaign: { ...snapshot.campaign, battleActive: true },
+        },
+        { selectedTokenIds: ["token-prep"] },
+      ),
+    );
     expect(screen.getByText("Очередь ходов")).toBeInTheDocument();
     expect(screen.getByText("Ввести в бой · 1")).toBeInTheDocument();
   });
@@ -120,21 +132,24 @@ describe("Activity initiative visibility and lifecycle", () => {
       "foreign-campaign encounter",
       [encounter({ campaignId: ids.foreignCampaign })],
     ],
-  ])("hides player initiative for %s", (_label, encounters) => {
-    const snapshot = playerSnapshot({
-      campaign: {
-        ...playerSnapshot().campaign,
-        id: ids.campaign,
-        battleActive: true,
-        initiative: [participant()],
-      },
-      encounters: encounters as EncounterDto[],
-    });
-    renderComponent(view(snapshot));
-    expect(screen.queryByText("Очередь ходов")).not.toBeInTheDocument();
-  });
+  ])(
+    "shows player initiative during the active campaign battle despite %s",
+    (_label, encounters) => {
+      const snapshot = playerSnapshot({
+        campaign: {
+          ...playerSnapshot().campaign,
+          id: ids.campaign,
+          battleActive: true,
+          initiative: [],
+        },
+        encounters: encounters as EncounterDto[],
+      });
+      renderComponent(view(snapshot));
+      expect(screen.getByText("Очередь ходов")).toBeInTheDocument();
+    },
+  );
 
-  it("shows an active campaign encounter with an empty roster even when battleActive is false", () => {
+  it("hides an active encounter with an empty roster when battleActive is false", () => {
     const snapshot = playerSnapshot({
       campaign: {
         ...playerSnapshot().campaign,
@@ -145,10 +160,7 @@ describe("Activity initiative visibility and lifecycle", () => {
       encounters: [encounter()],
     });
     renderComponent(view(snapshot));
-    expect(screen.getByText("Очередь ходов")).toBeInTheDocument();
-    expect(
-      screen.getByText("Мастер ещё не собрал очередь."),
-    ).toBeInTheDocument();
+    expect(screen.queryByText("Очередь ходов")).not.toBeInTheDocument();
   });
 
   it("retains the panel for active region and linked-scene encounters", () => {
@@ -174,7 +186,7 @@ describe("Activity initiative visibility and lifecycle", () => {
     rendered.rerender(
       view({
         ...snapshot,
-        campaign: { ...snapshot.campaign, battleActive: false },
+        campaign: { ...snapshot.campaign, battleActive: true },
         encounters: [linked],
       }),
     );
@@ -186,6 +198,7 @@ describe("Activity initiative visibility and lifecycle", () => {
       campaign: {
         ...playerSnapshot().campaign,
         id: ids.campaign,
+        battleActive: true,
         initiative: [
           participant(),
           participant({
@@ -212,6 +225,7 @@ describe("Activity initiative visibility and lifecycle", () => {
         ...playerSnapshot().campaign,
         id: ids.campaign,
         revision: 42,
+        battleActive: true,
         initiative: [participant()],
       },
       encounters: [encounter()],
@@ -230,6 +244,7 @@ describe("Activity initiative visibility and lifecycle", () => {
       campaign: {
         ...playerSnapshot().campaign,
         id: ids.campaign,
+        battleActive: true,
         initiative: [participant()],
       },
       encounters: [encounter()],
@@ -256,6 +271,7 @@ describe("Activity initiative visibility and lifecycle", () => {
       campaign: {
         ...gmSnapshot().campaign,
         id: ids.campaign,
+        battleActive: true,
         initiative: [participant()],
       },
       encounters: [],
@@ -287,6 +303,7 @@ describe("Activity initiative visibility and lifecycle", () => {
         campaign: {
           ...playerSnapshot().campaign,
           id: ids.campaign,
+          battleActive: true,
           initiative: [participant()],
         },
         encounters: [encounter()],
@@ -325,12 +342,20 @@ describe("Activity initiative visibility and lifecycle", () => {
 
   it("remounts and rerenders for ACTIVE then hides after ENDED", () => {
     const active = playerSnapshot({
-      campaign: { ...playerSnapshot().campaign, id: ids.campaign },
+      campaign: {
+        ...playerSnapshot().campaign,
+        id: ids.campaign,
+        battleActive: true,
+      },
       encounters: [encounter()],
     });
     const rendered = renderComponent(view(active));
     expect(screen.getByText("Очередь ходов")).toBeInTheDocument();
-    const ended = { ...active, encounters: [encounter({ status: "ENDED" })] };
+    const ended = {
+      ...active,
+      campaign: { ...active.campaign, battleActive: false },
+      encounters: [encounter({ status: "ENDED" })],
+    };
     rendered.rerender(view(ended));
     expect(screen.queryByText("Очередь ходов")).not.toBeInTheDocument();
     rendered.unmount();

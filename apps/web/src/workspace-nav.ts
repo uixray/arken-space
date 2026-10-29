@@ -50,10 +50,10 @@ export function workspaceNavItems(context: {
       { id: "spell-schools", label: "Школы заклинаний" },
       { id: "world-codex", label: WORLD_READER_TITLE },
     );
-  items.push({
-    id: "player-requests",
-    label: context.isGm ? "Открытые заявки" : "Мои заявки",
-  });
+  // UIX-2 visual scope: keep the workspace/API path intact, but hide the
+  // player-facing navigation entry at the owner's request.
+  if (context.isGm)
+    items.push({ id: "player-requests", label: "Открытые заявки" });
   if (context.operatorFeedbackAllowed)
     items.push({ id: "operator-feedback", label: OPERATOR_FEEDBACK_TITLE });
   if (context.isGm) items.push({ id: "media", label: "Файлы" });

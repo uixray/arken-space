@@ -79,14 +79,16 @@ export function AnimatedMapPing({
       haloRef.current?.opacity(g.haloOpacity);
       coreBackplateRef.current?.radius(g.coreRadius + 2 * inverseScale);
       coreBackplateRef.current?.strokeWidth(1.5 * inverseScale);
-      coreBackplateRef.current?.opacity(g.coreOpacity);
+      // The marker is a location cue, not part of the fading pulse. Keep the
+      // icon legible for the full ping lifetime while the halo/rings animate.
+      coreBackplateRef.current?.opacity(1);
       coreRef.current?.radius(g.coreRadius);
       coreRef.current?.strokeWidth(g.coreStrokeWidth);
-      coreRef.current?.opacity(g.coreOpacity);
+      coreRef.current?.opacity(1);
       nameRef.current?.x(g.nameX);
       nameRef.current?.y(g.nameY);
       nameRef.current?.fontSize(g.nameFontSize);
-      nameRef.current?.opacity(g.coreOpacity);
+      nameRef.current?.opacity(1);
       groupRef.current?.visible(mapPingIsActive(ping.createdAt, Date.now()));
     },
     [ping.createdAt, scale, reduced, inverseScale],
@@ -159,7 +161,7 @@ export function AnimatedMapPing({
         fill="#fff"
         stroke="#111827"
         strokeWidth={1.5 * inverseScale}
-        opacity={initial.coreOpacity}
+        opacity={1}
         listening={false}
       />
       <Circle
@@ -168,7 +170,7 @@ export function AnimatedMapPing({
         fill={color}
         stroke="#78350f"
         strokeWidth={initial.coreStrokeWidth}
-        opacity={initial.coreOpacity}
+        opacity={1}
         listening={false}
       />
       <Text
@@ -176,15 +178,13 @@ export function AnimatedMapPing({
         x={initial.nameX}
         y={initial.nameY}
         text={ping.displayName}
-        fill={color}
+        fill="#000"
         stroke="#fff"
         strokeWidth={3 * inverseScale}
-        shadowColor="#111827"
-        shadowBlur={2 * inverseScale}
-        shadowOpacity={0.9}
+        fillAfterStrokeEnabled
         fontSize={initial.nameFontSize}
         fontStyle="bold"
-        opacity={initial.coreOpacity}
+        opacity={1}
         listening={false}
       />
     </Group>

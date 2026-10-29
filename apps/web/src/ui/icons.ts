@@ -72,6 +72,13 @@ export {
   User as CharacterSurfaceIcon,
   X as CloseIcon,
   CircleCheck as SuccessNoticeIcon,
+  Clock3 as PreparedActionIcon,
+  Flame as DamageActionIcon,
+  Sparkles as CustomActionIcon,
+  Heart as HealingActionIcon,
+  Shield as DefenseActionIcon,
+  Footprints as MovementActionIcon,
+  WandSparkles as MagicActionIcon,
   Info as InfoNoticeIcon,
   TriangleAlert as WarningNoticeIcon,
 } from "lucide-react";

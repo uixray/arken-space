@@ -969,7 +969,7 @@ for (const role of ["GM", "PLAYER"] as const) {
         await expect(navigation).toBeVisible();
         await expect(
           navigation.getByRole("button", { name: "Мои заявки", exact: true }),
-        ).toBeVisible();
+        ).toHaveCount(0);
         await expect(
           navigation.getByRole("button", {
             name: "Файлы",
@@ -4556,8 +4556,18 @@ test("UIX-498 PLAYER keeps Story and ROLLS in Activity without private tabs", as
   await expect(page.getByText("PLAYER_ROLL_MARKER")).toBeVisible();
   await expect(page.locator(".story-composer")).toHaveCount(0);
   await expect(page.locator(".chat-compose textarea")).toBeVisible();
-  await openWorkspaceSection(page, "Мои заявки");
-  await expect(page.getByRole("dialog", { name: "Мои заявки" })).toBeVisible();
+  const workspaceNavigation = page.locator(".workspace-nav");
+  await expect(workspaceNavigation).toBeVisible();
+  await expect(
+    workspaceNavigation.getByRole("button", {
+      name: "Персонажи",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    workspaceNavigation.locator('[data-workspace="player-requests"]'),
+  ).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Мои заявки" })).toHaveCount(0);
 });
 
 test("UIX-274 activity read state reconciles and stays read after reload", async ({

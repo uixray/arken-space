@@ -67,15 +67,17 @@ for (const kind of ["ABILITY", "SKILL"] as const) {
       );
       fireEvent.click(
         screen.getByRole("tab", {
-          name: kind === "SKILL" ? "Характеристики и навыки" : "Способности",
+          name: kind === "SKILL" ? "Статы" : "Скилы",
         }),
       );
       if (executable) {
-        fireEvent.click(screen.getByRole("button", { name: "Удар" }));
-      } else if (kind === "ABILITY") {
         fireEvent.click(
-          screen.getByRole("button", { name: "Теневой шаг · Активировать" }),
+          screen.getByRole("button", {
+            name: kind === "ABILITY" ? "Теневой шаг" : "Удар",
+          }),
         );
+      } else if (kind === "ABILITY") {
+        fireEvent.click(screen.getByRole("button", { name: "Теневой шаг" }));
       } else {
         fireEvent.click(
           screen.getByRole("button", {
@@ -129,11 +131,14 @@ it("prepares a no-roll ability without writing and executes only on manual confi
     />,
   );
 
-  fireEvent.click(screen.getByRole("tab", { name: "Способности" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Скилы" }));
   fireEvent.click(
-    screen.getByRole("button", { name: "Подготовить активацию" }),
+    screen.getByRole("button", {
+      name: "Подготовить активацию: Теневой шаг",
+    }),
   );
-  expect(screen.getByRole("status")).toHaveTextContent("Подготовлено для хода");
+  expect(screen.getByRole("status")).toHaveTextContent("Подготовлено");
+  expect(screen.getByRole("status")).toHaveTextContent("Теневой шаг");
   expect(onEntryAction).not.toHaveBeenCalled();
 
   fireEvent.click(screen.getByRole("button", { name: "Выполнить сейчас" }));
@@ -177,8 +182,12 @@ it("blocks a prepared action after its entry revision changes", () => {
       onEntryAction={onEntryAction}
     />,
   );
-  fireEvent.click(screen.getByRole("tab", { name: "Способности" }));
-  fireEvent.click(screen.getByRole("button", { name: "Подготовить" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Скилы" }));
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Подготовить действие: Теневой шаг · Удар",
+    }),
+  );
   expect(onEntryAction).not.toHaveBeenCalled();
 
   const changedEntry = { ...entry, revision: 4 };
@@ -235,9 +244,10 @@ it("keeps numeric skill rows with characteristics and gives explicit control acc
       onQuickRoll={onQuickRoll}
     />,
   );
-  expect(
-    screen.getByRole("tab", { name: "Характеристики и навыки" }),
-  ).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("tab", { name: "Статы" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   expect(
     screen.getByRole("button", { name: /^Скрытность\s*3$/ }),
   ).toBeVisible();
@@ -283,7 +293,7 @@ it("posts the info control as SHARE without activating the ability name", async 
     />,
   );
 
-  fireEvent.click(screen.getByRole("tab", { name: "Способности" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Скилы" }));
   fireEvent.click(
     screen.getByRole("button", { name: "Показать без выполнения: Вспышка" }),
   );

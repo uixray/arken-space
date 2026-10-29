@@ -1,4 +1,5 @@
 import "./roll-controls.css";
+import "./bugpool-ui2.css";
 import {
   useEffect,
   useId,
@@ -9,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
+import { createPortal } from "react-dom";
 import type { CharacterCatalogEntryDto, CharacterDto } from "@arken/contracts";
 import { STAT_VALUE_RANGE } from "@arken/system";
 import { Button } from "../design-system/Button";
@@ -26,11 +28,52 @@ import {
   DiceTrayIcon,
   ExpandSectionIcon,
   SecretRollIcon,
+  PreparedActionIcon,
+  BattleIcon,
+  DamageActionIcon,
+  CustomActionIcon,
+  HealingActionIcon,
+  DefenseActionIcon,
+  MovementActionIcon,
+  MagicActionIcon,
 } from "../ui/icons";
 import { useRepeatRoll } from "./use-repeat-roll";
 
 const signedBonus = (bonus: number) =>
   new Intl.NumberFormat("en-US", { signDisplay: "always" }).format(bonus);
+
+function CatalogActionIcon({
+  kind,
+  semanticText = "",
+}: {
+  kind: "HIT" | "DAMAGE" | "CUSTOM";
+  semanticText?: string;
+}) {
+  const normalized = semanticText.toLocaleLowerCase("ru");
+  const semanticIcons = [
+    CustomActionIcon,
+    MagicActionIcon,
+    DefenseActionIcon,
+    MovementActionIcon,
+    HealingActionIcon,
+  ];
+  let icon =
+    semanticIcons[
+      Array.from(semanticText).reduce(
+        (sum, char) => sum + char.charCodeAt(0),
+        0,
+      ) % semanticIcons.length
+    ]!;
+  if (/леч|исцел|здоров|восстанов/.test(normalized)) icon = HealingActionIcon;
+  else if (/защит|щит|брон|блок/.test(normalized)) icon = DefenseActionIcon;
+  else if (/движ|шаг|прыж|скорост|телепорт/.test(normalized))
+    icon = MovementActionIcon;
+  else if (/маг|заклин|чар|руна|огнен|ледян|молни/.test(normalized))
+    icon = MagicActionIcon;
+  else if (kind === "HIT") icon = BattleIcon;
+  else if (kind === "DAMAGE") icon = DamageActionIcon;
+  return <AppIcon icon={icon} />;
+}
 
 type PreparedCatalogAction = {
   scope: string;
@@ -84,6 +127,7 @@ export function QuickRollPanel({
   canControlCharacter = false,
   gmOnly,
   physicalDiceControl,
+  preparedActionTarget,
   onQuickRoll,
   onEntryAction,
 }: {
@@ -105,6 +149,7 @@ export function QuickRollPanel({
    */
   gmOnly: boolean;
   physicalDiceControl?: ReactNode;
+  preparedActionTarget?: HTMLElement | null;
   onQuickRoll: (
     formula: string,
     label: string,
@@ -303,6 +348,40 @@ export function QuickRollPanel({
       );
     });
 
+  const preparedPanel = preparedAction && (
+    <div
+      className="quick-roll-prepared-action"
+      role="status"
+      title="Подготовлено вручную. Выполните, когда наступит ваш ход."
+    >
+      <strong>Подготовлено</strong>
+      <span>{preparedAction.label}</span>
+      {!preparedIsCurrent && (
+        <span className="muted">
+          Действие изменилось или больше недоступно. Выберите его заново.
+        </span>
+      )}
+      <Button
+        disabled={
+          !preparedIsCurrent || !canControlCharacter || entryPending !== null
+        }
+        onClick={() => void executePreparedAction()}
+      >
+        {entryPending ? "Выполняем…" : "Выполнить сейчас"}
+      </Button>
+      <Button
+        type="button"
+        disabled={entryPending !== null}
+        onClick={() => setPreparedAction(null)}
+      >
+        Очистить
+      </Button>
+      {!canControlCharacter && (
+        <span className="muted">Нет права управлять этим персонажем.</span>
+      )}
+    </div>
+  );
+
   return (
     <section
       className={`quick-roll-panel${collapsed ? " is-collapsed" : ""}`}
@@ -373,47 +452,11 @@ export function QuickRollPanel({
               aria-selected={activeTab === tab}
               onClick={() => setActiveTab(tab)}
             >
-              {tab === "stats" ? "Характеристики и навыки" : "Способности"}
+              {tab === "stats" ? "Статы" : "Скилы"}
             </button>
           ))}
         </div>
-        {preparedAction && (
-          <div className="quick-roll-prepared-action" role="status">
-            <strong>Подготовлено для хода</strong>
-            <span>{preparedAction.label}</span>
-            <span className="muted">
-              Панель не отслеживает активный ход. Нажмите вручную, когда
-              наступит ваш ход.
-            </span>
-            {!preparedIsCurrent && (
-              <span className="muted">
-                Действие изменилось или больше недоступно. Выберите его заново.
-              </span>
-            )}
-            <Button
-              disabled={
-                !preparedIsCurrent ||
-                !canControlCharacter ||
-                entryPending !== null
-              }
-              onClick={() => void executePreparedAction()}
-            >
-              {entryPending ? "Выполняем…" : "Выполнить сейчас"}
-            </Button>
-            <Button
-              type="button"
-              disabled={entryPending !== null}
-              onClick={() => setPreparedAction(null)}
-            >
-              Очистить
-            </Button>
-            {!canControlCharacter && (
-              <span className="muted">
-                Нет права управлять этим персонажем.
-              </span>
-            )}
-          </div>
-        )}
+        {preparedAction && !preparedActionTarget && preparedPanel}
         <div
           role="tabpanel"
           id={`${tabsId}-stats-panel`}
@@ -481,6 +524,8 @@ export function QuickRollPanel({
                   {Number.isInteger(entry.data.skillValue) && (
                     <Button
                       type="button"
+                      aria-label={`Подготовить навык: ${entry.name}`}
+                      title="Подготовить навык"
                       disabled={!canControlCharacter || entryPending !== null}
                       onClick={() =>
                         prepareEntryAction(
@@ -491,7 +536,7 @@ export function QuickRollPanel({
                         )
                       }
                     >
-                      Подготовить
+                      <AppIcon icon={PreparedActionIcon} />
                     </Button>
                   )}
                   {entry.data.rollActions?.map((action) => (
@@ -507,11 +552,16 @@ export function QuickRollPanel({
                           void submitEntry(entry, "EXECUTE", action.id)
                         }
                       >
-                        <AppIcon icon={DiceTrayIcon} />
+                        <CatalogActionIcon
+                          kind={action.kind}
+                          semanticText={`${entry.name} ${action.label}`}
+                        />
                         {action.label}
                       </Button>
                       <Button
                         type="button"
+                        aria-label={`Подготовить действие: ${entry.name} · ${action.label}`}
+                        title="Подготовить действие"
                         disabled={!canControlCharacter || entryPending !== null}
                         onClick={() =>
                           prepareEntryAction(
@@ -522,7 +572,7 @@ export function QuickRollPanel({
                           )
                         }
                       >
-                        Подготовить
+                        <AppIcon icon={PreparedActionIcon} />
                       </Button>
                     </div>
                   ))}
@@ -568,6 +618,15 @@ export function QuickRollPanel({
             >
               {abilityEntries.map((entry) => (
                 <div className="quick-roll-panel__entry" key={entry.id}>
+                  {(entry.data.rollActions?.length ?? 0) > 1 && (
+                    <strong className="quick-roll-panel__ability-name">
+                      <CatalogActionIcon
+                        kind={entry.data.rollActions[0]!.kind}
+                        semanticText={entry.name}
+                      />
+                      {entry.name}
+                    </strong>
+                  )}
                   {entry.data.rollActions?.length ? (
                     entry.data.rollActions.map((action) => (
                       <div key={action.id}>
@@ -581,11 +640,18 @@ export function QuickRollPanel({
                             void submitEntry(entry, "EXECUTE", action.id)
                           }
                         >
-                          <AppIcon icon={DiceTrayIcon} />
-                          {action.label}
+                          <CatalogActionIcon
+                            kind={action.kind}
+                            semanticText={`${entry.name} ${action.label}`}
+                          />
+                          {entry.data.rollActions.length === 1
+                            ? entry.name
+                            : action.label}
                         </Button>
                         <Button
                           type="button"
+                          aria-label={`Подготовить действие: ${entry.name} · ${action.label}`}
+                          title="Подготовить действие"
                           disabled={
                             !canControlCharacter || entryPending !== null
                           }
@@ -605,6 +671,7 @@ export function QuickRollPanel({
                   ) : (
                     <>
                       <Button
+                        title="Активировать способность"
                         disabled={
                           !canControlCharacter ||
                           entryPending !== null ||
@@ -612,10 +679,16 @@ export function QuickRollPanel({
                         }
                         onClick={() => void submitEntry(entry, "EXECUTE")}
                       >
-                        {entry.name} · Активировать
+                        <CatalogActionIcon
+                          kind="CUSTOM"
+                          semanticText={entry.name}
+                        />
+                        {entry.name}
                       </Button>
                       <Button
                         type="button"
+                        aria-label={`Подготовить активацию: ${entry.name}`}
+                        title="Подготовить активацию"
                         disabled={!canControlCharacter || entryPending !== null}
                         onClick={() =>
                           prepareEntryAction(
@@ -626,7 +699,7 @@ export function QuickRollPanel({
                           )
                         }
                       >
-                        Подготовить активацию
+                        <AppIcon icon={PreparedActionIcon} />
                       </Button>
                     </>
                   )}
@@ -649,6 +722,9 @@ export function QuickRollPanel({
         </div>
         {entryError && <p role="alert">{entryError}</p>}
       </div>
+      {preparedActionTarget && preparedPanel
+        ? createPortal(preparedPanel, preparedActionTarget)
+        : null}
       {!collapsed && (
         <button
           type="button"

@@ -72,12 +72,12 @@ function mount(
 beforeEach(() => installMatchMediaMock());
 
 describe("ActivityPanel initiative integration", () => {
-  it("places an active-encounter initiative panel before quick activity controls", () => {
+  it("places initiative controlled by campaign battleActive before quick activity controls", () => {
     const snapshot = playerSnapshot({
       campaign: {
         ...playerSnapshot().campaign,
         initiative: [],
-        battleActive: false,
+        battleActive: true,
       },
       encounters: [activeEncounter],
     });
@@ -95,12 +95,12 @@ describe("ActivityPanel initiative integration", () => {
     ).toBeTruthy();
   });
 
-  it("keeps GM preparation initiative and recruit callback in Activity without an encounter", async () => {
+  it("keeps GM initiative controls and recruit callback available during battle without an encounter", async () => {
     const snapshot = gmSnapshot({
       campaign: {
         ...gmSnapshot().campaign,
         initiative: [],
-        battleActive: false,
+        battleActive: true,
       },
       encounters: [],
     });

@@ -519,6 +519,8 @@ export function ActivityPanel({
   const setComposer = activityDraft.setValue;
   const [composerError, setComposerError] = useState("");
   const [composerInvalid, setComposerInvalid] = useState(false);
+  const [preparedActionTarget, setPreparedActionTarget] =
+    useState<HTMLDivElement | null>(null);
   const [quickRollError, setQuickRollError] = useState("");
   const [resourceError, setResourceError] = useState("");
   const availableRollCharacters = useMemo(
@@ -889,6 +891,7 @@ export function ActivityPanel({
               quickRollPending={pendingQuickRoll !== null}
               canControlCharacter={canSpendResources}
               gmOnly={rollVisibility === "GM_ONLY"}
+              preparedActionTarget={preparedActionTarget}
               physicalDiceControl={
                 <FormInput
                   className="compact-check quick-roll-panel__physical-dice"
@@ -1074,6 +1077,11 @@ export function ActivityPanel({
           Новые события · {newItemCount}
         </Button>
       )}
+      <div
+        className="activity-prepared-actions-slot"
+        ref={setPreparedActionTarget}
+        aria-label="Подготовленные действия"
+      />
       <form className="chat-compose chat-compose--single" onSubmit={submit}>
         <div
           className="chat-composer-input"

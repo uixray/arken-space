@@ -54,12 +54,10 @@ export function ActivityInitiativePanel({
   onRecruitFromZone,
 }: Props) {
   const isGm = snapshot.me.role === "GM";
-  const activeCampaignEncounter = (snapshot.encounters ?? []).some(
-    (encounter) =>
-      encounter.campaignId === snapshot.campaign.id &&
-      encounter.status === "ACTIVE",
-  );
-  const visible = isGm || activeCampaignEncounter;
+  // The campaign battle flag is the canonical combat lifecycle. An initiative
+  // roster can remain saved between combats and an encounter can be active for
+  // other reasons; neither is enough to make the queue visible.
+  const visible = snapshot.campaign.battleActive;
   const scopeKey = `${snapshot.campaign.id}:${snapshot.me.id}:${encounterScopeKey(snapshot)}`;
   const generation = useRef(0);
   const scopeRef = useRef(scopeKey);

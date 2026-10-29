@@ -95,13 +95,34 @@ async function createRequest(
   return response.json() as Promise<PlayerRequestDto>;
 }
 
-test("UIX644_PLAYER_REQUEST_NATIVE_DRAFT: player Gravity selects keep keyboard focus and draft through compact resize", async ({
+test("UIX644_PLAYER_REQUEST_NATIVE_DRAFT: player opens requests from an activity card while nav stays hidden, then Gravity selects keep keyboard focus and draft through compact resize", async ({
   page,
   gmToken,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const playerSnapshot = await signInAsPlayer(page, gmToken);
-  await openWorkspaceSection(page, "Мои заявки");
+  await createRequest(page, {
+    title: "Карточка для входа",
+    body: "Открыть раздел из ленты.",
+    horizon: "NOW",
+    audience: "PUBLIC",
+  });
+  await page.reload();
+  await expect(
+    page.locator('.workspace-nav [data-workspace="player-requests"]'),
+  ).toHaveCount(0);
+  await page.locator("#compact-nav-menu").click();
+  const campaignMenu = page.getByRole("region", { name: "Меню кампании" });
+  await expect(campaignMenu).toBeVisible();
+  await expect(
+    campaignMenu.getByRole("button", { name: "Мои заявки", exact: true }),
+  ).toHaveCount(0);
+  await page.locator("#compact-nav-journal").click();
+  const requestCard = page
+    .locator(".request-chat-card")
+    .filter({ hasText: "Карточка для входа" });
+  await expect(requestCard).toBeVisible();
+  await requestCard.getByRole("button", { name: "Открыть заявки" }).click();
   const dialog = page.getByRole("dialog", { name: "Мои заявки" });
   await expect(dialog).toBeVisible();
 
