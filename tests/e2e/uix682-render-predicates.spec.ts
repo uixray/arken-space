@@ -229,7 +229,10 @@ for (const width of widths) {
 
     // C07: the roll fieldset keeps its content off the edges.
     const kind = form.getByRole("combobox", { name: "Тип записи" });
-    await kind.selectOption({ label: "Способность / заклинание" });
+    await kind.click();
+    await page
+      .getByRole("option", { name: "Способность / заклинание", exact: true })
+      .click();
     const rolls = form.locator("fieldset", {
       has: page.locator("legend", { hasText: /^Броски$/ }),
     });

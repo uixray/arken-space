@@ -461,7 +461,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       } else {
         await expect(select).toHaveCount(0);
         await expect(
-          panel.getByRole("button", { name: "Наблюдение", exact: true }),
+          panel.getByRole("button", { name: /^Наблюдение\s*1$/ }),
         ).toBeVisible();
         await expect(
           panel.getByRole("button", { name: /^Поиск следов\s*1$/ }),

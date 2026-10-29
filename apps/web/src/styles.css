@@ -6312,16 +6312,16 @@ body:has(.landing-shell) {
   padding: 2px;
   border-radius: 50%;
   border: 1px solid currentColor;
-  background: color-mix(in srgb, var(--surface-2) 82%, var(--accent));
+  background: var(--surface-2);
 }
 .map-toolbar .map-tool[data-tool="PING"][aria-pressed="true"] {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, #fff);
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
   box-shadow: 0 0 0 3px #111827;
 }
 .map-toolbar .map-tool[data-tool="PING"][aria-pressed="true"] > .arken-icon {
   background: var(--accent);
-  color: var(--text);
+  color: var(--color-accent-ink);
 }
 .map-toolbar .map-tool__label {
   margin: 0;
@@ -7763,6 +7763,9 @@ html[data-player-theme="classic-v1"] .asset-picker__tile:focus-visible {
   padding: 0;
   border: 0;
 }
+.map-dice-tray .dice-tray-panel__toolbar .roll-mode-control {
+  position: relative;
+}
 .dice-tray-panel__toolbar .roll-mode-segments button {
   min-width: 24px;
   min-height: 32px;
@@ -7848,10 +7851,6 @@ html[data-player-theme="classic-v1"] .asset-picker__tile:focus-visible {
 .map-dice-tray .dice-tray-panel__body {
   overflow-x: auto;
   overflow-y: hidden;
-}
-.map-dice-tray .dice-tray-panel__toolbar {
-  width: 100%;
-  flex-wrap: wrap;
 }
 .map-dice-tray .dice-tray-panel > p {
   margin: 4px 8px;
