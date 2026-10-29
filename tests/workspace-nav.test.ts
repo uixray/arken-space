@@ -24,17 +24,15 @@ describe("UIX-472 — состав разделов", () => {
   });
 
   it("оставляет игроку то, чем он пользуется", () => {
-    expect(ids(player)).toEqual(["characters", "tokens", "player-requests"]);
+    expect(ids(player)).toEqual(["characters", "tokens"]);
   });
 
-  it("называет заявки по-разному мастеру и игроку", () => {
-    // У мастера это очередь входящих, у игрока — свои отправленные.
+  it("оставляет заявки в навигации мастера, но скрывает пункт у игрока", () => {
+    // Игрок открывает заявку из карточки в ленте; раздел остаётся только у GM.
     expect(gm.find((item) => item.id === "player-requests")?.label).toBe(
       "Открытые заявки",
     );
-    expect(player.find((item) => item.id === "player-requests")?.label).toBe(
-      "Мои заявки",
-    );
+    expect(player.some((item) => item.id === "player-requests")).toBe(false);
   });
 
   it("показывает отчёты оператора только тому, кому они разрешены", () => {
