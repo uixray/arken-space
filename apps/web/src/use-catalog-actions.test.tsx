@@ -35,7 +35,7 @@ function fixture(load = vi.fn().mockResolvedValue(undefined)) {
   const { result } = renderHook(() =>
     useCatalogActions({ run, load, setError }),
   );
-  return { result, load, setError };
+  return { result, load, setError, run };
 }
 it("returns the committed catalog entry when only snapshot refresh fails", async () => {
   vi.mocked(api).mockResolvedValue(entry);
