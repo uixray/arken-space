@@ -2880,13 +2880,13 @@ describe("Pool B HTTP boundaries", () => {
       },
     });
     expect(forbidden.statusCode).toBe(403);
-    const privateActionId = crypto.randomUUID();
+    const forbiddenPrivateActionId = crypto.randomUUID();
     const privateBatch = await app.inject({
       method: "POST",
       url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
       headers: headers(secrets.player),
       payload: {
-        actionId: privateActionId,
+        actionId: forbiddenPrivateActionId,
         entryRevision: entry.revision,
         executeAll: true,
         visibility: "GM_ONLY",
@@ -2900,7 +2900,7 @@ describe("Pool B HTTP boundaries", () => {
         .where(
           inArray(schema.gameEvents.actionId, [
             forbiddenActionId,
-            privateActionId,
+            forbiddenPrivateActionId,
           ]),
         ),
     ).toHaveLength(0);
