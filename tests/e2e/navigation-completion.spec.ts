@@ -192,8 +192,22 @@ for (const role of ["GM", "PLAYER"] as const) {
       await expect(directActive).toHaveAttribute("aria-pressed", "true");
       if ((await more.count()) === 0) {
         // splitWorkspaceNav intentionally omits More when every item fits.
-        // Verify the complete PLAYER set remains present and keyboard-operable.
-        await expect(nav.locator(":scope > button")).toHaveCount(3);
+        // PLAYER navigation contains Characters and Tokens only; requests
+        // open from their activity card instead of a nav item.
+        if (role === "PLAYER") {
+          await expect(nav.locator(":scope > button")).toHaveCount(2);
+          await expect(
+            nav.locator(":scope > button[data-workspace='characters']"),
+          ).toHaveCount(1);
+          await expect(
+            nav.locator(":scope > button[data-workspace='tokens']"),
+          ).toHaveCount(1);
+          await expect(
+            nav.locator("[data-workspace='player-requests']"),
+          ).toHaveCount(0);
+        } else {
+          await expect(nav.locator(":scope > button")).toHaveCount(3);
+        }
         await directActive.focus();
         await page.keyboard.press("Enter");
         await expect(directActive).toBeFocused();

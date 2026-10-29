@@ -558,6 +558,7 @@ test("UIX-386 GM toolbar keeps icons and encounter states accessible", async ({
 
   activeSnapshot = structuredClone(snapshot);
   activeSnapshot.encounters = [];
+  activeSnapshot.campaign.battleActive = false;
   await page.reload();
 
   const now = "2026-08-21T08:00:00.000Z";
@@ -582,6 +583,10 @@ test("UIX-386 GM toolbar keeps icons and encounter states accessible", async ({
       updatedAt: now,
     },
   ];
+  await page.reload();
+  await expect(page.locator(".initiative-panel")).toHaveCount(0);
+
+  activeSnapshot.campaign.battleActive = true;
   await page.reload();
 
   const activeToolbar = page.getByRole("toolbar", {
