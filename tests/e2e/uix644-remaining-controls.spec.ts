@@ -158,7 +158,7 @@ test("UIX-644 PlayerRequests custom selectors retain keyboard focus and state at
       characterName: null,
       audience: "PUBLIC",
       horizon: "NOW",
-      status: "OPEN",
+      status: "SUBMITTED",
       title: "Откройте заявки из ленты",
       body: "Входная карточка для проверки полей.",
       resolutionNote: null,
