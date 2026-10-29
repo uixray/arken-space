@@ -6321,7 +6321,7 @@ body:has(.landing-shell) {
 }
 .map-toolbar .map-tool[data-tool="PING"][aria-pressed="true"] > .arken-icon {
   background: var(--accent);
-  color: var(--color-accent-ink);
+  color: var(--color-accent-ink, var(--surface));
 }
 .map-toolbar .map-tool__label {
   margin: 0;
