@@ -135,7 +135,7 @@ for (const role of ["GM", "PLAYER"] as const)
       const box = await secret.boundingBox();
       expect(box!.width).toBeGreaterThanOrEqual(width === 360 ? 44 : 24);
       expect(box!.height).toBeGreaterThanOrEqual(width === 360 ? 44 : 24);
-      if (width === 360) await page.locator("#compact-nav-journal").click();
+      if (width < 1024) await page.locator("#compact-nav-journal").click();
       const quick = page.getByRole("region", {
         name: "Панель быстрых бросков",
         exact: true,
@@ -225,12 +225,12 @@ for (const role of ["GM", "PLAYER"] as const)
         path: info.outputPath(`private-quickroll-${role}-${width}.png`),
       });
       await statsTab.click();
-      if (width === 360) await page.locator("#compact-nav-map").click();
+      if (width < 1024) await page.locator("#compact-nav-map").click();
       await expect(secret).toHaveAttribute("aria-pressed", "true");
       await secret.focus();
       await secret.press("Space");
       await expect(secret).toHaveAttribute("aria-pressed", "false");
-      if (width === 360) await page.locator("#compact-nav-journal").click();
+      if (width < 1024) await page.locator("#compact-nav-journal").click();
       await expect(warning).toHaveCount(0);
       await expect(
         quick.getByRole("button", { name: "Сила", exact: true }),

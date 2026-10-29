@@ -212,6 +212,43 @@ test("UIX-644 PlayerRequests custom selectors retain keyboard focus and state at
       return route.fulfill({ json: { posts: [], nextCursor: null } });
     if (path === "/api/operator/feedback/capability")
       return route.fulfill({ status: 403, json: { error: "FORBIDDEN" } });
+    if (path === "/api/chat/read" && route.request().method() === "POST") {
+      const read = route.request().postDataJSON() as {
+        threadId: string;
+        sequence: number;
+      };
+      const threadState = snapshot.chatThreadStates.find(
+        (state) => state.threadId === read.threadId,
+      );
+      if (
+        read.threadId !== threadId ||
+        !Number.isInteger(read.sequence) ||
+        read.sequence < 0 ||
+        !threadState
+      )
+        throw new Error("Unexpected chat read receipt in UIX-644 fixture");
+      const lastReadSequence = Math.min(
+        Math.max(threadState.lastReadSequence, read.sequence),
+        threadState.latestSequence,
+      );
+      snapshot.chatThreadStates = snapshot.chatThreadStates.map((state) =>
+        state.threadId === read.threadId
+          ? {
+              ...state,
+              lastReadSequence,
+              unreadCount: Math.max(0, state.latestSequence - lastReadSequence),
+            }
+          : state,
+      );
+      return route.fulfill({
+        json: {
+          campaignId: snapshot.campaign.id,
+          threadId: read.threadId,
+          lastReadSequence,
+          updatedAt: timestamp,
+        },
+      });
+    }
     if (route.request().method() !== "GET" && path !== "/api/client-logs")
       throw new Error(
         `Unexpected mutation in UIX-644 read-only test: ${route.request().method()} ${path}`,
