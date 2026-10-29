@@ -621,7 +621,7 @@ export function QuickRollPanel({
                   {(entry.data.rollActions?.length ?? 0) > 1 && (
                     <strong className="quick-roll-panel__ability-name">
                       <CatalogActionIcon
-                        kind={entry.data.rollActions[0]!.kind}
+                        kind={entry.data.rollActions?.[0]?.kind ?? "CUSTOM"}
                         semanticText={entry.name}
                       />
                       {entry.name}
@@ -644,7 +644,7 @@ export function QuickRollPanel({
                             kind={action.kind}
                             semanticText={`${entry.name} ${action.label}`}
                           />
-                          {entry.data.rollActions.length === 1
+                          {(entry.data.rollActions?.length ?? 0) === 1
                             ? entry.name
                             : action.label}
                         </Button>
