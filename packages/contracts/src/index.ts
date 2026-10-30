@@ -3488,6 +3488,8 @@ export const createWorldContentSchema = z
     gmOnlyText: z.string().max(50000).optional(),
     tags: worldContentTagsSchema.optional(),
     coverAssetId: z.string().uuid().nullable().optional(),
+    /** UIX-263: import provenance (source, retrieval, hash, rights, editorial). */
+    provenance: worldContentProvenanceSchema.optional(),
   })
   .strict();
 export type CreateWorldContent = z.infer<typeof createWorldContentSchema>;
@@ -3535,6 +3537,17 @@ export const addWorldContentMediaSchema = z
     actionId: z.string().uuid(),
     assetId: z.string().uuid(),
     caption: z.string().trim().min(1).max(500).nullable().optional(),
+    importPrecondition: z
+      .object({
+        expectedRevision: z.number().int().nonnegative(),
+        slug: worldContentSlugSchema,
+        type: worldContentTypeSchema,
+        name: z.string().min(1).max(200),
+        summary: z.string().max(2000),
+        provenance: worldContentProvenanceSchema,
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type AddWorldContentMedia = z.infer<typeof addWorldContentMediaSchema>;

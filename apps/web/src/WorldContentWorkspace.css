@@ -241,3 +241,21 @@
     overflow: visible;
   }
 }
+
+/* UIX-263: artbook import panel. */
+.world-artbook-import {
+  display: grid;
+  gap: var(--space-xs);
+  margin-block: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.world-artbook-import h3,
+.world-artbook-import p {
+  margin: 0;
+}
+.world-artbook-import__folder {
+  display: grid;
+  gap: 3px;
+}

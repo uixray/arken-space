@@ -58,6 +58,43 @@ export function registerAssetRoutes(
   db: Database,
   { broadcast }: { broadcast: (campaignId: string) => Promise<void> },
 ) {
+  app.get("/api/assets/upload-actions/:actionId", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const { actionId } = z
+      .object({ actionId: actionIdSchema })
+      .parse(request.params);
+    const event = await findAction(db, auth.campaignId, actionId);
+    if (
+      !event ||
+      event.type !== "asset.created" ||
+      event.entityType !== "asset" ||
+      !event.entityId ||
+      !event.payload ||
+      typeof event.payload !== "object" ||
+      !("assetId" in event.payload) ||
+      event.payload.assetId !== event.entityId ||
+      !("kind" in event.payload) ||
+      event.payload.kind !== "IMAGE"
+    )
+      return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
+    const [asset] = await db
+      .select()
+      .from(assets)
+      .where(eq(assets.id, event.entityId))
+      .limit(1);
+    if (
+      !asset ||
+      asset.campaignId !== auth.campaignId ||
+      asset.kind !== "IMAGE" ||
+      !["image/png", "image/jpeg", "image/webp"].includes(asset.mimeType)
+    )
+      return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
+    return reply.send(assetDto(asset));
+  });
+
   app.post("/api/assets/:sourceAssetId/token", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;

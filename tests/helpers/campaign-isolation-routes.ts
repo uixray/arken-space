@@ -87,6 +87,8 @@ export const CAMPAIGN_ROUTE_KEYS = [
   "POST /api/soundpad/packs/:packId/sounds",
   "DELETE /api/catalog/:id",
   "DELETE /api/assets/:id",
+  // GM-only, current-campaign upload replay lookup; covered by asset lifecycle HTTP integration probes.
+  "GET /api/assets/upload-actions/:actionId",
   "DELETE /api/character-media/:id",
   "DELETE /api/characters/:characterId/catalog/:id",
   "DELETE /api/drawings/:id",

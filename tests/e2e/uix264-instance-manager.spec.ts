@@ -223,7 +223,17 @@ for (const width of [390, 1280]) {
     await page.goto("/");
     await expect(page.locator(".app-shell")).toBeVisible();
     await openWorkspaceSection(page, "Редактор мира");
-    await page.getByRole("button", { name: "Порт" }).click();
+    const editor = page.getByRole("dialog", {
+      name: "Редактор мира",
+      exact: true,
+    });
+    const canonicalRow = editor
+      .locator(".world-content-workspace__list")
+      .getByRole("button")
+      .filter({ has: page.getByText(canonical.name, { exact: true }) });
+    await expect(canonicalRow).toHaveCount(1);
+    await expect(canonicalRow).toBeVisible();
+    await canonicalRow.click();
     const panel = page.getByRole("region", { name: "Экземпляры в кампании" });
     await expect(
       panel.getByText("В этой кампании пока нет экземпляров этой сущности."),

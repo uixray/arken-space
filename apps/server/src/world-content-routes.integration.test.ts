@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from "fastify";
+import { readFile } from "node:fs/promises";
 import cookie from "@fastify/cookie";
 import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
@@ -65,6 +66,19 @@ beforeAll(async () => {
     });
   app = Fastify();
   await app.register(cookie);
+  app.setErrorHandler((error, _request, reply) => {
+    const problem = error as Error & {
+      validation?: unknown;
+      statusCode?: number;
+    };
+    const isValidationError =
+      Boolean(problem.validation) || problem.name === "ZodError";
+    const statusCode = isValidationError ? 400 : (problem.statusCode ?? 500);
+    return reply.code(statusCode).send({
+      error: isValidationError ? "VALIDATION_ERROR" : "REQUEST_FAILED",
+      message: problem.message,
+    });
+  });
   registerWorldContentRoutes(app, db as never);
   await app.ready();
 }, 30_000);
@@ -99,16 +113,30 @@ async function publish(entityId: string, revision: number) {
     payload: { actionId: id(), revision, lifecycle: "PUBLISHED" },
   });
 }
-async function seedGalleryAsset(assetId: string) {
+async function seedGalleryAsset(
+  assetId: string,
+  options: {
+    campaignId?: string;
+    kind?: "MAP" | "TOKEN" | "PORTRAIT" | "IMAGE" | "AUDIO" | "DICE_FRAME";
+    mimeType?: string;
+  } = {},
+) {
+  const kind = options.kind ?? "IMAGE";
   await db.insert(schema.assets).values({
     id: assetId,
-    campaignId: ids.campaign,
-    uploadedByMembershipId: ids.gm,
-    kind: "IMAGE",
+    campaignId: options.campaignId ?? ids.campaign,
+    uploadedByMembershipId:
+      options.campaignId === ids.foreignCampaign ? ids.foreignPlayer : ids.gm,
+    kind,
+    audioPurpose: kind === "AUDIO" ? "MUSIC" : null,
     name: "World content gallery fixture",
     storageKey: `uix245-gallery/${assetId}`,
-    mimeType: "image/png",
+    mimeType:
+      options.mimeType ?? (kind === "AUDIO" ? "audio/mpeg" : "image/png"),
     sizeBytes: 128,
+    posterStorageKey:
+      kind === "DICE_FRAME" ? `uix245-gallery-poster/${assetId}` : null,
+    posterSizeBytes: kind === "DICE_FRAME" ? 64 : null,
   });
 }
 
@@ -897,6 +925,501 @@ describe("world content HTTP: GET media (UIX-245 stage 4)", () => {
 });
 
 describe("world content HTTP: media", () => {
+  it("keeps the importer row lock before media and action inserts in the same route transaction", async () => {
+    const source = await readFile(
+      new URL("./world-content-routes.ts", import.meta.url),
+      "utf8",
+    );
+    const mediaRouteStart = source.indexOf(
+      'app.post("/api/world-content/:id/media"',
+    );
+    const mediaRouteEnd = source.indexOf(
+      'app.patch("/api/world-content/:id/media/:mediaId"',
+      mediaRouteStart,
+    );
+    expect(mediaRouteStart).toBeGreaterThanOrEqual(0);
+    expect(mediaRouteEnd).toBeGreaterThan(mediaRouteStart);
+    const mediaRoute = source.slice(mediaRouteStart, mediaRouteEnd);
+    const transaction =
+      mediaRoute.match(/db\.transaction\s*\(\s*async\s*\(\s*tx\s*\)/)?.index ??
+      -1;
+    const lock = mediaRoute.indexOf('.for("update")');
+    const mediaInsert = mediaRoute.indexOf(".insert(worldContentMedia)");
+    const actionInsert = mediaRoute.indexOf(".insert(worldContentActions)");
+    expect(transaction).toBeGreaterThanOrEqual(0);
+    expect(lock).toBeGreaterThan(transaction);
+    expect(mediaInsert).toBeGreaterThan(lock);
+    expect(actionInsert).toBeGreaterThan(mediaInsert);
+  });
+
+  it("checks importer DRAFT preconditions after auth and before its transaction; committed ordering is explicit", async () => {
+    const provenance = {
+      sourceUrl: "https://arc.framer.photos/#uix263-ordering",
+      sourceExternalId: "artbook-import-ordering",
+      retrievedAt: new Date(0).toISOString(),
+      rawContentHash: "sha256:ordering",
+      attribution: "Reviewed source attribution",
+      rightsReviewStatus: "APPROVED",
+      editorialApprovalStatus: "PENDING",
+    };
+    let reachedSeam!: () => void;
+    let releaseSeam!: () => void;
+    const seamReached = new Promise<void>((resolve) => (reachedSeam = resolve));
+    let gate = new Promise<void>((resolve) => (releaseSeam = resolve));
+    const raceApp = Fastify();
+    await raceApp.register(cookie);
+    registerWorldContentRoutes(raceApp, db as never, {
+      beforeImporterMediaTransaction: async () => {
+        reachedSeam();
+        await gate;
+      },
+    });
+    await raceApp.ready();
+    try {
+      const entity = (await createEntity(secrets.gm, { provenance })).json();
+      const assetId = id();
+      await seedGalleryAsset(assetId);
+      const condition = {
+        expectedRevision: entity.revision,
+        slug: entity.slug,
+        type: entity.type,
+        name: entity.name,
+        summary: entity.summary,
+        provenance: entity.provenance,
+      };
+      const actionId = id();
+      const importerRequest = raceApp.inject({
+        method: "POST",
+        url: `/api/world-content/${entity.id}/media`,
+        headers: headers(secrets.gm),
+        payload: { actionId, assetId, importPrecondition: condition },
+      });
+      await seamReached;
+      const published = await raceApp.inject({
+        method: "POST",
+        url: `/api/world-content/${entity.id}/lifecycle`,
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: id(),
+          revision: entity.revision,
+          lifecycle: "PUBLISHED",
+        },
+      });
+      expect(published.statusCode, published.body).toBe(200);
+      releaseSeam();
+      gate = Promise.resolve();
+      const rejected = await importerRequest;
+      expect(rejected.statusCode, rejected.body).toBe(409);
+      expect(
+        await db
+          .select()
+          .from(schema.worldContentMedia)
+          .where(eq(schema.worldContentMedia.worldContentId, entity.id)),
+      ).toHaveLength(0);
+      expect(
+        await db
+          .select()
+          .from(schema.worldContentActions)
+          .where(eq(schema.worldContentActions.actionId, actionId)),
+      ).toHaveLength(0);
+
+      const editedFirst = (
+        await createEntity(secrets.gm, {
+          provenance: {
+            ...provenance,
+            sourceExternalId: "artbook-edit-first",
+          },
+        })
+      ).json();
+      const editedAsset = id();
+      await seedGalleryAsset(editedAsset);
+      const edit = await raceApp.inject({
+        method: "PATCH",
+        url: `/api/world-content/${editedFirst.id}`,
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: id(),
+          revision: editedFirst.revision,
+          name: "Changed after the importer preview",
+        },
+      });
+      expect(edit.statusCode, edit.body).toBe(200);
+      const staleAfterEdit = await raceApp.inject({
+        method: "POST",
+        url: `/api/world-content/${editedFirst.id}/media`,
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: id(),
+          assetId: editedAsset,
+          importPrecondition: {
+            ...condition,
+            expectedRevision: editedFirst.revision,
+            slug: editedFirst.slug,
+            type: editedFirst.type,
+            name: editedFirst.name,
+            summary: editedFirst.summary,
+            provenance: editedFirst.provenance,
+          },
+        },
+      });
+      expect(staleAfterEdit.statusCode, staleAfterEdit.body).toBe(409);
+
+      const second = (
+        await createEntity(secrets.gm, {
+          provenance: {
+            ...provenance,
+            sourceExternalId: "artbook-import-first",
+          },
+        })
+      ).json();
+      const secondAsset = id();
+      await seedGalleryAsset(secondAsset);
+      const importFirstActionId = id();
+      const attached = await raceApp.inject({
+        method: "POST",
+        url: `/api/world-content/${second.id}/media`,
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: importFirstActionId,
+          assetId: secondAsset,
+          importPrecondition: {
+            ...condition,
+            expectedRevision: second.revision,
+            slug: second.slug,
+            type: second.type,
+            name: second.name,
+            summary: second.summary,
+            provenance: second.provenance,
+          },
+        },
+      });
+      expect(attached.statusCode, attached.body).toBe(201);
+      const attachedEntity = await raceApp.inject({
+        method: "GET",
+        url: `/api/world-content/${second.id}`,
+        headers: headers(secrets.gm),
+      });
+      expect(attachedEntity.statusCode, attachedEntity.body).toBe(200);
+      const thenPublished = await raceApp.inject({
+        method: "POST",
+        url: `/api/world-content/${second.id}/lifecycle`,
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: id(),
+          revision: attachedEntity.json().revision,
+          lifecycle: "PUBLISHED",
+        },
+      });
+      expect(thenPublished.statusCode, thenPublished.body).toBe(200);
+      expect(thenPublished.json().lifecycle).toBe("PUBLISHED");
+      expect(
+        await db
+          .select()
+          .from(schema.worldContentMedia)
+          .where(eq(schema.worldContentMedia.worldContentId, second.id)),
+      ).toHaveLength(1);
+      expect(
+        await db
+          .select()
+          .from(schema.worldContentActions)
+          .where(eq(schema.worldContentActions.actionId, importFirstActionId)),
+      ).toHaveLength(1);
+    } finally {
+      releaseSeam();
+      await raceApp.close();
+    }
+  });
+  it("enforces atomic importer DRAFT/source/revision preconditions while preserving generic GM media edits", async () => {
+    const provenance = {
+      sourceUrl: "https://arc.framer.photos/#uix263-test",
+      sourceExternalId: "artbook-import-precondition",
+      retrievedAt: new Date(0).toISOString(),
+      rawContentHash: "sha256:test",
+      attribution: "Reviewed source attribution",
+      rightsReviewStatus: "APPROVED",
+      editorialApprovalStatus: "PENDING",
+    };
+    const entity = (await createEntity(secrets.gm, { provenance })).json();
+    const assetId = id();
+    await seedGalleryAsset(assetId);
+    const precondition = {
+      expectedRevision: entity.revision,
+      slug: entity.slug,
+      type: entity.type,
+      name: entity.name,
+      summary: entity.summary,
+      provenance: entity.provenance,
+    };
+    const add = (body: Record<string, unknown>) =>
+      app.inject({
+        method: "POST",
+        url: `/api/world-content/${entity.id}/media`,
+        headers: headers(secrets.gm),
+        payload: body,
+      });
+    const actionId = id();
+    const attached = await add({
+      actionId,
+      assetId,
+      importPrecondition: precondition,
+    });
+    expect(attached.statusCode, attached.body).toBe(201);
+    const duplicate = await add({
+      actionId,
+      assetId,
+      importPrecondition: precondition,
+    });
+    expect(duplicate.json()).toEqual({ duplicate: true });
+    expect(
+      await db
+        .select()
+        .from(schema.worldContentMedia)
+        .where(eq(schema.worldContentMedia.worldContentId, entity.id)),
+    ).toHaveLength(1);
+
+    const editedBeforeRetry = await app.inject({
+      method: "PATCH",
+      url: `/api/world-content/${entity.id}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        revision: entity.revision,
+        name: `${entity.name} changed after preview`,
+      },
+    });
+    expect(editedBeforeRetry.statusCode, editedBeforeRetry.body).toBe(200);
+    const actionCount = await db.select().from(schema.worldContentActions);
+    const staleRevision = await add({
+      actionId: id(),
+      assetId,
+      importPrecondition: precondition,
+    });
+    expect(staleRevision.statusCode).toBe(409);
+    for (const changed of [
+      { name: "Manual edit" },
+      { summary: "Changed source text" },
+      { provenance: { ...provenance, rawContentHash: "sha256:changed" } },
+    ]) {
+      const mismatch = await add({
+        actionId: id(),
+        assetId,
+        importPrecondition: { ...precondition, ...changed },
+      });
+      expect(mismatch.statusCode).toBe(409);
+    }
+    const partial = await add({
+      actionId: id(),
+      assetId,
+      importPrecondition: { expectedRevision: 0 },
+    });
+    expect(partial.statusCode).toBe(400);
+    expect(
+      await db
+        .select()
+        .from(schema.worldContentMedia)
+        .where(eq(schema.worldContentMedia.worldContentId, entity.id)),
+    ).toHaveLength(1);
+    expect(await db.select().from(schema.worldContentActions)).toHaveLength(
+      actionCount.length,
+    );
+
+    await publish(entity.id, editedBeforeRetry.json().revision);
+    const publishedPrecondition = await db.select().from(schema.worldContent);
+    const publishedEntity = publishedPrecondition.find(
+      (item) => item.id === entity.id,
+    )!;
+    const published = await add({
+      actionId: id(),
+      assetId,
+      importPrecondition: {
+        ...precondition,
+        expectedRevision: publishedEntity.revision,
+      },
+    });
+    expect(published.statusCode).toBe(409);
+    const genericAssetId = id();
+    await seedGalleryAsset(genericAssetId);
+    const generic = await app.inject({
+      method: "POST",
+      url: `/api/world-content/${entity.id}/media`,
+      headers: headers(secrets.gm),
+      payload: { actionId: id(), assetId: genericAssetId },
+    });
+    expect(generic.statusCode, generic.body).toBe(201);
+    const archived = await app.inject({
+      method: "POST",
+      url: `/api/world-content/${entity.id}/lifecycle`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        revision: publishedEntity.revision,
+        lifecycle: "ARCHIVED",
+      },
+    });
+    expect(archived.statusCode).toBe(200);
+    const archivedAttempt = await add({
+      actionId: id(),
+      assetId,
+      importPrecondition: {
+        ...precondition,
+        expectedRevision: archived.json().revision,
+      },
+    });
+    expect(archivedAttempt.statusCode).toBe(409);
+
+    const rollbackEntity = (
+      await createEntity(secrets.gm, { provenance })
+    ).json();
+    const forcedActionId = id();
+    const constraintName = `test_fail_media_action_${forcedActionId.replaceAll("-", "")}`;
+    await database.exec(
+      `ALTER TABLE world_content_actions ADD CONSTRAINT ${constraintName} CHECK (action_id <> '${forcedActionId}'::uuid)`,
+    );
+    try {
+      const failed = await app.inject({
+        method: "POST",
+        url: `/api/world-content/${rollbackEntity.id}/media`,
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: forcedActionId,
+          assetId: genericAssetId,
+          importPrecondition: {
+            expectedRevision: rollbackEntity.revision,
+            slug: rollbackEntity.slug,
+            type: rollbackEntity.type,
+            name: rollbackEntity.name,
+            summary: rollbackEntity.summary,
+            provenance: rollbackEntity.provenance,
+          },
+        },
+      });
+      expect(failed.statusCode).toBe(500);
+      expect(
+        await db
+          .select()
+          .from(schema.worldContentMedia)
+          .where(
+            eq(schema.worldContentMedia.worldContentId, rollbackEntity.id),
+          ),
+      ).toHaveLength(0);
+      expect(
+        await db
+          .select()
+          .from(schema.worldContentActions)
+          .where(eq(schema.worldContentActions.actionId, forcedActionId)),
+      ).toHaveLength(0);
+    } finally {
+      await database.exec(
+        `ALTER TABLE world_content_actions DROP CONSTRAINT ${constraintName}`,
+      );
+    }
+    const player = await app.inject({
+      method: "POST",
+      url: `/api/world-content/${entity.id}/media`,
+      headers: headers(secrets.player),
+      payload: { actionId: id(), assetId: genericAssetId },
+    });
+    expect(player.statusCode).toBe(403);
+  });
+
+  it("accepts campaign-owned image-compatible kinds and rejects missing, foreign, and non-image references", async () => {
+    const entity = (await createEntity(secrets.gm)).json();
+    const supported = [
+      "MAP",
+      "TOKEN",
+      "PORTRAIT",
+      "IMAGE",
+      "DICE_FRAME",
+    ] as const;
+    for (const kind of supported) {
+      const assetId = id();
+      await seedGalleryAsset(assetId, { kind, mimeType: "image/webp" });
+      const create = await createEntity(secrets.gm, {
+        slug: `kind-${kind.toLowerCase().replaceAll("_", "-")}-${id()}`,
+        coverAssetId: assetId,
+      });
+      expect(create.statusCode, `${kind} create: ${create.body}`).toBe(201);
+      const latestEntity = await app.inject({
+        method: "GET",
+        url: `/api/world-content/${entity.id}`,
+        headers: headers(secrets.gm),
+      });
+      const patch = await app.inject({
+        method: "PATCH",
+        url: `/api/world-content/${entity.id}`,
+        headers: headers(secrets.gm),
+        payload: {
+          actionId: id(),
+          revision: latestEntity.json().revision,
+          coverAssetId: assetId,
+        },
+      });
+      expect(patch.statusCode, `${kind} patch: ${patch.body}`).toBe(200);
+      const attached = await app.inject({
+        method: "POST",
+        url: `/api/world-content/${entity.id}/media`,
+        headers: headers(secrets.gm),
+        payload: { actionId: id(), assetId },
+      });
+      expect(attached.statusCode, `${kind} media: ${attached.body}`).toBe(201);
+    }
+
+    const foreignId = id();
+    const audioId = id();
+    const wrongMimeId = id();
+    await seedGalleryAsset(foreignId, { campaignId: ids.foreignCampaign });
+    await seedGalleryAsset(audioId, { kind: "AUDIO" });
+    await seedGalleryAsset(wrongMimeId, { mimeType: "application/pdf" });
+    const invalidIds = [foreignId, audioId, wrongMimeId, id()];
+    for (const assetId of invalidIds) {
+      const create = await createEntity(secrets.gm, {
+        slug: `bad-cover-${id()}`,
+        coverAssetId: assetId,
+      });
+      expect(create.statusCode, create.body).toBe(422);
+      const patch = await app.inject({
+        method: "PATCH",
+        url: `/api/world-content/${entity.id}`,
+        headers: headers(secrets.gm),
+        payload: { actionId: id(), revision: 0, coverAssetId: assetId },
+      });
+      expect(patch.statusCode, patch.body).toBe(422);
+      const media = await app.inject({
+        method: "POST",
+        url: `/api/world-content/${entity.id}/media`,
+        headers: headers(secrets.gm),
+        payload: { actionId: id(), assetId },
+      });
+      expect(media.statusCode, media.body).toBe(422);
+    }
+
+    const player = await app.inject({
+      method: "POST",
+      url: `/api/world-content/${entity.id}/media`,
+      headers: headers(secrets.player),
+      payload: { actionId: id(), assetId: foreignId },
+    });
+    expect(player.statusCode).toBe(403);
+    const currentBeforeClear = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${entity.id}`,
+      headers: headers(secrets.gm),
+    });
+    const clear = await app.inject({
+      method: "PATCH",
+      url: `/api/world-content/${entity.id}`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: id(),
+        revision: currentBeforeClear.json().revision,
+        coverAssetId: null,
+      },
+    });
+    expect(clear.statusCode, clear.body).toBe(200);
+    expect(clear.json().coverAssetId).toBeNull();
+    expect(clear.json().revision).toBe(currentBeforeClear.json().revision + 1);
+  });
+
   it("attaches, reorders/recaptions, and removes gallery entries", async () => {
     const entity = (await createEntity(secrets.gm)).json();
     const assetId = id();
@@ -947,5 +1470,30 @@ describe("world content HTTP: media", () => {
       payload: { actionId: id(), caption: "Gone" },
     });
     expect(missing.statusCode).toBe(404);
+  });
+});
+
+describe("world content HTTP: import provenance (UIX-263)", () => {
+  it("stores provenance on create and returns it to the GM only", async () => {
+    const provenance = {
+      sourceUrl: "https://arc.framer.photos/#panteon",
+      sourceExternalId: "artbook-yaro",
+      retrievedAt: "2026-10-22T00:00:00.000Z",
+      rawContentHash: "sha256:abc",
+      attribution: "Вселенная — автор",
+      rightsReviewStatus: "APPROVED",
+      editorialApprovalStatus: "PENDING",
+    } as const;
+    const created = await createEntity(secrets.gm, { provenance });
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json()).toMatchObject({ lifecycle: "DRAFT", provenance });
+    await publish(created.json().id, created.json().revision);
+    const player = await app.inject({
+      method: "GET",
+      url: `/api/world-content/${created.json().id}`,
+      headers: headers(secrets.player),
+    });
+    expect(player.statusCode).toBe(200);
+    expect(player.body).not.toContain("arc.framer.photos");
   });
 });
