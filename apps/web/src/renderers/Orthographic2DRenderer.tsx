@@ -929,6 +929,17 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     setRulerDraftState(null);
   }, [props.tool, props.socket, props.scene.id]);
   useEffect(() => {
+    const sceneId = props.scene.id;
+    const socket = props.socket;
+    return () => {
+      // App keys this renderer by scene id, so a scene switch unmounts the
+      // active drag instead of changing props on the existing instance.
+      if (!rulerDraftRef.current) return;
+      socket?.emit("ruler:clear", { sceneId });
+      rulerDraftRef.current = null;
+    };
+  }, [props.scene.id, props.socket]);
+  useEffect(() => {
     if (props.tool !== "RULER") return;
     // UIX-381: commit the current live point as a waypoint on Ctrl keydown
     // (not Ctrl+click -- the pointer button stays held down for the whole
