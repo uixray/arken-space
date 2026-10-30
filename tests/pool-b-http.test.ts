@@ -2,8 +2,8 @@ import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { and, desc, eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "../packages/db/src/schema.js";
 import { createDrawingSchema } from "../packages/contracts/src/index.js";
 import { registerRoutes } from "../apps/server/src/routes.js";
@@ -2786,6 +2786,579 @@ describe("Pool B HTTP boundaries", () => {
     expect(failureEvents).toHaveLength(0);
   });
 
+  it("executes every configured ability roll in one ordered action, cost, and use receipt", async () => {
+    await db
+      .update(schema.characters)
+      .set({ resources: { physicalPower: { current: 5, maximum: 5 } } })
+      .where(eq(schema.characters.id, ids.character));
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/catalog",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        kind: "ABILITY",
+        name: "Twin action",
+        description: "Two ordered rolls, one activation",
+        data: {
+          uses: { current: 2, max: 2, recharge: "SHORT_REST" },
+          rollActions: [
+            {
+              id: "damage",
+              kind: "DAMAGE",
+              label: "Damage",
+              dice: "1d6",
+              order: 2,
+              advantage: false,
+              consumeUse: false,
+              cost: { type: "physical", amount: 1 },
+              modifiers: [],
+            },
+            {
+              id: "hit",
+              kind: "HIT",
+              label: "Hit",
+              dice: "1d20",
+              order: 1,
+              advantage: false,
+              consumeUse: true,
+              cost: { type: "physical", amount: 1 },
+              modifiers: [],
+            },
+          ],
+        },
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const assigned = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        catalogEntryId: created.json().id,
+      },
+    });
+    expect(assigned.statusCode).toBe(201);
+    const entry = assigned.json();
+    const actionId = crypto.randomUUID();
+    const execute = () =>
+      app.inject({
+        method: "POST",
+        url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+        headers: headers(secrets.player),
+        payload: {
+          actionId,
+          entryRevision: entry.revision,
+          executeAll: true,
+          visibility: "PUBLIC",
+        },
+      });
+    const staleRevision = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        entryRevision: entry.revision + 1,
+        executeAll: true,
+        visibility: "PUBLIC",
+      },
+    });
+    expect(staleRevision.statusCode).toBe(409);
+    expect(staleRevision.json()).toMatchObject({ error: "ENTRY_CONFLICT" });
+    const forbiddenActionId = crypto.randomUUID();
+    const forbidden = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+      headers: headers(secrets.foreignPlayer),
+      payload: {
+        actionId: forbiddenActionId,
+        entryRevision: entry.revision,
+        executeAll: true,
+        visibility: "PUBLIC",
+      },
+    });
+    expect(forbidden.statusCode).toBe(403);
+    const forbiddenPrivateActionId = crypto.randomUUID();
+    const privateBatch = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: forbiddenPrivateActionId,
+        entryRevision: entry.revision,
+        executeAll: true,
+        visibility: "GM_ONLY",
+      },
+    });
+    expect(privateBatch.statusCode).toBe(403);
+    expect(
+      await db
+        .select()
+        .from(schema.gameEvents)
+        .where(
+          inArray(schema.gameEvents.actionId, [
+            forbiddenActionId,
+            forbiddenPrivateActionId,
+          ]),
+        ),
+    ).toHaveLength(0);
+    const [first, concurrentReplay] = await Promise.all([execute(), execute()]);
+    expect([first.statusCode, concurrentReplay.statusCode].sort()).toEqual([
+      200, 201,
+    ]);
+    const applied = [first.json(), concurrentReplay.json()].find(
+      (payload) => payload.duplicate !== true,
+    );
+    expect([first.json(), concurrentReplay.json()]).toContainEqual({
+      duplicate: true,
+    });
+    expect(applied?.skillCard).toMatchObject({
+      action: null,
+      formula: null,
+      result: null,
+      rolls: [
+        { action: { id: "hit" }, formula: "1d20" },
+        { action: { id: "damage" }, formula: "1d6" },
+      ],
+      uses: { before: 2, after: 1, max: 2, recharge: "SHORT_REST" },
+      activationCost: { type: "physical", amount: 1, before: 5, after: 4 },
+    });
+    const [character] = await db
+      .select({ resources: schema.characters.resources })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    expect(character!.resources).toMatchObject({
+      physicalPower: { current: 4, maximum: 5 },
+    });
+    const receipts = await db
+      .select()
+      .from(schema.gameEvents)
+      .where(eq(schema.gameEvents.actionId, actionId));
+    expect(receipts).toHaveLength(1);
+    const messages = await db
+      .select()
+      .from(schema.chatMessages)
+      .where(eq(schema.chatMessages.id, receipts[0]!.entityId));
+    expect(messages).toHaveLength(1);
+    const [currentEntry] = await db
+      .select({ revision: schema.characterCatalogEntries.revision })
+      .from(schema.characterCatalogEntries)
+      .where(eq(schema.characterCatalogEntries.id, entry.id));
+    const privateActionId = crypto.randomUUID();
+    const privateExecution = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: privateActionId,
+        entryRevision: currentEntry!.revision,
+        executeAll: true,
+        visibility: "GM_ONLY",
+      },
+    });
+    expect(privateExecution.statusCode).toBe(201);
+    expect(privateExecution.json().skillCard).toMatchObject({
+      rolls: [{ action: { id: "hit" } }, { action: { id: "damage" } }],
+      uses: { before: 1, after: 0, max: 2 },
+      activationCost: { type: "physical", amount: 1, before: 4, after: 3 },
+    });
+    const privateMessageId = privateExecution.json().messageId;
+    const playerSnapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.player),
+    });
+    const gmSnapshot = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.gm),
+    });
+    expect(
+      playerSnapshot
+        .json()
+        .messages.some(
+          (message: { id: string }) => message.id === privateMessageId,
+        ),
+    ).toBe(false);
+    expect(
+      gmSnapshot
+        .json()
+        .messages.find(
+          (message: { id: string }) => message.id === privateMessageId,
+        )?.skillCard,
+    ).toMatchObject({
+      execution: "EXECUTED",
+      rolls: [{ action: { id: "hit" } }, { action: { id: "damage" } }],
+    });
+  });
+
+  it("fails closed for an all-roll activation with conflicting legacy costs", async () => {
+    await db
+      .update(schema.characters)
+      .set({ resources: { physicalPower: { current: 5, maximum: 5 } } })
+      .where(eq(schema.characters.id, ids.character));
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/catalog",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        kind: "ABILITY",
+        name: "Conflicting costs",
+        description: "Requires an explicit shared cost",
+        data: {
+          rollActions: [
+            {
+              id: "hit",
+              order: 0,
+              kind: "HIT",
+              label: "Hit",
+              dice: "1d20",
+              modifiers: [],
+              cost: { type: "physical", amount: 1 },
+            },
+            {
+              id: "damage",
+              order: 1,
+              kind: "DAMAGE",
+              label: "Damage",
+              dice: "1d6",
+              modifiers: [],
+              cost: { type: "physical", amount: 2 },
+            },
+          ],
+        },
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const assigned = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        catalogEntryId: created.json().id,
+      },
+    });
+    expect(assigned.statusCode).toBe(201);
+    const entry = assigned.json();
+    const actionId = crypto.randomUUID();
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId,
+        entryRevision: entry.revision,
+        executeAll: true,
+        visibility: "PUBLIC",
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "ABILITY_ACTION_COST_MISMATCH",
+      message: "Укажите общую стоимость способности",
+    });
+    expect(
+      await db
+        .select()
+        .from(schema.gameEvents)
+        .where(eq(schema.gameEvents.actionId, actionId)),
+    ).toHaveLength(0);
+    const freeCreated = await app.inject({
+      method: "POST",
+      url: "/api/catalog",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        kind: "ABILITY",
+        name: "Explicit free cost override",
+        description: "An explicit null cost overrides legacy action costs",
+        data: {
+          usageCost: null,
+          rollActions: [
+            {
+              id: "hit",
+              order: 0,
+              kind: "HIT",
+              label: "Hit",
+              dice: "1d20",
+              modifiers: [],
+              cost: { type: "physical", amount: 1 },
+            },
+            {
+              id: "damage",
+              order: 1,
+              kind: "DAMAGE",
+              label: "Damage",
+              dice: "1d6",
+              modifiers: [],
+              cost: { type: "physical", amount: 2 },
+            },
+          ],
+        },
+      },
+    });
+    expect(freeCreated.statusCode).toBe(201);
+    const freeAssigned = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        catalogEntryId: freeCreated.json().id,
+      },
+    });
+    expect(freeAssigned.statusCode).toBe(201);
+    const freeEntry = freeAssigned.json();
+    const freeExecution = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${freeEntry.id}/roll`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        entryRevision: freeEntry.revision,
+        executeAll: true,
+        visibility: "PUBLIC",
+      },
+    });
+    expect(freeExecution.statusCode).toBe(201);
+    expect(freeExecution.json().skillCard).toMatchObject({
+      rolls: [{ action: { id: "hit" } }, { action: { id: "damage" } }],
+      activationCost: null,
+    });
+    const paidCreated = await app.inject({
+      method: "POST",
+      url: "/api/catalog",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        kind: "ABILITY",
+        name: "Explicit paid cost override",
+        description: "The configured ability cost is charged once",
+        data: {
+          usageCost: { type: "physical", amount: 1 },
+          rollActions: [
+            {
+              id: "hit",
+              order: 0,
+              kind: "HIT",
+              label: "Hit",
+              dice: "1d20",
+              modifiers: [],
+              cost: { type: "physical", amount: 2 },
+            },
+            {
+              id: "damage",
+              order: 1,
+              kind: "DAMAGE",
+              label: "Damage",
+              dice: "1d6",
+              modifiers: [],
+              cost: { type: "physical", amount: 3 },
+            },
+          ],
+        },
+      },
+    });
+    const paidAssigned = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        catalogEntryId: paidCreated.json().id,
+      },
+    });
+    const paidEntry = paidAssigned.json();
+    const paidExecution = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${paidEntry.id}/roll`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        entryRevision: paidEntry.revision,
+        executeAll: true,
+        visibility: "PUBLIC",
+      },
+    });
+    expect(paidExecution.statusCode).toBe(201);
+    expect(paidExecution.json().skillCard).toMatchObject({
+      rolls: [{ action: { id: "hit" } }, { action: { id: "damage" } }],
+      activationCost: { type: "physical", amount: 1, before: 5, after: 4 },
+    });
+  });
+
+  it("does not persist a batch or spend resources when a later roll cannot resolve its modifier", async () => {
+    await db
+      .update(schema.characters)
+      .set({ resources: { physicalPower: { current: 4, maximum: 4 } } })
+      .where(eq(schema.characters.id, ids.character));
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/catalog",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        kind: "ABILITY",
+        name: "Late invalid modifier",
+        description: "Second configured roll is invalid for this character",
+        data: {
+          uses: { current: 1, max: 1, recharge: "DAY" },
+          rollActions: [
+            {
+              id: "hit",
+              kind: "HIT",
+              label: "Hit",
+              dice: "1d20",
+              order: 0,
+              advantage: false,
+              consumeUse: true,
+              cost: { type: "physical", amount: 2 },
+              modifiers: [],
+            },
+            {
+              id: "damage",
+              kind: "DAMAGE",
+              label: "Damage",
+              dice: "1d6",
+              order: 1,
+              advantage: false,
+              consumeUse: false,
+              modifiers: [{ type: "ENTRY_VALUE", key: "missing" }],
+            },
+          ],
+        },
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const assigned = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        catalogEntryId: created.json().id,
+      },
+    });
+    const entry = assigned.json();
+    const actionId = crypto.randomUUID();
+    const messagesBefore = await db
+      .select({ id: schema.chatMessages.id })
+      .from(schema.chatMessages)
+      .where(eq(schema.chatMessages.campaignId, ids.campaign));
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId,
+        entryRevision: entry.revision,
+        executeAll: true,
+        visibility: "PUBLIC",
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: "MISSING_MODIFIER_SOURCE" });
+    const [character] = await db
+      .select({ resources: schema.characters.resources })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    expect(character!.resources).toMatchObject({
+      physicalPower: { current: 4, maximum: 4 },
+    });
+    const [unchangedEntry] = await db
+      .select({ data: schema.characterCatalogEntries.data })
+      .from(schema.characterCatalogEntries)
+      .where(eq(schema.characterCatalogEntries.id, entry.id));
+    expect(unchangedEntry!.data).toMatchObject({
+      uses: { current: 1, max: 1 },
+    });
+    expect(
+      await db
+        .select()
+        .from(schema.gameEvents)
+        .where(eq(schema.gameEvents.actionId, actionId)),
+    ).toHaveLength(0);
+    const messagesAfter = await db
+      .select({ id: schema.chatMessages.id })
+      .from(schema.chatMessages)
+      .where(eq(schema.chatMessages.campaignId, ids.campaign));
+    expect(messagesAfter).toHaveLength(messagesBefore.length);
+  });
+
+  it("rejects a free batch when the entry changes after preflight but before its transaction lock", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/catalog",
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        kind: "ABILITY",
+        name: "Free revision race",
+        description: "An entry edit must win over stale free activation",
+        data: { usageCost: null, rollActions: [] },
+      },
+    });
+    const assigned = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog`,
+      headers: headers(secrets.gm),
+      payload: {
+        actionId: crypto.randomUUID(),
+        catalogEntryId: created.json().id,
+      },
+    });
+    const entry = assigned.json();
+    const actionId = crypto.randomUUID();
+    const messagesBefore = await db
+      .select({ id: schema.chatMessages.id })
+      .from(schema.chatMessages)
+      .where(eq(schema.chatMessages.campaignId, ids.campaign));
+    const transact = db.transaction.bind(db);
+    const transactionSpy = vi.spyOn(db, "transaction");
+    transactionSpy.mockImplementationOnce(async (callback) => {
+      await db
+        .update(schema.characterCatalogEntries)
+        .set({ revision: entry.revision + 1 })
+        .where(eq(schema.characterCatalogEntries.id, entry.id));
+      return transact(callback);
+    });
+    const response = await app
+      .inject({
+        method: "POST",
+        url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+        headers: headers(secrets.player),
+        payload: {
+          actionId,
+          entryRevision: entry.revision,
+          executeAll: true,
+          visibility: "PUBLIC",
+        },
+      })
+      .finally(() => transactionSpy.mockRestore());
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: "ENTRY_CONFLICT" });
+    const [unchangedEntry] = await db
+      .select({ revision: schema.characterCatalogEntries.revision })
+      .from(schema.characterCatalogEntries)
+      .where(eq(schema.characterCatalogEntries.id, entry.id));
+    expect(unchangedEntry!.revision).toBe(entry.revision + 1);
+    expect(
+      await db
+        .select()
+        .from(schema.gameEvents)
+        .where(eq(schema.gameEvents.actionId, actionId)),
+    ).toHaveLength(0);
+    const messagesAfter = await db
+      .select({ id: schema.chatMessages.id })
+      .from(schema.chatMessages)
+      .where(eq(schema.chatMessages.campaignId, ids.campaign));
+    expect(messagesAfter).toHaveLength(messagesBefore.length);
+  });
+
   it("treats absent and null ability costs as free, shares free, and debits an explicit cost once", async () => {
     await db
       .update(schema.characters)
@@ -2856,6 +3429,9 @@ describe("Pool B HTTP boundaries", () => {
         headers: headers(secrets.player),
         payload: {
           actionId: crypto.randomUUID(),
+          ...(name === "Null cost"
+            ? { executeAll: true, entryRevision: entry.revision }
+            : {}),
           visibility: "PUBLIC",
         },
       });

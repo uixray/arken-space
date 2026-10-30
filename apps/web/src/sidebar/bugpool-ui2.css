@@ -73,6 +73,19 @@
   vertical-align: -0.15em;
 }
 
+.character-action-card__action--primary code {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.skill-chat-card__rolls,
+.skill-chat-card__roll {
+  display: grid;
+  gap: var(--space-xs, 0.35rem);
+  min-width: 0;
+}
+
 .activity-prepared-actions-slot:empty {
   display: none;
 }

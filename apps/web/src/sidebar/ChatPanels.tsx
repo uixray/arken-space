@@ -330,6 +330,27 @@ function ChatMessageBodyComponent({
             active={isActive ?? false}
           />
         }
+        renderRollFrame={(rollResult) => {
+          const rollCritical = getDiceCritical(rollResult);
+          return (
+            <OutcomeFrame
+              frame={
+                rollResult.frame ??
+                (rollCritical
+                  ? {
+                      setKey: "ARKEN_CRITICAL_V1",
+                      frameKey:
+                        rollCritical.kind === "success"
+                          ? "critical-success"
+                          : "critical-failure",
+                    }
+                  : null)
+              }
+              styleFrame={rollResult.styleFrame ?? null}
+              active={isActive ?? false}
+            />
+          );
+        }}
         sourceRemoved={
           skillCard.entry.sourceRemoved ||
           Boolean(
@@ -909,10 +930,11 @@ export function ActivityPanel({
                   Физические кубы
                 </FormInput>
               }
-              onEntryAction={(entry, mode, rollActionId) =>
+              onEntryAction={(entry, mode, rollActionId, executeAll) =>
                 catalogActions.onRollEntry(rollCharacter.id, entry.id, {
                   mode,
                   rollActionId,
+                  ...(executeAll ? { executeAll: true } : {}),
                   entryRevision: entry.revision,
                 })
               }
