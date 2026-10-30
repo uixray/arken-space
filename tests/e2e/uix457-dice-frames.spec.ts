@@ -85,12 +85,17 @@ async function signInAsGm(page: Page, token: string) {
 async function openAppearance(page: Page) {
   if (await page.locator("#compact-nav-menu").isVisible()) {
     await page.locator("#compact-nav-menu").click();
-    await page.getByRole("button", { name: "Оформление и тема" }).click();
+    await page.getByRole("button", { name: "Тема и рамка бросков" }).click();
   } else {
     await page.locator(".account-menu > summary").click();
-    await page.getByRole("button", { name: "Оформление", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Тема и рамка бросков", exact: true })
+      .click();
   }
-  const dialog = page.getByRole("dialog", { name: "Оформление", exact: true });
+  const dialog = page.getByRole("dialog", {
+    name: "Тема и рамка бросков",
+    exact: true,
+  });
   await expect(dialog).toBeVisible();
   return dialog;
 }
