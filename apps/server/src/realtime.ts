@@ -1649,80 +1649,159 @@ export function registerRealtime(
       });
     });
 
-    // ruler:update and ruler:clear both hit the DB before broadcasting. If a
-    // drag's last ruler:update and the ruler:clear that follows it (e.g. from
-    // pressing Escape) are handled as two independent async callbacks, their
-    // DB lookups can resolve out of order, so the "clear" broadcast can beat
-    // the still-pending "update" broadcast across the wire. That leaves every
-    // client (including the one who cleared it) with a ruler:updated arriving
-    // after ruler:cleared, redrawing a stale line that nothing clears
-    // afterwards. Chaining both handlers on a single per-socket promise
-    // preserves the client's emit order in the broadcasts.
-    let rulerQueue: Promise<void> = Promise.resolve();
+    // Ruler drags can emit more updates than the DB relay can finish. Keep
+    // exactly one relay in flight, one pending clear barrier and one latest
+    // pending update. Intermediate pointer positions are disposable state,
+    // while the latest polyline keeps all committed Ctrl-waypoints. A later
+    // update cannot overwrite a required clear barrier; if it targets another
+    // scene, the active scene is cleared before the new ruler is broadcast.
+    type RulerRelayIntent =
+      | { kind: "update"; data: z.infer<typeof rulerUpdateSchema> }
+      | { kind: "clear"; sceneId: string; previousSceneId?: string };
+    let pendingRulerClear: Extract<
+      RulerRelayIntent,
+      { kind: "clear" }
+    > | null = null;
+    let pendingRulerUpdate: Extract<
+      RulerRelayIntent,
+      { kind: "update" }
+    > | null = null;
+    let inFlightRulerIntent: RulerRelayIntent | null = null;
+    let drainingRulerIntents = false;
 
-    socket.on("ruler:update", (input) => {
-      rulerQueue = rulerQueue.then(async () => {
-        const parsed = rulerUpdateSchema.safeParse(input);
-        if (!parsed.success) return;
-        await runCampaignCanvasRelay(db, auth.campaignId, async (tx) => {
-          const [scene] = await tx
-            .select({ id: scenes.id, grid: scenes.grid })
-            .from(scenes)
-            .where(
-              and(
-                eq(scenes.id, parsed.data.sceneId),
-                eq(scenes.campaignId, auth.campaignId),
+    const relayRulerIntent = async (intent: RulerRelayIntent) => {
+      if (!socket.connected) return;
+      await runCampaignCanvasRelay(db, auth.campaignId, async (tx) => {
+        const [scene] = await tx
+          .select({ id: scenes.id, grid: scenes.grid })
+          .from(scenes)
+          .where(
+            and(
+              eq(
+                scenes.id,
+                intent.kind === "update" ? intent.data.sceneId : intent.sceneId,
               ),
-            )
-            .limit(1);
-          if (!scene) return;
+              eq(scenes.campaignId, auth.campaignId),
+            ),
+          )
+          .limit(1);
+        if (!scene || !socket.connected) return;
+        if (intent.kind === "update") {
           const [member] = await tx
             .select({ rulerColor: memberships.rulerColor })
             .from(memberships)
             .where(eq(memberships.id, auth.membershipId))
             .limit(1);
           if (!socket.connected) return;
+          const previousSceneId = canvasEphemera.rulerSceneId;
+          if (previousSceneId && previousSceneId !== scene.id)
+            io.to(campaignRoom(auth.campaignId)).emit("ruler:cleared", {
+              sceneId: previousSceneId,
+              membershipId: auth.membershipId,
+            });
           canvasEphemera.rulerSceneId = scene.id;
           io.to(campaignRoom(auth.campaignId)).emit("ruler:updated", {
-            ...parsed.data,
+            ...intent.data,
             membershipId: auth.membershipId,
             displayName: auth.displayName,
             rulerColor: rulerColorKey(member?.rulerColor ?? null),
             distance: rulerPolylineDistance(
-              parsed.data.points,
+              intent.data.points,
               scene.grid.enabled ? scene.grid.size : 1,
             ),
           });
-        });
+          return;
+        }
+        const clearedSceneIds = new Set([
+          scene.id,
+          ...(intent.previousSceneId ? [intent.previousSceneId] : []),
+        ]);
+        if (
+          canvasEphemera.rulerSceneId &&
+          clearedSceneIds.has(canvasEphemera.rulerSceneId)
+        )
+          canvasEphemera.rulerSceneId = undefined;
+        for (const sceneId of clearedSceneIds)
+          io.to(campaignRoom(auth.campaignId)).emit("ruler:cleared", {
+            sceneId,
+            membershipId: auth.membershipId,
+          });
       });
+    };
+
+    const drainRulerIntents = async () => {
+      if (drainingRulerIntents) return;
+      drainingRulerIntents = true;
+      try {
+        while ((pendingRulerClear || pendingRulerUpdate) && socket.connected) {
+          const intent: RulerRelayIntent =
+            pendingRulerClear ?? pendingRulerUpdate!;
+          if (intent.kind === "clear") pendingRulerClear = null;
+          else pendingRulerUpdate = null;
+          inFlightRulerIntent = intent;
+          try {
+            await relayRulerIntent(intent);
+          } catch (error) {
+            log.warn(
+              {
+                errorKind: error instanceof Error ? error.name : typeof error,
+                campaignId: auth.campaignId,
+                membershipId: auth.membershipId,
+              },
+              "realtime.ruler_relay_failed",
+            );
+          } finally {
+            inFlightRulerIntent = null;
+          }
+        }
+      } finally {
+        drainingRulerIntents = false;
+        if ((pendingRulerClear || pendingRulerUpdate) && socket.connected)
+          void drainRulerIntents();
+      }
+    };
+    const enqueueRulerUpdate = (
+      data: z.infer<typeof rulerUpdateSchema>,
+    ) => {
+      pendingRulerUpdate = { kind: "update", data };
+      void drainRulerIntents();
+    };
+    const enqueueRulerClear = (sceneId: string) => {
+      const targetsKnownRuler =
+        canvasEphemera.rulerSceneId === sceneId ||
+        pendingRulerClear?.sceneId === sceneId ||
+        pendingRulerUpdate?.data.sceneId === sceneId ||
+        (inFlightRulerIntent?.kind === "update" &&
+          inFlightRulerIntent.data.sceneId === sceneId) ||
+        (inFlightRulerIntent?.kind === "clear" &&
+          inFlightRulerIntent.sceneId === sceneId);
+      if (!targetsKnownRuler) return;
+      const previousSceneId =
+        canvasEphemera.rulerSceneId !== sceneId
+          ? canvasEphemera.rulerSceneId
+          : undefined;
+      pendingRulerClear = {
+        kind: "clear",
+        sceneId,
+        ...(previousSceneId ? { previousSceneId } : {}),
+      };
+      if (pendingRulerUpdate?.data.sceneId === sceneId)
+        pendingRulerUpdate = null;
+      void drainRulerIntents();
+    };
+
+    socket.on("ruler:update", (input) => {
+      const parsed = rulerUpdateSchema.safeParse(input);
+      if (!parsed.success) return;
+      enqueueRulerUpdate(parsed.data);
     });
 
     socket.on("ruler:clear", (input) => {
-      rulerQueue = rulerQueue.then(async () => {
-        const parsed = z
-          .object({ sceneId: z.string().uuid() })
-          .safeParse(input);
-        if (!parsed.success) return;
-        if (canvasEphemera.rulerSceneId !== parsed.data.sceneId) return;
-        await runCampaignCanvasRelay(db, auth.campaignId, async (tx) => {
-          const [scene] = await tx
-            .select({ id: scenes.id })
-            .from(scenes)
-            .where(
-              and(
-                eq(scenes.id, parsed.data.sceneId),
-                eq(scenes.campaignId, auth.campaignId),
-              ),
-            )
-            .limit(1);
-          if (!scene) return;
-          canvasEphemera.rulerSceneId = undefined;
-          io.to(campaignRoom(auth.campaignId)).emit("ruler:cleared", {
-            sceneId: scene.id,
-            membershipId: auth.membershipId,
-          });
-        });
-      });
+      const parsed = z
+        .object({ sceneId: z.string().uuid() })
+        .safeParse(input);
+      if (!parsed.success) return;
+      enqueueRulerClear(parsed.data.sceneId);
     });
 
     socket.on("map:ping", async (input, ack) => {
@@ -1865,6 +1944,8 @@ export function registerRealtime(
     });
 
     socket.on("disconnect", (reason) => {
+      pendingRulerClear = null;
+      pendingRulerUpdate = null;
       log.info(
         {
           membershipId: auth.membershipId,

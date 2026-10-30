@@ -50,7 +50,13 @@ export function MediaPanel({
   );
   const [drafts, setDrafts] = useState<Partial<Record<AssetKind, File>>>({});
   const [uploading, setUploading] = useState<AssetKind | null>(null);
+  const [uploadErrors, setUploadErrors] = useState<
+    Partial<Record<AssetKind, string>>
+  >({});
   const [error, setError] = useState("");
+  const [deleteErrors, setDeleteErrors] = useState<
+    Partial<Record<string, string>>
+  >({});
   const [usageByAsset, setUsageByAsset] = useState<
     Record<string, AssetUsageResponseDto>
   >({});
@@ -88,6 +94,10 @@ export function MediaPanel({
     "AUDIO",
     "DICE_FRAME",
   ];
+  const updateDraft = (kind: AssetKind, file: File | undefined) => {
+    setDrafts((current) => ({ ...current, [kind]: file }));
+    setUploadErrors((current) => ({ ...current, [kind]: undefined }));
+  };
   const visibleKinds = kindOrder.filter((kind) =>
     snapshot.assets.some((asset) => asset.kind === kind),
   );
@@ -100,7 +110,7 @@ export function MediaPanel({
     if (!file) return;
     if (kind === "AUDIO" && !audioUploadPurpose) return;
     setUploading(kind);
-    setError("");
+    setUploadErrors((current) => ({ ...current, [kind]: undefined }));
     try {
       await onUpload(
         file,
@@ -110,10 +120,12 @@ export function MediaPanel({
           : undefined,
       );
       setDrafts((current) => ({ ...current, [kind]: undefined }));
+      setUploadErrors((current) => ({ ...current, [kind]: undefined }));
     } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Не удалось загрузить файл.",
-      );
+      setUploadErrors((current) => ({
+        ...current,
+        [kind]: formatApiError(reason, "Не удалось загрузить файл."),
+      }));
     } finally {
       setUploading(null);
     }
@@ -166,10 +178,15 @@ export function MediaPanel({
     if (!window.confirm(confirmation)) return;
     setDeletingAssetId(assetId);
     setError("");
+    setDeleteErrors((current) => ({ ...current, [assetId]: undefined }));
     try {
       await onDelete(assetId);
+      setDeleteErrors((current) => ({ ...current, [assetId]: undefined }));
     } catch (reason) {
-      setError(formatApiError(reason, "Не удалось удалить файл."));
+      setDeleteErrors((current) => ({
+        ...current,
+        [assetId]: formatApiError(reason, "Не удалось удалить файл."),
+      }));
       if (reason instanceof ApiError && reason.code === "ASSET_IN_USE")
         await checkUsage(assetId, false).catch(() => undefined);
     } finally {
@@ -201,11 +218,13 @@ export function MediaPanel({
           const status =
             uploading === kind
               ? "Файл загружается."
-              : uploading !== null
-                ? "Дождитесь завершения другой загрузки."
-                : drafts[kind]
-                  ? "Файл готов к загрузке."
-                  : "Сначала выберите файл.";
+              : uploadErrors[kind]
+                ? "Загрузка не удалась. Выбранный файл сохранен — повторите попытку."
+                : uploading !== null
+                  ? "Дождитесь завершения другой загрузки."
+                  : drafts[kind]
+                    ? "Файл готов к загрузке."
+                    : "Сначала выберите файл.";
           return (
             <section className="upload-section" key={kind}>
               {kind === "AUDIO" ? (
@@ -233,9 +252,7 @@ export function MediaPanel({
                     value={drafts[kind]}
                     hint="MP3 или OGG"
                     disabled={uploading !== null}
-                    onUpdate={(file) =>
-                      setDrafts((current) => ({ ...current, [kind]: file }))
-                    }
+                    onUpdate={(file) => updateDraft(kind, file)}
                   />
                 </>
               ) : (
@@ -253,9 +270,7 @@ export function MediaPanel({
                       : "PNG, JPEG или WebP"
                   }
                   disabled={uploading !== null}
-                  onUpdate={(file) =>
-                    setDrafts((current) => ({ ...current, [kind]: file }))
-                  }
+                  onUpdate={(file) => updateDraft(kind, file)}
                 />
               )}
               <p className="muted">
@@ -273,11 +288,16 @@ export function MediaPanel({
                 aria-describedby={statusId}
                 onClick={() => void upload(kind)}
               >
-                Загрузить
+                {uploadErrors[kind] ? "Повторить загрузку" : "Загрузить"}
               </Button>
               <p className="muted" id={statusId}>
                 {status}
               </p>
+              {uploadErrors[kind] && (
+                <p className="field-error" role="alert">
+                  {uploadErrors[kind]}
+                </p>
+              )}
             </section>
           );
         })}
@@ -521,6 +541,11 @@ export function MediaPanel({
                                 </div>
                               )}
                             </div>
+                          )}
+                          {deleteErrors[asset.id] && (
+                            <p className="field-error" role="alert">
+                              {deleteErrors[asset.id]}
+                            </p>
                           )}
                         </div>
                       </div>
