@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AssetDto, GameSnapshot } from "@arken/contracts";
-import { fireEvent, renderComponent, screen } from "../test-support/render";
+import {
+  act,
+  fireEvent,
+  renderComponent,
+  screen,
+} from "../test-support/render";
 import { normalizeClientDiceResult } from "../dice-result";
 import { DiceFramePicker } from "../DiceFramePicker";
 import { ChatMessageBody } from "./ChatPanels";
@@ -33,6 +38,8 @@ const rollMessage = (dice: Record<string, unknown>) =>
     createdAt: new Date().toISOString(),
   }) as unknown as GameSnapshot["messages"][number];
 
+afterEach(() => vi.unstubAllGlobals());
+
 describe("рамка-оформление броска", () => {
   it("анимирует только свежий бросок, история получает постер", () => {
     const { container, rerender } = renderComponent(
@@ -63,7 +70,19 @@ describe("рамка-оформление броска", () => {
     expect(container.querySelector("source")).toBeNull();
   });
 
-  it("уступает критической рамке", () => {
+  it("уступает критической рамке после реального для компонента IO допуска", async () => {
+    let observe!: IntersectionObserverCallback;
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          observe = callback;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     const { container } = renderComponent(
       <OutcomeFrame
         frame={{ setKey: "ARKEN_CRITICAL_V1", frameKey: "critical-success" }}
@@ -71,6 +90,19 @@ describe("рамка-оформление броска", () => {
         active
       />,
     );
+    const wrapper = container.querySelector(".outcome-frame")!;
+    await act(async () => {
+      observe(
+        [
+          {
+            target: wrapper,
+            isIntersecting: true,
+            intersectionRatio: 1,
+          } as IntersectionObserverEntry,
+        ],
+        {} as IntersectionObserver,
+      );
+    });
     expect(container.querySelectorAll("img")).toHaveLength(1);
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
       "/assets/frames/critical-success.png",

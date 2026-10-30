@@ -133,3 +133,26 @@
     grid-template-rows: minmax(220px, 1fr) minmax(220px, 1fr);
   }
 }
+
+/* UIX-245 step 5: discovered campaign instances of the article. */
+.world-encyclopedia-workspace__instances {
+  display: grid;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.world-encyclopedia-workspace__instances li {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: flex-start;
+}
+.world-encyclopedia-workspace__instances img {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+}
+.world-encyclopedia-workspace__instances p {
+  margin: 2px 0 0;
+}

@@ -21,6 +21,7 @@ import {
   validateSpellPackDraft,
   type SpellPackSummary,
 } from "./spell-schools-client";
+import { SpellReferenceImport } from "./SpellReferenceImport";
 import {
   createEmptySpellDraft,
   createPrerequisiteEdge,
@@ -702,6 +703,17 @@ export function SpellSchoolsWorkspace({
               </span>
             </button>
           ))}
+          <SpellReferenceImport
+            packs={packs}
+            disabled={busy || editorLocked || hasRecoveryCopy}
+            onImported={async (packId) => {
+              const list = await fetchSpellPackList();
+              setPacks(list);
+              const imported = list.find((pack) => pack.id === packId);
+              setNotice("Справочник школ Аркен-Хара загружен как референс.");
+              if (imported) await selectPack(imported);
+            }}
+          />
           <div className="spell-schools-new-pack">
             <h3>Новый черновик</h3>
             <label>

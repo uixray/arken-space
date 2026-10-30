@@ -14,8 +14,10 @@ import {
   deleteWorldContentInstanceSchema,
   updateWorldContentInstanceSchema,
   type WorldContentInstanceDto,
+  type WorldContentInstancePlayerDto,
 } from "@arken/contracts";
 import { requireAuth } from "./auth.js";
+import { worldContentPlayerVisibleIn } from "./world-content.js";
 
 /**
  * HTTP CRUD routes for campaign-scoped World Content instances (UIX-264,
@@ -23,7 +25,7 @@ import { requireAuth } from "./auth.js";
  * `world_content_instances` in `packages/db/src/schema.ts` for the full
  * architectural rationale.
  *
- * Entirely GM-only, entirely campaign-scoped (`auth.campaignId`, matching
+ * Writes are GM-only, everything is campaign-scoped (`auth.campaignId`, matching
  * `./encounters.ts`/`./character-media.ts`): a GM instances a canonical
  * entity into *their own* campaign only, and can never see or touch another
  * campaign's instances. Idempotency/audit follows the same
@@ -32,9 +34,10 @@ import { requireAuth } from "./auth.js";
  * `worldContentActions` — IS campaign-scoped, so `actionId` dedup here is
  * scoped per campaign (mirrors `gameEvents`/`action_journal`), not global.
  *
- * There is no player-facing projection in this stage (see
- * `worldContentInstanceDtoSchema`'s doc comment in `@arken/contracts`) — every
- * route below requires `auth.role === "GM"`.
+ * UIX-245 step 5: the list route also serves players — only instances the GM
+ * marked as discovered, of canon they can see in this campaign, without
+ * `gmNotes`/`currentLocationId` (`WorldContentInstancePlayerDto`). Every
+ * other route below requires `auth.role === "GM"`.
  */
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
@@ -82,6 +85,18 @@ function toDto(row: WorldContentInstanceRow): WorldContentInstanceDto {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+/** UIX-245 step 5: a discovered instance as its campaign's players see it. */
+function toPlayerDto(
+  row: WorldContentInstanceRow,
+): WorldContentInstancePlayerDto {
+  const {
+    gmNotes: _gmNotes,
+    currentLocationId: _currentLocationId,
+    ...visible
+  } = toDto(row);
+  return visible;
 }
 
 /** Campaign-scoped lookup, so a stale/foreign id 404s instead of leaking cross-campaign existence. */
@@ -203,18 +218,36 @@ export function registerWorldContentInstanceRoutes(
   app.get("/api/world-content-instances", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    if (auth.role !== "GM") return fail(reply, 403, "GM_REQUIRED");
     const query = listQuerySchema.parse(request.query);
     const conditions = [eq(worldContentInstances.campaignId, auth.campaignId)];
     if (query.worldContentId)
       conditions.push(
         eq(worldContentInstances.worldContentId, query.worldContentId),
       );
+    if (auth.role === "GM") {
+      const rows = await db
+        .select()
+        .from(worldContentInstances)
+        .where(and(...conditions));
+      return reply.send(rows.map(toDto));
+    }
+    // UIX-245 step 5: players read only discovered instances of canon they can
+    // see in this campaign; nothing else exists for them.
     const rows = await db
-      .select()
+      .select({ instance: worldContentInstances })
       .from(worldContentInstances)
-      .where(and(...conditions));
-    return reply.send(rows.map(toDto));
+      .innerJoin(
+        worldContent,
+        eq(worldContentInstances.worldContentId, worldContent.id),
+      )
+      .where(
+        and(
+          ...conditions,
+          eq(worldContentInstances.discovered, true),
+          worldContentPlayerVisibleIn(auth.campaignId),
+        ),
+      );
+    return reply.send(rows.map(({ instance }) => toPlayerDto(instance)));
   });
 
   app.get("/api/world-content-instances/:id", async (request, reply) => {

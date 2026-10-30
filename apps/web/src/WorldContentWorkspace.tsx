@@ -1,3 +1,4 @@
+import { WorldArtbookImport } from "./WorldArtbookImport";
 import {
   memo,
   useCallback,
@@ -99,6 +100,7 @@ type CanonicalConflict = {
  */
 export const WorldContentWorkspace = memo(function WorldContentWorkspace({
   open,
+  campaignId,
   assets,
   members = [],
   worldMaps,
@@ -106,6 +108,7 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
   onClose,
 }: {
   open: boolean;
+  campaignId?: string;
   assets: AssetDto[];
   members?: readonly MembershipDto[];
   worldMaps?: WorldMapsSnapshotDto;
@@ -113,6 +116,7 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
   onClose: () => void;
 }) {
   const [items, setItems] = useState<WorldContentDto[]>([]);
+  const [artbookOpen, setArtbookOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState("");
   const [filterType, setFilterType] = useState<WorldContentType | "">("");
@@ -308,7 +312,20 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
               <Button view="action" onClick={() => setCreateOpen(true)}>
                 Создать сущность
               </Button>
+              <Button
+                view="flat"
+                aria-expanded={artbookOpen}
+                onClick={() => setArtbookOpen((value) => !value)}
+              >
+                Импорт артбука
+              </Button>
             </div>
+            {artbookOpen && (
+              <WorldArtbookImport
+                campaignId={campaignId}
+                onChanged={() => void load()}
+              />
+            )}
             {listError && (
               <p className="field-error" role="alert">
                 {listError}

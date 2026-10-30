@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import type { AssetDto } from "@arken/contracts";
 import { formatApiError } from "./api";
+import { Button } from "./design-system/Button";
 
 /**
  * UIX-457: выбор рамки бросков. Радиогруппа из постеров — статичных кадров,
@@ -13,6 +14,8 @@ export function DiceFramePicker({
   value,
   disabled = false,
   noneLabel = "Без рамки",
+  emptyMessage = "Мастер ещё не загрузил рамки: они появятся в медиатеке кампании.",
+  onManageFrames,
   onChange,
 }: {
   legend: string;
@@ -20,6 +23,8 @@ export function DiceFramePicker({
   value: string | null;
   disabled?: boolean;
   noneLabel?: string;
+  emptyMessage?: string;
+  onManageFrames?: () => void;
   onChange: (assetId: string | null) => void;
 }) {
   const name = useId();
@@ -35,9 +40,14 @@ export function DiceFramePicker({
     <fieldset className="dice-frame-picker" disabled={disabled}>
       <legend>{legend}</legend>
       {frames.length === 0 ? (
-        <p className="muted">
-          Мастер ещё не загрузил рамки: они появятся в медиатеке кампании.
-        </p>
+        <div className="dice-frame-picker__empty">
+          <p className="muted">{emptyMessage}</p>
+          {onManageFrames ? (
+            <Button view="outlined" size="s" onClick={onManageFrames}>
+              Открыть медиатеку
+            </Button>
+          ) : null}
+        </div>
       ) : null}
       <div className="dice-frame-picker__options">
         {options.map((option) => (
@@ -67,10 +77,14 @@ export function PersonalDiceFrameSettings({
   frames,
   value,
   onSave,
+  isGm = false,
+  onOpenFrameLibrary,
 }: {
   frames: readonly AssetDto[];
   value: string | null;
   onSave: (assetId: string | null) => Promise<void>;
+  isGm?: boolean;
+  onOpenFrameLibrary?: () => void;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -84,6 +98,12 @@ export function PersonalDiceFrameSettings({
         frames={frames}
         value={selected}
         disabled={pending}
+        emptyMessage={
+          isGm
+            ? "В этой кампании пока нет рамок бросков. В медиатеке загрузите файл в разделе «Рамки бросков»."
+            : "В кампании пока нет рамок бросков. Попросите мастера добавить их в медиатеку; пока можно выбрать «Без рамки»."
+        }
+        onManageFrames={isGm ? onOpenFrameLibrary : undefined}
         onChange={(next) => {
           if (pending || next === selected) return;
           setSelected(next);
@@ -92,7 +112,12 @@ export function PersonalDiceFrameSettings({
           void onSave(next)
             .catch((reason: unknown) => {
               setSelected(value);
-              setError(formatApiError(reason, "Не удалось сохранить рамку."));
+              setError(
+                formatApiError(
+                  reason,
+                  "Не удалось подтвердить сохранение. Показан предыдущий выбор.",
+                ),
+              );
             })
             .finally(() => setPending(false));
         }}
@@ -101,7 +126,9 @@ export function PersonalDiceFrameSettings({
         Сохраняется сразу, отдельно от темы. Рамка навыка, назначенная мастером,
         важнее личной; критический бросок всегда показывает свою.
       </p>
-      {error ? <div role="alert">{error}</div> : null}
+      {error ? (
+        <div role="alert">{error}</div>
+      ) : null}
     </section>
   );
 }

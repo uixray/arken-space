@@ -78,7 +78,7 @@ export const AppModals = memo(function AppModals({
       {personalTheme ? (
         <ArkenDialog
           open={themeSettingsOpen}
-          title="Оформление"
+          title="Тема и рамка бросков"
           footer={false}
           onClose={() => {
             if (themePreference.pending) return;
@@ -113,6 +113,15 @@ export const AppModals = memo(function AppModals({
               frames={diceFrames}
               value={diceFrameAssetId}
               onSave={onSaveDiceFrame}
+              isGm={isGm}
+              onOpenFrameLibrary={
+                isGm
+                  ? () => {
+                      onCloseThemeSettings();
+                      onSelectWorkspace("media");
+                    }
+                  : undefined
+              }
             />
           ) : null}
         </ArkenDialog>

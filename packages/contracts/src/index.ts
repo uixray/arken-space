@@ -3488,6 +3488,8 @@ export const createWorldContentSchema = z
     gmOnlyText: z.string().max(50000).optional(),
     tags: worldContentTagsSchema.optional(),
     coverAssetId: z.string().uuid().nullable().optional(),
+    /** UIX-263: import provenance (source, retrieval, hash, rights, editorial). */
+    provenance: worldContentProvenanceSchema.optional(),
   })
   .strict();
 export type CreateWorldContent = z.infer<typeof createWorldContentSchema>;
@@ -3535,6 +3537,17 @@ export const addWorldContentMediaSchema = z
     actionId: z.string().uuid(),
     assetId: z.string().uuid(),
     caption: z.string().trim().min(1).max(500).nullable().optional(),
+    importPrecondition: z
+      .object({
+        expectedRevision: z.number().int().nonnegative(),
+        slug: worldContentSlugSchema,
+        type: worldContentTypeSchema,
+        name: z.string().min(1).max(200),
+        summary: z.string().max(2000),
+        provenance: worldContentProvenanceSchema,
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type AddWorldContentMedia = z.infer<typeof addWorldContentMediaSchema>;
@@ -3640,13 +3653,9 @@ export type DeleteWorldContent = z.infer<typeof deleteWorldContentSchema>;
  * `packages/db/src/schema.ts` for the full architectural rationale
  * (campaign-cascade, no-FK-cascade to canon, composite location FK, etc).
  *
- * GM-only, entirely: unlike `worldContentDtoSchema`/`worldContentPlayerDtoSchema`,
- * there is deliberately no player-facing projection here yet. UIX-264's AC
- * ("player APIs never expose... GM fields") implies instances will
- * eventually feed a player-visible campaign state (e.g. "this NPC is now
- * visibly wounded"), but that projection is a future integration point, not
- * built speculatively in this pass — every route that reads or writes an
- * instance requires the GM role.
+ * This full DTO is GM-only. Players read discovered instances only, as
+ * `WorldContentInstancePlayerDto` (UIX-245 step 5: no `gmNotes`, no
+ * `currentLocationId`); every write requires the GM role.
  */
 export const worldContentInstanceDtoSchema = z.object({
   id: z.string().uuid(),
@@ -3667,6 +3676,16 @@ export const worldContentInstanceDtoSchema = z.object({
 });
 export type WorldContentInstanceDto = z.infer<
   typeof worldContentInstanceDtoSchema
+>;
+
+/**
+ * UIX-245 step 5: what a player sees of a campaign instance the GM marked as
+ * discovered. `gmNotes` is GM-only; `currentLocationId` points at a map place
+ * whose own visibility is governed separately, so it is not projected.
+ */
+export type WorldContentInstancePlayerDto = Omit<
+  WorldContentInstanceDto,
+  "gmNotes" | "currentLocationId"
 >;
 
 export const createWorldContentInstanceSchema = z

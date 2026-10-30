@@ -1,0 +1,818 @@
+{
+  "источник": {
+    "тексты": "https://arc.framer.photos/ (Framer-артбук, legacy)",
+    "проверено": "https://arken-khar.tilda.ws/ — лендинг романа, энциклопедических записей нет; имена героев совпадают (Кай = Кайзер Астер)",
+    "картинки": "Eagle-артбук, экспорт владельца «Артбук» (Локации, Пантеон, Персонажи, Существа, карты)",
+    "получено": "2026-10-22",
+    "атрибуция": "Вселенная — Семён Чепурных; тексты — Дарья Сталь; арт — MidJourney",
+    "права": "APPROVED — владелец подтвердил 22.10.2026",
+    "редактура": "PENDING — импорт создаёт только DRAFT для ревью мастера"
+  },
+  "записи": [
+    {
+      "slug": "artbook-amanaras",
+      "type": "DEITY",
+      "name": "Аманарас",
+      "summary": "Бог света, один из первых богов, создавших пять миров",
+      "cover": "Пантеон/Аманарас бог света.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#panteon",
+      "rawContentHash": "sha256:c5bfbe24d154a450d574e570bfa1e910f3955a382b8da0028ac4513eaca8af4d"
+    },
+    {
+      "slug": "artbook-amberion",
+      "type": "DEITY",
+      "name": "Амберион",
+      "summary": "Великий маг; человек, ставший богом, покровитель всех магов",
+      "cover": "Пантеон/Амберион.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#panteon",
+      "rawContentHash": "sha256:217b914ca04becf4b97eef830478e8bc2d4d67b9ff35a976ff0d05b06ec722d4"
+    },
+    {
+      "slug": "artbook-breizarna",
+      "type": "DEITY",
+      "name": "Брейзарна",
+      "summary": "Богиня правосудия, покровительница Велтори, второе поколение богов",
+      "cover": "Пантеон/Брейзарна богиня торговли и правосудия.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#panteon",
+      "rawContentHash": "sha256:dec4c57115dc1b14f55fe8f900dfce7692c57d767c3f2a33274bf7a08a3e240c"
+    },
+    {
+      "slug": "artbook-viakorn-o-tar",
+      "type": "DEITY",
+      "name": "Виакорн-о-Тар",
+      "summary": "Богиня-демоница из Нарсис-Шада, второе поколение богов",
+      "cover": "Пантеон/Богиня-демоница Виакорн-о-Тар.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#panteon",
+      "rawContentHash": "sha256:d1ea6c7b8b212af98cc7f79beb8e16c1ae4ed6b3709a966bea5d10faec88f938"
+    },
+    {
+      "slug": "artbook-kalester",
+      "type": "DEITY",
+      "name": "Калестер",
+      "summary": "Бог воинского искусства, покровитель Крестландии",
+      "cover": "Пантеон/Калестер.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#panteon",
+      "rawContentHash": "sha256:ccb7415cec13bba09a94b02a27c6c3184b1c76a30a7c7b793716e6402da2dba0"
+    },
+    {
+      "slug": "artbook-kezegrukh",
+      "type": "DEITY",
+      "name": "Кезегрух",
+      "summary": "Бог смерти, бог-демон по прозвищу Пожиратель богов, один из первых богов, создавших пять миров",
+      "cover": "Пантеон/Кезегрух.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#panteon",
+      "rawContentHash": "sha256:f83aac4c662cc458306a0d5f5ad5ac77fd64e8995b07287f56a94dc90e29327b"
+    },
+    {
+      "slug": "artbook-perrarivior",
+      "type": "DEITY",
+      "name": "Перраривиор",
+      "summary": "Бог огня, бог-дракон, один из первых богов, создавших пять миров",
+      "cover": "Пантеон/Перраривиор первый бог дракон огня.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#panteon",
+      "rawContentHash": "sha256:e0c6aa38c23afec27197470b1a8bcb73e30a33d460cf7a7f5312745270d57460"
+    },
+    {
+      "slug": "artbook-rioras",
+      "type": "DEITY",
+      "name": "Риорас",
+      "summary": "Бог вечности и пустоты, один из первых богов, создавших пять миров",
+      "cover": "Пантеон/Риорас.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#panteon",
+      "rawContentHash": "sha256:d75a91c4450ea0717d4a5b3c3daeb54887186cfe9fca0658f5b6b95f82c11148"
+    },
+    {
+      "slug": "artbook-sardoris",
+      "type": "DEITY",
+      "name": "Сардорис",
+      "summary": "Бог жизни и природы, один из первых богов, создавших пять миров",
+      "cover": "Пантеон/Сардорис бог жизни.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#panteon",
+      "rawContentHash": "sha256:fa98d7215ab769d6d215471c6a1855c84221f97114100dc3eb5bece822d1dd6a"
+    },
+    {
+      "slug": "artbook-freyatron",
+      "type": "DEITY",
+      "name": "Фреятрон",
+      "summary": "Богиня воды и красоты, покровительница Аландрии, одна из первых богов, создавших пять миров",
+      "cover": "Пантеон/Фреятрон богиня воды и красоты.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#panteon",
+      "rawContentHash": "sha256:3110b54c1bdfbc19f6c406438948319be99ee8e1b35752142384744d61ba85a4"
+    },
+    {
+      "slug": "artbook-khelerarsor",
+      "type": "DEITY",
+      "name": "Хелерарсор",
+      "summary": "Богиня-драконица, которой поклоняются в Баракоре. Покровительница небес и свободы",
+      "cover": "Пантеон/Хелерарсор богиня дракон Баракора.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#panteon",
+      "rawContentHash": "sha256:933fe2fd1a9ed2b47f0ff72f4467c454d052401c6975d942380d7c8332352f58"
+    },
+    {
+      "slug": "artbook-erasteriya",
+      "type": "DEITY",
+      "name": "Эрастерия",
+      "summary": "Богиня семьи, любви и верности, второе поколение богов",
+      "cover": "Пантеон/Эрастерия богиня любви и семьи.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#panteon",
+      "rawContentHash": "sha256:0a83619281e712211bd219fca4cfb23a6066b84f69aefd42c264ed079acb233e"
+    },
+    {
+      "slug": "artbook-yaro",
+      "type": "DEITY",
+      "name": "Яро",
+      "summary": "Бог времени, один из первых богов, создавших пять миров",
+      "cover": "Пантеон/Яро.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#panteon",
+      "rawContentHash": "sha256:02eaf98beba4d51084f5bbb8a5045e5afb8cc9a6f2235b08da68afa7a2cdb10d"
+    },
+    {
+      "slug": "artbook-amber",
+      "type": "LOCATION",
+      "name": "Амбер",
+      "summary": "Столица бывшей империи Амбер, а ныне Аркен-Хар, основанная великим магом и богом Амберионом",
+      "cover": "Локации/Амбер с моря.png",
+      "gallery": ["Локации/Дворец императора в Амбере.png"],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:69c04d9dd558edd6b696fde3cded3a169802ed48322a5562d5f783598eacce87"
+    },
+    {
+      "slug": "artbook-barakor",
+      "type": "LOCATION",
+      "name": "Баракор",
+      "summary": "Страна степных кочевников, вечно посягающая на границы с севера Аркен-Хара. Во времена Баракорского вторжение под предводительством вождя Но-Хада баракорские шаманы вырезали почти всех магов Аркен-Хара",
+      "cover": "Локации/Баракор.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:175f2f67a59a5527ec63fe18954fadedaf4a09809b100431bf85bbb7b801d8d0"
+    },
+    {
+      "slug": "artbook-vardkhold",
+      "type": "LOCATION",
+      "name": "Вардхолд",
+      "summary": "Столица Восточного Аркен-Хара, один из самых богатых городов страны за счет влияния клана Нефритов",
+      "cover": "Локации/Вардхолд.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:2b44b121fcc169242bc0ef43edc6db5780146a1c26bd07914ed0e3b1ab7e736d"
+    },
+    {
+      "slug": "artbook-grogroz",
+      "type": "LOCATION",
+      "name": "Грогроз",
+      "summary": "Огромный лабиринт и древний подземный город в Центральном Аркен-Харе, не изученный до конца",
+      "cover": "Локации/Грогроз.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:3ce20cadad383ae2f28b222383391f29ed61992bfa8951086279617d22c6cef1"
+    },
+    {
+      "slug": "artbook-darasgrad",
+      "type": "LOCATION",
+      "name": "Дарасград",
+      "summary": "Город на границе Центрального и Восточного Аркен-Хара",
+      "cover": "Локации/Дарасград.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:8da3af152ffbc640505775234104b597ba16657ef805b8ed3cc5ec20d6389ad9"
+    },
+    {
+      "slug": "artbook-dvorets-kuriya",
+      "type": "LOCATION",
+      "name": "Дворец Курия",
+      "summary": "Дворец влиятельной семьи близ крупного оазиса в центре Аландрии",
+      "cover": "Локации/Курия.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:b22df7d684713800ddff277fc035a123c70bc15a1fbccb9f932f00b9561f7d0b",
+      "matchedByName": false
+    },
+    {
+      "slug": "artbook-zhangar",
+      "type": "LOCATION",
+      "name": "Жангар",
+      "summary": "Остров близ Велтори, юридически часть Аркен-Хара, пристанище контрабандистов и наёмников",
+      "cover": "Локации/Жангар.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:164738d0f515bae969ac29736bfb130160dce2e72c23c3e991747e7270fb6789"
+    },
+    {
+      "slug": "artbook-karanard",
+      "type": "LOCATION",
+      "name": "Каранард",
+      "summary": "Столица Северного Аркен-Хара, шедевр древнего мага-архитектора с высокими белокаменными башнями и дворцами",
+      "cover": "Локации/Каранард.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:380c32997b302db00a1a590ca24c07e6c927a0bce5ce8e38562889a9ce2c33ed"
+    },
+    {
+      "slug": "artbook-lansdar",
+      "type": "LOCATION",
+      "name": "Лансдар",
+      "summary": "Портовый город Южного Аркен-Хара на границе с Велтори",
+      "cover": "Локации/Лансдар.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:cbefc58d328fb6e76f82b5e87437795576be29ca6ad6732eedad8219e1f280d9"
+    },
+    {
+      "slug": "artbook-leonarris",
+      "type": "LOCATION",
+      "name": "Леонаррис",
+      "summary": "Крупный город с крепостью в Центральном Аркен-Харе, через который проходит речной торговый путь",
+      "cover": "Локации/Леонаррис.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:c32540bb40551faabcc308d82eccceefcb1b8696465035036ecbada3ada06a06"
+    },
+    {
+      "slug": "artbook-madkhar",
+      "type": "LOCATION",
+      "name": "Мадхар",
+      "summary": "Столица Аландрии, южной пустынной страны-контитента. В Аландрии поколениями правят могущественные маги Воды, которым покровительствует богиня Фреятрон",
+      "cover": "Локации/Мадхар.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:76b4793d19c19f955e1c81186caa79e1cbf6c07316c72c0f9a0a0dd904b89cac"
+    },
+    {
+      "slug": "artbook-mitsal",
+      "type": "LOCATION",
+      "name": "Митсаль",
+      "summary": "Столица Южного Аркен-Хара, где расположена резиденция лорда-наместника Гаррета Сертана. На центральной площади стоит статуя императору Аркену",
+      "cover": "Локации/Митсаль.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:d6fd1e47ebc90df8f7acef04174acf88dbfe227e28d1357914c129cccac70f70"
+    },
+    {
+      "slug": "artbook-mortikan",
+      "type": "LOCATION",
+      "name": "Мортикан",
+      "summary": "Магическая академия, основанная лордом Ходрадом Винтерстоком на месте старого замка Третьего рыцаря Амбериона, Ледяного рыцаря Келленгоста Тримуна. Академия находится в Северном Аркен-Харе в горах. Герб академии — белый шипастый латный кулак на синем фоне",
+      "cover": "Локации/Мортикан.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:d19e0c59d75ae222c95eb0b34629d1b6f802b92a4ae8074a647e9c8a87e1c8cd"
+    },
+    {
+      "slug": "artbook-narsis-shad",
+      "type": "LOCATION",
+      "name": "Нарсис-Шад",
+      "summary": "Мир расы демонов, отделённый от мира людей магическим барьером. В разные времена случались вторжения демонов и людей с войной в обе стороны, после которых боги укрепили границы",
+      "cover": "Локации/Нарсис-Шад 2.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:2c7bbc6dba93ae5bd5aafbf96153a050cb92249ad6076c3a1ea0c5cc0ab722e4"
+    },
+    {
+      "slug": "artbook-norbian",
+      "type": "LOCATION",
+      "name": "Норбиан",
+      "summary": "Город Велтори на границе с Восточным Аркен-Харом, славится ежегодным Осенним фестивалем",
+      "cover": "Локации/Норбиан город на границе Велтори.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:e382a023f38be7fc5606bb16c178e001093cb54ce291277acdc64f77ef0ed91f"
+    },
+    {
+      "slug": "artbook-odinokii-zamok",
+      "type": "LOCATION",
+      "name": "Одинокий замок",
+      "summary": "Владения в Восточном Аркен-Харе между Недрами и Святым лесом",
+      "cover": "Локации/Одинокий замок в восточном Аркен-Харе.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:3fb4f5af575fdf2ba6351a1fa1d0110b74b74a5360f3e19e60c013f51c5880c3"
+    },
+    {
+      "slug": "artbook-perevernutaya-bashnya",
+      "type": "LOCATION",
+      "name": "Перевернутая башня",
+      "summary": "Одна из серии зачарованных построек, сделанных демонами Нарсис-Шада во времена вторжения в мир людей",
+      "cover": "Локации/Перевернутая башня.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:c64bd39aa30d6bc3571998b9522113f7b8d868b0df2cd6f021239f108a826523"
+    },
+    {
+      "slug": "artbook-pretsikvar",
+      "type": "LOCATION",
+      "name": "Прециквар",
+      "summary": "Огромный разрушенный город древних в Северном Аркен-Харе, который некогда был чудом света и, возможно, построен расой драконов",
+      "cover": "Локации/Прециквар древний заброшенный город.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:4b819fd1a00153f427ddafdf31e9338588c2aec70ce520f487aa3c6f3fa21f1a"
+    },
+    {
+      "slug": "artbook-pridzar",
+      "type": "LOCATION",
+      "name": "Придзар",
+      "summary": "Город на границе Южного и Центрального Аркен-Хара, известный штаб-квартирой ордена инквизиции «Кровавая луна»",
+      "cover": "Локации/Придзар.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:5a0639c708679a0805989a637e0e83b6ec160e406386a7cbcf4249167e4a653e"
+    },
+    {
+      "slug": "artbook-proukdvar",
+      "type": "LOCATION",
+      "name": "Проукдвар",
+      "summary": "Город в Недрах, где находится также Храм Канеродвара, рыцаря Амбериона",
+      "cover": "Локации/Проукдвар замок в Недрах.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:a9a3cc7e1cee2cfd5274a309b35da047c136debe82eb25d7d314911da10ca2b4"
+    },
+    {
+      "slug": "artbook-raikavion",
+      "type": "LOCATION",
+      "name": "Райкавион",
+      "summary": "Магическая академия, основанная лордом Гарретом Сертаном на месте старого замка Второго рыцаря Амбериона, Белого дракона Амадора Эйзарта. Академия находится в Южном Аркен-Харе на Драконьем острове. Герб академии — белый дракон на синем фоне",
+      "cover": "Локации/Холл Райкавиона.png",
+      "gallery": [
+        "Локации/Летающий Райкавион.png",
+        "Локации/Амфитеатр близ Райкавиона.png",
+        "Локации/Драконий остров и Райкавион.png"
+      ],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:204db658d1a71a9f689f015c3840556cd42c264fd954ed958c8834408a3e5ab4"
+    },
+    {
+      "slug": "artbook-saidris",
+      "type": "LOCATION",
+      "name": "Сайдрис",
+      "summary": "Город на западе Велтори, славится самым крупным храмом богини Брейзарны и гильдией адвокатов",
+      "cover": "Локации/Сайдрис.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:ecfd8d5f46c28c7375f1de6187cfe8720ce1b8b8533be38dcbb97951b6f19cf6"
+    },
+    {
+      "slug": "artbook-svyatoi-les",
+      "type": "LOCATION",
+      "name": "Святой лес",
+      "summary": "Вечнозелёный, пропитанный магией лес, где живут друиды, служители бога Сардориса",
+      "cover": "Локации/Святой лес.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:005f89fd0ca9ec7c9c6f11c9d82223f80c70fbdb1c6ddee8e1a7bd7bc6d4e6f4"
+    },
+    {
+      "slug": "artbook-stratgard",
+      "type": "LOCATION",
+      "name": "Стратгард",
+      "summary": "Самый крупный и богатый город Южного Аркен-Хара, находится на полуострове Острие. Славится банковской гильдией и самым крупным банком страны",
+      "cover": "Локации/Стратгард.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:c0205311adb529832d1ce811b6d832285c14d8d2db3ae559167363b6cd6ce8aa"
+    },
+    {
+      "slug": "artbook-taravis",
+      "type": "LOCATION",
+      "name": "Таравис",
+      "summary": "Прибрежный город Велтори, ближайший к границе Аркен-Хара, часто служит перевалочным пунктом в путешествиях между странами, есть небольшой причал",
+      "cover": "Локации/Таравис.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:96d4fa817d76f7f00d9ed342a90ab8801dd44f93ef8d5f0a3ba6115896410008"
+    },
+    {
+      "slug": "artbook-tenevaya-bashnya",
+      "type": "LOCATION",
+      "name": "Теневая башня",
+      "summary": "Магическая пограничная башня, защищающая проход в холодный и мрачный регион Недра.",
+      "cover": "Локации/Темная башня.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:883f0d11e97c78899a2e7fd070dad9781edad114ad40ff9c9c46e0b20ace6c4c",
+      "matchedByName": false
+    },
+    {
+      "slug": "artbook-trimun",
+      "type": "LOCATION",
+      "name": "Тримун",
+      "summary": "Столица Велтори, один из самых крупных и богатых городов мира в лучшие времена",
+      "cover": "Локации/Тримун.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:b1c6ce9fa174bbb7ec2830023b85a61b441956e1c8914382ef9c82b26a104c6e"
+    },
+    {
+      "slug": "artbook-kheldris",
+      "type": "LOCATION",
+      "name": "Хельдрис",
+      "summary": "Крупный город в центре Велтори близ горного хребта",
+      "cover": "Локации/Хельдрис.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:0113abbe356f735bc18a0b1b9e6c856dda45e17e98e994544a74f42f37b8a478"
+    },
+    {
+      "slug": "artbook-yantarnaya-bashnya",
+      "type": "LOCATION",
+      "name": "Янтарная башня",
+      "summary": "Спрятанная в горах Центрального Аркен-Хара магическая библиотека Амбериона",
+      "cover": "Локации/Янтарная башня.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#locations",
+      "rawContentHash": "sha256:9b07e0d3cf65e19d030236e7c263a2b77542c8c8f569c8ffc4fb5d426efa5694"
+    },
+    {
+      "slug": "artbook-mira-grei",
+      "type": "PERSON",
+      "name": "Мира Грей",
+      "summary": "Маг Сумрака и Тьмы, первое поколение магов академии Райкавион, член Рубинового ордена",
+      "cover": "Персонажи/Мира Грей.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:0abd62071f72a387802dc0aab600053f3d0975d0175285d6ad1c1079cf5c6200"
+    },
+    {
+      "slug": "artbook-ellian-advenzor",
+      "type": "PERSON",
+      "name": "Эллиан Адвензор",
+      "summary": "Маг Огня и Света, ученик разрушенной академии Нейгранд в Велтори, член Рубинового ордена",
+      "cover": "Персонажи/Эллиан Адвензор.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:23c4794e0acfed0ebd3054e611bf6ea9239ca672aa0432ea3299b990d1a54706"
+    },
+    {
+      "slug": "artbook-settra-valtein",
+      "type": "PERSON",
+      "name": "Сеттра Валтейн",
+      "summary": "Маг Смерти и Воздуха, первое поколение магов академии Райкавион, член Рубинового ордена",
+      "cover": "Персонажи/Сеттра Валтейн.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:dbb73406515b16f5d8c2cf24756ef860dd9facb6960fe07210e27847efd02991"
+    },
+    {
+      "slug": "artbook-kaizer-aster",
+      "type": "PERSON",
+      "name": "Кайзер Астер",
+      "summary": "Маг Времени и Крови, первое поколение магов академии Райкавион, лидер Рубинового ордена",
+      "cover": "Персонажи/Кай Астер.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:5131015704789f16459e77bcf12af038ef59081bd5db9f6b272ea93029eb3dda",
+      "matchedByName": false
+    },
+    {
+      "slug": "artbook-rein-farkrat",
+      "type": "PERSON",
+      "name": "Рейн Фаркрат",
+      "summary": "Маг Огня и Тьмы, сын главы ордена инквизиции «Крыло ворона», директор академии Райкавион",
+      "cover": "Персонажи/Рейн Фаркрат.png",
+      "gallery": ["Персонажи/Рейн Фаркрат-младший.png"],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:71ebe7b60cfb4c311e66b0e912868917bce7b2d074cb2078e264e0525e6d7cff"
+    },
+    {
+      "slug": "artbook-menfis-al-akrabi",
+      "type": "PERSON",
+      "name": "Менфис аль-Акраби",
+      "summary": "Маг Воды из Аландрии, спаситель одарённых детей Аркен-Хара, наставник Патриса и Кайзера",
+      "cover": "Персонажи/Менфис.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:2de4a48e1f8937be690793ce9b98de5cfc6f09c337878112f4de3dfe7c5259dc",
+      "matchedByName": false
+    },
+    {
+      "slug": "artbook-sorinoks",
+      "type": "PERSON",
+      "name": "Соринокс",
+      "summary": "Тифлинг из Нарсис-Шада, также известный как Рубин, покровитель Рубинового ордена",
+      "cover": "Персонажи/Соринокс он же Рубин тифлинг.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:57525b86b323e2e24628051a4bea8252d9b9ec9dc32e9732ba1375bbb716d284"
+    },
+    {
+      "slug": "artbook-trevis",
+      "type": "PERSON",
+      "name": "Тревис",
+      "summary": "Секретарь академии Райкавион и Рубинового ордена, дядя Эллиона Адвензора",
+      "cover": "Персонажи/Тревис.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:5026344680773b061a9a0af306857c762231214d2d4f67fc93934c6a3d704854"
+    },
+    {
+      "slug": "artbook-arabella-vistar",
+      "type": "PERSON",
+      "name": "Арабелла Вистар",
+      "summary": "Преподаватель истории в академии Райкавион, куратор Рубинового ордена, поэт",
+      "cover": "Персонажи/Арабелла Вистар.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:c8bc4a9d53a4d1cb2bb9eacc7a69aa915b24cfa968d0fa143bdc20920ef87f51"
+    },
+    {
+      "slug": "artbook-doran-astral",
+      "type": "PERSON",
+      "name": "Доран Астрал",
+      "summary": "Первый рыцарь ордена инквизиции Крыло ворона, далее союзник Рубинового ордена",
+      "cover": "Персонажи/Доран Астрал(нужно увеличить).png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:d5585637fb5d09df1d3fed3173d68fb452c2f03f79d70b0c689053a4823be7ad"
+    },
+    {
+      "slug": "artbook-lanetta-rink",
+      "type": "PERSON",
+      "name": "Ланетта Ринк",
+      "summary": "Дворянка из Стратгарда, шпионка, далее секретарь Рубинового ордена",
+      "cover": "Персонажи/Ланетта.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:905c087fbf07f148b175aaa2fc3bddcb6bd22359383e4fbbed583e31057f95ea",
+      "matchedByName": false
+    },
+    {
+      "slug": "artbook-mark-trimun",
+      "type": "PERSON",
+      "name": "Марк Тримун",
+      "summary": "Маг Времени, первое поколение магов Райкавиона, далее директор академии",
+      "cover": "Персонажи/Марк Тримун.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:72fbd4530ab7b0dc91dd657a679f62df2a3a3561c87b2c2ced36c3414d4aa102"
+    },
+    {
+      "slug": "artbook-adora-farkrat",
+      "type": "PERSON",
+      "name": "Адора Фаркрат",
+      "summary": "Маг Льда и Воды, второе поколение магов Райкавиона",
+      "cover": "Персонажи/Адора.png",
+      "gallery": ["Персонажи/Адора и Муор.png"],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:64590d4d3167df49fdb47e2256c3ecaaa25b85b9c3f0593cadf7622b7a721111",
+      "matchedByName": false
+    },
+    {
+      "slug": "artbook-rein-farkrat-mladshii",
+      "type": "PERSON",
+      "name": "Рейн Фаркрат-младший",
+      "summary": "Маг Огня и Света, второе поколение магов Райкавиона",
+      "cover": "Персонажи/Рейн Фаркрат-младший.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:04cd3f75d1d9d84adcb66811b1dbf848076599e7722473b9ed903d2d8a896dd7"
+    },
+    {
+      "slug": "artbook-muor-o-bash-ibn-saab-gund",
+      "type": "PERSON",
+      "name": "Муор-О’баш ибн Сааб’Гунд",
+      "summary": "Маг Смерти из Аландрии, владеет магией высшего дома демонов О-Лор как гвардеец императора",
+      "cover": "Персонажи/Муор.png",
+      "gallery": ["Персонажи/Адора и Муор.png"],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:81f0fc2f774e8c53123613d38d215de3ad43c20c9b722d0c5142622a358f2faf",
+      "matchedByName": false
+    },
+    {
+      "slug": "artbook-nimat",
+      "type": "PERSON",
+      "name": "Нимат",
+      "summary": "Заклинатель духов, кочевник, считает своим призванием собрать Братство духов",
+      "cover": "Персонажи/Нимат (нужно увеличить).png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:37b67d4373f7cd2728484c9efbd1caab19d40753a25ad1a209ed9e56149e8513"
+    },
+    {
+      "slug": "artbook-fenser",
+      "type": "PERSON",
+      "name": "Фенсер",
+      "summary": "Маг Света из храма Амадора Эйзарта, фехтовальщик",
+      "cover": "Персонажи/Фенсер.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:81f2f4a799d5c329c8985d59932db4a572b9cfb4bd9ba253b4b2bce6e5e8e06f"
+    },
+    {
+      "slug": "artbook-gorianna-blashtfild",
+      "type": "PERSON",
+      "name": "Горианна Блаштфилд",
+      "summary": "Дворянка из обедневшего рода Сайдриса в Велтори",
+      "cover": "Персонажи/Горианна Блаштфилд.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:b61ee2d3e8230ca6c359168b9dbb8399519eb09657d603e25190eca42a6e90f6"
+    },
+    {
+      "slug": "artbook-arana",
+      "type": "PERSON",
+      "name": "Арана",
+      "summary": "Девушка с частичкой божественной силы, хозяйка сиирадона Знаний",
+      "cover": "Персонажи/Арана.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:806e5b47e92f569469f5e605747b20105001263d84bb7112bcf1b34413bc84b1"
+    },
+    {
+      "slug": "artbook-evarion",
+      "type": "PERSON",
+      "name": "Эварион",
+      "summary": "Маг с частичкой божественной силы, союзник демона Янтира",
+      "cover": "Персонажи/Эварион.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:f6bbedcd8b1f1c7f5eecccb96cd3e30c6b7a2271b8717efddc6afa3b765d55e9"
+    },
+    {
+      "slug": "artbook-veshtazar",
+      "type": "PERSON",
+      "name": "Вештазар",
+      "summary": "Великий маг, воплощение бога Аркена, развязал войну с императором Рэмом",
+      "cover": "Персонажи/Вештазар.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:0b998b9dd1fac970745739f8b27ffc1fab822123940df92e1696e3a087e7ab19"
+    },
+    {
+      "slug": "artbook-rem-o-lor",
+      "type": "PERSON",
+      "name": "Рэм О-Лор",
+      "summary": "Демон из Нарсис-Шада, ставший императором Аркен-Хара при содействии Рубинового ордена",
+      "cover": "Персонажи/Император Рэм О-Лор.png",
+      "gallery": ["Персонажи/Тронный зал Амбера и Рэм.png"],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:d75456ff768a820075260300812bc1fc72faa35608f92b850feb073cae5a0bfc"
+    },
+    {
+      "slug": "artbook-leonard",
+      "type": "PERSON",
+      "name": "Леонард",
+      "summary": "Маг Времени, воевал с бессмертными, ученик Эркенвальда Блаштфилда",
+      "cover": "Персонажи/Леонард.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:ea2498b7fc5e270c4b2e2874e2d8829a5a702dc56f68de722d1a7f6c4b0f5691"
+    },
+    {
+      "slug": "artbook-tir-na-el-kuerkas",
+      "type": "PERSON",
+      "name": "Тир-На-Эль Куэркас",
+      "summary": "Потомок другидов, отшельник, маг земли и света ученик Эркенвальда Блаштфилда",
+      "cover": "Персонажи/Тир-На-Эль Куэркас.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:fea0febc8f54b6630ddbdb1b94dc3fa38e9035f701664074e1736a6d66797895"
+    },
+    {
+      "slug": "artbook-makoto",
+      "type": "PERSON",
+      "name": "Макото",
+      "summary": "Скрытный воин с далёкого Востока, владеет магическим клинком клана Изумрудного дракона",
+      "cover": "Персонажи/Макото.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:b2e6bcdb630a81c5caf0af82c313a48b89cbc81ae83758eebdfc2fd1bded9f9f"
+    },
+    {
+      "slug": "artbook-otto",
+      "type": "PERSON",
+      "name": "Отто",
+      "summary": "Воин из северного ордена охотников на чудовищ, владеет двумя клинками ракуями",
+      "cover": "Персонажи/Отто.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:c7787f11ac5d37976e9f2e2a1c5e5f57dea89f339352bb835deb3b2fc70f5037"
+    },
+    {
+      "slug": "artbook-erkenvald-blashtfild",
+      "type": "PERSON",
+      "name": "Эркенвальд Блаштфилд",
+      "summary": "Маг Льда и Крови, убийца драконов, бессмертных и чудовищ, покоритель Грогроза, названый брат Пург-Гор-Дрокса, покровитель Нефритов, спаситель друидов и великий учитель волшебников",
+      "cover": "Персонажи/Эркенвальд.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:f57b72606319cffbe3f4788dd3fcc507f461b76711792f9d2aae2b6dcd9adcac",
+      "matchedByName": false
+    },
+    {
+      "slug": "artbook-shaman",
+      "type": "PERSON",
+      "name": "Шаман",
+      "summary": "Разновидность магов из Баракора, черпающие силу из поклонения драконам и демонам",
+      "cover": "Персонажи/Шаман.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#chapters",
+      "rawContentHash": "sha256:b3c91aab3559858a54570642881fca23ccc721d9c237a26257ffab2e142fb90a"
+    },
+    {
+      "slug": "artbook-obernaks",
+      "type": "MONSTER",
+      "name": "Обернакс",
+      "summary": "Красный высший дракон, в человеческом облике известен как глава ордена инквизиции Кровавая луна. Драконы существуют как отдельная раса и когда-то были царями этого мира",
+      "cover": "Существа/Обернакс.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#monsters",
+      "rawContentHash": "sha256:28e4c94ebd546265cdf5292149332fa6349305c3f0eec3a20d92d51763c476ce"
+    },
+    {
+      "slug": "artbook-grestinkhog",
+      "type": "MONSTER",
+      "name": "Грестинхог",
+      "summary": "Самый древний из известных высших драконов, хранитель сиирадонов. Один из драконов, который передавал людям знания о магии и богах",
+      "cover": "Существа/Грестинхог.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#monsters",
+      "rawContentHash": "sha256:4481986d43f706c904003b5e5572c28c36c5fcd726b6677adb220b761fe3151e"
+    },
+    {
+      "slug": "artbook-poludrakon",
+      "type": "MONSTER",
+      "name": "Полудракон",
+      "summary": "Редкая разновидность полукровок дракона и человека, также известные как дракониды. Драконы считают ниже своего достоинства спариваться с людьми",
+      "cover": "Существа/Полудракон.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#monsters",
+      "rawContentHash": "sha256:61bf2484a31ac0425dd55c60cede2deff32df2ab6faee224d6e990f636e1af45"
+    },
+    {
+      "slug": "artbook-khago",
+      "type": "MONSTER",
+      "name": "Хаго",
+      "summary": "Дух-прорицатель, друг и защитник заклинателя духов Нимата. Мир Аркен-Хара населён большим разнообразием духов разных стихий, локаций, эмоций и деятельности",
+      "cover": "Существа/Хаго.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#monsters",
+      "rawContentHash": "sha256:3dc13c51da007a7457018dd08423c09e6d1a76c436fd71d300fb9128f2e160c9"
+    },
+    {
+      "slug": "artbook-poludemon",
+      "type": "MONSTER",
+      "name": "Полудемон",
+      "summary": "Полукровка демона и человека, также известные как тифлинги. Широко распространены в Нарсис-Шаде, где люди имеют статус прислуги",
+      "cover": "Существа/Полудемон.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#monsters",
+      "rawContentHash": "sha256:aff4b659fbb377cb3c7e4f2d1c07bd4b83e88316ad5abf2fcd3b6bedb4b38ce6"
+    },
+    {
+      "slug": "artbook-pur-gor-droks",
+      "type": "MONSTER",
+      "name": "Пур-Гор-Дрокс",
+      "summary": "Дух подземелий, которого Амберион нарёк королём Грогроза. Абсолютно дружелюбен если ему дают признание его величества и обидчив, если его принижают",
+      "cover": "Существа/Пур-Гор-Дрокс.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#monsters",
+      "rawContentHash": "sha256:3a5e91d0e49f65414159b67ca967bd194429b745ed1c5abf15b516f0a0e46b1c"
+    },
+    {
+      "slug": "artbook-dukh-mira-mertvykh",
+      "type": "MONSTER",
+      "name": "Дух мира Мёртвых",
+      "summary": "Неубиваемый страж из мира Мёртвых. Такие духи начали проникать в мир, когда из-за разрушения сиирадонов пошатнулась граница между мирами",
+      "cover": "Существа/Дух мира Мёртвых.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#monsters",
+      "rawContentHash": "sha256:d9a3b331f6870d066de5598ba71f18932557a0ebd0d3a5645ef15a93cb4f18de"
+    },
+    {
+      "slug": "artbook-lich-leviren",
+      "type": "MONSTER",
+      "name": "Лич Лэвирен",
+      "summary": "Разновидность лича, некогда могущественный маг, ставший духом и наставником Муора. Неизвестно, как он был создан",
+      "cover": "Существа/Лич Лэвирен,.png",
+      "gallery": [],
+      "sourceUrl": "https://arc.framer.photos/#monsters",
+      "rawContentHash": "sha256:994f99427429b92d4771f84df0d359f74468f8cbae62d2144d267bd34d476851"
+    }
+  ],
+  "картинкиБезТекста": [
+    "Локации/Осень в Северном Аркен-Харе.png",
+    "Локации/Поместье Бахтира в Аландрии.png",
+    "Локации/Пять лун _ Драконьи города.png",
+    "Локации/Регион Проклятый месяц.png",
+    "Персонажи/Патрис и Элеонора.png",
+    "Персонажи/Янтир.png",
+    "Существа/Белдхарозокас.png"
+  ],
+  "уточнить": [
+    "«Теневая башня» сопоставлена с «Темная башня.png» по смыслу — проверить.",
+    "Картинки без текста во Framer (см. картинкиБезТекста) не превращены в записи: нет текстового источника."
+  ]
+}
