@@ -275,40 +275,44 @@ for (const role of ["GM", "PLAYER"] as const) {
           await expect(control).toBeEnabled();
           const svg = control.locator(":scope > svg.arken-icon");
           await expect(svg).toBeVisible();
-          for (const [a, v] of [
-            ["aria-hidden", "true"],
-            ["focusable", "false"],
-            ["stroke", "currentColor"],
-            ["stroke-width", "2"],
-          ])
-            await expect(svg).toHaveAttribute(a, v);
-          glyphs.push(await svg.innerHTML());
-          const offsets = await control.evaluate((node) => {
-            const b = node.getBoundingClientRect();
-            const g = node.querySelector("svg")!.getBoundingClientRect();
-            return [
-              g.x + g.width / 2 - b.x - b.width / 2,
-              g.y + g.height / 2 - b.y - b.height / 2,
-            ];
+          await expect
+            .poll(() =>
+              svg.evaluate((icon) => [
+                icon.getAttribute("aria-hidden"),
+                icon.getAttribute("focusable"),
+                icon.getAttribute("stroke"),
+                icon.getAttribute("stroke-width"),
+              ]),
+            )
+            .toEqual(["true", "false", "currentColor", "2"]);
+          const iconMetrics = await control.evaluate((node) => {
+            const icon = node.querySelector("svg.arken-icon");
+            if (!icon) throw new Error("Missing action icon");
+            const button = node.getBoundingClientRect();
+            const glyph = icon.getBoundingClientRect();
+            return {
+              glyph: icon.innerHTML,
+              offsets: [
+                glyph.x + glyph.width / 2 - button.x - button.width / 2,
+                glyph.y + glyph.height / 2 - button.y - button.height / 2,
+              ],
+              size: [button.width, button.height],
+              hit: node.contains(
+                document.elementFromPoint(
+                  button.x + button.width / 2,
+                  button.y + button.height / 2,
+                ),
+              ),
+            };
           });
-          for (const offset of offsets)
+          glyphs.push(iconMetrics.glyph);
+          for (const offset of iconMetrics.offsets)
             expect(Math.abs(offset)).toBeLessThanOrEqual(1);
-          const box = (await control.boundingBox())!;
-          for (const size of [box.width, box.height])
+          for (const size of iconMetrics.size)
             expect(Number(size.toFixed(3))).toBeGreaterThanOrEqual(
               width === 360 ? 44 : 24,
             );
-          expect(
-            await control.evaluate((node) => {
-              const r = node.getBoundingClientRect();
-              return node.contains(
-                document.elementFromPoint(
-                  r.x + r.width / 2,
-                  r.y + r.height / 2,
-                ),
-              );
-            }),
-          ).toBe(true);
+          expect(iconMetrics.hit).toBe(true);
           await page.mouse.move(1, 899);
           await settleIconState(control);
           const focus = await paintedIconContrast(svg);
@@ -1282,28 +1286,45 @@ async function expectStableSelectionChrome(
   page: Page,
   baseline: Awaited<ReturnType<typeof zoomBounds>>,
 ) {
+  const zoom = page.locator(".map-scale");
   const current = await zoomBounds(page);
+  await expect
+    .poll(() =>
+      zoom.evaluate((zoomElement) => {
+        const viewport = zoomElement.closest(".map-viewport");
+        return {
+          outputCount:
+            viewport?.querySelectorAll(
+              'output[aria-label="Выбрано объектов"]',
+            ).length ?? -1,
+          hasSelectionText: /Выбрано|Токенов:|Рисунков:/.test(
+            zoomElement.textContent ?? "",
+          ),
+        };
+      }),
+    )
+    .toEqual({ outputCount: 0, hasSelectionText: false });
+  const action = page.getByRole("button", {
+    name: "Удалить выбранное",
+    exact: true,
+  });
+  const actionCount = await action.count();
+  if (actionCount) await expect(action).toBeVisible();
   for (const key of ["x", "y", "width", "height"] as const)
     expect(current[key], `selection must not change zoom ${key}`).toBeCloseTo(
       baseline[key],
       1,
     );
-  await expect(
-    page.locator('.map-viewport output[aria-label="Выбрано объектов"]'),
-  ).toHaveCount(0);
-  await expect(page.locator(".map-scale")).not.toContainText(
-    /Выбрано|Токенов:|Рисунков:/,
-  );
-  const action = page.getByRole("button", {
-    name: "Удалить выбранное",
-    exact: true,
-  });
-  if (await action.count()) {
-    await expect(action).toBeVisible();
-    expect(
-      await action.evaluate((node) => node.closest(".map-scale") !== null),
-    ).toBe(false);
-    const bounds = (await action.boundingBox())!;
+  if (actionCount) {
+    const metrics = await action.evaluate((node) => {
+      const bounds = node.getBoundingClientRect();
+      return {
+        insideZoom: node.closest(".map-scale") !== null,
+        bounds: bounds.toJSON(),
+      };
+    });
+    expect(metrics.insideZoom).toBe(false);
+    const bounds = metrics.bounds;
     expect(
       bounds.x + bounds.width <= current.x ||
         bounds.x >= current.x + current.width ||
@@ -2010,12 +2031,34 @@ for (const scenario of ["cancel", "overlay", "toggle", "mutation"] as const) {
 
   // Restore the mixed group for the existing move/delete checks below.
   // Dragging either selected member uses the existing queued mixed bulk move.
-  await page.mouse.move(tokenCenter.x, tokenCenter.y);
-  await page.mouse.down();
-  await page.mouse.move(tokenCenter.x + 64 * scale, tokenCenter.y, {
-    steps: 6,
-  });
-  await page.mouse.up();
+  const waitForBulkResponse = (operation: "MOVE" | "DELETE") =>
+    page.waitForResponse((response) => {
+      const request = response.request();
+      if (
+        new URL(response.url()).pathname !== "/api/canvas/bulk" ||
+        request.method() !== "POST"
+      )
+        return false;
+      try {
+        return (
+          request.postDataJSON() as { operation?: unknown }
+        ).operation === operation;
+      } catch {
+        return false;
+      }
+    });
+  const [moveResponse] = await Promise.all([
+    waitForBulkResponse("MOVE"),
+    (async () => {
+      await page.mouse.move(tokenCenter.x, tokenCenter.y);
+      await page.mouse.down();
+      await page.mouse.move(tokenCenter.x + 64 * scale, tokenCenter.y, {
+        steps: 6,
+      });
+      await page.mouse.up();
+    })(),
+  ]);
+  expect(await moveResponse.finished()).toBeNull();
   await expect.poll(() => bulkRequests.length).toBe(1);
   expect(bulkRequests[0]).toMatchObject({
     operation: "MOVE",
@@ -2034,7 +2077,11 @@ for (const scenario of ["cancel", "overlay", "toggle", "mutation"] as const) {
     "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
   );
   expect(bulkRequests).toHaveLength(1);
-  await dialog.getByRole("button", { name: "Удалить", exact: true }).click();
+  const [deleteResponse] = await Promise.all([
+    waitForBulkResponse("DELETE"),
+    dialog.getByRole("button", { name: "Удалить", exact: true }).click(),
+  ]);
+  expect(await deleteResponse.finished()).toBeNull();
   await expect.poll(() => bulkRequests.length).toBe(2);
   expect(bulkRequests[1]).toMatchObject({
     operation: "DELETE",
@@ -2238,6 +2285,7 @@ test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes sel
   await page.reload();
   await expectStableSelectionChrome(page, zoomBaseline);
   await map.focus();
+  await expect(map).toBeFocused();
   await page.keyboard.press("Delete");
   await expect(deleteDialog).toHaveCount(0);
   expect(requests).toHaveLength(1);
@@ -2676,6 +2724,17 @@ for (const tool of ["PAN", "DRAW"] as const) {
   });
 }
 
+test.describe("UIX-507 polygon trusted-input timing", () => {
+  test.use({
+    trace: {
+      mode: "retain-on-failure",
+      snapshots: false,
+      screenshots: true,
+      sources: true,
+      attachments: true,
+    },
+  });
+
 for (const shifted of [true, false]) {
   for (const tool of ["FOG_POLYGON", "COVER_POLYGON"] as const) {
     test(`UIX-507 ${shifted ? "Shift" : "Plain"} polygon cancellation and completion ${tool}`, async ({
@@ -2742,12 +2801,14 @@ for (const shifted of [true, false]) {
                       x: number;
                       y: number;
                       detail: number;
+                      isTrusted: boolean;
                     }>;
                     recorded.push({
                       time: event.timeStamp,
                       x: (event as MouseEvent).clientX,
                       y: (event as MouseEvent).clientY,
                       detail: (event as MouseEvent).detail,
+                      isTrusted: (event as MouseEvent).isTrusted,
                     });
                     document.documentElement.dataset.polygonJitterClicks =
                       JSON.stringify(recorded);
@@ -2756,22 +2817,36 @@ for (const shifted of [true, false]) {
                   window.addEventListener("click", handler, { capture: true });
                 });
                 await page.mouse.click(point.x, point.y);
-                // A second real pointer click remains within the renderer's
-                // four-pixel tolerance; avoid a hand-built move/down/up chain
-                // that can exceed the double-click time window under load.
-                await page.mouse.click(point.x + 2, point.y + 1, {
-                  clickCount: 2,
-                });
+                // Mouse.click({ clickCount: 2 }) emits two click sequences.
+                // Use one trusted low-level click at the jittered coordinate.
+                await page.mouse.move(point.x + 2, point.y + 1);
+                await page.mouse.down({ clickCount: 2 });
+                await page.mouse.up({ clickCount: 2 });
                 const deliveredClicks = JSON.parse(
                   (await page.locator("html").getAttribute(
                     "data-polygon-jitter-clicks",
                   )) ?? "[]",
-                ) as Array<{ time: number; x: number; y: number; detail: number }>;
+                ) as Array<{
+                  time: number;
+                  x: number;
+                  y: number;
+                  detail: number;
+                  isTrusted: boolean;
+                }>;
                 expect(deliveredClicks).toHaveLength(2);
-                expect(deliveredClicks[1]!.time - deliveredClicks[0]!.time).toBeLessThanOrEqual(400);
                 expect(deliveredClicks.map(({ detail }) => detail)).toEqual([
                   1,
                   2,
+                ]);
+                expect(deliveredClicks.every(({ isTrusted }) => isTrusted)).toBe(
+                  true,
+                );
+                const interval = deliveredClicks[1]!.time - deliveredClicks[0]!.time;
+                expect(interval).toBeGreaterThanOrEqual(0);
+                expect(interval).toBeLessThanOrEqual(400);
+                expect(deliveredClicks.map(({ x, y }) => [x, y])).toEqual([
+                  [Math.floor(point.x), Math.floor(point.y)],
+                  [Math.floor(point.x + 2), Math.floor(point.y + 1)],
                 ]);
                 expect(
                   Math.hypot(
@@ -2878,6 +2953,7 @@ for (const shifted of [true, false]) {
     });
   }
 }
+});
 for (const tool of ["FOG", "COVER", "FOG_BRUSH", "COVER_BRUSH"] as const) {
   test(`UIX-507 Shift fog gesture and Escape cancellation ${tool}`, async ({
     page,
