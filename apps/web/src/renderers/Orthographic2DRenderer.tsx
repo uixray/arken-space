@@ -591,6 +591,13 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     onSelectionChangeRef.current?.(selectedTokenIds);
   }, [selectedTokenIds, onSelectionChangeRef]);
   const [selectedDrawingIds, setSelectedDrawingIds] = useState<string[]>([]);
+  const [areaSelectionMode, setAreaSelectionMode] = useState(false);
+  const [bulkDeletePending, setBulkDeletePending] = useState(false);
+  const bulkDeletePendingRef = useRef(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | undefined>();
+  const currentSceneIdRef = useRef(props.scene.id);
+  currentSceneIdRef.current = props.scene.id;
+  const selectionSceneIdRef = useRef(props.scene.id);
   const [bulkDeleteRequested, setBulkDeleteRequested] = useState<{
     scope: string;
     request: MapDeleteRequest;
@@ -607,6 +614,28 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     width: number;
     height: number;
   } | null>(null);
+  useLayoutEffect(() => {
+    if (selectionSceneIdRef.current === props.scene.id) return;
+    selectionSceneIdRef.current = props.scene.id;
+    setSelectedTokenIds([]);
+    setSelectedDrawingIds([]);
+    setSelectedDrawingId(null);
+    setMarquee(null);
+    setAreaSelectionMode(false);
+    setBulkDeleteRequested(null);
+    setBulkDeleteError(undefined);
+    dispatchInteraction({ type: "clear-selection" });
+  }, [props.scene.id]);
+  useEffect(() => {
+    if (props.tool === "PAN" || !areaSelectionMode) return;
+    setAreaSelectionMode(false);
+    setMarquee(null);
+  }, [areaSelectionMode, props.tool]);
+  useEffect(() => {
+    if (isObjectListOpen || !areaSelectionMode) return;
+    setAreaSelectionMode(false);
+    setMarquee(null);
+  }, [areaSelectionMode, isObjectListOpen]);
   const panStartRef = useRef<{
     pointerX: number;
     pointerY: number;
@@ -1012,6 +1041,11 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       const list = objectListRef.current;
       const target = event.target as HTMLElement | null;
       if (target?.closest(".map-object-list-trigger")) return;
+      const canvas =
+        areaSelectionMode &&
+        target instanceof Element &&
+        target.closest(".konvajs-content");
+      if (canvas && containerRef.current?.contains(canvas)) return;
       if (list && !list.contains(event.target as Node)) {
         dispatchInteraction({ type: "close-object-list" });
         props.onObjectListClose?.();
@@ -1022,6 +1056,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       window.removeEventListener("pointerdown", closeOnOutsidePointer);
   }, [
     interaction.objectListOpen,
+    areaSelectionMode,
     props.externalObjectListOpen,
     props.onObjectListClose,
   ]);
@@ -1483,6 +1518,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   }, [bulkDeleteRequested, bulkDeleteValid]);
   const requestBulkDelete = () => {
     if (
+      bulkDeletePendingRef.current ||
       !movableTargets.length ||
       movableTargets.length !==
         selectedTokenIds.length + selectedDrawingIds.length
@@ -1495,6 +1531,34 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
         targets: movableTargets.map((target) => ({ ...target })),
       },
     });
+    setBulkDeleteError(undefined);
+  };
+  const canBulkSelectToken = (token: TokenDto) =>
+    token.layer !== "MAP" &&
+    !token.locked &&
+    (props.role === "GM" ||
+      token.controllerMembershipIds.includes(props.membershipId));
+  const setObjectBulkSelected = (ref: MapObjectRef, checked: boolean) => {
+    if (bulkDeletePendingRef.current) return;
+    dispatchInteraction({ type: "clear-selection" });
+    setSelectedDrawingId(null);
+    if (ref.kind === "token") {
+      setSelectedTokenIds((ids) =>
+        checked
+          ? ids.includes(ref.objectId)
+            ? ids
+            : [...ids, ref.objectId]
+          : ids.filter((id) => id !== ref.objectId),
+      );
+      return;
+    }
+    setSelectedDrawingIds((ids) =>
+      checked
+        ? ids.includes(ref.objectId)
+          ? ids
+          : [...ids, ref.objectId]
+        : ids.filter((id) => id !== ref.objectId),
+    );
   };
   const keyboardTokenTargets = movableTargets.filter(
     (target) => target.targetType === "TOKEN",
@@ -1533,6 +1597,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     return current ? createValidatedMapObjectRef(ref) : null;
   };
   const requestDelete = (ref: MapObjectRef) => {
+    if (bulkDeletePendingRef.current) return;
     const current = resolveCurrentRef(ref);
     if (
       current?.kind === "token" &&
@@ -1554,16 +1619,34 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       requestBulkDelete();
   };
   const confirmBulkDelete = async () => {
-    if (!props.onBulkDelete || !bulkDeleteRequested || !bulkDeleteValid) return;
+    if (
+      bulkDeletePendingRef.current ||
+      !props.onBulkDelete ||
+      !bulkDeleteRequested ||
+      !bulkDeleteValid
+    )
+      return;
+    const requested = bulkDeleteRequested;
+    const requestedSceneId = props.scene.id;
+    bulkDeletePendingRef.current = true;
+    setBulkDeletePending(true);
+    setBulkDeleteError(undefined);
     try {
-      await props.onBulkDelete(bulkDeleteRequested.request);
-      setBulkDeleteRequested(null);
-      setSelectedTokenIds([]);
-      setSelectedDrawingIds([]);
-      setSelectedDrawingId(null);
+      await props.onBulkDelete(requested.request);
+      if (currentSceneIdRef.current === requestedSceneId) {
+        setBulkDeleteRequested(null);
+        setSelectedTokenIds([]);
+        setSelectedDrawingIds([]);
+        setSelectedDrawingId(null);
+      }
     } catch {
-      // The app presents the mutation error. Preserve both confirmation and
-      // selection so the user can retry or cancel without losing context.
+      if (currentSceneIdRef.current === requestedSceneId)
+        setBulkDeleteError(
+          "Не удалось удалить выбранные объекты. Выделение сохранено; можно повторить.",
+        );
+    } finally {
+      bulkDeletePendingRef.current = false;
+      setBulkDeletePending(false);
     }
   };
   useLayoutEffect(() => {
@@ -1628,6 +1711,13 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       event.metaKey
     )
       return;
+    if (event.key === "Escape" && areaSelectionMode) {
+      setAreaSelectionMode(false);
+      setMarquee(null);
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     const step = 48;
     const tokenMove = resolveTokenMoveKey({
       key: event.key,
@@ -2065,7 +2155,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     }
     if (
       event.evt.button === 0 &&
-      event.evt.shiftKey &&
+      (event.evt.shiftKey || areaSelectionMode) &&
       targetIsCanvas &&
       props.tool === "PAN"
     ) {
@@ -2260,13 +2350,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     if (marquee) {
       setSelectedTokenIds(
         selectableObjects.tokens
-          .filter(
-            (token) =>
-              token.layer !== "MAP" &&
-              !token.locked &&
-              (props.role === "GM" ||
-                token.controllerMembershipIds.includes(props.membershipId)),
-          )
+          .filter(canBulkSelectToken)
           .filter((token) => rectanglesIntersect(marquee, token))
           .map((token) => token.id),
       );
@@ -3295,6 +3379,13 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           aria-expanded={isObjectListOpen}
           onClick={() => dispatchInteraction({ type: "open-object-list" })}
           onKeyDown={(event) => {
+            if (event.key === "Escape" && areaSelectionMode) {
+              setAreaSelectionMode(false);
+              setMarquee(null);
+              event.preventDefault();
+              event.stopPropagation();
+              return;
+            }
             if (
               resolveMapEscapeIntent({
                 key: event.key,
@@ -3319,6 +3410,13 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           aria-label={"Объекты карты"}
           onPointerDown={(event) => event.stopPropagation()}
           onKeyDown={(event) => {
+            if (event.key === "Escape" && areaSelectionMode) {
+              setAreaSelectionMode(false);
+              setMarquee(null);
+              event.preventDefault();
+              event.stopPropagation();
+              return;
+            }
             if (
               resolveMapEscapeIntent({
                 key: event.key,
@@ -3341,6 +3439,25 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
             trigger?.focus();
           }}
         >
+          <div className="map-object-list__selection-controls">
+            <button
+              type="button"
+              aria-pressed={areaSelectionMode}
+              disabled={bulkDeletePending}
+              onClick={() => {
+                if (!areaSelectionMode && props.tool !== "PAN")
+                  onToolSelect("PAN");
+                setAreaSelectionMode(!areaSelectionMode);
+              }}
+            >
+              {areaSelectionMode ? "Завершить выбор области" : "Выбрать область"}
+            </button>
+            {areaSelectionMode && (
+              <p role="status">
+                Перетащите рамку по свободному месту карты. Escape — выйти.
+              </p>
+            )}
+          </div>
           <ul className="map-object-list">
             {selectableObjects.tokens.map((token) => {
               const dragPosition = dragPositions[token.id];
@@ -3362,6 +3479,28 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                   key={`token:${token.id}:${token.revision}`}
                   className="map-object-list__token"
                 >
+                  <label className="map-object-list__bulk-select">
+                    <input
+                      type="checkbox"
+                      checked={selectedTokenIds.includes(token.id)}
+                      disabled={
+                        bulkDeletePending ||
+                        (!selectedTokenIds.includes(token.id) &&
+                          !canBulkSelectToken(token))
+                      }
+                      aria-label={`Выбрать для группового действия: ${label}`}
+                      onChange={(event) =>
+                        setObjectBulkSelected(
+                          {
+                            kind: "token",
+                            objectId: token.id,
+                            revision: token.revision,
+                          },
+                          event.target.checked,
+                        )
+                      }
+                    />
+                  </label>
                   <button
                     type="button"
                     aria-pressed={
@@ -3445,7 +3584,28 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                 drawing.authorMembershipId === props.membershipId;
               const label = `Рисунок ${index + 1}`;
               return (
-                <li key={`drawing:${drawing.id}:${drawing.revision}`}>
+                <li
+                  className="map-object-list__drawing"
+                  key={`drawing:${drawing.id}:${drawing.revision}`}
+                >
+                  <label className="map-object-list__bulk-select">
+                    <input
+                      type="checkbox"
+                      checked={selectedDrawingIds.includes(drawing.id)}
+                      disabled={bulkDeletePending}
+                      aria-label={`Выбрать для группового действия: ${label}`}
+                      onChange={(event) =>
+                        setObjectBulkSelected(
+                          {
+                            kind: "drawing",
+                            objectId: drawing.id,
+                            revision: drawing.revision,
+                          },
+                          event.target.checked,
+                        )
+                      }
+                    />
+                  </label>
                   <button
                     type="button"
                     aria-pressed={
@@ -4446,8 +4606,12 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
               .filter((target) => target.targetType === "DRAWING")
               .map((target) => target.targetId) ?? [],
         })}
-        onClose={() => setBulkDeleteRequested(null)}
+        onClose={() => {
+          if (!bulkDeletePendingRef.current) setBulkDeleteRequested(null);
+        }}
         onConfirm={() => void confirmBulkDelete()}
+        loading={bulkDeletePending}
+        error={bulkDeleteError}
       />
       {props.canvasEditMode === "BACKGROUND" && (
         <label className="aspect-lock">
