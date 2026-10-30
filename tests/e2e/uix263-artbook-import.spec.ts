@@ -16,7 +16,7 @@ import {
   artbookProvenance,
   type ArtbookSource,
 } from "../../apps/web/src/world-artbook";
-import bundledArtbook from "../../docs/content/world-artbook.json";
+import bundledArtbook from "../../docs/content/world-artbook.json" with { type: "json" };
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 import { fulfillUnmocked } from "./mock-api-contract";
