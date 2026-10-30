@@ -154,5 +154,6 @@ it("keeps quick roll groups visually distinct without redundant headings and sha
     expect.objectContaining({ id: "fire" }),
     "SHARE",
     undefined,
+    undefined,
   );
 });
