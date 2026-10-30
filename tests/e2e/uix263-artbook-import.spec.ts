@@ -1,4 +1,5 @@
 import { expect, test } from "./react-console-guard";
+import type { Page } from "@playwright/test";
 import {
   addWorldContentMediaSchema,
   createWorldContentSchema,
@@ -11,6 +12,11 @@ import {
   gmSnapshot,
   playerSnapshot,
 } from "../../apps/web/src/test-support/game-snapshot-fixtures";
+import {
+  artbookProvenance,
+  type ArtbookSource,
+} from "../../apps/web/src/world-artbook";
+import bundledArtbook from "../../docs/content/world-artbook.json" with { type: "json" };
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { openWorkspaceSection } from "./workspace-nav-helper";
 import { fulfillUnmocked } from "./mock-api-contract";
@@ -18,11 +24,13 @@ import { fulfillUnmocked } from "./mock-api-contract";
 const campaignId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const selectedFolder = "tests/e2e/fixtures/uix263-artbook";
 const date = new Date(0).toISOString();
+const artbookSource = bundledArtbook as unknown as ArtbookSource;
 
-for (const width of [390, 1280]) {
-  test(`UIX-263 GM reviews, imports and resumes artbook DRAFT plus mapped media at ${width}px`, async ({
-    page,
-  }) => {
+async function configureGmArtbook(
+    page: Page,
+    width: number,
+    seedCanonicalDrafts = false,
+  ) {
     const snapshot = gmSnapshot({
       schemaVersion: 2,
       campaign: { ...gmSnapshot().campaign, id: campaignId },
@@ -35,6 +43,31 @@ for (const width of [390, 1280]) {
     const writes: { method: string; path: string; actionId?: string }[] = [];
     const forbiddenWrites: string[] = [];
     let nextId = 1;
+    if (seedCanonicalDrafts) {
+      artbookSource.записи.forEach((record, index) => {
+        const row: WorldContentDto = {
+          id: `cccccccc-cccc-4ccc-8ccc-${String(index + 1).padStart(12, "0")}`,
+          slug: record.slug,
+          type: record.type,
+          subtype: null,
+          name: record.name,
+          aliases: [],
+          summary: record.summary ?? "",
+          publicText: "",
+          gmOnlyText: "",
+          tags: [],
+          lifecycle: "DRAFT",
+          coverAssetId: null,
+          provenance: artbookProvenance(artbookSource, record),
+          revision: 0,
+          createdAt: date,
+          updatedAt: date,
+        };
+        entities.set(row.id, row);
+        media.set(row.id, []);
+      });
+      nextId = artbookSource.записи.length + 1;
+    }
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
         if (message.toString() === "40") socket.send('40{"sid":"artbook"}');
@@ -243,6 +276,21 @@ for (const width of [390, 1280]) {
         .getByRole("button", { name: "Импорт артбука", exact: true })
         .click();
     }
+    return {
+      entities,
+      media,
+      assetsByAction,
+      assetLookups,
+      writes,
+      forbiddenWrites,
+      openImporter,
+    };
+}
+
+for (const width of [390, 1280]) {
+  test(`UIX-263 GM imports 78 artbook text records as DRAFT and resumes idempotently at ${width}px`, async ({ page }) => {
+    const { entities, writes, forbiddenWrites, openImporter } =
+      await configureGmArtbook(page, width);
     await openImporter();
     await page
       .getByRole("button", { name: "1. Предварительный просмотр текста" })
@@ -276,8 +324,9 @@ for (const width of [390, 1280]) {
     ).toHaveLength(78);
     expect(writes.some((item) => item.path === "/api/assets")).toBe(false);
     expect(writes.some((item) => item.path.endsWith("/media"))).toBe(false);
-    expect(writes.some((item) => item.path.endsWith("/lifecycle"))).toBe(false);
-
+    expect(writes.some((item) => item.path.endsWith("/lifecycle"))).toBe(
+      false,
+    );
     await page.reload();
     await openImporter();
     await page
@@ -289,7 +338,35 @@ for (const width of [390, 1280]) {
         (item) => item.path === "/api/world-content" && item.method === "POST",
       ),
     ).toHaveLength(78);
+    expect(forbiddenWrites).toEqual([]);
+  });
+}
 
+for (const width of [390, 1280]) {
+  test(`UIX-263 GM imports mapped media idempotently from canonical DRAFTs at ${width}px`, async ({ page }) => {
+    const {
+      entities,
+      media,
+      assetsByAction,
+      assetLookups,
+      writes,
+      forbiddenWrites,
+      openImporter,
+    } = await configureGmArtbook(page, width, true);
+    expect(entities.size).toBe(78);
+    expect(
+      [...entities.values()].every(
+        (item) =>
+          item.lifecycle === "DRAFT" &&
+          item.revision === 0 &&
+          item.coverAssetId === null &&
+          item.provenance.editorialApprovalStatus === "PENDING",
+      ),
+    ).toBe(true);
+    expect([...media.values()].every((items) => items.length === 0)).toBe(true);
+    expect(assetsByAction.size).toBe(0);
+    expect(writes).toEqual([]);
+    await openImporter();
     const folder = page.getByLabel(
       "3. Предложить сопоставления файлов (папка «Артбук»)",
     );

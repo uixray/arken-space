@@ -179,8 +179,13 @@ async function mockSurfaceApp(page: Page, snapshot: GameSnapshot) {
 
 async function openThemeDialog(page: Page) {
   await page.locator(".account-menu > summary").click();
-  await page.getByRole("button", { name: "Оформление", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Оформление", exact: true });
+  await page
+    .getByRole("button", { name: "Тема и рамка бросков", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Тема и рамка бросков",
+    exact: true,
+  });
   await expect(dialog).toBeVisible();
   return dialog;
 }

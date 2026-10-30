@@ -9,6 +9,7 @@ import {
   renderComponent,
   screen,
   userEvent,
+  waitFor,
   within,
 } from "./test-support/render";
 import { artbookImageFixtureBytes } from "./artbook-image-test-fixtures";
@@ -808,14 +809,15 @@ describe("WorldArtbookImport", () => {
           "3. Предложить сопоставления файлов (папка «Артбук»)",
         );
         await user.upload(input, files);
+        await waitFor(() => expect(input).toBeEnabled());
         await user.click(
           screen.getByLabelText(/Я проверил каждое показанное сопоставление/),
         );
-        await user.click(
-          screen.getByRole("button", {
-            name: "4. Подтвердить сопоставления и загрузку",
-          }),
-        );
+        const confirm = screen.getByRole("button", {
+          name: "4. Подтвердить сопоставления и загрузку",
+        });
+        await waitFor(() => expect(confirm).toBeEnabled());
+        await user.click(confirm);
       };
       await chooseAndConfirm();
       expect(
@@ -918,14 +920,18 @@ describe("WorldArtbookImport", () => {
           ),
           files,
         );
+        const input = screen.getByLabelText(
+          "3. Предложить сопоставления файлов (папка «Артбук»)",
+        );
+        await waitFor(() => expect(input).toBeEnabled());
         await user.click(
           screen.getByLabelText(/Я проверил каждое показанное сопоставление/),
         );
-        await user.click(
-          screen.getByRole("button", {
-            name: "4. Подтвердить сопоставления и загрузку",
-          }),
-        );
+        const confirm = screen.getByRole("button", {
+          name: "4. Подтвердить сопоставления и загрузку",
+        });
+        await waitFor(() => expect(confirm).toBeEnabled());
+        await user.click(confirm);
       };
       await chooseAndConfirm();
       expect(
