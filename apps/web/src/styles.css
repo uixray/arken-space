@@ -8204,6 +8204,13 @@ button:not([role="tab"]),
   margin-bottom: var(--space-sm);
 }
 
+.dice-frame-picker__empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
 .dice-frame-picker__options {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));

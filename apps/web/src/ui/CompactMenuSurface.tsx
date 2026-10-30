@@ -182,7 +182,7 @@ export const CompactMenuSurface = memo(function CompactMenuSurface({
             onClick={onOpenThemeSettings}
           >
             <AppIcon icon={SettingsIcon} />
-            <span>Оформление и тема</span>
+            <span>Тема и рамка бросков</span>
           </button>
 
           <button

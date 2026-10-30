@@ -237,7 +237,7 @@ export const AppHeader = memo(function AppHeader({
                   onOpenThemeSettings();
                 }}
               >
-                Оформление
+                Тема и рамка бросков
               </button>
             )}
             {/* UIX-462: шпаргалка рядом с выходом — сюда лезут, когда ищут
