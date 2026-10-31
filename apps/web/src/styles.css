@@ -4685,20 +4685,40 @@ body:has(.landing-shell) {
   padding: 0;
   list-style: none;
 }
+.map-object-list__selection-controls {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  margin-block-end: var(--space-sm);
+}
+.map-object-list__selection-controls p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
 .map-object-list li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(2, auto);
+  grid-template-columns: auto minmax(0, 1fr) repeat(2, auto);
   gap: 4px;
   align-items: center;
 }
 .map-object-list li.map-object-list__token {
-  grid-template-columns: minmax(0, 1fr) repeat(3, auto);
+  grid-template-columns: auto minmax(0, 1fr) repeat(3, auto);
+}
+.map-object-list__bulk-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 6px;
+}
+.map-object-list__bulk-select input {
+  margin: 0;
 }
 .map-object-list button {
   min-width: 0;
   text-align: left;
 }
-.map-object-list li > button:first-child {
+.map-object-list li > button:first-of-type {
   overflow-wrap: anywhere;
 }
 .map-object-list button[aria-pressed="true"] {

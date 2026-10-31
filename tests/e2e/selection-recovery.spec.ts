@@ -71,8 +71,11 @@ function fixture(): GameSnapshot {
   ];
   return snapshot;
 }
-async function boundary(page: Page) {
-  let snapshot = fixture();
+async function boundary(
+  page: Page,
+  initialSnapshot: GameSnapshot = fixture(),
+) {
+  let snapshot = structuredClone(initialSnapshot);
   const sockets = new Set<WebSocketRoute>();
   const writes: Record<string, unknown>[] = [];
   const unexpected: string[] = [];
@@ -156,6 +159,22 @@ async function boundary(page: Page) {
           revisions: {
             tokens: { [tokenId]: revision },
             drawings: { [drawingId]: revision },
+          },
+        },
+      });
+    },
+    acceptDelete: async () => {
+      expect(held).toBeDefined();
+      const response = held!;
+      held = undefined;
+      await response.fulfill({
+        json: {
+          ok: true,
+          tokens: [],
+          drawings: [],
+          revisions: {
+            tokens: { [tokenId]: 0 },
+            drawings: { [drawingId]: 0 },
           },
         },
       });
@@ -437,6 +456,377 @@ test("UIX-507 in-place authoritative deletion prunes only the missing selected m
       .poll(() => map.getAttribute("data-resize-handle-x"))
       .toBeNull();
     expect(mock.writes).toHaveLength(0);
+    expect(mock.unexpected).toEqual([]);
+  } finally {
+    await mock.cleanup();
+  }
+});
+
+test("UIX-777 area mode selects without Shift, keeps its list open on canvas, and exits with Escape", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const mock = await boundary(page);
+  try {
+    await mockAuthenticatedGameCapabilities(page);
+    await page.goto("/");
+    const map = page.locator(".map-viewport");
+    const trigger = page.getByRole("button", {
+      name: "Список объектов и токенов карты",
+      exact: true,
+    });
+    await trigger.click();
+    const list = page.getByRole("region", {
+      name: "Объекты карты",
+      exact: true,
+    });
+    await list
+      .getByRole("button", { name: "Выбранный токен", exact: true })
+      .click();
+    const areaButton = list.locator(
+      ".map-object-list__selection-controls button",
+    );
+    await areaButton.click();
+    await expect(areaButton).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      list.getByRole("status"),
+    ).toHaveText("Перетащите рамку по свободному месту карты. Escape — выйти.");
+
+    const box = (await map.boundingBox())!;
+    const right = Number(await map.getAttribute("data-resize-handle-x"));
+    const bottom = Number(await map.getAttribute("data-resize-handle-y"));
+    expect(Number.isFinite(right)).toBe(true);
+    expect(right).toBeGreaterThan(0);
+    expect(Number.isFinite(bottom)).toBe(true);
+    expect(bottom).toBeGreaterThan(0);
+    const scale = Number(
+      await map.getByRole("slider", { name: "Масштаб карты" }).inputValue(),
+    );
+    const point = (x: number, y: number) => ({
+      x: box.x + right + (x - 448) * scale,
+      y: box.y + bottom + (y - 384) * scale,
+    });
+    const start = point(350, 290);
+    const end = point(565, 410);
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await expect(list).toBeVisible();
+    await page.mouse.move(end.x, end.y, { steps: 6 });
+    await page.mouse.up();
+    await expect(
+      list.getByRole("checkbox", {
+        name: "Выбрать для группового действия: Выбранный токен",
+      }),
+    ).toBeChecked();
+    await expect(
+      list.getByRole("checkbox", {
+        name: "Выбрать для группового действия: Рисунок 1",
+      }),
+    ).toBeChecked();
+    await map.focus();
+    await page.keyboard.press("Escape");
+    await expect(areaButton).toHaveAttribute("aria-pressed", "false");
+    await expect(list).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Удалить выбранное", exact: true }),
+    ).toBeVisible();
+    expect(mock.writes).toHaveLength(0);
+    expect(mock.unexpected).toEqual([]);
+  } finally {
+    await mock.cleanup();
+  }
+});
+
+test("UIX-777 object-list checkboxes are keyboard-operable and preserve current revisions in bulk targets", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const mock = await boundary(page);
+  try {
+    await mockAuthenticatedGameCapabilities(page);
+    await page.goto("/");
+    const trigger = page.getByRole("button", {
+      name: "Список объектов и токенов карты",
+      exact: true,
+    });
+    await trigger.click();
+    const list = page.getByRole("region", {
+      name: "Объекты карты",
+      exact: true,
+    });
+    const tokenCheckbox = list.getByRole("checkbox", {
+      name: "Выбрать для группового действия: Выбранный токен",
+    });
+    const drawingCheckbox = list.getByRole("checkbox", {
+      name: "Выбрать для группового действия: Рисунок 1",
+    });
+    await tokenCheckbox.focus();
+    await page.keyboard.press("Space");
+    await expect(tokenCheckbox).toBeChecked();
+    await page.keyboard.press("Space");
+    await expect(tokenCheckbox).not.toBeChecked();
+    await page.keyboard.press("Space");
+    await drawingCheckbox.check();
+    await expect(tokenCheckbox).toBeChecked();
+    await expect(drawingCheckbox).toBeChecked();
+
+    await page
+      .getByRole("button", { name: "Удалить выбранное", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Удалить выбранные объекты?",
+      exact: true,
+    });
+    await dialog.getByRole("button", { name: "Удалить", exact: true }).click();
+    await expect.poll(() => mock.writes.length).toBe(1);
+    const deleteRequest = mock.writes[0]!;
+    expect(deleteRequest).toEqual({
+      actionId: expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      ),
+      operation: "DELETE",
+      sceneId,
+      targets: [
+        { targetType: "TOKEN", targetId: tokenId, revision: 0 },
+        { targetType: "DRAWING", targetId: drawingId, revision: 0 },
+      ],
+    });
+    await mock.acceptDelete();
+    await expect(dialog).toBeHidden();
+    expect(mock.unexpected).toEqual([]);
+  } finally {
+    await mock.cleanup();
+  }
+});
+
+test("UIX-777 PLAYER group checkboxes do not extend selection beyond current controller ACL", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const current = fixture();
+  current.me.role = "PLAYER";
+  const membershipId = current.me.id;
+  current.tokens[0]!.ownerMembershipId = membershipId;
+  current.tokens[0]!.controllerMembershipIds = [membershipId];
+  current.tokens.push(
+    {
+      ...current.tokens[0]!,
+      id: "50700000-0000-4000-8000-000000000005",
+      name: "Заблокированный токен",
+      locked: true,
+      x: 600,
+    },
+    {
+      ...current.tokens[0]!,
+      id: "50700000-0000-4000-8000-000000000006",
+      name: "Токен без контроля",
+      controllerMembershipIds: [],
+      x: 800,
+    },
+    {
+      ...current.tokens[0]!,
+      id: "50700000-0000-4000-8000-000000000007",
+      name: "Чужой токен",
+      ownerMembershipId: "50700000-0000-4000-8000-000000000008",
+      controllerMembershipIds: ["50700000-0000-4000-8000-000000000008"],
+      x: 1000,
+    },
+  );
+  current.fogReveals = [
+    { id: "revealed", sceneId, x: 0, y: 0, width: 1600, height: 1000 },
+  ];
+  const mock = await boundary(page, current);
+  try {
+    await mockAuthenticatedGameCapabilities(page);
+    await page.goto("/");
+    await page
+      .getByRole("button", {
+        name: "Список объектов и токенов карты",
+        exact: true,
+      })
+      .click();
+    const list = page.getByRole("region", { name: "Объекты карты", exact: true });
+    const available = list.getByRole("checkbox", {
+      name: "Выбрать для группового действия: Выбранный токен",
+    });
+    const locked = list.getByRole("checkbox", {
+      name: "Выбрать для группового действия: Заблокированный токен",
+    });
+    const uncontrolled = list.getByRole("checkbox", {
+      name: "Выбрать для группового действия: Токен без контроля",
+    });
+    await expect(available).toBeEnabled();
+    await expect(locked).toBeDisabled();
+    await expect(uncontrolled).toBeDisabled();
+    await expect(
+      list.getByRole("button", { name: "Чужой токен", exact: true }),
+    ).toHaveCount(0);
+    await available.focus();
+    await page.keyboard.press("Space");
+    await expect(available).toBeChecked();
+    expect(mock.writes).toHaveLength(0);
+    expect(mock.unexpected).toEqual([]);
+  } finally {
+    await mock.cleanup();
+  }
+});
+
+test("UIX-777 bulk delete blocks duplicate submission and preserves selection on failure", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const mock = await boundary(page);
+  try {
+    await mockAuthenticatedGameCapabilities(page);
+    await page.goto("/");
+    const trigger = page.getByRole("button", {
+      name: "Список объектов и токенов карты",
+      exact: true,
+    });
+    await trigger.click();
+    const list = page.getByRole("region", { name: "Объекты карты", exact: true });
+    await list
+      .getByRole("checkbox", {
+        name: "Выбрать для группового действия: Выбранный токен",
+      })
+      .check();
+    await list
+      .getByRole("checkbox", {
+        name: "Выбрать для группового действия: Рисунок 1",
+      })
+      .check();
+    await page
+      .getByRole("button", { name: "Удалить выбранное", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Удалить выбранные объекты?",
+      exact: true,
+    });
+    const confirm = dialog.locator(
+      "button.arken-modal-dialog-footer__button-apply",
+    );
+    await confirm.click();
+    await expect.poll(() => mock.writes.length).toBe(1);
+    await expect(confirm).toBeDisabled();
+    await confirm.evaluate((button) => (button as HTMLButtonElement).click());
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    await expect.poll(() => mock.writes.length).toBe(1);
+
+    await mock.reject();
+    await expect(dialog.getByRole("alert")).toHaveText(
+      "Не удалось удалить выбранные объекты. Выделение сохранено; можно повторить.",
+    );
+    await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
+    await trigger.click();
+    await expect(
+      list.getByRole("checkbox", {
+        name: "Выбрать для группового действия: Выбранный токен",
+      }),
+    ).toBeChecked();
+    await expect(
+      list.getByRole("checkbox", {
+        name: "Выбрать для группового действия: Рисунок 1",
+      }),
+    ).toBeChecked();
+    await page
+      .getByRole("button", { name: "Удалить выбранное", exact: true })
+      .click();
+    await expect(dialog).toContainText("Токенов: 1. Рисунков: 1.");
+    await expect(confirm).toBeEnabled();
+    await confirm.click();
+    await expect.poll(() => mock.writes.length).toBe(2);
+    expect(mock.unexpected).toEqual([]);
+    await mock.acceptDelete();
+    await expect(dialog).toBeHidden();
+  } finally {
+    await mock.cleanup();
+  }
+});
+
+test("UIX-777 late bulk-delete acknowledgement from a prior scene does not clear the new scene selection", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const nextSceneId = "50700000-0000-4000-8000-000000000009";
+  const current = fixture();
+  current.scenes.push({
+    ...current.scenes[0]!,
+    id: nextSceneId,
+    name: "Новая сцена",
+    active: false,
+  });
+  current.tokens.push({
+    ...current.tokens[0]!,
+    id: "50700000-0000-4000-8000-000000000010",
+    sceneId: nextSceneId,
+    name: "Токен новой сцены",
+    x: 700,
+  });
+  const mock = await boundary(page, current);
+  try {
+    await mockAuthenticatedGameCapabilities(page);
+    await page.goto("/");
+    const trigger = page.getByRole("button", {
+      name: "Список объектов и токенов карты",
+      exact: true,
+    });
+    await trigger.click();
+    const list = page.getByRole("region", { name: "Объекты карты", exact: true });
+    await list
+      .getByRole("checkbox", {
+        name: "Выбрать для группового действия: Выбранный токен",
+      })
+      .check();
+    await list
+      .getByRole("checkbox", {
+        name: "Выбрать для группового действия: Рисунок 1",
+      })
+      .check();
+    await page
+      .getByRole("button", { name: "Удалить выбранное", exact: true })
+      .click();
+    await page
+      .getByRole("dialog", { name: "Удалить выбранные объекты?", exact: true })
+      .getByRole("button", { name: "Удалить", exact: true })
+      .click();
+    await expect.poll(() => mock.writes.length).toBe(1);
+
+    const next = structuredClone(current);
+    next.snapshotVersion = current.snapshotVersion + 1;
+    next.scenes[0]!.active = false;
+    next.scenes[1]!.active = true;
+    await mock.publish(next);
+    await expect(page.locator(".topbar")).toContainText("Новая сцена");
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await trigger.click();
+    const newSceneList = page.getByRole("region", {
+      name: "Объекты карты",
+      exact: true,
+    });
+    const newSceneToken = newSceneList.getByRole("button", {
+      name: "Токен новой сцены",
+      exact: true,
+    });
+    await newSceneToken.click();
+    await expect(newSceneToken).toHaveAttribute("aria-pressed", "true");
+
+    const response = page.waitForResponse(
+      (candidate) =>
+        new URL(candidate.url()).pathname === "/api/canvas/bulk" &&
+        candidate.request().method() === "POST",
+    );
+    await mock.acceptDelete();
+    const completedResponse = await response;
+    await completedResponse.finished();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(newSceneToken).toHaveAttribute("aria-pressed", "true");
+    expect(mock.writes).toHaveLength(1);
     expect(mock.unexpected).toEqual([]);
   } finally {
     await mock.cleanup();
