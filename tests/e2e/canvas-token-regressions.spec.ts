@@ -166,9 +166,10 @@ for (const role of ["GM", "PLAYER"] as const) {
         ? ["СтражДревнейБашни".repeat(6), "Рисунок 1", "Рисунок 2"]
         : ["СтражДревнейБашни".repeat(6), "Рисунок 1"];
     for (const label of labels) {
-      test(`UIX-645 object list row icons ${role} ${width} ${label}`, async ({
-        page,
-      }, info) => {
+      for (const targetAction of ["Дублировать", "Удалить"] as const) {
+        test(`UIX-645 object list row icons ${role} ${width} ${label} ${targetAction}`, async ({
+          page,
+        }, info) => {
       const current: GameSnapshot = structuredClone(snapshot);
       current.me.role = role;
       const tokenName = "СтражДревнейБашни".repeat(6);
@@ -250,7 +251,20 @@ for (const role of ["GM", "PLAYER"] as const) {
           await select.evaluate((node) => node.scrollWidth - node.clientWidth),
         ).toBeLessThanOrEqual(1);
         await select.focus();
-        const glyphs: string[] = [];
+        const siblingGlyphs = await list.evaluate((node, rowLabel) =>
+          ["Дублировать", "Удалить"].map((action) => {
+            const button = Array.from(
+              node.querySelectorAll<HTMLButtonElement>("button[aria-label]"),
+            ).find(
+              (item) => item.getAttribute("aria-label") === `${action}: ${rowLabel}`,
+            );
+            const icon = button?.querySelector<SVGSVGElement>("svg.arken-icon");
+            if (!icon) throw new Error(`Missing ${action} icon for ${rowLabel}`);
+            return icon.innerHTML;
+          }),
+          label,
+        );
+        expect(new Set(siblingGlyphs).size).toBe(2);
         if (label === tokenName) {
           // Tokens now expose a dedicated focus-on-map action between the
           // selection row and duplicate/delete actions.
@@ -262,8 +276,20 @@ for (const role of ["GM", "PLAYER"] as const) {
           await expect(locate).toBeFocused();
           await expect(locate).toBeEnabled();
         }
-        for (const action of ["Дублировать", "Удалить"]) {
-          const control = list.getByRole("button", {
+        if (targetAction === "Удалить") {
+          const duplicate = list.getByRole("button", {
+            name: `Дублировать: ${label}`,
+            exact: true,
+          });
+          await page.keyboard.press("Tab");
+          await expect(duplicate).toBeFocused();
+          await expect(duplicate).toBeEnabled();
+          expect(
+            await duplicate.evaluate((node) => node.matches(":focus-visible")),
+          ).toBe(true);
+        }
+        const action = targetAction;
+        const control = list.getByRole("button", {
             name: `${action}: ${label}`,
             exact: true,
           });
@@ -305,7 +331,7 @@ for (const role of ["GM", "PLAYER"] as const) {
               ),
             };
           });
-          glyphs.push(iconMetrics.glyph);
+          expect(siblingGlyphs[action === "Дублировать" ? 0 : 1]).toBe(iconMetrics.glyph);
           for (const offset of iconMetrics.offsets)
             expect(Math.abs(offset)).toBeLessThanOrEqual(1);
           for (const size of iconMetrics.size)
@@ -327,8 +353,6 @@ for (const role of ["GM", "PLAYER"] as const) {
           samples.push({ label, action, normal, hover, focus });
           await page.mouse.move(1, 899);
           await control.focus();
-        }
-        expect(new Set(glyphs).size).toBe(2);
       expect(
         await list.evaluate((node) => node.scrollWidth - node.clientWidth),
       ).toBeLessThanOrEqual(1);
@@ -342,7 +366,8 @@ for (const role of ["GM", "PLAYER"] as const) {
         body: JSON.stringify({ role, width, samples, writes, errors }),
         contentType: "application/json",
       });
-      });
+        });
+      }
     }
   }
 }
@@ -1864,9 +1889,9 @@ for (const scenario of [
       await zoom
         .getByRole("button", { name: "Вписать карту", exact: true })
         .click();
-      await expect
-        .poll(async () => Number(await zoom.getByRole("slider").inputValue()))
-        .toBeCloseTo(fitted.scale, 2);
+      await expect(page.locator(".map-scale-percent")).toHaveText(
+        `${Math.round(fitted.scale * 100)}%`,
+      );
       await map.evaluate(
         (node) =>
           new Promise<void>((resolve) =>
@@ -2269,9 +2294,9 @@ for (const scenario of ["marquee-acl", "reload-prunes-selection"] as const) {
     await zoom
       .getByRole("button", { name: "Вписать карту", exact: true })
       .click();
-    await expect
-      .poll(async () => Number(await zoom.getByRole("slider").inputValue()))
-      .toBeCloseTo(fitted.scale, 2);
+    await expect(page.locator(".map-scale-percent")).toHaveText(
+      `${Math.round(fitted.scale * 100)}%`,
+    );
     await map.evaluate(
       (node) =>
         new Promise<void>((resolve) =>
