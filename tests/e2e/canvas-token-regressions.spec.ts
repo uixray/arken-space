@@ -2330,6 +2330,20 @@ for (const scenario of ["marquee-acl", "reload-prunes-selection"] as const) {
     if (scenario === "reload-prunes-selection") {
       accessEnabled = false;
       await page.reload();
+      await zoom
+        .getByRole("button", { name: "Вписать карту", exact: true })
+        .click();
+      await expect(page.locator(".map-scale-percent")).toHaveText(
+        `${Math.round(fitted.scale * 100)}%`,
+      );
+      await map.evaluate(
+        (node) =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => resolve()),
+            ),
+          ),
+      );
       await expectStableSelectionChrome(page, zoomBaseline);
       await map.focus();
       await expect(map).toBeFocused();

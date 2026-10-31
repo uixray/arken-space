@@ -1,5 +1,6 @@
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Page } from "@playwright/test";
+import { trustedJitterDoubleClick } from "./helpers/trusted-jitter-click";
 import { expect, test } from "./react-console-guard";
 import type { GameSnapshot } from "@arken/contracts";
 const sceneId = "7376b502-02f8-4cd6-9c55-3816d70d44dc";
@@ -235,12 +236,12 @@ for (const shifted of [true, false]) {
                     trackedWindow.__polygonJitterClickHandler = handler;
                     window.addEventListener("click", handler, { capture: true });
                   });
-                  await page.mouse.click(point.x, point.y);
-                  // Mouse.click({ clickCount: 2 }) emits two click sequences.
-                  // Use one trusted low-level click at the jittered coordinate.
-                  await page.mouse.move(point.x + 2, point.y + 1);
-                  await page.mouse.down({ clickCount: 2 });
-                  await page.mouse.up({ clickCount: 2 });
+                  await trustedJitterDoubleClick(
+                    page,
+                    info,
+                    point,
+                    { x: point.x + 2, y: point.y + 1 },
+                  );
                   const deliveredClicks = JSON.parse(
                     (await page.locator("html").getAttribute(
                       "data-polygon-jitter-clicks",
