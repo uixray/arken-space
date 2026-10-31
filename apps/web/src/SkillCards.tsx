@@ -597,7 +597,11 @@ export function SkillChatCard({
   sourceRemoved?: boolean;
   critical?: DiceCritical | null;
   outcomeFrame?: ReactNode;
-  renderRollFrame?: (result: DiceResult) => ReactNode;
+  renderRollFrame?: (
+    result: DiceResult,
+    actionId: string,
+    index: number,
+  ) => ReactNode;
 }) {
   const statLabels = useCampaignStatLabels();
   const actionFormula = card.action?.formula ?? "";
@@ -637,7 +641,7 @@ export function SkillChatCard({
         <p className="muted">Без броска и расходования ресурсов.</p>
       ) : card.rolls?.length ? (
         <div className="skill-chat-card__rolls">
-          {card.rolls.map((roll) => {
+          {card.rolls.map((roll, index) => {
             const hasInternalModifier = /\bmodifier_\d+\b/.test(roll.formula);
             const formula = humanizeFormula(
               hasInternalModifier ? roll.result.resolvedFormula : roll.formula,
@@ -652,7 +656,7 @@ export function SkillChatCard({
                 <div className="skill-chat-card__result">
                   <div className="roll-total-wrap">
                     <AppIcon icon={DiceTrayIcon} />
-                    {renderRollFrame?.(roll.result)}
+                    {renderRollFrame?.(roll.result, roll.action.id, index)}
                     <strong
                       className="roll-total__value"
                       aria-label={`Итог броска: ${roll.action.label}`}

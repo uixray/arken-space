@@ -307,6 +307,16 @@ function ChatMessageBodyComponent({
   );
   const dice = normalizeClientDiceResult(message.dice);
   const critical = dice ? getDiceCritical(dice) : null;
+  // Selection depends only on persisted result order, never playback success.
+  // A failed/exhausted owner does not promote another roll into an animation.
+  const rolls = skillCard?.rolls ?? [];
+  const firstCriticalIndex = rolls.findIndex((roll) =>
+    Boolean(getDiceCritical(roll.result)),
+  );
+  const animatedRollIndex =
+    firstCriticalIndex >= 0
+      ? firstCriticalIndex
+      : rolls.findIndex((roll) => Boolean(roll.result.styleFrame));
   if (message.kind === "DICE" && skillCard)
     return (
       <SkillChatCard
@@ -328,9 +338,10 @@ function ChatMessageBodyComponent({
             }
             styleFrame={dice?.styleFrame ?? null}
             active={isActive ?? false}
+            identity={message.id}
           />
         }
-        renderRollFrame={(rollResult) => {
+        renderRollFrame={(rollResult, actionId, index) => {
           const rollCritical = getDiceCritical(rollResult);
           return (
             <OutcomeFrame
@@ -347,7 +358,8 @@ function ChatMessageBodyComponent({
                   : null)
               }
               styleFrame={rollResult.styleFrame ?? null}
-              active={isActive ?? false}
+              active={Boolean(isActive) && index === animatedRollIndex}
+              identity={`${message.id}:${actionId}:${index}`}
             />
           );
         }}
@@ -468,6 +480,7 @@ function ChatMessageBodyComponent({
             }
             styleFrame={dice?.styleFrame ?? null}
             active={isActive ?? false}
+            identity={message.id}
           />
           <span className="roll-total__value">{dice.total}</span>
         </strong>

@@ -38,10 +38,39 @@ const rollMessage = (dice: Record<string, unknown>) =>
     createdAt: new Date().toISOString(),
   }) as unknown as GameSnapshot["messages"][number];
 
+// Admit actual observed targets, rather than assuming active means visible.
+function installIntersectionAdmission() {
+  const admissions: Array<() => void> = [];
+  vi.stubGlobal("matchMedia", () => ({ matches: false }));
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        admissions.push(() =>
+          this.callback(
+            [
+              { target, isIntersecting: true, intersectionRatio: 1 } as IntersectionObserverEntry,
+            ],
+            this as unknown as IntersectionObserver,
+          ),
+        );
+      }
+      disconnect() {}
+    },
+  );
+  return async () => {
+    await act(async () => {
+      for (const admit of admissions) admit();
+    });
+  };
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe("рамка-оформление броска", () => {
-  it("анимирует только свежий бросок, история получает постер", () => {
+  it("анимирует только допущенный свежий бросок, история получает постер", async () => {
+    const admit = installIntersectionAdmission();
     const { container, rerender } = renderComponent(
       <OutcomeFrame
         frame={null}
@@ -50,13 +79,11 @@ describe("рамка-оформление броска", () => {
       />,
     );
     const img = () => container.querySelector("img");
+    expect(img()?.getAttribute("src")).toBe(
+      `/api/assets/${frameId}/content?variant=poster`,
+    );
+    await admit();
     expect(img()?.getAttribute("src")).toBe(`/api/assets/${frameId}/content`);
-    // При reduced motion браузер возьмёт постер из <source>.
-    expect(
-      container
-        .querySelector('source[media="(prefers-reduced-motion: reduce)"]')
-        ?.getAttribute("srcset"),
-    ).toBe(`/api/assets/${frameId}/content?variant=poster`);
     rerender(
       <OutcomeFrame
         frame={null}
@@ -109,7 +136,8 @@ describe("рамка-оформление броска", () => {
     );
   });
 
-  it("доходит из истории до ленты и отбрасывает чужую форму", () => {
+  it("доходит из истории до ленты и отбрасывает чужую форму", async () => {
+    const admit = installIntersectionAdmission();
     const { container } = renderComponent(
       <ChatMessageBody
         isActive
@@ -118,6 +146,12 @@ describe("рамка-оформление броска", () => {
         })}
       />,
     );
+    expect(
+      container
+        .querySelector('[data-frame-source="PLAYER"] img')
+        ?.getAttribute("src"),
+    ).toBe(`/api/assets/${frameId}/content?variant=poster`);
+    await admit();
     expect(
       container
         .querySelector('[data-frame-source="PLAYER"] img')
