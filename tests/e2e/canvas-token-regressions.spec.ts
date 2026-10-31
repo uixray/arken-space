@@ -1749,111 +1749,185 @@ for (const role of ["GM", "PLAYER"] as const) {
   }
 }
 
-for (const scenario of ["cancel", "overlay", "toggle", "mutation"] as const) {
+for (const scenario of [
+  "cancel",
+  "overlay",
+  "toggle-drawing",
+  "toggle-token",
+  "replace-clear",
+  "mutation",
+] as const) {
   test(`UIX-507 GM mixed group ${scenario}`, async ({ page }) => {
-  await installCanvasRoutes(page);
-  const secondId = "95f46186-2ebc-4cf8-bce7-870097305a6b";
-  const drawingId = "a5f46186-2ebc-4cf8-bce7-870097305a6b";
-  await page.route("**/api/bootstrap", (route) =>
-    route.fulfill({
-      json: {
-        ...snapshot,
-        tokens: [
-          ...snapshot.tokens,
-          {
-            ...snapshot.tokens[0],
-            id: secondId,
-            x: 464,
-            y: 700,
-            name: "Scale token",
-          },
-        ],
-        drawings: [
-          {
-            id: drawingId,
-            sceneId,
-            authorMembershipId: snapshot.me.id,
-            points: [0, 0, 64, 64],
-            color: "#ef4444",
-            strokeWidth: 8,
-            x: 480,
-            y: 320,
-            revision: 0,
-          },
-        ],
-      },
-    }),
-  );
-  await page.route("**/api/canvas/history**", (route) =>
-    route.fulfill({ json: [] }),
-  );
-  const bulkRequests: Array<Record<string, unknown>> = [];
-  await page.route("**/api/canvas/bulk", (route) => {
-    const body = route.request().postDataJSON() as Record<string, unknown>;
-    bulkRequests.push(body);
-    return route.fulfill({
-      json: {
-        revisions: {
-          tokens: { [tokenId]: 1 },
-          drawings: { [drawingId]: 1 },
+    await installCanvasRoutes(page);
+    const secondId = "95f46186-2ebc-4cf8-bce7-870097305a6b";
+    const drawingId = "a5f46186-2ebc-4cf8-bce7-870097305a6b";
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({
+        json: {
+          ...snapshot,
+          tokens: [
+            ...snapshot.tokens,
+            {
+              ...snapshot.tokens[0],
+              id: secondId,
+              x: 464,
+              y: 700,
+              name: "Scale token",
+            },
+          ],
+          drawings: [
+            {
+              id: drawingId,
+              sceneId,
+              authorMembershipId: snapshot.me.id,
+              points: [0, 0, 64, 64],
+              color: "#ef4444",
+              strokeWidth: 8,
+              x: 480,
+              y: 320,
+              revision: 0,
+            },
+          ],
         },
-      },
+      }),
+    );
+    await page.route("**/api/canvas/history**", (route) =>
+      route.fulfill({ json: [] }),
+    );
+    const bulkRequests: Array<Record<string, unknown>> = [];
+    await page.route("**/api/canvas/bulk", (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      bulkRequests.push(body);
+      return route.fulfill({
+        json: {
+          revisions: {
+            tokens: { [tokenId]: 1 },
+            drawings: { [drawingId]: 1 },
+          },
+        },
+      });
     });
-  });
-  await mockAuthenticatedGameCapabilities(page);
-  await page.goto("/");
-  const map = page.locator(".map-viewport");
-  const zoomBaseline = await zoomBounds(page);
-  const trigger = objectListTrigger(page);
-  await trigger.click();
-  await map
-    .getByRole("button", { name: "Selected token", exact: true })
-    .click();
-  await trigger.click();
-  await expect(map).toHaveAttribute("data-resize-handle-x", /\d/);
-  await expectStableSelectionChrome(page, zoomBaseline);
-  const box = (await map.boundingBox())!;
-  const right = Number(await map.getAttribute("data-resize-handle-x"));
-  const bottom = Number(await map.getAttribute("data-resize-handle-y"));
-  // Read the actual fit transform by comparing two known token handles.
-  await trigger.click();
-  await map.getByRole("button", { name: "Scale token", exact: true }).click();
-  await trigger.click();
-  const secondRight = Number(await map.getAttribute("data-resize-handle-x"));
-  const scale = (secondRight - right) / 80;
-
-  // Plain empty-canvas drag remains camera pan and never creates selection.
-  await page.keyboard.press("Escape");
-  const panStart = {
-    x: box.x + right - 80 * scale,
-    y: box.y + bottom - 80 * scale,
-  };
-  await page.mouse.move(panStart.x, panStart.y);
-  await page.mouse.down();
-  await page.mouse.move(panStart.x + 40, panStart.y, { steps: 4 });
-  await page.mouse.up();
-  await expect(map).not.toHaveAttribute("data-resize-handle-x");
-  await expectStableSelectionChrome(page, zoomBaseline);
-  await trigger.click();
-  await map
-    .getByRole("button", { name: "Selected token", exact: true })
-    .click();
-  await trigger.click();
-  const rightAfterPan = Number(await map.getAttribute("data-resize-handle-x"));
-  const bottomAfterPan = Number(await map.getAttribute("data-resize-handle-y"));
-  expect(rightAfterPan).toBeCloseTo(right + 40, 0);
-  await page.keyboard.press("Escape");
-
-  const screenPoint = (x: number, y: number) => ({
-    x: box.x + rightAfterPan - (snapshot.tokens[0]!.x + 64) * scale + x * scale,
-    y:
-      box.y + bottomAfterPan - (snapshot.tokens[0]!.y + 64) * scale + y * scale,
-  });
-  const marqueeStart = screenPoint(350, 285);
-  const marqueeEnd = screenPoint(560, 415);
-  const tokenCenter = screenPoint(416, 352);
-  const drawingPoint = screenPoint(512, 352);
-  const selectMixed = async () => {
+    await mockAuthenticatedGameCapabilities(page);
+    await page.goto("/");
+    const map = page.locator(".map-viewport");
+    let zoomBaseline = await zoomBounds(page);
+    const trigger = objectListTrigger(page);
+    const box = (await map.boundingBox())!;
+    let scale: number;
+    let offsetX: number;
+    let offsetY: number;
+    if (scenario === "cancel") {
+    await trigger.click();
+    await map
+      .getByRole("button", { name: "Selected token", exact: true })
+      .click();
+    await trigger.click();
+    await expect(map).toHaveAttribute("data-resize-handle-x", /\d/);
+    await expectStableSelectionChrome(page, zoomBaseline);
+    const right = Number(await map.getAttribute("data-resize-handle-x"));
+    const bottom = Number(await map.getAttribute("data-resize-handle-y"));
+    // Read the actual fit transform by comparing two known token handles.
+    await trigger.click();
+    await map.getByRole("button", { name: "Scale token", exact: true }).click();
+    await trigger.click();
+    const secondRight = Number(await map.getAttribute("data-resize-handle-x"));
+    scale = (secondRight - right) / 80;
+  
+    // Plain empty-canvas drag remains camera pan and never creates selection.
+    await page.keyboard.press("Escape");
+    const panStart = {
+      x: box.x + right - 80 * scale,
+      y: box.y + bottom - 80 * scale,
+    };
+    await page.mouse.move(panStart.x, panStart.y);
+    await page.mouse.down();
+    await page.mouse.move(panStart.x + 40, panStart.y, { steps: 4 });
+    await page.mouse.up();
+    await expect(map).not.toHaveAttribute("data-resize-handle-x");
+    await expectStableSelectionChrome(page, zoomBaseline);
+    await trigger.click();
+    await map
+      .getByRole("button", { name: "Selected token", exact: true })
+      .click();
+    await trigger.click();
+    const rightAfterPan = Number(await map.getAttribute("data-resize-handle-x"));
+    const bottomAfterPan = Number(await map.getAttribute("data-resize-handle-y"));
+    expect(rightAfterPan).toBeCloseTo(right + 40, 0);
+    offsetX = rightAfterPan - (snapshot.tokens[0]!.x + 64) * scale;
+    offsetY = bottomAfterPan - (snapshot.tokens[0]!.y + 64) * scale;
+    await page.keyboard.press("Escape");
+    } else {
+      // Keep the pan/calibration oracle on the cancellation case; other journeys
+      // use the known camera fit and still select via real canvas marquee input.
+      const fitted = fitRect({ x: 0, y: 0, width: 1600, height: 1000 }, box);
+      const zoom = map.locator(".map-scale");
+      await zoom
+        .getByRole("button", { name: "Вписать карту", exact: true })
+        .click();
+      await expect
+        .poll(async () => Number(await zoom.getByRole("slider").inputValue()))
+        .toBeCloseTo(fitted.scale, 2);
+      await map.evaluate(
+        (node) =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => resolve()),
+            ),
+          ),
+      );
+      zoomBaseline = await zoomBounds(page);
+      scale = fitted.scale;
+      offsetX = fitted.position.x;
+      offsetY = fitted.position.y;
+    }
+    const screenPoint = (x: number, y: number) => ({
+      x: box.x + offsetX + x * scale,
+      y: box.y + offsetY + y * scale,
+    });
+    const marqueeStart = screenPoint(350, 285);
+    const marqueeEnd = screenPoint(560, 415);
+    const tokenCenter = screenPoint(416, 352);
+    const drawingPoint = screenPoint(512, 352);
+    const selectMixed = async () => {
+      await page.keyboard.down("Shift");
+      await page.mouse.move(marqueeStart.x, marqueeStart.y);
+      await page.mouse.down();
+      await page.mouse.move(marqueeEnd.x, marqueeEnd.y, { steps: 8 });
+      await page.mouse.up();
+      await page.keyboard.up("Shift");
+      await expectStableSelectionChrome(page, zoomBaseline);
+      await page.getByRole("button", { name: "Удалить выбранное" }).click();
+      await inspectBulkConfirmation(
+        page,
+        "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
+      );
+      expect(bulkRequests).toHaveLength(0);
+    };
+  
+    if (scenario === "cancel") {
+    // Escape cancels the in-flight rectangle, not just the previous selection.
+    // The later pointerup must not resurrect this group.
+    await page.keyboard.down("Shift");
+    await page.mouse.move(marqueeStart.x, marqueeStart.y);
+    await page.mouse.down();
+    await page.mouse.move(marqueeEnd.x, marqueeEnd.y, { steps: 8 });
+    await map.focus();
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+    await page.keyboard.up("Shift");
+    await expect(
+      page.getByRole("button", { name: "Удалить выбранное" }),
+    ).toHaveCount(0);
+    await page.keyboard.press("Delete");
+    await expect(
+      page.getByRole("dialog", {
+        name: /Удалить выбранные объекты|Убрать токен с карты/,
+      }),
+    ).toHaveCount(0);
+    expect(bulkRequests).toHaveLength(0);
+    await expectStableSelectionChrome(page, zoomBaseline);
+  
+    // Positive control: the same rectangle without cancellation selects both.
     await page.keyboard.down("Shift");
     await page.mouse.move(marqueeStart.x, marqueeStart.y);
     await page.mouse.down();
@@ -1867,432 +1941,410 @@ for (const scenario of ["cancel", "overlay", "toggle", "mutation"] as const) {
       "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
     );
     expect(bulkRequests).toHaveLength(0);
-  };
-
-  if (scenario === "cancel") {
-  // Escape cancels the in-flight rectangle, not just the previous selection.
-  // The later pointerup must not resurrect this group.
-  await page.keyboard.down("Shift");
-  await page.mouse.move(marqueeStart.x, marqueeStart.y);
-  await page.mouse.down();
-  await page.mouse.move(marqueeEnd.x, marqueeEnd.y, { steps: 8 });
-  await map.focus();
-  await page.keyboard.press("Escape");
-  await page.mouse.up();
-  await page.keyboard.up("Shift");
-  await expect(
-    page.getByRole("button", { name: "Удалить выбранное" }),
-  ).toHaveCount(0);
-  await page.keyboard.press("Delete");
-  await expect(
-    page.getByRole("dialog", {
-      name: /Удалить выбранные объекты|Убрать токен с карты/,
-    }),
-  ).toHaveCount(0);
-  expect(bulkRequests).toHaveLength(0);
-  await expectStableSelectionChrome(page, zoomBaseline);
-
-  // Positive control: the same rectangle without cancellation selects both.
-  await page.keyboard.down("Shift");
-  await page.mouse.move(marqueeStart.x, marqueeStart.y);
-  await page.mouse.down();
-  await page.mouse.move(marqueeEnd.x, marqueeEnd.y, { steps: 8 });
-  await page.mouse.up();
-  await page.keyboard.up("Shift");
-  await expectStableSelectionChrome(page, zoomBaseline);
-  await page.getByRole("button", { name: "Удалить выбранное" }).click();
-  await inspectBulkConfirmation(
-    page,
-    "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
-  );
-  expect(bulkRequests).toHaveLength(0);
-  return;
-  }
-
-  await page.keyboard.press("Escape");
-  await selectMixed();
-  if (scenario === "overlay") {
-
-  // A context menu belongs above the mixed selection: opening/closing it
-  // must neither replace that group nor consume the next destructive action.
-  const contextPoint = screenPoint(416, 352);
-  await map.focus();
-  await page.mouse.click(contextPoint.x, contextPoint.y, { button: "right" });
-  const contextMenu = page.getByRole("menu");
-  await expect(contextMenu).toBeVisible();
-  await expect(contextMenu).toContainText("Selected token");
-  await expect(
-    page.getByRole("button", { name: "Удалить выбранное" }),
-  ).toBeVisible();
-  expect(bulkRequests).toHaveLength(0);
-  await page.keyboard.press("Escape");
-  await expect(contextMenu).toHaveCount(0);
-  await page.mouse.click(contextPoint.x, contextPoint.y, { button: "right" });
-  await expect(contextMenu).toBeVisible();
-  const menuItem = contextMenu.getByRole("menuitemradio", {
-    name: "Игровой слой",
-    exact: true,
-  });
-  await menuItem.focus();
-  await expect(menuItem).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(contextMenu).toHaveCount(0);
-  await expect(map).toBeFocused();
-
-  // Outside-pointer dismissal must hand focus to the opened object list,
-  // whose Escape action returns it to the clicked toolbar control.
-  await page.mouse.click(contextPoint.x, contextPoint.y, { button: "right" });
-  await expect(contextMenu).toBeVisible();
-  await trigger.click();
-  await expect(contextMenu).toHaveCount(0);
-  const focusedObject = map.locator(".map-object-list button").first();
-  await expect(focusedObject).toBeFocused();
-  await focusedObject.press("Escape");
-  await expect(
-    map.getByRole("region", { name: "Объекты карты", exact: true }),
-  ).toHaveCount(0);
-  await expect(trigger).toBeFocused();
-  await expect(
-    page.getByRole("button", { name: "Удалить выбранное" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Удалить выбранное" }).click();
-  await inspectBulkConfirmation(
-    page,
-    "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
-  );
-  expect(bulkRequests).toHaveLength(0);
-  return;
-  }
-
-  if (scenario === "toggle") {
-
-  // Shift+click toggles one drawing without replacing the token selection.
-  await page.keyboard.down("Shift");
-  await page.mouse.click(drawingPoint.x, drawingPoint.y);
-  await page.keyboard.up("Shift");
-  await map.focus();
-  await page.keyboard.press("Delete");
-  await inspectBulkConfirmation(
-    page,
-    "Выбрано объектов: 1. Токенов: 1. Рисунков: 0.",
-  );
-  await expectStableSelectionChrome(page, zoomBaseline);
-  expect(bulkRequests).toHaveLength(0);
-  await page.keyboard.down("Shift");
-  await page.mouse.click(drawingPoint.x, drawingPoint.y);
-  await page.keyboard.up("Shift");
-  await expectStableSelectionChrome(page, zoomBaseline);
-  await page.getByRole("button", { name: "Удалить выбранное" }).click();
-  await inspectBulkConfirmation(
-    page,
-    "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
-  );
-  expect(bulkRequests).toHaveLength(0);
-
-  // Toggle a token as well as a drawing: neither may replace its selected peer.
-  await page.keyboard.down("Shift");
-  await page.mouse.click(tokenCenter.x, tokenCenter.y);
-  await page.keyboard.up("Shift");
-  await map.focus();
-  await page.keyboard.press("Delete");
-  await inspectBulkConfirmation(
-    page,
-    "Выбрано объектов: 1. Токенов: 0. Рисунков: 1.",
-  );
-  await page.keyboard.down("Shift");
-  await page.mouse.click(tokenCenter.x, tokenCenter.y);
-  await page.keyboard.up("Shift");
-  await page.getByRole("button", { name: "Удалить выбранное" }).click();
-  await inspectBulkConfirmation(
-    page,
-    "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
-  );
-
-  // An unmodified object click replaces the group with a single selection.
-  await page.mouse.click(tokenCenter.x, tokenCenter.y);
-  await expect(
-    page.getByRole("button", { name: "Удалить выбранное" }),
-  ).toHaveCount(0);
-  await expect(map).toHaveAttribute("data-resize-handle-x", /\d/);
-  await page.mouse.click(marqueeStart.x, marqueeStart.y);
-  await expect(map).not.toHaveAttribute("data-resize-handle-x");
-  await expect(
-    page.getByRole("button", { name: "Удалить выбранное" }),
-  ).toHaveCount(0);
-  await map.focus();
-  await page.keyboard.press("Delete");
-  await expect(
-    page.getByRole("dialog", { name: "Удалить выбранные объекты?" }),
-  ).toHaveCount(0);
-  await expectStableSelectionChrome(page, zoomBaseline);
-  expect(bulkRequests).toHaveLength(0);
-  return;
-  }
-
-  // Restore the mixed group for the existing move/delete checks below.
-  // Dragging either selected member uses the existing queued mixed bulk move.
-  const waitForBulkResponse = (operation: "MOVE" | "DELETE") =>
-    page.waitForResponse((response) => {
-      const request = response.request();
-      if (
-        new URL(response.url()).pathname !== "/api/canvas/bulk" ||
-        request.method() !== "POST"
-      )
-        return false;
-      try {
-        return (
-          request.postDataJSON() as { operation?: unknown }
-        ).operation === operation;
-      } catch {
-        return false;
-      }
+    return;
+    }
+  
+    await page.keyboard.press("Escape");
+    await selectMixed();
+    if (scenario === "overlay") {
+  
+    // A context menu belongs above the mixed selection: opening/closing it
+    // must neither replace that group nor consume the next destructive action.
+    const contextPoint = screenPoint(416, 352);
+    await map.focus();
+    await page.mouse.click(contextPoint.x, contextPoint.y, { button: "right" });
+    const contextMenu = page.getByRole("menu");
+    await expect(contextMenu).toBeVisible();
+    await expect(contextMenu).toContainText("Selected token");
+    await expect(
+      page.getByRole("button", { name: "Удалить выбранное" }),
+    ).toBeVisible();
+    expect(bulkRequests).toHaveLength(0);
+    await page.keyboard.press("Escape");
+    await expect(contextMenu).toHaveCount(0);
+    await page.mouse.click(contextPoint.x, contextPoint.y, { button: "right" });
+    await expect(contextMenu).toBeVisible();
+    const menuItem = contextMenu.getByRole("menuitemradio", {
+      name: "Игровой слой",
+      exact: true,
     });
-  const [moveResponse] = await Promise.all([
-    waitForBulkResponse("MOVE"),
-    (async () => {
-      await page.mouse.move(tokenCenter.x, tokenCenter.y);
-      await page.mouse.down();
-      await page.mouse.move(tokenCenter.x + 64 * scale, tokenCenter.y, {
-        steps: 6,
+    await menuItem.focus();
+    await expect(menuItem).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(contextMenu).toHaveCount(0);
+    await expect(map).toBeFocused();
+  
+    // Outside-pointer dismissal must hand focus to the opened object list,
+    // whose Escape action returns it to the clicked toolbar control.
+    await page.mouse.click(contextPoint.x, contextPoint.y, { button: "right" });
+    await expect(contextMenu).toBeVisible();
+    await trigger.click();
+    await expect(contextMenu).toHaveCount(0);
+    const focusedObject = map.locator(".map-object-list button").first();
+    await expect(focusedObject).toBeFocused();
+    await focusedObject.press("Escape");
+    await expect(
+      map.getByRole("region", { name: "Объекты карты", exact: true }),
+    ).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await expect(
+      page.getByRole("button", { name: "Удалить выбранное" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Удалить выбранное" }).click();
+    await inspectBulkConfirmation(
+      page,
+      "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
+    );
+    expect(bulkRequests).toHaveLength(0);
+    return;
+    }
+  
+    if (scenario === "toggle-drawing") {
+      // Shift+click toggles one drawing without replacing the token selection.
+      await page.keyboard.down("Shift");
+      await page.mouse.click(drawingPoint.x, drawingPoint.y);
+      await page.keyboard.up("Shift");
+      await map.focus();
+      await page.keyboard.press("Delete");
+      await inspectBulkConfirmation(
+        page,
+        "Выбрано объектов: 1. Токенов: 1. Рисунков: 0.",
+      );
+      await expectStableSelectionChrome(page, zoomBaseline);
+      expect(bulkRequests).toHaveLength(0);
+      await page.keyboard.down("Shift");
+      await page.mouse.click(drawingPoint.x, drawingPoint.y);
+      await page.keyboard.up("Shift");
+      await expectStableSelectionChrome(page, zoomBaseline);
+      await page.getByRole("button", { name: "Удалить выбранное" }).click();
+      await inspectBulkConfirmation(
+        page,
+        "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
+      );
+      expect(bulkRequests).toHaveLength(0);
+      return;
+    }
+  
+    if (scenario === "toggle-token") {
+      // Toggle a token as well as a drawing: neither may replace its selected peer.
+      await page.keyboard.down("Shift");
+      await page.mouse.click(tokenCenter.x, tokenCenter.y);
+      await page.keyboard.up("Shift");
+      await map.focus();
+      await page.keyboard.press("Delete");
+      await inspectBulkConfirmation(
+        page,
+        "Выбрано объектов: 1. Токенов: 0. Рисунков: 1.",
+      );
+      await page.keyboard.down("Shift");
+      await page.mouse.click(tokenCenter.x, tokenCenter.y);
+      await page.keyboard.up("Shift");
+      await page.getByRole("button", { name: "Удалить выбранное" }).click();
+      await inspectBulkConfirmation(
+        page,
+        "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
+      );
+      expect(bulkRequests).toHaveLength(0);
+      return;
+    }
+  
+    if (scenario === "replace-clear") {
+      // An unmodified object click replaces the group with a single selection.
+      await page.mouse.click(tokenCenter.x, tokenCenter.y);
+      await expect(
+        page.getByRole("button", { name: "Удалить выбранное" }),
+      ).toHaveCount(0);
+      await expect(map).toHaveAttribute("data-resize-handle-x", /\d/);
+      await page.mouse.click(marqueeStart.x, marqueeStart.y);
+      await expect(map).not.toHaveAttribute("data-resize-handle-x");
+      await expect(
+        page.getByRole("button", { name: "Удалить выбранное" }),
+      ).toHaveCount(0);
+      await map.focus();
+      await page.keyboard.press("Delete");
+      await expect(
+        page.getByRole("dialog", { name: "Удалить выбранные объекты?" }),
+      ).toHaveCount(0);
+      await expectStableSelectionChrome(page, zoomBaseline);
+      expect(bulkRequests).toHaveLength(0);
+      return;
+    }
+  
+    // Restore the mixed group for the existing move/delete checks below.
+    // Dragging either selected member uses the existing queued mixed bulk move.
+    const waitForBulkResponse = (operation: "MOVE" | "DELETE") =>
+      page.waitForResponse((response) => {
+        const request = response.request();
+        if (
+          new URL(response.url()).pathname !== "/api/canvas/bulk" ||
+          request.method() !== "POST"
+        )
+          return false;
+        try {
+          return (
+            request.postDataJSON() as { operation?: unknown }
+          ).operation === operation;
+        } catch {
+          return false;
+        }
       });
-      await page.mouse.up();
-    })(),
-  ]);
-  expect(await moveResponse.finished()).toBeNull();
-  await expect.poll(() => bulkRequests.length).toBe(1);
-  expect(bulkRequests[0]).toMatchObject({
-    operation: "MOVE",
-    targets: [
-      { targetType: "TOKEN", targetId: tokenId, revision: 0 },
-      { targetType: "DRAWING", targetId: drawingId, revision: 0 },
-    ],
-  });
-  await expectStableSelectionChrome(page, zoomBaseline);
-
-  await page.getByRole("button", { name: "Удалить выбранное" }).click();
-  const dialog = page.getByRole("dialog", {
-    name: "Удалить выбранные объекты?",
-  });
-  await expect(dialog).toContainText(
-    "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
-  );
-  expect(bulkRequests).toHaveLength(1);
-  const [deleteResponse] = await Promise.all([
-    waitForBulkResponse("DELETE"),
-    dialog.getByRole("button", { name: "Удалить", exact: true }).click(),
-  ]);
-  expect(await deleteResponse.finished()).toBeNull();
-  await expect.poll(() => bulkRequests.length).toBe(2);
-  expect(bulkRequests[1]).toMatchObject({
-    operation: "DELETE",
-    targets: [
-      { targetType: "TOKEN", targetId: tokenId },
-      { targetType: "DRAWING", targetId: drawingId },
-    ],
-  });
+    const [moveResponse] = await Promise.all([
+      waitForBulkResponse("MOVE"),
+      (async () => {
+        await page.mouse.move(tokenCenter.x, tokenCenter.y);
+        await page.mouse.down();
+        await page.mouse.move(tokenCenter.x + 64 * scale, tokenCenter.y, {
+          steps: 6,
+        });
+        await page.mouse.up();
+      })(),
+    ]);
+    expect(await moveResponse.finished()).toBeNull();
+    await expect.poll(() => bulkRequests.length).toBe(1);
+    expect(bulkRequests[0]).toMatchObject({
+      operation: "MOVE",
+      targets: [
+        { targetType: "TOKEN", targetId: tokenId, revision: 0 },
+        { targetType: "DRAWING", targetId: drawingId, revision: 0 },
+      ],
+    });
+    await expectStableSelectionChrome(page, zoomBaseline);
+  
+    await page.getByRole("button", { name: "Удалить выбранное" }).click();
+    const dialog = page.getByRole("dialog", {
+      name: "Удалить выбранные объекты?",
+    });
+    await expect(dialog).toContainText(
+      "Выбрано объектов: 2. Токенов: 1. Рисунков: 1.",
+    );
+    expect(bulkRequests).toHaveLength(1);
+    const [deleteResponse] = await Promise.all([
+      waitForBulkResponse("DELETE"),
+      dialog.getByRole("button", { name: "Удалить", exact: true }).click(),
+    ]);
+    expect(await deleteResponse.finished()).toBeNull();
+    await expect.poll(() => bulkRequests.length).toBe(2);
+    expect(bulkRequests[1]).toMatchObject({
+      operation: "DELETE",
+      targets: [
+        { targetType: "TOKEN", targetId: tokenId },
+        { targetType: "DRAWING", targetId: drawingId },
+      ],
+    });
   });
 }
 
-test("UIX-507 PLAYER marquee excludes inaccessible objects and reload prunes selection", async ({
-  page,
-}) => {
-  await installCanvasRoutes(page);
-  const playerId = "b5f46186-2ebc-4cf8-bce7-870097305a6b";
-  const ownDrawingId = "c5f46186-2ebc-4cf8-bce7-870097305a6b";
-  const secondOwnDrawingId = "d5f46186-2ebc-4cf8-bce7-870097305a6b";
-  const hiddenOwnDrawingId = "e5f46186-2ebc-4cf8-bce7-870097305a6b";
-  let accessEnabled = true;
-  let playerMode = false;
-  const playerSnapshot = () => ({
-    ...snapshot,
-    me: {
-      ...snapshot.me,
-      id: playerId,
-      role: playerMode ? ("PLAYER" as const) : ("GM" as const),
-    },
-    tokens: [
-      {
-        ...snapshot.tokens[0],
-        name: "Owned token",
-        controllerMembershipIds: accessEnabled ? [playerId] : [],
-        ownerMembershipId: accessEnabled ? playerId : null,
+for (const scenario of ["marquee-acl", "reload-prunes-selection"] as const) {
+  test(`UIX-507 PLAYER ${scenario}`, async ({ page }) => {
+    await installCanvasRoutes(page);
+    const playerId = "b5f46186-2ebc-4cf8-bce7-870097305a6b";
+    const ownDrawingId = "c5f46186-2ebc-4cf8-bce7-870097305a6b";
+    const secondOwnDrawingId = "d5f46186-2ebc-4cf8-bce7-870097305a6b";
+    const hiddenOwnDrawingId = "e5f46186-2ebc-4cf8-bce7-870097305a6b";
+    let accessEnabled = true;
+    const playerMode = true;
+    const playerSnapshot = () => ({
+      ...snapshot,
+      me: {
+        ...snapshot.me,
+        id: playerId,
+        role: playerMode ? ("PLAYER" as const) : ("GM" as const),
       },
-      {
-        ...snapshot.tokens[0],
-        id: "foreign",
-        x: 480,
-        assetId: null,
-        name: "Foreign token",
-      },
-      {
-        ...snapshot.tokens[0],
-        id: "locked",
-        x: 560,
-        assetId: null,
-        name: "Locked token",
-        locked: true,
-        controllerMembershipIds: [playerId],
-      },
-      {
-        ...snapshot.tokens[0],
-        id: "map-layer",
-        x: 640,
-        assetId: null,
-        name: "Map token",
-        layer: "MAP" as const,
-        controllerMembershipIds: [playerId],
-      },
-      {
-        ...snapshot.tokens[0],
-        id: "gm-layer",
-        x: 720,
-        assetId: null,
-        name: "GM token",
-        layer: "GM" as const,
-        controllerMembershipIds: [playerId],
-      },
-    ],
-    drawings: [
-      {
-        id: ownDrawingId,
-        sceneId,
-        authorMembershipId: accessEnabled ? playerId : "other",
-        points: [0, 0, 64, 64],
-        color: "#ef4444",
-        strokeWidth: 8,
-        x: 480,
-        y: 400,
-        revision: 0,
-      },
-      {
-        id: "foreign-drawing",
-        sceneId,
-        authorMembershipId: "other",
-        points: [0, 0, 64, 64],
-        color: "#22c55e",
-        strokeWidth: 8,
-        x: 560,
-        y: 400,
-        revision: 0,
-      },
-      {
-        id: secondOwnDrawingId,
-        sceneId,
-        authorMembershipId: playerId,
-        points: [0, 0, 64, 64],
-        color: "#3b82f6",
-        strokeWidth: 8,
-        x: 600,
-        y: 400,
-        revision: 0,
-      },
-      {
-        id: hiddenOwnDrawingId,
-        sceneId,
-        authorMembershipId: playerId,
-        points: [0, 0, 64, 64],
-        color: "#a855f7",
-        strokeWidth: 8,
-        x: 720,
-        y: 400,
-        revision: 0,
-      },
-    ],
-    fogReveals: [
-      { id: "reveal", sceneId, x: 0, y: 0, width: 700, height: 1000 },
-    ],
-  });
-  await page.route("**/api/bootstrap", (route) =>
-    route.fulfill({ json: playerSnapshot() }),
-  );
-  await page.route("**/api/canvas/history**", (route) =>
-    route.fulfill({ json: [] }),
-  );
-  const requests: Array<Record<string, unknown>> = [];
-  await page.route("**/api/canvas/bulk", (route) => {
-    requests.push(route.request().postDataJSON());
-    return route.fulfill({
-      json: {
-        revisions: {
-          tokens: { [tokenId]: 1 },
-          drawings: { [ownDrawingId]: 1, [secondOwnDrawingId]: 1 },
+      tokens: [
+        {
+          ...snapshot.tokens[0],
+          name: "Owned token",
+          controllerMembershipIds: accessEnabled ? [playerId] : [],
+          ownerMembershipId: accessEnabled ? playerId : null,
         },
-      },
+        {
+          ...snapshot.tokens[0],
+          id: "foreign",
+          x: 480,
+          assetId: null,
+          name: "Foreign token",
+        },
+        {
+          ...snapshot.tokens[0],
+          id: "locked",
+          x: 560,
+          assetId: null,
+          name: "Locked token",
+          locked: true,
+          controllerMembershipIds: [playerId],
+        },
+        {
+          ...snapshot.tokens[0],
+          id: "map-layer",
+          x: 640,
+          assetId: null,
+          name: "Map token",
+          layer: "MAP" as const,
+          controllerMembershipIds: [playerId],
+        },
+        {
+          ...snapshot.tokens[0],
+          id: "gm-layer",
+          x: 720,
+          assetId: null,
+          name: "GM token",
+          layer: "GM" as const,
+          controllerMembershipIds: [playerId],
+        },
+      ],
+      drawings: [
+        {
+          id: ownDrawingId,
+          sceneId,
+          authorMembershipId: accessEnabled ? playerId : "other",
+          points: [0, 0, 64, 64],
+          color: "#ef4444",
+          strokeWidth: 8,
+          x: 480,
+          y: 400,
+          revision: 0,
+        },
+        {
+          id: "foreign-drawing",
+          sceneId,
+          authorMembershipId: "other",
+          points: [0, 0, 64, 64],
+          color: "#22c55e",
+          strokeWidth: 8,
+          x: 560,
+          y: 400,
+          revision: 0,
+        },
+        {
+          id: secondOwnDrawingId,
+          sceneId,
+          authorMembershipId: playerId,
+          points: [0, 0, 64, 64],
+          color: "#3b82f6",
+          strokeWidth: 8,
+          x: 600,
+          y: 400,
+          revision: 0,
+        },
+        {
+          id: hiddenOwnDrawingId,
+          sceneId,
+          authorMembershipId: playerId,
+          points: [0, 0, 64, 64],
+          color: "#a855f7",
+          strokeWidth: 8,
+          x: 720,
+          y: 400,
+          revision: 0,
+        },
+      ],
+      fogReveals: [
+        { id: "reveal", sceneId, x: 0, y: 0, width: 700, height: 1000 },
+      ],
     });
+    await page.route("**/api/bootstrap", (route) =>
+      route.fulfill({ json: playerSnapshot() }),
+    );
+    await page.route("**/api/canvas/history**", (route) =>
+      route.fulfill({ json: [] }),
+    );
+    const requests: Array<Record<string, unknown>> = [];
+    await page.route("**/api/canvas/bulk", (route) => {
+      requests.push(route.request().postDataJSON());
+      return route.fulfill({
+        json: {
+          revisions: {
+            tokens: { [tokenId]: 1 },
+            drawings: { [ownDrawingId]: 1, [secondOwnDrawingId]: 1 },
+          },
+        },
+      });
+    });
+    await mockAuthenticatedGameCapabilities(page);
+    await page.goto("/");
+    const map = page.locator(".map-viewport");
+    const box = (await map.boundingBox())!;
+    const fitted = fitRect({ x: 0, y: 0, width: 1600, height: 1000 }, box);
+    const zoom = map.locator(".map-scale");
+    await zoom
+      .getByRole("button", { name: "Вписать карту", exact: true })
+      .click();
+    await expect
+      .poll(async () => Number(await zoom.getByRole("slider").inputValue()))
+      .toBeCloseTo(fitted.scale, 2);
+    await map.evaluate(
+      (node) =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => resolve()),
+          ),
+        ),
+    );
+    const zoomBaseline = await zoomBounds(page);
+    const scale = fitted.scale;
+    const offsetX = fitted.position.x;
+    const offsetY = fitted.position.y;
+    const screenPoint = (x: number, y: number) => ({
+      x: box.x + offsetX + x * scale,
+      y: box.y + offsetY + y * scale,
+    });
+    // Fog clips strokes, not author permissions (5dcf729a). All three own
+    // drawings are actionable; the foreign drawing must stay excluded.
+    const marqueeStart = screenPoint(460, 360);
+    const marqueeEnd = screenPoint(800, 500);
+    await page.keyboard.down("Shift");
+    await page.mouse.move(marqueeStart.x, marqueeStart.y);
+    await page.mouse.down();
+    await page.mouse.move(marqueeEnd.x, marqueeEnd.y, { steps: 10 });
+    await page.mouse.up();
+    await page.keyboard.up("Shift");
+    await expectStableSelectionChrome(page, zoomBaseline);
+    await expect(
+      page.getByRole("button", { name: "Удалить выбранное" }),
+    ).toBeVisible();
+    if (scenario === "reload-prunes-selection") {
+      accessEnabled = false;
+      await page.reload();
+      await expectStableSelectionChrome(page, zoomBaseline);
+      await map.focus();
+      await expect(map).toBeFocused();
+      await page.keyboard.press("Delete");
+      await expect(
+        page.getByRole("dialog", { name: "Удалить выбранные объекты?" }),
+      ).toHaveCount(0);
+      expect(requests).toHaveLength(0);
+      await expect(
+        page.getByRole("button", { name: "Удалить выбранное" }),
+      ).toHaveCount(0);
+      return;
+    }
+    await page.getByRole("button", { name: "Удалить выбранное" }).click();
+    const deleteDialog = page.getByRole("dialog", {
+      name: "Удалить выбранные объекты?",
+    });
+    await expect(deleteDialog).toContainText(
+      "Выбрано объектов: 3. Токенов: 0. Рисунков: 3.",
+    );
+    await deleteDialog
+      .getByRole("button", { name: "Отмена", exact: true })
+      .click();
+    expect(requests).toHaveLength(0);
+    await page.getByRole("button", { name: "Удалить выбранное" }).click();
+    await deleteDialog
+      .getByRole("button", { name: "Удалить", exact: true })
+      .click();
+    await expect.poll(() => requests.length).toBe(1);
+    expect(requests[0]).toMatchObject({
+      operation: "DELETE",
+      targets: [
+        { targetType: "DRAWING", targetId: ownDrawingId },
+        { targetType: "DRAWING", targetId: secondOwnDrawingId },
+        { targetType: "DRAWING", targetId: hiddenOwnDrawingId },
+      ],
+    });
+  
   });
-  await mockAuthenticatedGameCapabilities(page);
-  await page.goto("/");
-  const map = page.locator(".map-viewport");
-  const trigger = objectListTrigger(page);
-  await trigger.click();
-  await map.getByRole("button", { name: "Owned token", exact: true }).click();
-  await trigger.click();
-  const ownedRight = Number(await map.getAttribute("data-resize-handle-x"));
-  const ownedBottom = Number(await map.getAttribute("data-resize-handle-y"));
-  await trigger.click();
-  await map.getByRole("button", { name: "Locked token", exact: true }).click();
-  await trigger.click();
-  const lockedRight = Number(await map.getAttribute("data-resize-handle-x"));
-  const scale = (lockedRight - ownedRight) / (560 - 384);
-  const offsetX = ownedRight - (384 + 64) * scale;
-  const offsetY = ownedBottom - (320 + 64) * scale;
-
-  playerMode = true;
-  await page.reload();
-  const zoomBaseline = await zoomBounds(page);
-  const box = (await map.boundingBox())!;
-  const screenPoint = (x: number, y: number) => ({
-    x: box.x + offsetX + x * scale,
-    y: box.y + offsetY + y * scale,
-  });
-  // Fog clips strokes, not author permissions (5dcf729a). All three own
-  // drawings are actionable; the foreign drawing must stay excluded.
-  const marqueeStart = screenPoint(460, 360);
-  const marqueeEnd = screenPoint(800, 500);
-  await page.keyboard.down("Shift");
-  await page.mouse.move(marqueeStart.x, marqueeStart.y);
-  await page.mouse.down();
-  await page.mouse.move(marqueeEnd.x, marqueeEnd.y, { steps: 10 });
-  await page.mouse.up();
-  await page.keyboard.up("Shift");
-  await expectStableSelectionChrome(page, zoomBaseline);
-  await page.getByRole("button", { name: "Удалить выбранное" }).click();
-  const deleteDialog = page.getByRole("dialog", {
-    name: "Удалить выбранные объекты?",
-  });
-  await expect(deleteDialog).toContainText(
-    "Выбрано объектов: 3. Токенов: 0. Рисунков: 3.",
-  );
-  await deleteDialog
-    .getByRole("button", { name: "Отмена", exact: true })
-    .click();
-  expect(requests).toHaveLength(0);
-  await page.getByRole("button", { name: "Удалить выбранное" }).click();
-  await deleteDialog
-    .getByRole("button", { name: "Удалить", exact: true })
-    .click();
-  await expect.poll(() => requests.length).toBe(1);
-  expect(requests[0]).toMatchObject({
-    operation: "DELETE",
-    targets: [
-      { targetType: "DRAWING", targetId: ownDrawingId },
-      { targetType: "DRAWING", targetId: secondOwnDrawingId },
-      { targetType: "DRAWING", targetId: hiddenOwnDrawingId },
-    ],
-  });
-
-  accessEnabled = false;
-  await page.reload();
-  await expectStableSelectionChrome(page, zoomBaseline);
-  await map.focus();
-  await expect(map).toBeFocused();
-  await page.keyboard.press("Delete");
-  await expect(deleteDialog).toHaveCount(0);
-  expect(requests).toHaveLength(1);
-  await expect(
-    page.getByRole("button", { name: "Удалить выбранное" }),
-  ).toHaveCount(0);
-});
+}
 
 async function installCanvasReviewRoutes(page: Page) {
   await installCanvasRoutes(page);
