@@ -4,7 +4,7 @@ import {
   type DiceFrameReference,
 } from "@arken/contracts";
 
-const CRITICAL_VISIBLE_BUDGET_MS = 2200;
+const FRAME_VISIBLE_BUDGET_MS = 2200;
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 const CRITICAL_FRAME_KEYS = new Set(["critical-success", "critical-failure"]);
 
@@ -18,7 +18,7 @@ function readReducedMotion(): boolean | null {
   }
 }
 
-function ActiveCriticalImage({
+function ActiveFrameImage({
   src,
   registerSession,
   readBudget,
@@ -114,17 +114,25 @@ function ActiveCriticalImage({
   );
 }
 
-function BundledCriticalFrame({
-  frameKey,
+/** One mounted result/source owns its cumulative eligible playback budget. */
+function FramePlayback({
+  src,
   active,
+  className,
+  poster,
+  source,
+  enabled = true,
 }: {
-  frameKey: string;
+  src: string;
   active: boolean;
+  className: string;
+  poster?: string;
+  source?: DiceFrameChoice["source"];
+  enabled?: boolean;
 }) {
-  const src = `/assets/frames/${frameKey}.png`;
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const generationRef = useRef(0);
-  const remainingRef = useRef(CRITICAL_VISIBLE_BUDGET_MS);
+  const remainingRef = useRef(FRAME_VISIBLE_BUDGET_MS);
   const failedRef = useRef(false);
   const ownerAliveRef = useRef(true);
   const sessionIdRef = useRef(0);
@@ -139,7 +147,8 @@ function BundledCriticalFrame({
   );
   const [pageActive, setPageActive] = useState(true);
   const [failed, setFailed] = useState(false);
-  const [remaining, setRemaining] = useState(CRITICAL_VISIBLE_BUDGET_MS);
+  const [posterFailed, setPosterFailed] = useState(false);
+  const [remaining, setRemaining] = useState(FRAME_VISIBLE_BUDGET_MS);
   const browserApisAvailable =
     reducedMotion !== null &&
     typeof IntersectionObserver !== "undefined" &&
@@ -263,23 +272,31 @@ function BundledCriticalFrame({
     setFailed(true);
   };
 
-  const validFrame = CRITICAL_FRAME_KEYS.has(frameKey);
-
   return (
     <span
       ref={wrapperRef}
-      className={`outcome-frame outcome-frame--${frameKey} ${active ? "outcome-frame--active" : "outcome-frame--inactive"}`}
+      className={className}
+      data-frame-source={source}
       aria-hidden="true"
     >
-      {canMountImage && validFrame && (
-        <ActiveCriticalImage
+      {canMountImage && enabled ? (
+        <ActiveFrameImage
+          key="animated"
           src={src}
           registerSession={registerSession}
           readBudget={readBudget}
           chargeElapsed={chargeElapsed}
           onError={markFailed}
         />
-      )}
+      ) : poster && !posterFailed ? (
+        <img
+          key="poster"
+          src={poster}
+          alt=""
+          loading="lazy"
+          onError={() => setPosterFailed(true)}
+        />
+      ) : null}
     </span>
   );
 }
@@ -293,49 +310,38 @@ export function OutcomeFrame({
   frame,
   styleFrame = null,
   active,
+  identity = "",
 }: {
   frame: DiceFrameReference | null;
   /** UIX-457: рамка игрока или навыка; при крите уступает критической. */
   styleFrame?: DiceFrameChoice | null;
   active: boolean;
+  /** Stable message/result identity; a new result must not inherit a budget. */
+  identity?: string;
 }) {
   if (frame?.setKey === "ARKEN_CRITICAL_V1") {
     return (
-      <BundledCriticalFrame
-        key={`${frame.setKey}:${frame.frameKey}`}
-        frameKey={frame.frameKey}
+      <FramePlayback
+        key={`${identity}:${frame.setKey}:${frame.frameKey}`}
+        src={`/assets/frames/${frame.frameKey}.png`}
+        enabled={CRITICAL_FRAME_KEYS.has(frame.frameKey)}
+        className={`outcome-frame outcome-frame--${frame.frameKey} ${active ? "outcome-frame--active" : "outcome-frame--inactive"}`}
         active={active}
       />
     );
   }
 
   if (styleFrame) {
-    // Анимирован только свежий бросок; история и reduced motion получают
-    // постер, чтобы лента не крутила десятки анимаций разом.
     const urls = diceStyleFrameUrls(styleFrame.assetId);
     return (
-      <span
+      <FramePlayback
+        key={`${identity}:style:${styleFrame.source}:${styleFrame.assetId}`}
+        src={urls.animated}
+        poster={urls.poster}
+        source={styleFrame.source}
         className={`outcome-frame outcome-frame--style ${active ? "outcome-frame--style-active" : "outcome-frame--style-history"}`}
-        data-frame-source={styleFrame.source}
-        aria-hidden="true"
-      >
-        <picture>
-          {active && (
-            <source
-              media="(prefers-reduced-motion: reduce)"
-              srcSet={urls.poster}
-            />
-          )}
-          <img
-            src={active ? urls.animated : urls.poster}
-            alt=""
-            loading="lazy"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-        </picture>
-      </span>
+        active={active}
+      />
     );
   }
 
