@@ -25,6 +25,7 @@ import {
   tokens,
   tokenControllers,
   tokenDefinitions,
+  worldInstanceBindings,
 } from "@arken/db";
 import { requireAuth } from "./auth.js";
 import { findAction } from "./action-lookup.js";
@@ -1249,6 +1250,17 @@ export function registerTokenRoutes(
       if (!current) return { outcome: "missing" as const };
       if (current.revision !== body.revision)
         return { outcome: "conflict" as const };
+      const [binding] = await tx
+        .select({ id: worldInstanceBindings.instanceId })
+        .from(worldInstanceBindings)
+        .where(
+          and(
+            eq(worldInstanceBindings.campaignId, auth.campaignId),
+            eq(worldInstanceBindings.tokenDefinitionId, id),
+          ),
+        )
+        .limit(1);
+      if (binding) return { outcome: "bound" as const };
       await tx.execute(
         sql`select id from tokens where definition_id = ${id} for update`,
       );
@@ -1320,6 +1332,13 @@ export function registerTokenRoutes(
         sceneIds,
       };
     });
+    if (result.outcome === "bound")
+      return reply
+        .code(409)
+        .send({
+          error: "TOKEN_DEFINITION_BOUND",
+          message: "Сначала уберите привязку токена в экземпляре NPC/монстра.",
+        });
     if (result.outcome === "missing")
       return reply.code(404).send({ error: "TOKEN_DEFINITION_NOT_FOUND" });
     if (result.outcome === "conflict")

@@ -1,3 +1,4 @@
+import { sameInspiration } from "./character-extras-routes.js";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
 import type {
@@ -169,6 +170,16 @@ export function registerCharacterPlayRoutes(
         .code(409)
         .send({ error: "CHARACTER_CONFLICT", revision: character!.revision });
     }
+    if (
+      body.wallet &&
+      body.wallet.sp !== normalizeCharacterWallet(character!.wallet).sp
+    )
+      return reply.code(409).send({ error: "USE_PROGRESSION_SP_LEDGER" });
+    if (
+      body.resources &&
+      !sameInspiration(character!.resources, body.resources)
+    )
+      return reply.code(409).send({ error: "USE_INSPIRATION_ADJUSTMENT" });
     const nextResources = body.rest
       ? applyCharacterRest(
           (character!.resources ?? {}) as Resources,
@@ -899,7 +910,8 @@ export function registerCharacterPlayRoutes(
       } | null;
       try {
         saved = await db.transaction(async (tx) => {
-          if (executeAll) {
+          {
+            // Serialize all public dice with inspiration spending.
             // Keep the shared lock order consistent with existing rolls:
             // character resources first, then the catalog entry.
             await tx
@@ -908,6 +920,8 @@ export function registerCharacterPlayRoutes(
               .where(eq(characters.id, row.character.id))
               .for("update")
               .limit(1);
+          }
+          if (executeAll) {
             const [currentEntry] = await tx
               .select({ revision: characterCatalogEntries.revision })
               .from(characterCatalogEntries)
@@ -1138,6 +1152,12 @@ export function registerCharacterPlayRoutes(
         }),
       };
       const saved = await db.transaction(async (tx) => {
+        if (character)
+          await tx
+            .select({ id: characters.id })
+            .from(characters)
+            .where(eq(characters.id, character.id))
+            .for("update");
         const [row] = await tx
           .insert(chatMessages)
           .values({

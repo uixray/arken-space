@@ -10,6 +10,7 @@ import type {
 } from "@arken/contracts";
 import {
   assets,
+  achievementDefinitions,
   campaignAudioTracks,
   campaignSounds,
   catalogEntries,
@@ -79,6 +80,18 @@ export async function resolveAssetUsages(
   campaignId: string,
   assetId: string,
 ): Promise<AssetUsageDto[]> {
+  const achievementRows = await db
+    .select({
+      id: achievementDefinitions.id,
+      title: achievementDefinitions.title,
+    })
+    .from(achievementDefinitions)
+    .where(
+      and(
+        eq(achievementDefinitions.campaignId, campaignId),
+        eq(achievementDefinitions.iconAssetId, assetId),
+      ),
+    );
   const [
     sceneRows,
     definitionRows,
@@ -283,6 +296,14 @@ export async function resolveAssetUsages(
   ]);
 
   return [
+    ...achievementRows.map((row) => ({
+      kind: "ACHIEVEMENT_ICON" as const,
+      entityId: row.id,
+      label: row.title,
+      location: "Достижение",
+      visibility: "GM_ONLY" as const,
+      deletionPolicy: "BLOCK" as const,
+    })),
     ...sceneRows.map((row) => ({
       kind: "SCENE_BACKGROUND" as const,
       entityId: row.id,
@@ -555,7 +576,11 @@ export function registerAssetLifecycleRoutes(
         return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
     }
     const usages = await resolveAssetUsages(db, auth.campaignId, id);
-    return reply.send(assetUsagePolicy(asset, usages, auth));
+    const disclosedUsages =
+      auth.role === "GM"
+        ? usages
+        : usages.filter((usage) => usage.kind !== "ACHIEVEMENT_ICON");
+    return reply.send(assetUsagePolicy(asset, disclosedUsages, auth));
   });
 
   app.delete("/api/assets/:id", async (request, reply) => {
@@ -580,6 +605,8 @@ export function registerAssetLifecycleRoutes(
           auth.campaignId,
           id,
         );
+        if (usages.some((usage) => usage.deletionPolicy === "BLOCK"))
+          throw new Error("ASSET_IN_USE");
         // Detach every live reference in the same transaction as metadata
         // deletion. Keep owning records (characters, maps and global world
         // content) intact; gallery/audio/pack rows are association records.

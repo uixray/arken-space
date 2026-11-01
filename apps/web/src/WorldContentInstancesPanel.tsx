@@ -1,3 +1,4 @@
+import { InstanceBindings } from "./InstanceBindings";
 import {
   useCallback,
   useEffect,
@@ -550,6 +551,18 @@ export function WorldContentInstancesPanel({
       }
     } catch (reason) {
       if (canonicalIdRef.current !== intent.canonicalId) return;
+      if (
+        reason instanceof ApiError &&
+        reason.code === "INSTANCE_CONTAINER_IN_USE"
+      ) {
+        pendingDeletesByCanonicalRef.current.delete(intent.canonicalId);
+        setPendingDelete(null);
+        setDeletePrompt(null);
+        setError(
+          "В контейнере есть предметы. Сначала измените их связи контейнера.",
+        );
+        return;
+      }
       if (reason instanceof ApiError && reason.status === 409) {
         pendingDeletesByCanonicalRef.current.delete(intent.canonicalId);
         setPendingDelete(null);
@@ -698,6 +711,11 @@ export function WorldContentInstancesPanel({
         </ul>
       )}
 
+      {base &&
+        mode !== "create" &&
+        ["PERSON", "MONSTER", "ITEM"].includes(canonical.type) && (
+          <InstanceBindings key={base.id} instanceId={base.id} />
+        )}
       {(mode === "create" || mode === "edit") && (
         <div className="world-content-instances__form">
           <h4>

@@ -35,6 +35,7 @@ export function visiblePlayerRequests(
   filters: PlayerRequestFilters,
 ) {
   return requests.filter((request) => {
+    if (request.progression) return false; // Managed in the character progression section.
     if (role === "PLAYER" && request.authorMembershipId !== membershipId)
       return false;
     const open =

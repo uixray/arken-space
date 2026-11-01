@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   DICE_FRAME_SOURCES,
+  inspirationLinkSchema,
   type DiceResult,
   type SkillCardSnapshot,
 } from "@arken/contracts";
@@ -12,6 +13,7 @@ const diceTermSchema = z.object({
 });
 
 const diceResultSchema = z.object({
+  inspiration: inspirationLinkSchema.optional(),
   formula: z.string().max(160),
   resolvedFormula: z.string().max(512),
   terms: z.array(diceTermSchema).max(80),

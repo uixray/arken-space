@@ -1,3 +1,5 @@
+import { Achievements } from "../Achievements";
+import { PrivateNpcNotebook, InspirationResource } from "../CharacterExtras";
 import {
   useEffect,
   useId,
@@ -44,6 +46,7 @@ import {
 } from "../character-workspace-state";
 import { CharacterMediaGallery } from "./CharacterMediaGallery";
 import { CharacterSpellBranches } from "../CharacterSpellBranches";
+import { CharacterProgression } from "../CharacterProgression";
 import { CharacterActionCard } from "../SkillCards";
 import { humanizeFormula } from "../formula-display";
 import { rollModeFromEvent } from "../roll-modifier-keys";
@@ -274,6 +277,10 @@ export function CharacterWorkspace({
             Персонажи
           </h2>
         </div>
+        <Achievements
+          key={props.snapshot.campaign.id + ":" + props.snapshot.me.id}
+          snapshot={props.snapshot}
+        />
         <p className="muted">
           Открыто {openCount}/{MAX_OPEN_CHARACTER_SHEETS}
         </p>
@@ -2478,7 +2485,10 @@ export function CharacterPanel({
           <div className="subsection character-resource-editor">
             {Object.entries(resourcesDraft)
               .filter(
-                ([key]) => key !== "physicalPower" && key !== "magicPower",
+                ([key]) =>
+                  key !== "physicalPower" &&
+                  key !== "magicPower" &&
+                  key !== "inspiration",
               )
               .map(([key, resource]) => (
                 <fieldset
@@ -2877,7 +2887,32 @@ export function CharacterPanel({
         </div>
       </div>
 
+      {editable && character.lifecycle === "ACTIVE" && (
+        <div
+          className="character-extras"
+          key={snapshot.campaign.id + ":" + snapshot.me.id + ":" + character.id}
+        >
+          <PrivateNpcNotebook character={character} />
+          <InspirationResource character={character} snapshot={snapshot} />
+        </div>
+      )}
       {/* Секция 4: Личность, медиа и доступ */}
+      {editable && character.lifecycle === "ACTIVE" && (
+        <CharacterProgression
+          key={snapshot.campaign.id + ":" + snapshot.me.id + ":" + character.id}
+          character={character}
+          isGm={snapshot.me.role === "GM"}
+          membershipId={snapshot.me.id}
+          campaignId={snapshot.campaign.id}
+          requestVersion={(snapshot.playerRequests ?? [])
+            .filter(
+              (request) =>
+                request.characterId === character.id && request.progression,
+            )
+            .map((request) => request.id + ":" + request.revision)
+            .join(",")}
+        />
+      )}
       <div
         className="character-section character-section--bio"
         data-character-section="bio"

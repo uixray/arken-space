@@ -1,0 +1,26 @@
+.progression-workspace {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.progression-workspace form,
+.progression-workspace label,
+.progression-controls {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.progression-workspace input,
+.progression-workspace select,
+.progression-workspace textarea {
+  max-width: 100%;
+  min-width: 0;
+}
+.progression-record {
+  border-top: 1px solid currentColor;
+  padding-block: 1rem;
+  overflow-wrap: anywhere;
+}
+.progression-controls:empty {
+  display: none;
+}

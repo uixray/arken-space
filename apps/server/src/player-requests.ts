@@ -4,6 +4,7 @@ import type { Server } from "socket.io";
 import { and, asc, eq, inArray, or, type SQL } from "drizzle-orm";
 import {
   createPlayerRequestSchema,
+  progressionDataSchema,
   listPlayerRequestsSchema,
   transitionPlayerRequestSchema,
   updatePlayerRequestSchema,
@@ -73,7 +74,7 @@ function visibility(auth: AuthContext): SQL {
         ),
       )!;
 }
-async function dtoById(
+export async function dtoById(
   db: RequestDb,
   auth: AuthContext,
   id: string,
@@ -121,6 +122,9 @@ async function dtoById(
     title: row.title,
     body: row.body,
     resolutionNote: row.resolutionNote,
+    progression: row.progression
+      ? progressionDataSchema.parse(row.progression)
+      : null,
     resolvedByMembershipId: row.resolvedByMembershipId,
     resolvedByDisplayName: resolver?.displayName ?? null,
     revision: row.revision,
@@ -438,6 +442,8 @@ export function registerPlayerRequestRoutes(
     if (prior.kind === "MATCH") return dtoById(db, auth, id);
     const visible = await dtoById(db, auth, id);
     if (!visible) return fail(reply, 404, "NOT_FOUND");
+    if (visible.progression)
+      return fail(reply, 409, "USE_PROGRESSION_WORKSPACE");
     if (visible.authorMembershipId !== auth.membershipId)
       return fail(reply, 403, "FORBIDDEN");
     if (visible.status !== "SUBMITTED")
@@ -494,6 +500,8 @@ export function registerPlayerRequestRoutes(
     if (prior.kind === "MATCH") return dtoById(db, auth, id);
     const visible = await dtoById(db, auth, id);
     if (!visible) return fail(reply, 404, "NOT_FOUND");
+    if (visible.progression)
+      return fail(reply, 409, "USE_PROGRESSION_WORKSPACE");
     if (body.action === "CANCEL") {
       if (visible.authorMembershipId !== auth.membershipId)
         return fail(reply, 403, "FORBIDDEN");

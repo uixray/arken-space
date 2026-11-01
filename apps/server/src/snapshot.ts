@@ -1,3 +1,4 @@
+import { visibleAchievementIconIds } from "./awards-bindings-routes.js";
 import { assetDto } from "./asset-lifecycle.js";
 import {
   and,
@@ -891,6 +892,10 @@ export async function buildSnapshot(
   }
   for (const track of normalizedAudioTracks) {
     if (track.assetId) visibleAssetIds.add(track.assetId);
+  }
+  if (auth.role !== "GM") {
+    for (const assetId of await visibleAchievementIconIds(db, auth))
+      visibleAssetIds.add(assetId);
   }
   for (const assetId of worldMapProjection.backgroundAssetIds)
     visibleAssetIds.add(assetId);

@@ -116,8 +116,8 @@ export function characterDto(
     inventory: Array.isArray(character.inventory) ? character.inventory : [],
     resources:
       character.resources && typeof character.resources === "object"
-        ? character.resources
-        : {},
+        ? { inspiration: { current: 0, maximum: 1 }, ...character.resources }
+        : { inspiration: { current: 0, maximum: 1 } },
     wallet: normalizeCharacterWallet(wallet),
     entries: entries.map((entry) => ({
       id: entry.id,

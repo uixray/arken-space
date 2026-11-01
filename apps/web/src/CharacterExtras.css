@@ -1,0 +1,21 @@
+.character-extras,
+.inspiration-resource {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.character-extras {
+  margin-block: 0.75rem;
+}
+
+.inspiration-resource--compact {
+  font-size: 0.875rem;
+}
+
+.private-npc-notebook textarea {
+  width: 100%;
+  min-height: 14rem;
+  resize: vertical;
+}
