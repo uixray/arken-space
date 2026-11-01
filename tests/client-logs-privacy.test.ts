@@ -1,3 +1,6 @@
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createMigratedPglite } from "./helpers/pglite-template.js";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
@@ -28,12 +31,18 @@ let database: PGlite;
 let db: ReturnType<typeof drizzle<typeof schema>>;
 let app: FastifyInstance;
 let logged: unknown[];
+let journalDirectory: string;
+const originalJournalDirectory = env.PERFORMANCE_LOG_DIR;
+const originalJournalReserve = env.PERFORMANCE_MIN_FREE_DISK_BYTES;
 
 beforeEach(async () => {
   database = await createMigratedPglite();
   db = drizzle(database, { schema });
   await ensureSeed(db as never);
 
+  journalDirectory = await mkdtemp(join(tmpdir(), "arken-client-logs-"));
+  env.PERFORMANCE_LOG_DIR = journalDirectory;
+  env.PERFORMANCE_MIN_FREE_DISK_BYTES = 1;
   logged = [];
   // Only the application's own `client.event` record is under test. Fastify's
   // built-in request logging is captured here too, but this hook runs before
@@ -64,6 +73,9 @@ beforeEach(async () => {
 afterEach(async () => {
   await app.close();
   await database.close();
+  env.PERFORMANCE_LOG_DIR = originalJournalDirectory;
+  env.PERFORMANCE_MIN_FREE_DISK_BYTES = originalJournalReserve;
+  await rm(journalDirectory, { recursive: true, force: true });
 });
 
 describe("client error reports never carry user content into the log", () => {
@@ -222,5 +234,93 @@ describe("client error reports never carry user content into the log", () => {
     // request was refused rather than accepted, and that nothing was logged.
     expect(response.statusCode).not.toBe(202);
     expect(JSON.stringify(logged)).not.toContain("Дариус");
+  });
+});
+
+describe("durable performance acknowledgement", () => {
+  async function sessionCookie() {
+    const [gm] = await db
+      .select()
+      .from(schema.memberships)
+      .where(eq(schema.memberships.role, "GM"))
+      .limit(1);
+    if (!gm) throw new Error("seed failed");
+    const session = "p".repeat(40);
+    await db
+      .insert(schema.sessions)
+      .values({
+        membershipId: gm.id,
+        tokenHash: hashToken(session),
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+    return `${env.SESSION_COOKIE_NAME}=${session}`;
+  }
+  const payload = {
+    level: "info",
+    event: "client.performance.heartbeat",
+    context: {
+      sessionId: "11111111-1111-4111-8111-111111111111",
+      clientRevision: "a".repeat(40),
+      sequence: 1,
+      sendFailures: 0,
+      longTaskObserver: "active",
+      interactionObserver: "unsupported",
+      windowMs: 60_000,
+      longTasks: 0,
+      blockingMs: 0,
+      longestTaskMs: 0,
+      interactions: 0,
+      slowInteractions: 0,
+      slowestInteractionMs: 0,
+    },
+  };
+  it("acknowledges only after writing the heartbeat without membership or cookie data", async () => {
+    const cookie = await sessionCookie();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/client-logs",
+      headers: { cookie },
+      payload,
+    });
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toEqual({ ok: true, persisted: true });
+    const files = await readdir(journalDirectory);
+    expect(files).toHaveLength(1);
+    const text = await readFile(join(journalDirectory, files[0]!), "utf8");
+    const record = JSON.parse(text);
+    expect(record).toMatchObject({
+      schema: 1,
+      event: payload.event,
+      context: payload.context,
+      serverRevision: env.BUILD_REVISION,
+    });
+    expect(text).not.toContain(cookie);
+    expect(text).not.toContain("membershipId");
+    expect(text).not.toContain("campaignId");
+  });
+  it("does not return success if the journal cannot be written", async () => {
+    const cookie = await sessionCookie();
+    await rm(journalDirectory, { recursive: true, force: true });
+    await writeFile(journalDirectory, "not a directory");
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/client-logs",
+      headers: { cookie },
+      payload,
+    });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      ok: false,
+      code: "PERFORMANCE_PERSISTENCE_UNAVAILABLE",
+    });
+  });
+  it("does not persist unauthenticated reports", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/client-logs",
+      payload,
+    });
+    expect(response.statusCode).not.toBe(202);
+    expect(await readdir(journalDirectory)).toEqual([]);
   });
 });

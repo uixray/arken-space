@@ -247,6 +247,8 @@ export async function sendClientEventNow(payload: {
   event: string;
   context?: ReportContext;
 }): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
     const response = await fetch("/api/client-logs", {
       method: "POST",
@@ -254,10 +256,18 @@ export async function sendClientEventNow(payload: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       keepalive: true,
+      signal: controller.signal,
     });
-    return response.ok;
+    if (!response.ok) return false;
+    if (payload.event.startsWith("client.performance")) {
+      const result = await response.json();
+      return result.persisted === true;
+    }
+    return true;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

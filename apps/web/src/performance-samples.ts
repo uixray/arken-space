@@ -5,8 +5,8 @@
  * **Why long tasks and interactions, and not frame rate.** The complaint this
  * exists to answer was "тормозит любое действие, не получается совершить с
  * первого раза ничего" — during that session the socket's ping timeout fired,
- * which takes 20 seconds of a blocked main thread and cannot be explained by
- * render churn alone. A blocked main thread is exactly what the `longtask`
+ * which alone does not establish a blocked main thread or its cause.
+ * A blocked main thread is exactly what the `longtask`
  * entry type reports, and "the action did not respond" is exactly what the
  * `event` entry type's duration measures. Frame rate would have told us the
  * page felt bad without saying why.
@@ -16,7 +16,7 @@
  * signatures. A long task can fire hundreds of times a minute; sending each
  * one would exhaust the budget that real errors need and drown the log. So a
  * window of samples is reduced to one record here, and only a window worth
- * looking at is sent at all — a session with nothing wrong reports nothing.
+ * looking at is sent. Forced heartbeat windows also report quiet intervals.
  *
  * Everything below is numbers plus a DOM event name from a fixed vocabulary
  * (`pointerdown`, `keydown`, ...). No user content can reach it by
@@ -61,9 +61,9 @@ export interface PerformanceAggregator {
   addInteraction: (name: string, durationMs: number) => void;
   /**
    * Returns the window's summary and starts a new window. Returns null when
-   * the window is not worth reporting, so callers can simply skip sending.
+   * the window is not worth reporting, unless forced for a heartbeat.
    */
-  take: (nowMs: number) => PerformanceSummary | null;
+  take: (nowMs: number, force?: boolean) => PerformanceSummary | null;
 }
 
 export function createPerformanceAggregator(
@@ -108,7 +108,7 @@ export function createPerformanceAggregator(
       }
     },
 
-    take: (nowMs) => {
+    take: (nowMs, force = false) => {
       const windowMs = Math.max(0, Math.round(nowMs - windowStartMs));
       // A window is worth a request if the main thread was blocked enough to
       // notice, or if any single interaction was slow. The second clause
@@ -116,7 +116,7 @@ export function createPerformanceAggregator(
       // even when total blocking time stays modest.
       const notable =
         blockingMs >= REPORTABLE_BLOCKING_MS || slowInteractions > 0;
-      if (!notable) {
+      if (!notable && !force) {
         reset(nowMs);
         return null;
       }
@@ -130,6 +130,11 @@ export function createPerformanceAggregator(
         ...(slowestInteraction ? { slowestInteraction } : {}),
         windowMs,
       };
+      for (const key of Object.keys(summary) as (keyof PerformanceSummary)[]) {
+        const value = summary[key];
+        if (typeof value === "number")
+          Object.assign(summary, { [key]: Math.min(1_000_000, value) });
+      }
       reset(nowMs);
       return summary;
     },

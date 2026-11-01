@@ -69,7 +69,7 @@ jobs:
 
       - name: Build web image
         run: |
-          docker build --file Dockerfile.web \
+          docker build --file Dockerfile.web --build-arg BUILD_REVISION="$REVISION" \
             --label "org.opencontainers.image.revision=$REVISION" \
             --tag "arken-release-web:$REVISION" .
 

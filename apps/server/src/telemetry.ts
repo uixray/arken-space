@@ -6,9 +6,16 @@ type ClientEventName =
   | "window.unhandled_rejection"
   | "realtime.disconnected"
   | "api.request_failed"
-  | "client.performance";
+  | "client.performance"
+  | "client.performance.heartbeat";
 
 const allowedContextKeys = new Set([
+  "sessionId",
+  "clientRevision",
+  "longTaskObserver",
+  "interactionObserver",
+  "sequence",
+  "sendFailures",
   "actionId",
   "buildRevision",
   "code",
@@ -34,6 +41,8 @@ const allowedContextKeys = new Set([
 
 /** Context keys whose value is a number rather than a bounded string. */
 const numericContextKeys = new Set([
+  "sequence",
+  "sendFailures",
   "line",
   "status",
   "blockingMs",
@@ -122,12 +131,46 @@ const renderFailureEventSchema = z
  */
 const performanceCountSchema = z.number().int().nonnegative().max(1_000_000);
 
+const performanceIdentity = {
+  sessionId: z.string().uuid(),
+  clientRevision: z.string().regex(/^(?:[0-9a-f]{40}|development|unknown)$/),
+};
+const observerStatus = z.enum(["active", "unsupported", "failed"]);
+const heartbeatEventSchema = z
+  .object({
+    level: z.literal("info"),
+    event: z.literal("client.performance.heartbeat"),
+    context: z
+      .object({
+        ...performanceIdentity,
+        longTaskObserver: observerStatus,
+        interactionObserver: observerStatus,
+        sequence: performanceCountSchema,
+        sendFailures: performanceCountSchema,
+        windowMs: performanceCountSchema,
+        longTasks: performanceCountSchema,
+        blockingMs: performanceCountSchema,
+        longestTaskMs: performanceCountSchema,
+        interactions: performanceCountSchema,
+        slowInteractions: performanceCountSchema,
+        slowestInteractionMs: performanceCountSchema,
+        slowestInteraction: z
+          .string()
+          .regex(/^[a-z]{1,30}$/)
+          .optional(),
+      })
+      .strict(),
+  })
+  .strict();
+
 const performanceEventSchema = z
   .object({
     level: z.literal("info"),
     event: z.literal("client.performance"),
     context: z
       .object({
+        sessionId: performanceIdentity.sessionId.optional(),
+        clientRevision: performanceIdentity.clientRevision.optional(),
         longTasks: performanceCountSchema,
         blockingMs: performanceCountSchema,
         longestTaskMs: performanceCountSchema,
@@ -165,6 +208,7 @@ const standardClientEventSchema = z
 export const clientEventSchema = z.union([
   renderFailureEventSchema,
   performanceEventSchema,
+  heartbeatEventSchema,
   standardClientEventSchema,
 ]);
 
@@ -200,6 +244,7 @@ export function safeClientMessage(event: ClientEventName) {
     "realtime.disconnected": "Realtime connection interrupted",
     "api.request_failed": "API request failed",
     "client.performance": "Client performance window",
+    "client.performance.heartbeat": "Client performance collector heartbeat",
   };
   return labels[event];
 }
