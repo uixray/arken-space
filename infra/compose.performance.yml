@@ -1,0 +1,9 @@
+# Include LAST with the production compose files, on every release and rollback.
+# Use an absolute host directory outside /releases and outside media/backups.
+services:
+  server:
+    environment:
+      PERFORMANCE_LOG_DIR: /srv/arken-space/telemetry
+      PERFORMANCE_MIN_FREE_DISK_BYTES: ${PERFORMANCE_MIN_FREE_DISK_BYTES:-3221225472}
+    volumes:
+      - ${PERFORMANCE_LOG_HOST_PATH:?Set an absolute persistent PERFORMANCE_LOG_HOST_PATH}:/srv/arken-space/telemetry

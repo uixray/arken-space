@@ -6,6 +6,7 @@ import {
   flushClientEventBuffer,
   formatApiError,
   reportClientEvent,
+  sendClientEventNow,
   resetClientEventBufferForTest,
 } from "./api";
 
@@ -377,4 +378,46 @@ describe("UIX-417 rate limit recovery copy", () => {
       });
     },
   );
+});
+
+describe("durable measurement delivery", () => {
+  const payload = {
+    level: "info" as const,
+    event: "client.performance.heartbeat",
+    context: {},
+  };
+  it("requires explicit persistence acknowledgement rather than HTTP success alone", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    for (const body of [
+      { ok: true },
+      { ok: true, persisted: false },
+      { ok: true, persisted: true },
+    ]) {
+      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => body });
+      expect(await sendClientEventNow(payload)).toBe(body.persisted === true);
+    }
+    expect(fetchMock.mock.calls[0]?.[1].signal).toBeInstanceOf(AbortSignal);
+  });
+  it("bounds an unresponsive request to ten seconds", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          (_url: unknown, options: RequestInit) =>
+            new Promise((_resolve, reject) => {
+              options.signal?.addEventListener("abort", () =>
+                reject(new Error("aborted")),
+              );
+            }),
+        ),
+      );
+      const pending = sendClientEventNow(payload);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(await pending).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

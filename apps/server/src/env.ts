@@ -84,6 +84,8 @@ export const env = z
       .string()
       .min(32)
       .default("development-master-token-change-me-now"),
+    PERFORMANCE_LOG_DIR: z.string().default(""),
+    PERFORMANCE_MIN_FREE_DISK_BYTES: bytes.default(3 * 1024 * 1024 * 1024),
     MEDIA_ROOT: z.string().default("./media"),
     GLOBAL_STICKERS_ENABLED: z
       .enum(["true", "false"])

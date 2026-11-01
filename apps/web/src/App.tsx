@@ -40,6 +40,7 @@ import { TokenTray } from "./TokenTray";
 import { CompactMenuSurface } from "./ui/CompactMenuSurface";
 import { fetchOperatorCapability } from "./operator-feedback";
 import { setErrorReportContext } from "./error-report-context";
+import { setPerformanceSession } from "./performance-session";
 import { removeRollToast, type RollToast } from "./toast-state";
 import { notify } from "./ui/notifications";
 import { ErrorState, LoadingState } from "./ui/EntityState";
@@ -635,6 +636,13 @@ export function App() {
       buildRevision: snapshot?.buildRevision,
     });
   }, [snapshot, tool]);
+  const performanceSessionKey = snapshot
+    ? `${snapshot.campaign.id}:${snapshot.me.id}`
+    : undefined;
+  useEffect(() => {
+    setPerformanceSession(performanceSessionKey);
+    return () => setPerformanceSession(undefined);
+  }, [performanceSessionKey]);
 
   /*
    * UIX-398 step A0. These four back 45 call sites between them and used to

@@ -173,3 +173,46 @@ describe("server telemetry safety", () => {
     );
   });
 });
+
+describe("performance heartbeat schema", () => {
+  const context = {
+    sessionId: "11111111-1111-4111-8111-111111111111",
+    clientRevision: "a".repeat(40),
+    longTaskObserver: "active",
+    interactionObserver: "unsupported",
+    sequence: 1,
+    sendFailures: 0,
+    windowMs: 60_000,
+    longTasks: 0,
+    blockingMs: 0,
+    longestTaskMs: 0,
+    interactions: 0,
+    slowInteractions: 0,
+    slowestInteractionMs: 0,
+  };
+  it("preserves capability status and numeric counters", () => {
+    const body = clientEventSchema.parse({
+      level: "info",
+      event: "client.performance.heartbeat",
+      context,
+    });
+    expect(sanitizeClientContext(body.context)).toEqual(context);
+  });
+  it("rejects user content, invalid observer states, unbounded counters, and fake revisions", () => {
+    for (const extra of [
+      { message: "private" },
+      { longTaskObserver: "yes" },
+      { sequence: -1 },
+      { windowMs: 1_000_001 },
+      { clientRevision: "private-text" },
+    ]) {
+      expect(
+        clientEventSchema.safeParse({
+          level: "info",
+          event: "client.performance.heartbeat",
+          context: { ...context, ...extra },
+        }).success,
+      ).toBe(false);
+    }
+  });
+});

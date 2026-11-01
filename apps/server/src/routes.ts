@@ -1,3 +1,4 @@
+import { createPerformanceJournal } from "./performance-journal.js";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
 import { and, asc, eq, sum } from "drizzle-orm";
@@ -372,6 +373,40 @@ export function registerRoutes(
   io: RealtimeServer,
   mailContext: AccountMailContext = createAccountMailContext(env),
 ) {
+  const performanceJournal = env.PERFORMANCE_LOG_DIR
+    ? createPerformanceJournal({
+        directory: env.PERFORMANCE_LOG_DIR,
+        minFreeBytes: env.PERFORMANCE_MIN_FREE_DISK_BYTES,
+      })
+    : undefined;
+  let lastJournalWarning = -Infinity;
+  const warnJournal = () => {
+    if (Date.now() - lastJournalWarning < 60_000) return;
+    lastJournalWarning = Date.now();
+    app.log.warn(
+      { event: "performance.persistence_failed" },
+      "Performance journal unavailable",
+    );
+  };
+  let journalTimer: ReturnType<typeof setInterval> | undefined;
+  app.addHook("onReady", async () => {
+    if (!performanceJournal) {
+      app.log.warn(
+        { event: "performance.persistence_disabled" },
+        "Performance journal not configured",
+      );
+      return;
+    }
+    await performanceJournal.maintenance().catch(warnJournal);
+    journalTimer = setInterval(() => {
+      void performanceJournal.maintenance().catch(warnJournal);
+    }, 3_600_000);
+    journalTimer.unref();
+  });
+  app.addHook("onClose", async () => {
+    if (journalTimer) clearInterval(journalTimer);
+    await performanceJournal?.drain();
+  });
   registerAccountAuthRoutes(app, db, io, {
     enabled: env.ACCOUNT_AUTH_ENABLED,
     registrationEnabled: env.ACCOUNT_REGISTRATION_ENABLED,
@@ -522,6 +557,25 @@ export function registerRoutes(
       const auth = await requireAuth(request, reply, db);
       if (!auth) return;
       const body = clientEventSchema.parse(request.body);
+      const performanceEvent =
+        body.event === "client.performance" ||
+        body.event === "client.performance.heartbeat";
+      if (performanceEvent && performanceJournal) {
+        try {
+          await performanceJournal.append({
+            schema: 1,
+            receivedAt: new Date().toISOString(),
+            serverRevision: env.BUILD_REVISION,
+            event: body.event,
+            context: sanitizeClientContext(body.context),
+          });
+        } catch {
+          warnJournal();
+          return reply
+            .code(503)
+            .send({ ok: false, code: "PERFORMANCE_PERSISTENCE_UNAVAILABLE" });
+        }
+      }
       app.log[body.level](
         {
           source: "browser",
@@ -545,7 +599,14 @@ export function registerRoutes(
         },
         "client.event",
       );
-      return reply.code(202).send({ ok: true });
+      return reply
+        .code(202)
+        .send({
+          ok: true,
+          ...(performanceEvent
+            ? { persisted: Boolean(performanceJournal) }
+            : {}),
+        });
     },
   );
 
