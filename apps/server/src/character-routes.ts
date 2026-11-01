@@ -1,3 +1,4 @@
+import { sameInspiration } from "./character-extras-routes.js";
 import type { FastifyInstance } from "fastify";
 import type { CharacterDto, ChatMessageDto } from "@arken/contracts";
 import { and, eq } from "drizzle-orm";
@@ -86,7 +87,10 @@ export function registerCharacterRoutes(
           skills: template.skills ?? starter.skills,
           spells: template.spells ?? starter.spells,
           inventory: template.inventory ?? [],
-          resources: template.resources ?? starter.resources,
+          resources: {
+            ...(template.resources ?? starter.resources),
+            inspiration: { current: 0, maximum: 1 },
+          },
         })
         .returning();
       if (!created) throw new Error("CHARACTER_CREATE_FAILED");
@@ -215,6 +219,13 @@ export function registerCharacterRoutes(
     if (body.revision !== undefined && body.revision !== current.revision)
       return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
     const { actionId, revision: _revision, ...updates } = body;
+    if (
+      updates.resources &&
+      !sameInspiration(current.resources, updates.resources)
+    )
+      return reply.code(409).send({ error: "USE_INSPIRATION_ADJUSTMENT" });
+    if (updates.wallet && updates.wallet.sp !== current.wallet.sp)
+      return reply.code(409).send({ error: "USE_PROGRESSION_SP_LEDGER" });
     if (
       auth.role !== "GM" &&
       Object.keys(updates).some(

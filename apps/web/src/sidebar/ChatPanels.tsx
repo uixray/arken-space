@@ -1,3 +1,4 @@
+import { InspirationRollAction, InspirationResource } from "../CharacterExtras";
 import { useComposerSuggestions } from "../ui/use-composer-suggestions";
 import { RollVisibilityContext } from "../roll-visibility-context";
 import {
@@ -904,6 +905,20 @@ export function ActivityPanel({
             }
           />
         )}
+        {rollCharacter && (
+          <InspirationResource
+            key={
+              snapshot.campaign.id +
+              ":" +
+              snapshot.me.id +
+              ":" +
+              rollCharacter.id
+            }
+            character={rollCharacter}
+            snapshot={snapshot}
+            compact
+          />
+        )}
         {resourceError && (
           <p className="composer-error" role="alert">
             {resourceError}
@@ -1099,6 +1114,13 @@ export function ActivityPanel({
                 }
                 playerRequests={snapshot.playerRequests}
                 onOpenPlayerRequests={onOpenPlayerRequestCreate}
+              />
+              <InspirationRollAction
+                key={
+                  snapshot.campaign.id + ":" + snapshot.me.id + ":" + message.id
+                }
+                snapshot={snapshot}
+                message={message}
               />
             </article>
           );
@@ -1870,6 +1892,17 @@ export function ChatPanel({
                 }
                 playerRequests={snapshot.playerRequests}
                 onOpenPlayerRequests={onOpenPlayerRequests}
+              />
+              <InspirationRollAction
+                key={
+                  snapshot.campaign.id +
+                  ":" +
+                  snapshot.me.id +
+                  ":" +
+                  item.message.id
+                }
+                snapshot={snapshot}
+                message={item.message}
               />
             </article>
           ),

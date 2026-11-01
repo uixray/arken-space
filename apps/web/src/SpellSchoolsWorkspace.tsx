@@ -134,8 +134,10 @@ export function SpellSchoolsWorkspace({
   const updateGraph = (
     update: (current: SpellProgressionGraph) => SpellProgressionGraph,
   ) => {
-    if (editorLocked || busy) return;
-    setGraph((current) => (current ? update(current) : current));
+    if (editorLocked || busy || hasRecoveryCopy) return;
+    setGraph((current) =>
+      current?.lifecycle === "DRAFT" ? update(current) : current,
+    );
     setActivationPrompt(null);
     pendingSave.current = null;
     setError("");
@@ -291,7 +293,13 @@ export function SpellSchoolsWorkspace({
   };
 
   const save = async () => {
-    if (!graph || busy || (editorLocked && !retryPending) || hasRecoveryCopy)
+    if (
+      !graph ||
+      !["DRAFT", "ACTIVE", "REFERENCE"].includes(graph.lifecycle) ||
+      busy ||
+      (editorLocked && !retryPending) ||
+      hasRecoveryCopy
+    )
       return;
     setBusy(true);
     setError("");
@@ -304,12 +312,6 @@ export function SpellSchoolsWorkspace({
         setError(activationError);
         return;
       }
-      const validation = await validateSpellPackDraft(graph);
-      if (!validation.valid) {
-        setError(validation.errors.map(issueText).join("\n"));
-        return;
-      }
-
       const fingerprint = JSON.stringify({ graph, isNew });
       let pending = pendingSave.current;
       if (!pending || pending.fingerprint !== fingerprint) {
@@ -320,9 +322,15 @@ export function SpellSchoolsWorkspace({
           actionId: id(),
           expectedVersion: isNew ? 0 : graph.version,
         };
-        pendingSave.current = pending;
-        setRetryPending(true);
       }
+      // Validate the new DRAFT, never mutate or reclassify its source version.
+      const validation = await validateSpellPackDraft(pending.graph);
+      if (!validation.valid) {
+        setError(validation.errors.map(issueText).join("\n"));
+        return;
+      }
+      pendingSave.current = pending;
+      setRetryPending(true);
 
       const saved: SpellPackVersionDto = isNew
         ? await createSpellPackDraft(pending.graph, pending.actionId)
@@ -752,7 +760,12 @@ export function SpellSchoolsWorkspace({
             <>
               <fieldset
                 className="spell-editor-fields"
-                disabled={busy || editorLocked}
+                disabled={
+                  busy ||
+                  editorLocked ||
+                  hasRecoveryCopy ||
+                  graph.lifecycle !== "DRAFT"
+                }
                 aria-label="Поля черновика школы и веток"
               >
                 <div className="spell-schools-title-row">
@@ -815,6 +828,28 @@ export function SpellSchoolsWorkspace({
                         />
                       </label>
                     </div>
+                    <label>
+                      Видимость школы
+                      <select
+                        value={school.visibilityPolicy}
+                        onChange={(event) =>
+                          changeSchool(school.id, {
+                            visibilityPolicy: event.target
+                              .value as SpellSchool["visibilityPolicy"],
+                          })
+                        }
+                      >
+                        <option value="GM_ONLY">Только мастер</option>
+                        <option value="DISCOVERED">
+                          После выдачи персонажу
+                        </option>
+                        <option value="PUBLIC">Открытая для игроков</option>
+                      </select>
+                    </label>
+                    <p className="muted">
+                      Видимость не выдаёт школу автоматически. Изменения новой
+                      версии не затрагивают уже выданные версии.
+                    </p>
                     <div className="spell-node-list">
                       {graph.nodes
                         .filter((node) => node.schoolId === school.id)
@@ -1321,8 +1356,27 @@ export function SpellSchoolsWorkspace({
                         ? "Проверить и сохранить черновик"
                         : "Проверить и сохранить новую версию"}
                 </button>
+                {!isNew && ["ACTIVE", "REFERENCE"].includes(graph.lifecycle) && (
+                  <button
+                    type="button"
+                    onClick={() => void save()}
+                    disabled={
+                      busy ||
+                      (editorLocked && !retryPending) ||
+                      hasRecoveryCopy ||
+                      versionConflict
+                    }
+                  >
+                    {retryPending
+                      ? "Повторить создание того же черновика"
+                      : "Создать новый черновик из этой версии"}
+                  </button>
+                )}
                 {!isNew && graph.lifecycle !== "DRAFT" && (
-                  <span>Можно редактировать только черновую версию.</span>
+                  <span>
+                    Эта версия неизменяема. Новый черновик не активируется и не
+                    заменяет версии, уже выданные персонажам.
+                  </span>
                 )}
                 {!isNew && ["DRAFT", "REFERENCE"].includes(graph.lifecycle) && (
                   <button

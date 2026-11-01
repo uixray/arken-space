@@ -1,3 +1,4 @@
+import { postgresErrorCode } from "./database-errors.js";
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -437,30 +438,37 @@ export function registerWorldContentInstanceRoutes(
     if (!existing) return fail(reply, 404, "WORLD_CONTENT_INSTANCE_NOT_FOUND");
     if (existing.revision !== body.revision)
       return fail(reply, 409, "WORLD_CONTENT_INSTANCE_CONFLICT");
-    const deleted = await db.transaction(async (tx) => {
-      const rows = await tx
-        .delete(worldContentInstances)
-        .where(
-          and(
-            eq(worldContentInstances.id, id),
-            eq(worldContentInstances.campaignId, auth.campaignId),
-            eq(worldContentInstances.revision, existing.revision),
-          ),
-        )
-        .returning();
-      if (rows.length === 0) return false;
-      await tx.insert(worldContentInstanceActions).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        type: "world_content_instance.deleted",
-        entityType: "world_content_instance",
-        entityId: id,
-        entityRevision: existing.revision,
-        actorMembershipId: auth.membershipId,
-        payload: existing,
+    const deleted = await db
+      .transaction(async (tx) => {
+        const rows = await tx
+          .delete(worldContentInstances)
+          .where(
+            and(
+              eq(worldContentInstances.id, id),
+              eq(worldContentInstances.campaignId, auth.campaignId),
+              eq(worldContentInstances.revision, existing.revision),
+            ),
+          )
+          .returning();
+        if (rows.length === 0) return false;
+        await tx.insert(worldContentInstanceActions).values({
+          campaignId: auth.campaignId,
+          actionId: body.actionId,
+          type: "world_content_instance.deleted",
+          entityType: "world_content_instance",
+          entityId: id,
+          entityRevision: existing.revision,
+          actorMembershipId: auth.membershipId,
+          payload: existing,
+        });
+        return true;
+      })
+      .catch((error: unknown) => {
+        if (postgresErrorCode(error) === "23503") return "REFERENCED" as const;
+        throw error;
       });
-      return true;
-    });
+    if (deleted === "REFERENCED")
+      return fail(reply, 409, "INSTANCE_CONTAINER_IN_USE");
     if (!deleted) return fail(reply, 409, "WORLD_CONTENT_INSTANCE_CONFLICT");
     return reply.code(204).send();
   });

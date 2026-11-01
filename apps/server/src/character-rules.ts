@@ -142,7 +142,8 @@ export function applyCharacterRest(
 ): Resources {
   return Object.fromEntries(
     Object.entries(resources).map(([key, resource]) => {
-      if (resource.recoverable === false) return [key, resource];
+      if (key === "inspiration" || resource.recoverable === false)
+        return [key, resource];
 
       const regenStat = RESOURCE_REGEN_STAT[key];
       const regen =

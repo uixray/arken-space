@@ -1,3 +1,4 @@
+import { registerAwardsBindingsRoutes } from "./awards-bindings-routes.js";
 import { createPerformanceJournal } from "./performance-journal.js";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
@@ -48,6 +49,8 @@ import { registerSoundpadRoutes } from "./soundpad-routes.js";
 import { registerAudioClipRoutes } from "./audio-clip-routes.js";
 import { registerOperatorFeedbackRoutes } from "./operator-feedback.js";
 import { registerPlayerRequestRoutes } from "./player-requests.js";
+import { registerCharacterExtrasRoutes } from "./character-extras-routes.js";
+import { registerProgressionRoutes } from "./progression-routes.js";
 import { registerCharacterMediaRoutes } from "./character-media.js";
 import { registerGalleryChatShareRoutes } from "./gallery-chat-share.js";
 import { registerChatAttachmentContentRoute } from "./chat-attachment-content.js";
@@ -451,6 +454,15 @@ export function registerRoutes(
   registerGlobalStickerRoutes(app, db);
   registerOperatorFeedbackRoutes(app, db);
   registerPlayerRequestRoutes(app, db, io);
+  registerProgressionRoutes(app, db, (campaignId) =>
+    broadcastSnapshots(io, db, campaignId),
+  );
+  registerCharacterExtrasRoutes(app, db, (campaignId) =>
+    broadcastSnapshots(io, db, campaignId),
+  );
+  registerAwardsBindingsRoutes(app, db, (campaignId) =>
+    broadcastSnapshots(io, db, campaignId),
+  );
   registerCharacterMediaRoutes(app, db);
   registerGalleryChatShareRoutes(app, db, io);
   registerChatAttachmentContentRoute(app, db);

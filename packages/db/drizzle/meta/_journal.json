@@ -456,6 +456,27 @@
       "when": 1792580326855,
       "tag": "0064_story_world_time",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1793532600000,
+      "tag": "0065_character_progression",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1793534700000,
+      "tag": "0066_private_notebooks_inspiration",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1793538000000,
+      "tag": "0067_instance_bindings_achievements",
+      "breakpoints": true
     }
   ]
 }

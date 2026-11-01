@@ -26,6 +26,7 @@ export function assetUploadActionMatches(
 }
 
 export const ASSET_DEPENDENCY_REGISTRY = [
+  "ACHIEVEMENT_ICON",
   "SCENE_BACKGROUND",
   "TOKEN_DEFINITION",
   "TOKEN_INSTANCE",

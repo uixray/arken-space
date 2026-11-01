@@ -1,3 +1,4 @@
+export * from "./awards-bindings.js";
 import { z } from "zod";
 import {
   soundpadTriggerSchema,
@@ -136,6 +137,7 @@ export type WorldMapLocationVisibility = z.infer<
 >;
 
 export const playerRequestAudienceSchema = z.enum(["PUBLIC", "GM_ONLY"]);
+export * from "./character-extras.js";
 export const playerRequestHorizonSchema = z.enum([
   "NOW",
   "BEFORE_BREAK",
@@ -155,6 +157,19 @@ export const playerRequestTransitionSchema = z.enum([
   "DECLINE",
   "CANCEL",
 ]);
+export {
+  progressionDataSchema,
+  createProgressionSchema,
+  grantProgressionSpSchema,
+  progressionActionSchema,
+} from "./progression.js";
+export type {
+  ProgressionData,
+  ProgressionTarget,
+  ProgressionAction,
+} from "./progression.js";
+import { progressionDataSchema } from "./progression.js";
+
 export const playerRequestDtoSchema = z.object({
   id: z.string().uuid(),
   campaignId: z.string().uuid(),
@@ -168,6 +183,7 @@ export const playerRequestDtoSchema = z.object({
   title: z.string(),
   body: z.string(),
   resolutionNote: z.string().nullable(),
+  progression: progressionDataSchema.nullable().optional(),
   resolvedByMembershipId: z.string().uuid().nullable(),
   resolvedByDisplayName: z.string().nullable(),
   revision: z.number().int().nonnegative(),
@@ -2468,6 +2484,7 @@ export const assetUsageKindSchema = z.enum([
   "WORLD_MAP_BACKGROUND",
   "AUDIO_TRACK",
   "CAMPAIGN_SOUND",
+  "ACHIEVEMENT_ICON",
   "WORLD_CONTENT_COVER",
   "WORLD_CONTENT_MEDIA",
   "WORLD_CONTENT_INSTANCE_PORTRAIT",
@@ -2992,6 +3009,8 @@ export function resolveDiceFrame(candidates: {
 }
 
 export interface DiceResult {
+  /** A linked inspiration reroll, never an automatic ability re-execution. */
+  inspiration?: import("./character-extras.js").InspirationLink;
   formula: string;
   resolvedFormula: string;
   terms: DiceTerm[];

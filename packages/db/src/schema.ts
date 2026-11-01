@@ -1648,7 +1648,13 @@ export const tokenDefinitions = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [index("token_definitions_campaign_idx").on(table.campaignId)],
+  (table) => [
+    index("token_definitions_campaign_idx").on(table.campaignId),
+    uniqueIndex("token_definitions_campaign_id_unique").on(
+      table.campaignId,
+      table.id,
+    ),
+  ],
 );
 
 export const tokenControllers = pgTable(
@@ -2292,6 +2298,9 @@ export const chatMessages = pgTable(
     /** Reference-only projection; canonical request content stays in player_requests. */
     playerRequestId: uuid("player_request_id"),
     dice: jsonb("dice").$type<unknown>(),
+    inspirationSourceMessageId: uuid(
+      "inspiration_source_message_id",
+    ).references((): AnyPgColumn => chatMessages.id, { onDelete: "restrict" }),
     systemData: jsonb("system_data").$type<{
       type: "WALLET_AUDIT";
       before: { gold: number; silver: number; copper: number; sp: number };
@@ -2317,6 +2326,9 @@ export const chatMessages = pgTable(
   },
   (table) => [
     uniqueIndex("chat_sequence_idx").on(table.sequence),
+    uniqueIndex("chat_inspiration_source_unique").on(
+      table.inspirationSourceMessageId,
+    ),
     uniqueIndex("chat_messages_player_request_idx").on(table.playerRequestId),
     index("chat_campaign_sequence_idx").on(table.campaignId, table.sequence),
     index("chat_messages_thread_sequence_idx").on(
@@ -2918,6 +2930,7 @@ export const playerRequests = pgTable(
     audience: playerRequestAudienceEnum("audience").notNull(),
     horizon: playerRequestHorizonEnum("horizon").notNull(),
     status: playerRequestStatusEnum("status").notNull().default("SUBMITTED"),
+    progression: jsonb("progression").$type<Record<string, unknown> | null>(),
     title: text("title").notNull(),
     body: text("body").notNull(),
     resolutionNote: text("resolution_note"),
@@ -2973,6 +2986,10 @@ export const playerRequests = pgTable(
       sql`length(trim(${table.title})) BETWEEN 1 AND 120 AND length(trim(${table.body})) BETWEEN 1 AND 4000 AND ${table.revision} >= 0`,
     ),
     check(
+      "player_requests_progression_private_check",
+      sql`${table.progression} IS NULL OR (${table.characterId} IS NOT NULL AND ${table.audience} = 'GM_ONLY')`,
+    ),
+    check(
       "player_requests_resolution_shape_check",
       sql`((${table.status} IN ('RESOLVED', 'DECLINED')) AND ${table.resolvedByMembershipId} IS NOT NULL) OR ((${table.status} NOT IN ('RESOLVED', 'DECLINED')) AND ${table.resolvedByMembershipId} IS NULL AND ${table.resolutionNote} IS NULL)`,
     ),
@@ -2983,6 +3000,47 @@ export const playerRequests = pgTable(
     check(
       "player_requests_cancellation_shape_check",
       sql`(${table.status} = 'CANCELLED' AND ${table.cancelledAt} IS NOT NULL) OR (${table.status} <> 'CANCELLED' AND ${table.cancelledAt} IS NULL)`,
+    ),
+  ],
+);
+
+/** Private author notebook: intentionally absent from character/snapshot DTOs. */
+export const characterPrivateNotebooks = pgTable(
+  "character_private_notebooks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    characterId: uuid("character_id").notNull(),
+    authorMembershipId: uuid("author_membership_id").notNull(),
+    text: text("text").notNull().default(""),
+    revision: integer("revision").notNull().default(0),
+    lastActionId: uuid("last_action_id"),
+    lastCommandHash: text("last_command_hash"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("private_notebook_author_character_unique").on(
+      table.campaignId,
+      table.characterId,
+      table.authorMembershipId,
+    ),
+    foreignKey({
+      name: "private_notebook_character_fk",
+      columns: [table.campaignId, table.characterId],
+      foreignColumns: [characters.campaignId, characters.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "private_notebook_author_fk",
+      columns: [table.campaignId, table.authorMembershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("cascade"),
+    check(
+      "private_notebook_content_check",
+      sql`length(${table.text}) <= 20000 AND ${table.revision} >= 0`,
     ),
   ],
 );
@@ -3430,6 +3488,10 @@ export const worldContentInstances = pgTable(
       .notNull(),
   },
   (table) => [
+    uniqueIndex("world_instances_campaign_id_unique").on(
+      table.campaignId,
+      table.id,
+    ),
     index("world_content_instances_campaign_idx").on(table.campaignId),
     index("world_content_instances_world_content_idx").on(table.worldContentId),
     index("world_content_instances_campaign_world_content_idx").on(
@@ -3508,3 +3570,118 @@ export const publicRoadmapVotes = pgTable(
     ),
   ],
 );
+
+/** GM-only instance bindings. Separate from canonical content and player DTOs. */
+export const worldInstanceBindings = pgTable(
+  "world_instance_bindings",
+  {
+    instanceId: uuid("instance_id").primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    tokenDefinitionId: uuid("token_definition_id"),
+    containerInstanceId: uuid("container_instance_id"),
+    revision: integer("revision").notNull().default(0),
+  },
+  (t) => [
+    foreignKey({
+      name: "binding_campaign_instance_fk",
+      columns: [t.campaignId, t.instanceId],
+      foreignColumns: [
+        worldContentInstances.campaignId,
+        worldContentInstances.id,
+      ],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "binding_campaign_token_fk",
+      columns: [t.campaignId, t.tokenDefinitionId],
+      foreignColumns: [tokenDefinitions.campaignId, tokenDefinitions.id],
+    }),
+    foreignKey({
+      name: "binding_campaign_container_fk",
+      columns: [t.campaignId, t.containerInstanceId],
+      foreignColumns: [
+        worldContentInstances.campaignId,
+        worldContentInstances.id,
+      ],
+    }),
+    check(
+      "instance_binding_no_self",
+      sql`${t.containerInstanceId} IS NULL OR ${t.containerInstanceId} <> ${t.instanceId}`,
+    ),
+  ],
+);
+
+export const achievementDefinitions = pgTable(
+  "achievement_definitions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    color: text("color").notNull(),
+    iconAssetId: uuid("icon_asset_id"),
+    provenance: text("provenance").notNull().default(""),
+    archived: boolean("archived").notNull().default(false),
+    revision: integer("revision").notNull().default(0),
+  },
+  (t) => [
+    uniqueIndex("achievement_campaign_id_unique").on(t.campaignId, t.id),
+    foreignKey({
+      name: "achievement_campaign_icon_fk",
+      columns: [t.campaignId, t.iconAssetId],
+      foreignColumns: [assets.campaignId, assets.id],
+    }),
+  ],
+);
+export const achievementAwards = pgTable(
+  "achievement_awards",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    achievementId: uuid("achievement_id").notNull(),
+    membershipId: uuid("membership_id").notNull(),
+    public: boolean("public").notNull().default(false),
+    revoked: boolean("revoked").notNull().default(false),
+    revision: integer("revision").notNull().default(0),
+  },
+  (t) => [
+    uniqueIndex("achievement_award_member_unique").on(
+      t.achievementId,
+      t.membershipId,
+    ),
+    foreignKey({
+      name: "award_campaign_definition_fk",
+      columns: [t.campaignId, t.achievementId],
+      foreignColumns: [
+        achievementDefinitions.campaignId,
+        achievementDefinitions.id,
+      ],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "award_campaign_member_fk",
+      columns: [t.campaignId, t.membershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("cascade"),
+  ],
+);
+/** Audit reasons and snapshots stay GM-only, never in shared gameEvents. */
+export const achievementHistory = pgTable("achievement_history", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  campaignId: uuid("campaign_id")
+    .notNull()
+    .references(() => campaigns.id, { onDelete: "cascade" }),
+  actorMembershipId: uuid("actor_membership_id")
+    .notNull()
+    .references(() => memberships.id),
+  operation: text("operation").notNull(),
+  reason: text("reason").notNull(),
+  payload: jsonb("payload").$type<unknown>(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
