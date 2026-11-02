@@ -406,14 +406,16 @@ export function CharacterActionCard({
       {entry.kind === "ABILITY" && (
         <div className="character-action-card__action character-action-card__action--primary">
           <span>
-            <b>{actions.length ? "Выполнить способность" : "Активировать"}</b>
+            <b>{entry.data.areaEffect ? "Область действия" : actions.length ? "Выполнить способность" : "Активировать"}</b>
             <code>
-              {actions.length
+              {entry.data.areaEffect
+                ? `Радиус ${entry.data.areaEffect.radiusMeters} м · общий 1к6 маны${uses ? " · 1 использование" : ""}`
+                : actions.length
                 ? `${actions.length} ${actions.length === 1 ? "бросок" : actions.length < 5 ? "броска" : "бросков"} · одно выполнение`
                 : (entry.data.activation?.consumeUse ?? Boolean(uses))
                   ? "1 использование · без броска"
                   : "Без броска"}
-              {!actions.length && entry.data.activation?.cost
+              {!entry.data.areaEffect && !actions.length && entry.data.activation?.cost
                 ? ` · ${entry.data.activation.cost.amount} ${entry.data.activation.cost.type === "physical" ? "физической силы" : "магической силы"}`
                 : ""}
             </code>
@@ -423,10 +425,10 @@ export function CharacterActionCard({
             disabled={
               disabled ||
               pending !== null ||
-              (actions.length
+              (!entry.data.areaEffect && (actions.length
                 ? actions.some((candidate) => candidate.consumeUse) && exhausted
                 : (entry.data.activation?.consumeUse ?? Boolean(uses)) &&
-                  exhausted)
+                  exhausted))
             }
             onClick={() =>
               void submit("EXECUTE", undefined, actions.length > 0)
@@ -435,7 +437,9 @@ export function CharacterActionCard({
             <CatalogActionIcon kind="CUSTOM" semanticText={entry.name} />
             {pending === "EXECUTE"
               ? "Выполняем…"
-              : actions.length
+              : entry.data.areaEffect
+                ? "Показать область на карте"
+                : actions.length
                 ? "Выполнить способность"
                 : "Активировать"}
           </button>
@@ -484,7 +488,7 @@ export function CharacterActionCard({
             </button>
           </div>
         )}
-      {actions.map((action) => (
+      {!entry.data.areaEffect && actions.map((action) => (
         <div className="character-action-card__action" key={action.id}>
           <span>
             <b>{action.label}</b>

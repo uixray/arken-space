@@ -65,7 +65,10 @@ export function buildActivityFeed(
       .map((thread) => thread.id),
   );
   const messageEvents: ActivityEvent[] = messages
-    .filter((message) => !directThreadIds.has(message.threadId))
+    .filter(
+      (message) =>
+        message.stream !== null && !directThreadIds.has(message.threadId),
+    )
     .map((message) => ({
       type: "MESSAGE",
       id: message.id,

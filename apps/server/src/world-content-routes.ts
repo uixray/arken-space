@@ -9,6 +9,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
   worldContent,
@@ -28,6 +29,7 @@ import {
   updateWorldContentMediaSchema,
   updateWorldContentSchema,
   worldContentTypeSchema,
+  worldContentDtoSchema,
   type WorldContentLifecycle,
   type WorldContentMediaDto,
   type WorldContentRelationDto,
@@ -63,6 +65,86 @@ import {
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type RequestDb = Database | Transaction;
+
+async function canonicalMutationReplay(
+  db: RequestDb,
+  actionId: string,
+  actor: string,
+  type: string,
+  requestHash: string,
+) {
+  const prior = await findAction(db, actionId);
+  if (!prior) return null;
+  const payload = prior.payload as {
+    requestHash?: string;
+    response?: unknown;
+  } | null;
+  const response = worldContentDtoSchema.safeParse(payload?.response);
+  if (
+    prior.actorMembershipId !== actor ||
+    prior.type !== type ||
+    payload?.requestHash !== requestHash ||
+    !response.success
+  )
+    return { actionConflict: true } as const;
+  return { replayed: response.data } as const;
+}
+
+/** Region is a flat reference to an immutable LOCATION type, not a hierarchy. */
+async function validRegion(
+  db: RequestDb,
+  regionId: string | null | undefined,
+  selfId?: string,
+) {
+  if (!regionId) return true;
+  if (regionId === selfId) return false;
+  const [region] = await db
+    .select({ id: worldContent.id })
+    .from(worldContent)
+    .where(
+      and(eq(worldContent.id, regionId), eq(worldContent.type, "LOCATION")),
+    )
+    .limit(1)
+    .for("share");
+  return Boolean(region);
+}
+
+async function playerRegionDtos(
+  db: RequestDb,
+  auth: WorldContentAuthContext,
+  rows: Array<
+    Parameters<typeof toPlayerDto>[0] & { sourceRegionId: string | null }
+  >,
+) {
+  const ids = [
+    ...new Set(
+      rows.flatMap((row) => (row.sourceRegionId ? [row.sourceRegionId] : [])),
+    ),
+  ];
+  const regions = ids.length
+    ? await db
+        .select({ id: worldContent.id, name: worldContent.name })
+        .from(worldContent)
+        .where(
+          and(
+            worldContentVisibility(auth),
+            eq(worldContent.type, "LOCATION"),
+            inArray(worldContent.id, ids),
+          ),
+        )
+    : [];
+  const visible = new Map(regions.map((row) => [row.id, row.name]));
+  return rows.map((row) => {
+    const name = row.sourceRegionId
+      ? visible.get(row.sourceRegionId)
+      : undefined;
+    return {
+      ...toPlayerDto(row),
+      regionId: name !== undefined ? row.sourceRegionId : null,
+      regionName: name ?? null,
+    };
+  });
+}
 type WorldContentMediaRow = typeof worldContentMedia.$inferSelect;
 type WorldContentRelationRow = typeof worldContentRelations.$inferSelect;
 type ImportMediaCreateResult =
@@ -220,6 +302,8 @@ const listQuerySchema = z
     tags: z.string().trim().min(1).max(500).optional(),
     q: z.string().trim().min(1).max(200).optional(),
     relatedTo: z.string().uuid().optional(),
+    regionId: z.string().uuid().optional(),
+    era: z.string().trim().min(1).max(80).optional(),
   })
   .partial()
   .passthrough();
@@ -232,9 +316,41 @@ export function registerWorldContentRoutes(
     beforeImporterMediaTransaction?: () => Promise<void> | void;
   } = {},
 ) {
+  app.get("/api/world-content-regions", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    reply.header("Cache-Control", "private, no-store");
+    const query = z
+      .object({
+        q: z.string().trim().max(200).optional(),
+        id: z.string().uuid().optional(),
+      })
+      .strict()
+      .parse(request.query);
+    const visible = worldContentVisibility({
+      role: auth.role,
+      campaignId: auth.campaignId,
+    });
+    const rows = await db
+      .select({ id: worldContent.id, name: worldContent.name })
+      .from(worldContent)
+      .where(
+        and(
+          visible,
+          eq(worldContent.type, "LOCATION"),
+          query.id ? eq(worldContent.id, query.id) : undefined,
+          query.q ? ilike(worldContent.name, `%${query.q}%`) : undefined,
+        ),
+      )
+      .orderBy(worldContent.name, worldContent.id)
+      .limit(41);
+    return reply.send({ items: rows.slice(0, 40), hasMore: rows.length > 40 });
+  });
+
   app.get("/api/world-content", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
+    reply.header("Cache-Control", "private, no-store");
     const parsedQuery = listQuerySchema.safeParse(request.query);
     if (!parsedQuery.success)
       return fail(reply, 400, "WORLD_CONTENT_QUERY_INVALID");
@@ -244,6 +360,21 @@ export function registerWorldContentRoutes(
       campaignId: auth.campaignId,
     };
     const conditions: SQL[] = [worldContentVisibility(authCtx)];
+    if (query.regionId) {
+      const [region] = await db
+        .select({ id: worldContent.id })
+        .from(worldContent)
+        .where(
+          and(
+            worldContentByIdVisibleTo(authCtx, query.regionId),
+            eq(worldContent.type, "LOCATION"),
+          ),
+        )
+        .limit(1);
+      if (!region) return fail(reply, 404, "WORLD_CONTENT_NOT_FOUND");
+      conditions.push(eq(worldContent.regionId, query.regionId));
+    }
+    if (query.era) conditions.push(eq(worldContent.era, query.era));
     if (query.relatedTo) {
       // Match the relation-detail endpoint's subject 404 before inspecting
       // edges. A hidden/unknown subject must not be distinguishable by result
@@ -307,16 +438,20 @@ export function registerWorldContentRoutes(
       return reply.send(rows.map(toGmDto));
     }
     const rows = await db
-      .select(worldContentPlayerColumns)
+      .select({
+        ...worldContentPlayerColumns,
+        sourceRegionId: worldContent.regionId,
+      })
       .from(worldContent)
       .where(where)
       .orderBy(worldContentDefaultOrder);
-    return reply.send(rows.map(toPlayerDto));
+    return reply.send(await playerRegionDtos(db, authCtx, rows));
   });
 
   app.get("/api/world-content/:id", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
+    reply.header("Cache-Control", "private, no-store");
     const { id } = idParams.parse(request.params);
     const authCtx: WorldContentAuthContext = {
       role: auth.role,
@@ -332,12 +467,15 @@ export function registerWorldContentRoutes(
       return reply.send(toGmDto(row));
     }
     const [row] = await db
-      .select(worldContentPlayerColumns)
+      .select({
+        ...worldContentPlayerColumns,
+        sourceRegionId: worldContent.regionId,
+      })
       .from(worldContent)
       .where(worldContentByIdVisibleTo(authCtx, id))
       .limit(1);
     if (!row) return fail(reply, 404, "WORLD_CONTENT_NOT_FOUND");
-    return reply.send(toPlayerDto(row));
+    return reply.send((await playerRegionDtos(db, authCtx, [row]))[0]);
   });
 
   /**
@@ -452,8 +590,22 @@ export function registerWorldContentRoutes(
     if (!auth) return;
     if (auth.role !== "GM") return fail(reply, 403, "GM_REQUIRED");
     const body = createWorldContentSchema.parse(request.body);
-    if (await findAction(db, body.actionId))
-      return reply.code(200).send({ duplicate: true });
+    if (body.basePriceCopper != null && body.type !== "ITEM")
+      return fail(reply, 400, "ITEM_PRICE_REQUIRES_ITEM");
+    const requestHash = createHash("sha256")
+      .update(JSON.stringify({ type: "created", id: null, body }))
+      .digest("hex");
+    const replay = await canonicalMutationReplay(
+      db,
+      body.actionId,
+      auth.membershipId,
+      "world_content.created",
+      requestHash,
+    );
+    if (replay)
+      return "actionConflict" in replay
+        ? fail(reply, 409, "ACTION_ID_CONFLICT")
+        : reply.send(replay.replayed);
     if (
       body.coverAssetId &&
       !(await findImageAssetForCampaign(db, body.coverAssetId, auth.campaignId))
@@ -461,13 +613,28 @@ export function registerWorldContentRoutes(
       return fail(reply, 422, "WORLD_CONTENT_ASSET_INVALID");
     try {
       const created = await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended('world-content-region-edits', 0))`,
+        );
+        const replay = await canonicalMutationReplay(
+          tx,
+          body.actionId,
+          auth.membershipId,
+          "world_content.created",
+          requestHash,
+        );
+        if (replay) return replay;
+        if (!(await validRegion(tx, body.regionId))) return null;
         const [row] = await tx
           .insert(worldContent)
           .values({
             slug: body.slug,
             type: body.type,
             subtype: body.subtype ?? null,
+            regionId: body.regionId ?? null,
+            era: body.era ?? null,
             name: body.name,
+            basePriceCopper: body.basePriceCopper ?? null,
             aliases: body.aliases ?? [],
             summary: body.summary ?? "",
             publicText: body.publicText ?? "",
@@ -498,12 +665,27 @@ export function registerWorldContentRoutes(
           entityId: row.id,
           entityRevision: row.revision,
           actorMembershipId: auth.membershipId,
-          payload: row,
+          payload: { ...row, requestHash, response: toGmDto(row) },
         });
         return row;
       });
+      if (!created) return fail(reply, 422, "WORLD_CONTENT_REGION_INVALID");
+      if ("actionConflict" in created)
+        return fail(reply, 409, "ACTION_ID_CONFLICT");
+      if ("replayed" in created) return reply.send(created.replayed);
       return reply.code(201).send(toGmDto(created));
     } catch (error) {
+      const replay = await canonicalMutationReplay(
+        db,
+        body.actionId,
+        auth.membershipId,
+        "world_content.created",
+        requestHash,
+      );
+      if (replay)
+        return "actionConflict" in replay
+          ? fail(reply, 409, "ACTION_ID_CONFLICT")
+          : reply.send(replay.replayed);
       if (isUniqueViolation(error, "world_content_slug_idx"))
         return fail(reply, 409, "WORLD_CONTENT_SLUG_CONFLICT");
       throw error;
@@ -514,49 +696,102 @@ export function registerWorldContentRoutes(
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     if (auth.role !== "GM") return fail(reply, 403, "GM_REQUIRED");
+    // The shop's canonical-price form pins the actor across cookie changes in
+    // another tab. Existing non-shop canonical editors keep their API contract.
+    if ((request.headers["x-economy-campaign"] !== undefined || request.headers["x-economy-membership"] !== undefined) &&
+        (request.headers["x-economy-campaign"] !== auth.campaignId || request.headers["x-economy-membership"] !== auth.membershipId))
+      return reply.code(409).send({ error: "ECONOMY_CONTEXT_CHANGED",
+        message: "Сменился аккаунт или кампания. Вернитесь в исходную кампанию, чтобы проверить сохранённый запрос." });
     const { id } = idParams.parse(request.params);
     const body = updateWorldContentSchema.parse(request.body);
-    if (await findAction(db, body.actionId))
-      return reply.code(200).send({ duplicate: true });
+    const requestHash = createHash("sha256")
+      .update(JSON.stringify({ type: "updated", id: id, body }))
+      .digest("hex");
+    const replay = await canonicalMutationReplay(
+      db,
+      body.actionId,
+      auth.membershipId,
+      "world_content.updated",
+      requestHash,
+    );
+    if (replay)
+      return "actionConflict" in replay
+        ? fail(reply, 409, "ACTION_ID_CONFLICT")
+        : reply.send(replay.replayed);
     if (
       body.coverAssetId !== undefined &&
       body.coverAssetId !== null &&
       !(await findImageAssetForCampaign(db, body.coverAssetId, auth.campaignId))
     )
       return fail(reply, 422, "WORLD_CONTENT_ASSET_INVALID");
-    const existing = await findEntity(db, id);
-    if (!existing) return fail(reply, 404, "WORLD_CONTENT_NOT_FOUND");
-    if (existing.revision !== body.revision)
-      return fail(reply, 409, "WORLD_CONTENT_CONFLICT");
     const { actionId, revision: _revision, ...changes } = body;
-    const updated = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .update(worldContent)
-        .set({
-          ...changes,
-          revision: existing.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(worldContent.id, id),
-            eq(worldContent.revision, existing.revision),
-          ),
-        )
-        .returning();
-      if (!row) return null;
-      await tx.insert(worldContentActions).values({
-        actionId,
-        type: "world_content.updated",
-        entityType: "world_content",
-        entityId: id,
-        entityRevision: row.revision,
-        actorMembershipId: auth.membershipId,
-        payload: row,
+    const updated = await db
+      .transaction(async (tx) => {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended('world-content-region-edits', 0))`,
+        );
+        const replay = await canonicalMutationReplay(
+          tx,
+          body.actionId,
+          auth.membershipId,
+          "world_content.updated",
+          requestHash,
+        );
+        if (replay) return replay;
+        const existing = await findEntity(tx, id);
+        if (!existing) return { notFound: true } as const;
+        if (existing.revision !== body.revision) return null;
+        if (body.basePriceCopper != null && existing.type !== "ITEM")
+          return { priceInvalid: true } as const;
+        if (!(await validRegion(tx, body.regionId, id)))
+          return { regionInvalid: true } as const;
+        const [row] = await tx
+          .update(worldContent)
+          .set({
+            ...changes,
+            revision: existing.revision + 1,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(worldContent.id, id),
+              eq(worldContent.revision, existing.revision),
+            ),
+          )
+          .returning();
+        if (!row) return null;
+        await tx.insert(worldContentActions).values({
+          actionId,
+          type: "world_content.updated",
+          entityType: "world_content",
+          entityId: id,
+          entityRevision: row.revision,
+          actorMembershipId: auth.membershipId,
+          payload: { ...row, requestHash, response: toGmDto(row) },
+        });
+        return row;
+      })
+      .catch(async (error: unknown) => {
+        const replay = await canonicalMutationReplay(
+          db,
+          body.actionId,
+          auth.membershipId,
+          "world_content.updated",
+          requestHash,
+        );
+        if (replay) return replay;
+        throw error;
       });
-      return row;
-    });
     if (!updated) return fail(reply, 409, "WORLD_CONTENT_CONFLICT");
+    if ("actionConflict" in updated)
+      return fail(reply, 409, "ACTION_ID_CONFLICT");
+    if ("replayed" in updated) return reply.send(updated.replayed);
+    if ("notFound" in updated)
+      return fail(reply, 404, "WORLD_CONTENT_NOT_FOUND");
+    if ("regionInvalid" in updated)
+      return fail(reply, 422, "WORLD_CONTENT_REGION_INVALID");
+    if ("priceInvalid" in updated)
+      return fail(reply, 400, "ITEM_PRICE_REQUIRES_ITEM");
     return reply.send(toGmDto(updated));
   });
 

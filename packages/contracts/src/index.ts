@@ -1,5 +1,8 @@
 export * from "./awards-bindings.js";
+export * from "./token-sprites.js";
+export * from "./bug-intake.js";
 import { z } from "zod";
+export * from "./economy.js";
 import {
   soundpadTriggerSchema,
   type SoundpadTriggeredEvent,
@@ -474,9 +477,8 @@ export const tokenLayerSchema = z.enum(["MAP", "GM", "PLAYER"]);
  *
  * Набор закрытый. Расширяемый мастером тянет за собой справочник, его редактор
  * и правило «что делать с состоянием, которое уже висит на фигуре, когда его
- * удаляют из справочника», — а это отдельная задача, не эта. Добавить пятое
- * состояние здесь стоит одной миграции; неудачно спроектированный справочник
- * стоит дороже.
+ * удаляют из справочника», — а это отдельная задача, не эта.
+ * UIX-715 добавляет FLYING только для визуальной позы: не высота и не бонус.
  *
  * Хранятся у **размещённой** фигуры, а не у её определения: один персонаж
  * может стоять на двух сценах и быть отравлен только на одной.
@@ -486,6 +488,7 @@ export const tokenConditionSchema = z.enum([
   "UNCONSCIOUS",
   "RESTRAINED",
   "PRONE",
+  "FLYING",
 ]);
 export type TokenCondition = z.infer<typeof tokenConditionSchema>;
 
@@ -495,6 +498,7 @@ export const TOKEN_CONDITION_LABEL: Readonly<Record<TokenCondition, string>> = {
   UNCONSCIOUS: "Без сознания",
   RESTRAINED: "Обездвижен",
   PRONE: "Распластан",
+  FLYING: "Летит (визуальное состояние)",
 };
 
 /**
@@ -643,9 +647,39 @@ export const abilityUsesSchema = z
     message: "current must not exceed max",
     path: ["current"],
   });
+/** First approved area mechanic: one shared d6 mana restoration for player
+ * characters, including the caster when eligible. Never infer from prose. */
+export { abilityAreaCircle } from "./ability-area-geometry.js";
+export const abilityAreaEffectSchema = z.object({
+  kind: z.literal("RESTORE_MANA"),
+  radiusMeters: z.number().finite().positive().max(1000000),
+  origin: z.literal("CASTER"),
+  targets: z.literal("PLAYER_CHARACTERS"),
+  dice: z.literal("1d6"),
+  includeCaster: z.literal(true),
+}).strict();
+
+/** Only identity/revisions cross the boundary; targets and dice are server-owned. */
+export const abilityAreaApplySchema = z.object({
+  actionId: z.string().uuid(),
+  characterId: z.string().uuid(),
+  entryId: z.string().uuid(),
+  entryRevision: z.number().int().nonnegative(),
+  sceneId: z.string().uuid(),
+  sceneRevision: z.number().int().nonnegative(),
+  casterTokenId: z.string().uuid(),
+  casterTokenRevision: z.number().int().nonnegative(),
+}).strict();
+export type AbilityAreaApply = z.infer<typeof abilityAreaApplySchema>;
+export const abilityAreaResultSchema = z.object({
+  duplicate: z.boolean(),
+  messageId: z.string().uuid(),
+}).strict();
+
 export const entryDataSchema = z
   .object({
     rollActions: z.array(rollActionSchema).max(20).optional(),
+    areaEffect: abilityAreaEffectSchema.optional(),
     /** Optional no-roll ability activation; costs are charged without a roll. */
     activation: z
       .object({
@@ -1140,6 +1174,8 @@ export interface PlayerAccessSecretDto {
 }
 
 export const gridSchema = z.object({
+  /** GM-authored scale; absent/null means metres cannot be inferred. */
+  metersPerCell: z.number().finite().positive().max(1000000).nullable().optional(),
   enabled: z.boolean().default(true),
   size: z.number().int().min(16).max(256).default(64),
   offsetX: z.number().finite().default(0),
@@ -2569,6 +2605,7 @@ export interface TokenDefinitionDto {
   id: string;
   characterId: string | null;
   defaultAssetId: string | null;
+  spriteSet?: import("./token-sprites.js").TokenSpriteSet | null;
   /**
    * Имя, которое видит человек: собственное, либо унаследованное от персонажа.
    * Всегда непустое — разрешением занимается сервер.
@@ -2668,6 +2705,7 @@ export interface TokenDto {
   characterId: string | null;
   ownerMembershipId: string | null;
   assetId: string | null;
+  spriteSet?: import("./token-sprites.js").TokenSpriteSet | null;
   name: string;
   x: number;
   y: number;
@@ -2676,6 +2714,8 @@ export interface TokenDto {
   width: number;
   height: number;
   rotation: number;
+  /** Absent only in legacy payloads; render them facing FRONT. */
+  facing?: import("./token-sprites.js").TokenFacing;
   visible: boolean;
   locked: boolean;
   baseColor: string;
@@ -3205,6 +3245,8 @@ export interface GameSnapshot {
   me: MembershipDto;
   /** Optional while older fixtures migrate; production bootstrap always supplies it. */
   personalTheme?: PersonalThemeDto;
+  /** Personal presentation only; absent means existing default names. */
+  personalDiceNames?: "GEOMETRIC";
   members: MembershipDto[];
   /** Safe peers available to the current member for a direct chat. */
   directChatContacts?: DirectChatContactDto[];
@@ -3459,7 +3501,10 @@ export const worldContentDtoSchema = z.object({
   slug: worldContentSlugSchema,
   type: worldContentTypeSchema,
   subtype: z.string().nullable(),
+  regionId: z.string().uuid().nullable().optional(),
+  era: z.string().trim().min(1).max(80).nullable().optional(),
   name: z.string(),
+  basePriceCopper: z.number().int().min(0).max(1_000_000_000_000).nullable().optional(),
   aliases: worldContentAliasesSchema,
   summary: z.string(),
   publicText: z.string(),
@@ -3483,6 +3528,10 @@ export const worldContentPlayerDtoSchema = z.object({
   slug: worldContentSlugSchema,
   type: worldContentTypeSchema,
   subtype: z.string().nullable(),
+  /** Hidden region targets are projected as null, never raw canonical IDs. */
+  regionId: z.string().uuid().nullable().optional(),
+  regionName: z.string().nullable().optional(),
+  era: z.string().trim().min(1).max(80).nullable().optional(),
   name: z.string(),
   aliases: worldContentAliasesSchema,
   summary: z.string(),
@@ -3499,6 +3548,9 @@ export const createWorldContentSchema = z
     actionId: z.string().uuid(),
     slug: worldContentSlugSchema,
     type: worldContentTypeSchema,
+    basePriceCopper: z.number().int().min(0).max(1_000_000_000_000).nullable().optional(),
+    regionId: z.string().uuid().nullable().optional(),
+    era: z.string().trim().min(1).max(80).nullable().optional(),
     subtype: z.string().trim().min(1).max(120).nullable().optional(),
     name: z.string().trim().min(1).max(200),
     aliases: worldContentAliasesSchema.optional(),
@@ -3517,6 +3569,9 @@ export const updateWorldContentSchema = z
   .object({
     actionId: z.string().uuid(),
     revision: z.number().int().nonnegative(),
+    basePriceCopper: z.number().int().min(0).max(1_000_000_000_000).nullable().optional(),
+    regionId: z.string().uuid().nullable().optional(),
+    era: z.string().trim().min(1).max(80).nullable().optional(),
     subtype: z.string().trim().min(1).max(120).nullable().optional(),
     name: z.string().trim().min(1).max(200).optional(),
     aliases: worldContentAliasesSchema.optional(),
@@ -3676,6 +3731,18 @@ export type DeleteWorldContent = z.infer<typeof deleteWorldContentSchema>;
  * `WorldContentInstancePlayerDto` (UIX-245 step 5: no `gmNotes`, no
  * `currentLocationId`); every write requires the GM role.
  */
+export interface CharacterInventoryItemDto {
+  id: string;
+  name: string;
+  quantity: number | null;
+  condition: string | null;
+  revision: number;
+}
+export interface CharacterInventoryPageDto {
+  items: CharacterInventoryItemDto[];
+  nextCursor: string | null;
+}
+
 export const worldContentInstanceDtoSchema = z.object({
   id: z.string().uuid(),
   campaignId: z.string().uuid(),
@@ -3685,6 +3752,7 @@ export const worldContentInstanceDtoSchema = z.object({
   gmNotes: z.string().nullable(),
   portraitAssetId: z.string().uuid().nullable(),
   ownerMembershipId: z.string().uuid().nullable(),
+  inventoryCharacterId: z.string().uuid().nullable().optional(),
   currentLocationId: z.string().uuid().nullable(),
   quantity: z.number().int().nonnegative().nullable(),
   condition: z.string().nullable(),
@@ -3704,7 +3772,7 @@ export type WorldContentInstanceDto = z.infer<
  */
 export type WorldContentInstancePlayerDto = Omit<
   WorldContentInstanceDto,
-  "gmNotes" | "currentLocationId"
+  "gmNotes" | "currentLocationId" | "inventoryCharacterId"
 >;
 
 export const createWorldContentInstanceSchema = z
@@ -3722,6 +3790,7 @@ export const createWorldContentInstanceSchema = z
     gmNotes: z.string().trim().max(20000).nullable().optional(),
     portraitAssetId: z.string().uuid().nullable().optional(),
     ownerMembershipId: z.string().uuid().nullable().optional(),
+    inventoryCharacterId: z.string().uuid().nullable().optional(),
     currentLocationId: z.string().uuid().nullable().optional(),
     quantity: z.number().int().nonnegative().nullable().optional(),
     condition: z.string().trim().min(1).max(200).nullable().optional(),
@@ -3747,6 +3816,7 @@ export const updateWorldContentInstanceSchema = z
     gmNotes: z.string().trim().max(20000).nullable().optional(),
     portraitAssetId: z.string().uuid().nullable().optional(),
     ownerMembershipId: z.string().uuid().nullable().optional(),
+    inventoryCharacterId: z.string().uuid().nullable().optional(),
     currentLocationId: z.string().uuid().nullable().optional(),
     quantity: z.number().int().nonnegative().nullable().optional(),
     condition: z.string().trim().min(1).max(200).nullable().optional(),

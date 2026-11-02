@@ -1,3 +1,4 @@
+import { CharacterInventory } from "./CharacterInventory";
 import { Achievements } from "../Achievements";
 import { PrivateNpcNotebook, InspirationResource } from "../CharacterExtras";
 import {
@@ -343,7 +344,11 @@ export function CharacterWorkspace({
             </p>
           )}
           {characters.length === 0 ? (
-            <p className="muted">Нет доступных персонажей.</p>
+            <p className="muted">
+              {props.snapshot.me.role === "PLAYER"
+                ? "У вас пока нет персонажа. Нажмите «Создать персонажа» или попросите мастера назначить вам готовый лист."
+                : "В кампании пока нет доступных персонажей. Нажмите «Создать персонажа», чтобы подготовить первый лист."}
+            </p>
           ) : (
             characters.map((character) => {
               const isOpen = state.openIds.includes(character.id);
@@ -1279,7 +1284,7 @@ export function CharacterPanel({
     return (
       <Empty
         title="Нет персонажа"
-        text="Мастер ещё не назначил вам персонажа."
+        text="Выберите доступный лист или создайте персонажа в списке персонажей. Мастер также может назначить вам готовый лист."
       />
     );
   const editPermissionReason =
@@ -2849,8 +2854,14 @@ export function CharacterPanel({
           data-character-section="inventory"
         >
           <h3 className="character-block-heading">Инвентарь и снаряжение</h3>
+          <CharacterInventory
+            key={`${snapshot.campaign.id}:${snapshot.me.id}:${snapshot.me.role}:${character.id}:${character.lifecycle}`}
+            characterId={character.id}
+            gm={snapshot.me.role === "GM"}
+            active={character.lifecycle === "ACTIVE"}
+          />
           <label className="field">
-            Инвентарь (один предмет на строку)
+            Текстовые записи инвентаря (сохранены отдельно)
             <FormTextArea
               controlRef={inventoryRef}
               defaultValue={character.inventory.join("\n")}
@@ -2890,7 +2901,14 @@ export function CharacterPanel({
       {editable && character.lifecycle === "ACTIVE" && (
         <div
           className="character-extras"
-          key={snapshot.campaign.id + ":" + snapshot.me.id + ":" + character.id}
+          key={
+            "extras:" +
+            snapshot.campaign.id +
+            ":" +
+            snapshot.me.id +
+            ":" +
+            character.id
+          }
         >
           <PrivateNpcNotebook character={character} />
           <InspirationResource character={character} snapshot={snapshot} />
@@ -2899,7 +2917,14 @@ export function CharacterPanel({
       {/* Секция 4: Личность, медиа и доступ */}
       {editable && character.lifecycle === "ACTIVE" && (
         <CharacterProgression
-          key={snapshot.campaign.id + ":" + snapshot.me.id + ":" + character.id}
+          key={
+            "progression:" +
+            snapshot.campaign.id +
+            ":" +
+            snapshot.me.id +
+            ":" +
+            character.id
+          }
           character={character}
           isGm={snapshot.me.role === "GM"}
           membershipId={snapshot.me.id}

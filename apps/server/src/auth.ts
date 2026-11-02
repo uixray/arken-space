@@ -12,6 +12,7 @@ import {
 import type { Role } from "@arken/contracts";
 import { env } from "./env.js";
 import { hashToken, randomToken } from "./security.js";
+import { accountAssuranceWhere } from "./account-assurance.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -58,7 +59,7 @@ async function sessionSourceIsValid(db: Database, row: SessionSourceRow) {
           eq(accountSessions.id, row.accountSessionId),
           isNull(accountSessions.revokedAt),
           gt(accountSessions.expiresAt, new Date()),
-          isNotNull(users.verifiedAt),
+          accountAssuranceWhere(env.DEPLOYMENT_MODE === "LOCAL_HOST" ? env.LOCAL_INSTANCE_ID : undefined),
           isNull(users.disabledAt),
         ),
       )
@@ -256,7 +257,7 @@ export async function createSession(
           eq(accountSessions.id, provenance.accountSessionId),
           isNull(accountSessions.revokedAt),
           gt(accountSessions.expiresAt, new Date()),
-          isNotNull(users.verifiedAt),
+          accountAssuranceWhere(env.DEPLOYMENT_MODE === "LOCAL_HOST" ? env.LOCAL_INSTANCE_ID : undefined),
           isNull(users.disabledAt),
         ),
       )

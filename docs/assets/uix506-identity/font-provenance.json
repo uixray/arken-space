@@ -1,0 +1,65 @@
+[
+  {
+    "file": "fonts/forum/Forum-Regular.ttf",
+    "url": "https://raw.githubusercontent.com/google/fonts/a748fc6b738075c2be721f3d45d0fedebef2c640/ofl/forum/Forum-Regular.ttf",
+    "revision": "a748fc6b738075c2be721f3d45d0fedebef2c640",
+    "bytes": 303316,
+    "sha256": "5c9fbe9c4ce76d0269f5088d921d57e58082fd9c28433eacb6de95baf938adf8"
+  },
+  {
+    "file": "fonts/forum/OFL.txt",
+    "url": "https://raw.githubusercontent.com/google/fonts/a748fc6b738075c2be721f3d45d0fedebef2c640/ofl/forum/OFL.txt",
+    "revision": "a748fc6b738075c2be721f3d45d0fedebef2c640",
+    "bytes": 4399,
+    "sha256": "1bfe7d2aca99042eabf37079152fef8abdda2c36dad454ae89b858a3cb1078c5"
+  },
+  {
+    "file": "fonts/forum/METADATA.pb",
+    "url": "https://raw.githubusercontent.com/google/fonts/a748fc6b738075c2be721f3d45d0fedebef2c640/ofl/forum/METADATA.pb",
+    "revision": "a748fc6b738075c2be721f3d45d0fedebef2c640",
+    "bytes": 724,
+    "sha256": "2c7c2615aafda9e6d8acc763bf3c89c7ede5c28e3aa115486b5d492076357ca2"
+  },
+  {
+    "file": "fonts/unbounded/Unbounded[wght].ttf",
+    "url": "https://raw.githubusercontent.com/google/fonts/8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5/ofl/unbounded/Unbounded%5Bwght%5D.ttf",
+    "revision": "8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5",
+    "bytes": 778272,
+    "sha256": "323b511be380c8d474ef030686b71aedde501f8d9cd46da558b7c40454372c3f"
+  },
+  {
+    "file": "fonts/unbounded/OFL.txt",
+    "url": "https://raw.githubusercontent.com/google/fonts/8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5/ofl/unbounded/OFL.txt",
+    "revision": "8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5",
+    "bytes": 4392,
+    "sha256": "31e5d4e83955e7103c34570dd49b0570ef490800bd65b42923c0dd02445263b3"
+  },
+  {
+    "file": "fonts/unbounded/METADATA.pb",
+    "url": "https://raw.githubusercontent.com/google/fonts/8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5/ofl/unbounded/METADATA.pb",
+    "revision": "8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5",
+    "bytes": 1047,
+    "sha256": "1783291bc9f242703a27cc385f9094c0a0672e74905d23c889eb80e96e70bb75"
+  },
+  {
+    "file": "fonts/yesevaone/YesevaOne-Regular.ttf",
+    "url": "https://raw.githubusercontent.com/google/fonts/b05e0c06645032255e156afcde1755bac9c2dd9c/ofl/yesevaone/YesevaOne-Regular.ttf",
+    "revision": "b05e0c06645032255e156afcde1755bac9c2dd9c",
+    "bytes": 108016,
+    "sha256": "88362b33820f0011e163e67b1d570fecd442aa8c05eaac89d5162f9c40d9dac3"
+  },
+  {
+    "file": "fonts/yesevaone/OFL.txt",
+    "url": "https://raw.githubusercontent.com/google/fonts/b05e0c06645032255e156afcde1755bac9c2dd9c/ofl/yesevaone/OFL.txt",
+    "revision": "b05e0c06645032255e156afcde1755bac9c2dd9c",
+    "bytes": 4405,
+    "sha256": "ab592d1abca19428b89d851706fa7815ec25139c6affb45d366577ca63fb91b7"
+  },
+  {
+    "file": "fonts/yesevaone/METADATA.pb",
+    "url": "https://raw.githubusercontent.com/google/fonts/b05e0c06645032255e156afcde1755bac9c2dd9c/ofl/yesevaone/METADATA.pb",
+    "revision": "b05e0c06645032255e156afcde1755bac9c2dd9c",
+    "bytes": 684,
+    "sha256": "405967b7e007d961366e28ebaaa29c5bb8e26ab5af6dd447dbb292c45c44aab9"
+  }
+]

@@ -1,4 +1,5 @@
 import { WorldArtbookImport } from "./WorldArtbookImport";
+import { WorldRegionPicker } from "./WorldRegionPicker";
 import {
   memo,
   useCallback,
@@ -124,6 +125,8 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
     WorldContentLifecycle | "ALL"
   >("ALL");
   const [filterTags, setFilterTags] = useState("");
+  const [filterRegion, setFilterRegion] = useState("");
+  const [filterEra, setFilterEra] = useState("");
   const [filterQ, setFilterQ] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -136,6 +139,7 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
     { kind: "close" } | { kind: "select"; id: string } | null
   >(null);
   const selectedIdRef = useRef(selectedId);
+  const listRequest = useRef(0);
   const selectionEpochRef = useRef(0);
 
   const setSelection = (id: string | null) => {
@@ -183,25 +187,38 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
   };
 
   const load = async () => {
+    const requestId = ++listRequest.current;
     setLoading(true);
     setListError("");
     try {
       const list = await fetchWorldContentList({
         type: filterType || undefined,
         tags: parseTagList(filterTags),
+        regionId: filterRegion || undefined,
+        era: filterEra.trim() || undefined,
         q: filterQ.trim() || undefined,
       });
+      if (requestId !== listRequest.current) return;
       setItems(list);
     } catch (reason) {
+      if (requestId !== listRequest.current) return;
+      setItems([]);
       setListError(formatApiError(reason, "Не удалось загрузить список."));
     } finally {
-      setLoading(false);
+      if (requestId === listRequest.current) setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      listRequest.current += 1;
+      setLoading(false);
+      return;
+    }
     void load();
+    return () => {
+      listRequest.current += 1;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -250,6 +267,18 @@ export const WorldContentWorkspace = memo(function WorldContentWorkspace({
         <div className="world-content-workspace__grid">
           <section className="world-content-workspace__list-pane">
             <div className="world-content-workspace__filters">
+              <WorldRegionPicker
+                value={filterRegion}
+                onChange={setFilterRegion}
+              />
+              <label className="field">
+                Эпоха
+                <FormInput
+                  value={filterEra}
+                  maxLength={80}
+                  onChange={(event) => setFilterEra(event.target.value)}
+                />
+              </label>
               <label className="field">
                 Тип
                 <FormSelect
@@ -466,6 +495,8 @@ function CreateEntityDialog({
   const [slugTouched, setSlugTouched] = useState(false);
   const [type, setType] = useState<WorldContentType>("LOCATION");
   const [subtype, setSubtype] = useState("");
+  const [regionId, setRegionId] = useState("");
+  const [era, setEra] = useState("");
   const [aliases, setAliases] = useState("");
   const [summary, setSummary] = useState("");
   const [tags, setTags] = useState("");
@@ -507,6 +538,8 @@ function CreateEntityDialog({
         slug: effectiveSlug,
         type,
         subtype: subtype.trim() || null,
+        regionId: regionId || null,
+        era: era.trim() || null,
         aliases: parseTagList(aliases),
         summary: summary.trim() || undefined,
         tags: parseTagList(tags),
@@ -590,6 +623,20 @@ function CreateEntityDialog({
           value={subtype}
           disabled={busy}
           onChange={(event) => setSubtype(event.target.value)}
+        />
+      </label>
+      <WorldRegionPicker
+        value={regionId}
+        onChange={setRegionId}
+        disabled={busy}
+      />
+      <label className="field">
+        Эпоха
+        <FormInput
+          value={era}
+          maxLength={80}
+          disabled={busy}
+          onChange={(event) => setEra(event.target.value)}
         />
       </label>
       <label className="field">
@@ -1021,6 +1068,21 @@ function EntityDetail({
           value={draft.subtype}
           disabled={editorLocked}
           onChange={(event) => changeDraft("subtype", event.target.value)}
+        />
+      </label>
+      <WorldRegionPicker
+        value={draft.regionId}
+        excludeId={entity.id}
+        disabled={editorLocked}
+        onChange={(value) => changeDraft("regionId", value)}
+      />
+      <label className="field">
+        Эпоха
+        <FormInput
+          value={draft.era}
+          maxLength={80}
+          disabled={editorLocked}
+          onChange={(event) => changeDraft("era", event.target.value)}
         />
       </label>
       <label className="field">

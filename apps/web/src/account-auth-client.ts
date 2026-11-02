@@ -15,10 +15,10 @@ export const registerAccount = (email: string, password: string) =>
     body: JSON.stringify({ email, password }),
   });
 
-export const loginAccount = (email: string, password: string) =>
+export const loginAccount = (email: string, password: string, local = false) =>
   api<AccountSession>("/api/account/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(local ? { login: email, password } : { email, password }),
   });
 
 export const requestVerification = (email: string) =>

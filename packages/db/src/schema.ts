@@ -351,8 +351,12 @@ export const users = pgTable(
   "users",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    emailNormalized: text("email_normalized").notNull(),
-    emailDisplay: text("email_display").notNull(),
+    emailNormalized: text("email_normalized"),
+    emailDisplay: text("email_display"),
+    identityKind: text("identity_kind", { enum: ["EMAIL", "LOCAL"] }).notNull().default("EMAIL"),
+    localInstanceId: uuid("local_instance_id"),
+    localLogin: text("local_login"),
+    localApprovedAt: timestamp("local_approved_at", { withTimezone: true }),
     passwordHash: text("password_hash").notNull(),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
     disabledAt: timestamp("disabled_at", { withTimezone: true }),
@@ -365,8 +369,25 @@ export const users = pgTable(
   },
   (table) => [
     uniqueIndex("users_email_normalized_idx").on(table.emailNormalized),
+    uniqueIndex("users_local_login_idx").on(table.localInstanceId, table.localLogin),
+    check("users_identity_check", sql`(
+      ${table.identityKind} = 'EMAIL' AND ${table.emailNormalized} IS NOT NULL AND ${table.emailDisplay} IS NOT NULL
+      AND ${table.localInstanceId} IS NULL AND ${table.localLogin} IS NULL AND ${table.localApprovedAt} IS NULL
+    ) OR (
+      ${table.identityKind} = 'LOCAL' AND ${table.emailNormalized} IS NULL AND ${table.emailDisplay} IS NULL
+      AND ${table.verifiedAt} IS NULL AND ${table.localInstanceId} IS NOT NULL
+      AND ${table.localLogin} IS NOT NULL AND ${table.localApprovedAt} IS NOT NULL
+    )`),
   ],
 );
+
+/** One database belongs to one local host; never claim an existing cloud DB. */
+export const localHostInstances = pgTable("local_host_instances", {
+  singleton: boolean("singleton").primaryKey().default(true),
+  id: uuid("id").notNull().unique(),
+  ownerUserId: uuid("owner_user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [check("local_host_singleton_check", sql`${table.singleton} = true`)]);
 
 /** Account authentication sessions are separate from selected game memberships. */
 export const accountSessions = pgTable(
@@ -1462,6 +1483,7 @@ export const scenes = pgTable(
       .default(1080),
     grid: jsonb("grid")
       .$type<{
+        metersPerCell?: number | null;
         enabled: boolean;
         size: number;
         offsetX: number;
@@ -1625,6 +1647,8 @@ export const tokenDefinitions = pgTable(
     defaultAssetId: uuid("default_asset_id").references(() => assets.id, {
       onDelete: "set null",
     }),
+    /** Validated by tokenSpriteSetSchema at the API/projection boundary. */
+    spriteSet: jsonb("sprite_set").$type<unknown>(),
     /**
      * UIX-400: `NULL` значит «зовусь как мой персонаж».
      *
@@ -1707,6 +1731,10 @@ export const tokens = pgTable(
     width: doublePrecision("width").notNull().default(64),
     height: doublePrecision("height").notNull().default(64),
     rotation: doublePrecision("rotation").notNull().default(0),
+    /** Derived by the database on committed coordinate updates (migration 0069). */
+    facing: text("facing", { enum: ["FRONT", "BACK", "LEFT", "RIGHT"] })
+      .notNull()
+      .default("FRONT"),
     visible: boolean("visible").notNull().default(true),
     locked: boolean("locked").notNull().default(false),
     baseColor: text("base_color").notNull().default("#b5623e"),
@@ -1724,7 +1752,13 @@ export const tokens = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [index("tokens_scene_idx").on(table.sceneId)],
+  (table) => [
+    index("tokens_scene_idx").on(table.sceneId),
+    check(
+      "tokens_facing_check",
+      sql`${table.facing} IN ('FRONT', 'BACK', 'LEFT', 'RIGHT')`,
+    ),
+  ],
 );
 
 export const fogReveals = pgTable(
@@ -3250,7 +3284,12 @@ export const worldContent = pgTable(
     type: worldContentTypeEnum("type").notNull(),
     /** Free-form, per-type categorization (e.g. "capital city", "dragon"); not an enum because the issue does not pin down a fixed subtype list per type. */
     subtype: text("subtype"),
+    /** Flat classification, not a parent tree or calendar. */
+    regionId: uuid("region_id").references((): AnyPgColumn => worldContent.id),
+    era: text("era"),
     name: text("name").notNull(),
+    /** Authored ITEM price, copper per piece. NULL is unpriced, zero is explicitly free. */
+    basePriceCopper: bigint("base_price_copper", { mode: "number" }),
     aliases: jsonb("aliases").$type<string[]>().notNull().default([]),
     summary: text("summary").notNull().default(""),
     /** Player-visible rich body (markdown). */
@@ -3285,6 +3324,18 @@ export const worldContent = pgTable(
   },
   (table) => [
     uniqueIndex("world_content_slug_idx").on(table.slug),
+    check("world_content_base_price_check",
+      sql`${table.basePriceCopper} IS NULL OR (${table.type} = 'ITEM' AND ${table.basePriceCopper} BETWEEN 0 AND 1000000000000)`),
+    index("world_content_region_idx").on(table.regionId),
+    index("world_content_era_idx").on(table.era),
+    check(
+      "world_content_region_self_check",
+      sql`${table.regionId} IS NULL OR ${table.regionId} <> ${table.id}`,
+    ),
+    check(
+      "world_content_era_check",
+      sql`${table.era} IS NULL OR length(trim(${table.era})) BETWEEN 1 AND 80`,
+    ),
     index("world_content_type_lifecycle_idx").on(table.type, table.lifecycle),
     index("world_content_lifecycle_updated_idx").on(
       table.lifecycle,
@@ -3473,6 +3524,8 @@ export const worldContentInstances = pgTable(
     ),
     /** See table doc comment re: composite FK below. */
     currentLocationId: uuid("current_location_id"),
+    /** Whole-stack inventory assignment; never a second quantity balance. */
+    inventoryCharacterId: uuid("inventory_character_id"),
     /** ITEM-type instances only; null/irrelevant for other types. */
     quantity: integer("quantity"),
     /** ITEM-type instances only, e.g. "damaged", "pristine". */
@@ -3494,6 +3547,19 @@ export const worldContentInstances = pgTable(
     ),
     index("world_content_instances_campaign_idx").on(table.campaignId),
     index("world_content_instances_world_content_idx").on(table.worldContentId),
+    index("world_instances_inventory_character_idx").on(
+      table.campaignId,
+      table.inventoryCharacterId,
+    ),
+    foreignKey({
+      name: "world_instances_inventory_character_fk",
+      columns: [table.campaignId, table.inventoryCharacterId],
+      foreignColumns: [characters.campaignId, characters.id],
+    }),
+    check(
+      "world_instances_inventory_quantity_check",
+      sql`${table.inventoryCharacterId} IS NULL OR (${table.quantity} IS NOT NULL AND ${table.quantity} > 0)`,
+    ),
     index("world_content_instances_campaign_world_content_idx").on(
       table.campaignId,
       table.worldContentId,
@@ -3685,3 +3751,378 @@ export const achievementHistory = pgTable("achievement_history", {
     .notNull()
     .defaultNow(),
 });
+
+// External bug intake is operator-only; never part of campaign snapshots.
+export const bugIntakeAlbums = pgTable("bug_intake_albums", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  provider: text("provider").notNull(),
+  chatId: text("chat_id").notNull(),
+  albumId: text("album_id").notNull(),
+  revision: integer("revision").notNull().default(0),
+  state: text("state").notNull().default("REVIEW"),
+  approval: jsonb("approval").$type<Record<string, unknown>>(),
+  linearIssueId: text("linear_issue_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("bug_intake_album_source_unique").on(t.provider, t.chatId, t.albumId),
+  index("bug_intake_album_queue_idx").on(t.state, t.updatedAt, t.id),
+  check("bug_intake_album_provider_check", sql`${t.provider} = 'TELEGRAM'`),
+  check("bug_intake_album_revision_check", sql`${t.revision} >= 0`),
+  check("bug_intake_album_state_check", sql`${t.state} IN ('REVIEW', 'APPROVED', 'LINKED', 'DISMISSED')`),
+  check("bug_intake_album_approval_check", sql`${t.state} <> 'APPROVED' OR ${t.approval} IS NOT NULL`),
+]);
+
+export const bugIntakeMessages = pgTable(
+  "bug_intake_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    provider: text("provider").notNull(),
+    chatId: text("chat_id").notNull(),
+    messageId: text("message_id").notNull(),
+    albumId: text("album_id"),
+    sourceRevisionAt: timestamp("source_revision_at", {
+      withTimezone: true,
+    }).notNull(),
+    sourceHash: text("source_hash").notNull(),
+    source: jsonb("source").$type<Record<string, unknown>>().notNull(),
+    revision: integer("revision").notNull().default(0),
+    state: text("state").notNull().default("REVIEW"),
+    approval: jsonb("approval").$type<Record<string, unknown>>(),
+    linearIssueId: text("linear_issue_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("bug_intake_source_unique").on(
+      t.provider,
+      t.chatId,
+      t.messageId,
+    ),
+    index("bug_intake_queue_idx").on(t.state, t.updatedAt, t.id),
+    index("bug_intake_album_idx").on(t.provider, t.chatId, t.albumId),
+    check("bug_intake_provider_check", sql`${t.provider} = 'TELEGRAM'`),
+    check("bug_intake_revision_check", sql`${t.revision} >= 0`),
+    check(
+      "bug_intake_state_check",
+      sql`${t.state} IN ('REVIEW', 'APPROVED', 'LINKED', 'DISMISSED')`,
+    ),
+    check(
+      "bug_intake_approval_check",
+      sql`${t.state} <> 'APPROVED' OR ${t.approval} IS NOT NULL`,
+    ),
+  ],
+);
+
+// Immutable source history: ingestion writes a version and current row atomically.
+export const bugIntakeVersions = pgTable(
+  "bug_intake_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => bugIntakeMessages.id, { onDelete: "restrict" }),
+    sourceHash: text("source_hash").notNull(),
+    sourceRevisionAt: timestamp("source_revision_at", {
+      withTimezone: true,
+    }).notNull(),
+    source: jsonb("source").$type<Record<string, unknown>>().notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("bug_intake_version_unique").on(t.messageId, t.sourceHash),
+  ],
+);
+
+// A file belongs to a source version. Edits cannot silently inherit old file consent.
+export const bugIntakeFiles = pgTable(
+  "bug_intake_files",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    versionId: uuid("version_id")
+      .notNull()
+      .references(() => bugIntakeVersions.id, { onDelete: "restrict" }),
+    sourceFileId: text("source_file_id").notNull(),
+    name: text("name").notNull(),
+    state: text("state").notNull().default("MISSING"),
+    storageKey: text("storage_key").unique(),
+    sha256: text("sha256"),
+    mimeType: text("mime_type"),
+    sizeBytes: integer("size_bytes"),
+    failureCode: text("failure_code"),
+    exclusionReason: text("exclusion_reason"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("bug_intake_file_unique").on(t.versionId, t.sourceFileId),
+    check(
+      "bug_intake_file_state_check",
+      sql`${t.state} IN ('MISSING', 'STORED', 'FAILED', 'EXCLUDED')`,
+    ),
+    check(
+      "bug_intake_file_stored_check",
+      sql`${t.state} <> 'STORED' OR (${t.storageKey} IS NOT NULL AND ${t.sha256} IS NOT NULL AND ${t.mimeType} IS NOT NULL AND ${t.sizeBytes} IS NOT NULL AND ${t.sizeBytes} >= 0)`,
+    ),
+    check(
+      "bug_intake_file_excluded_check",
+      sql`${t.state} <> 'EXCLUDED' OR (${t.exclusionReason} IS NOT NULL AND length(trim(${t.exclusionReason})) > 0)`,
+    ),
+    check(
+      "bug_intake_file_failed_check",
+      sql`${t.state} <> 'FAILED' OR ${t.failureCode} IS NOT NULL`,
+    ),
+  ],
+);
+
+export const bugIntakeActions = pgTable(
+  "bug_intake_actions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    actionId: uuid("action_id").notNull().unique(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => bugIntakeMessages.id, { onDelete: "restrict" }),
+    operatorMembershipId: uuid("operator_membership_id")
+      .notNull()
+      .references(() => memberships.id, { onDelete: "restrict" }),
+    action: text("action").notNull(),
+    requestHash: text("request_hash").notNull(),
+    resultingRevision: integer("resulting_revision").notNull(),
+    receipt: jsonb("receipt").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("bug_intake_actions_message_idx").on(t.messageId, t.createdAt)],
+);
+
+// Durable transport inbox. Source key is an opaque configured receiver identity,
+// never the bot token. Only authenticated, allowlisted chat updates belong here.
+export const bugIntakeUpdates = pgTable(
+  "bug_intake_updates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    receiverId: text("receiver_id").notNull(),
+    updateId: text("update_id").notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    conflictingPayloads: jsonb("conflicting_payloads")
+      .$type<Array<{ hash: string; payload: Record<string, unknown> }>>()
+      .notNull()
+      .default([]),
+    state: text("state").notNull().default("PENDING"),
+    reason: text("reason"),
+    messageId: uuid("message_id").references(() => bugIntakeMessages.id, {
+      onDelete: "restrict",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("bug_intake_update_identity").on(t.receiverId, t.updateId),
+    index("bug_intake_update_pending_idx").on(t.state, t.createdAt, t.id),
+    check(
+      "bug_intake_update_state_check",
+      sql`${t.state} IN ('PENDING', 'PROCESSED', 'QUARANTINED')`,
+    ),
+  ],
+);
+
+export const bugIntakeUpdateActions = pgTable(
+  "bug_intake_update_actions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    actionId: uuid("action_id").notNull().unique(),
+    updateRowId: uuid("update_row_id")
+      .notNull()
+      .references(() => bugIntakeUpdates.id, { onDelete: "restrict" }),
+    operatorMembershipId: uuid("operator_membership_id")
+      .notNull()
+      .references(() => memberships.id, { onDelete: "restrict" }),
+    action: text("action").notNull(),
+    requestHash: text("request_hash").notNull(),
+    receipt: jsonb("receipt").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("bug_intake_update_actions_row_idx").on(t.updateRowId, t.createdAt),
+  ],
+);
+
+export const bugIntakeDeliveries = pgTable(
+  "bug_intake_deliveries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => bugIntakeMessages.id, { onDelete: "restrict" }),
+    approvedRevision: integer("approved_revision").notNull(),
+    state: text("state").notNull().default("QUEUED"),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    claimId: uuid("claim_id"),
+    uploadReceipts: jsonb("upload_receipts")
+      .$type<Record<string, {
+        sha256: string;
+        sizeBytes: number;
+        assetUrl: string;
+        completedAt: string;
+      }>>()
+      .notNull()
+      .default({}),
+    linearIssueId: text("linear_issue_id"),
+    failureCode: text("failure_code"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("bug_intake_delivery_revision_unique").on(
+      t.messageId,
+      t.approvedRevision,
+    ),
+    index("bug_intake_delivery_state_idx").on(t.state, t.createdAt, t.id),
+    check(
+      "bug_intake_delivery_state_check",
+      sql`${t.state} IN ('QUEUED', 'CLAIMED', 'SENT', 'UNKNOWN', 'CANCELLED')`,
+    ),
+    check(
+      "bug_intake_delivery_revision_check",
+      sql`${t.approvedRevision} >= 0`,
+    ),
+  ],
+);
+
+// Album-owned deliveries never borrow a member message revision.
+export const bugIntakeAlbumDeliveries = pgTable(
+  "bug_intake_album_deliveries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => bugIntakeAlbums.id, { onDelete: "restrict" }),
+    approvedRevision: integer("approved_revision").notNull(),
+    state: text("state").notNull().default("QUEUED"),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    claimId: uuid("claim_id"),
+    uploadReceipts: jsonb("upload_receipts")
+      .$type<Record<string, {
+        sha256: string;
+        sizeBytes: number;
+        assetUrl: string;
+        completedAt: string;
+      }>>()
+      .notNull()
+      .default({}),
+    linearIssueId: text("linear_issue_id"),
+    failureCode: text("failure_code"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("bug_intake_album_delivery_revision_unique").on(
+      t.albumId,
+      t.approvedRevision,
+    ),
+    index("bug_intake_album_delivery_state_idx").on(t.state, t.createdAt, t.id),
+    check(
+      "bug_intake_album_delivery_state_check",
+      sql`${t.state} IN ('QUEUED', 'CLAIMED', 'SENT', 'UNKNOWN', 'CANCELLED')`,
+    ),
+    check(
+      "bug_intake_album_delivery_revision_check",
+      sql`${t.approvedRevision} >= 0`,
+    ),
+  ],
+);
+
+/** Opt-in authoring only: absent row means the legacy campaign has no shops. */
+export const campaignEconomies = pgTable("campaign_economies", {
+  campaignId: uuid("campaign_id").primaryKey().references(() => campaigns.id, { onDelete: "cascade" }),
+  config: jsonb("config").$type<unknown>().notNull(),
+  revision: integer("revision").notNull().default(0),
+}, (t) => [check("campaign_economies_revision_check", sql`${t.revision} >= 0`)]);
+
+export const economyMerchants = pgTable("economy_merchants", {
+  id: uuid("id").primaryKey(),
+  campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  regionId: uuid("region_id").notNull().references(() => worldContent.id),
+  visible: boolean("visible").notNull().default(false),
+  percent: integer("percent").notNull(),
+  revision: integer("revision").notNull().default(0),
+}, (t) => [
+  uniqueIndex("economy_merchants_campaign_id_unique").on(t.campaignId, t.id),
+  check("economy_merchants_shape_check", sql`length(trim(${t.name})) BETWEEN 1 AND 100 AND ${t.percent} BETWEEN 0 AND 10000 AND ${t.revision} >= 0`),
+]);
+
+/** No second stock balance. The existing instance is the only quantity owner. */
+export const economyOffers = pgTable("economy_offers", {
+  id: uuid("id").primaryKey(),
+  campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  merchantId: uuid("merchant_id").notNull(),
+  instanceId: uuid("instance_id").notNull(),
+  visible: boolean("visible").notNull().default(false),
+  supplyPercent: integer("supply_percent").notNull(),
+  gmPercent: integer("gm_percent").notNull(),
+  overrideCopper: bigint("override_copper", { mode: "number" }),
+  reason: text("reason").notNull().default(""),
+  revision: integer("revision").notNull().default(0),
+}, (t) => [
+  uniqueIndex("economy_offers_instance_unique").on(t.campaignId, t.instanceId),
+  foreignKey({ name: "economy_offers_merchant_fk", columns: [t.campaignId, t.merchantId],
+    foreignColumns: [economyMerchants.campaignId, economyMerchants.id] }),
+  foreignKey({ name: "economy_offers_instance_fk", columns: [t.campaignId, t.instanceId],
+    foreignColumns: [worldContentInstances.campaignId, worldContentInstances.id] }).onDelete("cascade"),
+  check("economy_offers_shape_check", sql`${t.revision} >= 0 AND ${t.supplyPercent} BETWEEN 0 AND 10000 AND ${t.gmPercent} BETWEEN 0 AND 10000 AND (${t.overrideCopper} IS NULL OR ${t.overrideCopper} BETWEEN 0 AND 1000000000000) AND length(${t.reason}) <= 500 AND ((${t.overrideCopper} IS NULL AND ${t.gmPercent} = 100) OR length(trim(${t.reason})) > 0)`),
+]);
+
+/** Private inputs are never projected via snapshots or game event payloads. */
+export const economyQuotes = pgTable("economy_quotes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  actorMembershipId: uuid("actor_membership_id").notNull(),
+  characterId: uuid("character_id").notNull(),
+  offerId: uuid("offer_id").notNull(),
+  inputHash: text("input_hash").notNull(),
+  inputs: jsonb("inputs").$type<unknown>().notNull(),
+  view: jsonb("view").$type<unknown>().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("economy_quotes_campaign_actor_idx").on(t.campaignId, t.actorMembershipId, t.createdAt)]);
+
+export const economyPurchases = pgTable("economy_purchases", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  actionId: uuid("action_id").notNull(),
+  actorMembershipId: uuid("actor_membership_id").notNull(),
+  quoteId: uuid("quote_id").notNull().references(() => economyQuotes.id),
+  receipt: jsonb("receipt").$type<unknown>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("economy_purchases_action_unique").on(t.campaignId, t.actionId),
+  uniqueIndex("economy_purchases_quote_unique").on(t.quoteId),
+  index("economy_purchases_history_idx").on(t.campaignId, t.createdAt, t.id),
+]);

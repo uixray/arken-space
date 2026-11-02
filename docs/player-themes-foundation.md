@@ -1,5 +1,14 @@
 # Player themes: opt-in foundation
 
+> **Source reconciliation — 2026-11-02.** This file preserves historical stage
+> reports, not current-runtime acceptance. The app now uses own Base UI form
+> primitives/adapters; `@gravity-ui/uikit` was removed by `dc1abdf31`.
+> Membership persistence and the separate classic source remain visible in code.
+> For the current source-backed system map and known cascade/Storybook gaps, read
+> [design-system-evidence.md](design-system-evidence.md). No runtime or application
+> tests were run for that documentation stage; historical PASS statements below
+> do not transfer.
+
 > **Current implementation state — 2026-09-19.** The sections below record
 > the foundation and earlier scoped checkpoints; read them as history unless
 > this section explicitly supersedes them.

@@ -1,3 +1,6 @@
+import { isAbsolute, relative, resolve } from "node:path";
+import { registerBugIntakeRoutes } from "./bug-intake-routes.js";
+import { parseBugAssetOrigins } from "./bug-intake-origins.js";
 import { registerAwardsBindingsRoutes } from "./awards-bindings-routes.js";
 import { createPerformanceJournal } from "./performance-journal.js";
 import type { FastifyInstance } from "fastify";
@@ -31,6 +34,7 @@ import {
 import { env } from "./env.js";
 import { buildSnapshot, loadCampaignReadSet } from "./snapshot.js";
 import {
+  createSnapshotTriggerCollector,
   largestFields,
   measureSnapshot,
   queryCountSince,
@@ -38,6 +42,8 @@ import {
   SNAPSHOT_METRICS_ENABLED,
   sumByField,
   type BroadcastMeasurement,
+  type SnapshotTriggerBatch,
+  type SnapshotTriggerDomain,
 } from "./snapshot-metrics.js";
 import { registerWorldMapRoutes } from "./world-map-routes.js";
 import { registerStoryRoutes } from "./story.js";
@@ -88,6 +94,7 @@ import { emitTokenUpdated } from "./token-events.js";
 import { normalizeTokenConditions } from "./token-conditions.js";
 import { registerWorldContentRoutes } from "./world-content-routes.js";
 import { registerWorldContentInstanceRoutes } from "./world-content-instances.js";
+import { registerEconomyRoutes } from "./economy-routes.js";
 import { registerSpellPackRoutes } from "./spell-pack-routes.js";
 import { registerSpellAssignmentRoutes } from "./spell-assignment-routes.js";
 import { registerSpellProjectionRoutes } from "./spell-projection-routes.js";
@@ -121,6 +128,9 @@ const snapshotCoalescers = new WeakMap<
   RealtimeServer,
   ReturnType<typeof createBroadcastCoalescer>
 >();
+const snapshotTriggers = SNAPSHOT_METRICS_ENABLED
+  ? new WeakMap<RealtimeServer, ReturnType<typeof createSnapshotTriggerCollector>>()
+  : null;
 
 /**
  * Sends every campaign socket its snapshot. Bursts of writes share one
@@ -131,13 +141,27 @@ function broadcastSnapshots(
   io: RealtimeServer,
   db: Database,
   campaignId: string,
+  trigger: SnapshotTriggerDomain = "unattributed",
 ) {
   let coalesce = snapshotCoalescers.get(io);
   if (!coalesce) {
     coalesce = createBroadcastCoalescer();
     snapshotCoalescers.set(io, coalesce);
   }
-  return coalesce(campaignId, () => emitCampaignSnapshots(io, db, campaignId));
+  if (!snapshotTriggers)
+    return coalesce(campaignId, () => emitCampaignSnapshots(io, db, campaignId));
+  let collector = snapshotTriggers.get(io);
+  if (!collector) {
+    collector = createSnapshotTriggerCollector();
+    snapshotTriggers.set(io, collector);
+  }
+  // Count even a caller whose callback will be coalesced away. A run consumes
+  // its batch synchronously, before fetching sockets or reading the database.
+  collector.record(campaignId, trigger);
+  const pending = collector;
+  return coalesce(campaignId, () =>
+    emitCampaignSnapshots(io, db, campaignId, pending.take(campaignId)),
+  );
 }
 
 /**
@@ -241,13 +265,15 @@ async function publishDrawingChange(
     (socket) => socket.data.auth?.campaignId === campaignId,
   );
   const fallback = emitDrawingChange(sockets, campaign, change);
-  if (fallback === "snapshot") await broadcastSnapshots(io, db, campaignId);
+  if (fallback === "snapshot")
+    await broadcastSnapshots(io, db, campaignId, "drawing-fallback");
 }
 
 async function emitCampaignSnapshots(
   io: RealtimeServer,
   db: Database,
   campaignId: string,
+  triggers: SnapshotTriggerBatch | null = null,
 ) {
   const sockets = await io.in(campaignRoom(campaignId)).fetchSockets();
   const targetSockets = sockets.filter(
@@ -331,11 +357,21 @@ async function emitCampaignSnapshots(
     perSocket,
     bytesByField: sumByField(fieldReports),
   };
-  // Числа, а не игровые данные: количество запросов, байты и миллисекунды.
+  // Explicit v2 projection: no campaign, account, entity or request IDs.
+  // Mixed batches are ONE measurement; never charge their cost to every label.
   console.info(
     "[snapshot-metrics]",
     JSON.stringify({
-      ...measurement,
+      schemaVersion: 2,
+      recordedAt: new Date().toISOString(),
+      triggers,
+      sockets: measurement.sockets,
+      queries: measurement.queries,
+      queryCountScope: measurement.queryCountScope,
+      totalBytes: measurement.totalBytes,
+      totalMs: measurement.totalMs,
+      perSocket: measurement.perSocket,
+      bytesByField: measurement.bytesByField,
       largest: largestFields(measurement.bytesByField),
     }),
   );
@@ -365,7 +401,7 @@ export async function broadcastCampaignPauseSnapshot(
       current.revision !== expected.revision
     )
       return false;
-    await broadcastSnapshots(io, db, campaignId);
+    await broadcastSnapshots(io, db, campaignId, "campaign-pause");
     return true;
   });
 }
@@ -411,6 +447,7 @@ export function registerRoutes(
     await performanceJournal?.drain();
   });
   registerAccountAuthRoutes(app, db, io, {
+    localInstanceId: env.DEPLOYMENT_MODE === "LOCAL_HOST" ? env.LOCAL_INSTANCE_ID : undefined,
     enabled: env.ACCOUNT_AUTH_ENABLED,
     registrationEnabled: env.ACCOUNT_REGISTRATION_ENABLED,
     legacyDevEnabled:
@@ -429,6 +466,7 @@ export function registerRoutes(
     mailKeyring: mailContext.keyring,
   });
   registerAccountCampaignRoutes(app, db, io, {
+    localInstanceId: env.DEPLOYMENT_MODE === "LOCAL_HOST" ? env.LOCAL_INSTANCE_ID : undefined,
     enabled: env.ACCOUNT_AUTH_ENABLED,
     creationEnabled: env.ACCOUNT_CAMPAIGN_CREATION_ENABLED,
     creationLimit: env.ACCOUNT_CAMPAIGN_CREATION_LIMIT,
@@ -443,7 +481,7 @@ export function registerRoutes(
   const canvasTx = (campaignId: string) =>
     campaignCanvasDatabase(db, campaignId);
   registerWorldMapRoutes(app, db, (campaignId) =>
-    broadcastSnapshots(io, db, campaignId),
+    broadcastSnapshots(io, db, campaignId, "world-map"),
   );
   registerTerrainStampRoutes(app, db);
   registerStoryRoutes(app, db, io);
@@ -453,27 +491,40 @@ export function registerRoutes(
   );
   registerGlobalStickerRoutes(app, db);
   registerOperatorFeedbackRoutes(app, db);
+  if (env.BUG_INTAKE_ENABLED === "true") {
+    if (!isAbsolute(env.BUG_INTAKE_ROOT))
+      throw new Error("BUG_INTAKE_ROOT_MUST_BE_ABSOLUTE");
+    const root = resolve(env.BUG_INTAKE_ROOT);
+    const fromMedia = relative(resolve(env.MEDIA_ROOT), root);
+    if (!fromMedia || (!fromMedia.startsWith("..") && !isAbsolute(fromMedia)))
+      throw new Error("BUG_INTAKE_ROOT_MUST_BE_PRIVATE");
+    registerBugIntakeRoutes(app, db, {
+      root,
+      maxBytes: env.BUG_INTAKE_MAX_FILE_BYTES,
+      assetOrigins: parseBugAssetOrigins(env.BUG_INTAKE_ASSET_ORIGINS),
+    });
+  }
   registerPlayerRequestRoutes(app, db, io);
   registerProgressionRoutes(app, db, (campaignId) =>
-    broadcastSnapshots(io, db, campaignId),
+    broadcastSnapshots(io, db, campaignId, "progression"),
   );
   registerCharacterExtrasRoutes(app, db, (campaignId) =>
-    broadcastSnapshots(io, db, campaignId),
+    broadcastSnapshots(io, db, campaignId, "character-extras"),
   );
   registerAwardsBindingsRoutes(app, db, (campaignId) =>
-    broadcastSnapshots(io, db, campaignId),
+    broadcastSnapshots(io, db, campaignId, "awards"),
   );
   registerCharacterMediaRoutes(app, db);
   registerGalleryChatShareRoutes(app, db, io);
   registerChatAttachmentContentRoute(app, db);
   registerCharacterArchiveRoutes(app, db, (campaignId) =>
-    broadcastSnapshots(io, db, campaignId),
+    broadcastSnapshots(io, db, campaignId, "character-archive"),
   );
   registerPlayerThemeRoutes(app, db);
   registerMemberRulerColorRoutes(app, db);
   registerMemberDiceFrameRoutes(app, db);
   registerEncounterRoutes(app, db, (campaignId) =>
-    broadcastSnapshots(io, db, campaignId),
+    broadcastSnapshots(io, db, campaignId, "encounter"),
   );
   registerCampaignPauseRoutes(
     app,
@@ -487,10 +538,15 @@ export function registerRoutes(
   );
   registerWorldContentRoutes(app, db);
   registerWorldContentInstanceRoutes(app, db);
+  registerEconomyRoutes(app, db, (campaignId) =>
+    broadcastSnapshots(io, db, campaignId, "economy"),
+  );
   registerSpellPackRoutes(app, db);
   registerSpellAssignmentRoutes(app, db);
   registerSpellProjectionRoutes(app, db);
-  registerAssetLifecycleRoutes(app, db, io, broadcastSnapshots);
+  registerAssetLifecycleRoutes(app, db, io, (server, database, campaignId) =>
+    broadcastSnapshots(server, database, campaignId, "asset-lifecycle"),
+  );
   registerSoundpadRoutes(app, db, io);
   registerAudioClipRoutes(app, db, io);
 
@@ -555,7 +611,7 @@ export function registerRoutes(
       if (socket.data.auth?.membershipId === id)
         socket.data.auth.displayName = updated.displayName;
     }
-    await broadcastSnapshots(io, db, auth.campaignId);
+    await broadcastSnapshots(io, db, auth.campaignId, "membership-rename");
     return updated;
   });
 
@@ -611,14 +667,10 @@ export function registerRoutes(
         },
         "client.event",
       );
-      return reply
-        .code(202)
-        .send({
-          ok: true,
-          ...(performanceEvent
-            ? { persisted: Boolean(performanceJournal) }
-            : {}),
-        });
+      return reply.code(202).send({
+        ok: true,
+        ...(performanceEvent ? { persisted: Boolean(performanceJournal) } : {}),
+      });
     },
   );
 
@@ -782,7 +834,7 @@ export function registerRoutes(
   );
 
   registerCharacterRoutes(app, db, {
-    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId),
+    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId, "character"),
     publishCharacter: (campaignId, change) =>
       publishCharacterChange(io, campaignId, change),
   });
@@ -791,12 +843,12 @@ export function registerRoutes(
 
   registerSceneRoutes(app, db, io, {
     canvasTx,
-    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId),
+    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId, "scene"),
   });
 
   registerTokenRoutes(app, db, {
     canvasTx,
-    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId),
+    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId, "token"),
     publishToken: (campaignId, tokenId, envelope) =>
       publishTokenChange(io, db, campaignId, tokenId, envelope),
   });
@@ -809,26 +861,27 @@ export function registerRoutes(
 
   registerCanvasRoutes(app, db, {
     canvasTx,
-    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId),
+    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId, "canvas"),
   });
 
   registerStickerRoutes(app, db, {
-    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId),
+    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId, "sticker"),
   });
 
   registerChatRoutes(app, db, io);
 
   registerCampaignRoutes(app, db, {
-    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId),
+    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId, "campaign"),
   });
 
   registerCharacterPlayRoutes(app, db, io, {
-    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId),
+    broadcast: (campaignId) =>
+      broadcastSnapshots(io, db, campaignId, "character-play"),
     publishCharacter: (campaignId, change) =>
       publishCharacterChange(io, campaignId, change),
   });
 
   registerAssetRoutes(app, db, {
-    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId),
+    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId, "asset"),
   });
 }

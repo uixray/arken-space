@@ -95,7 +95,10 @@ export function toGmDto(row: WorldContentRow): WorldContentDto {
     slug: row.slug,
     type: row.type,
     subtype: row.subtype,
+    regionId: row.regionId,
+    era: row.era,
     name: row.name,
+    basePriceCopper: row.basePriceCopper,
     aliases: row.aliases,
     summary: row.summary,
     publicText: row.publicText,
@@ -136,6 +139,7 @@ export const worldContentPlayerColumns = {
   aliases: worldContent.aliases,
   summary: worldContent.summary,
   publicText: worldContent.publicText,
+  era: worldContent.era,
   tags: worldContent.tags,
   lifecycle: worldContent.lifecycle,
   coverAssetId: worldContent.coverAssetId,
@@ -152,6 +156,7 @@ type WorldContentPlayerRow = {
   aliases: string[];
   summary: string;
   publicText: string;
+  era?: string | null;
   tags: string[];
   lifecycle: WorldContentRow["lifecycle"];
   coverAssetId: string | null;
@@ -166,6 +171,11 @@ export function toPlayerDto(row: WorldContentPlayerRow): WorldContentPlayerDto {
     slug: row.slug,
     type: row.type,
     subtype: row.subtype,
+    era: row.era ?? null,
+    // Region resolution is campaign-dependent; raw canonical IDs never flow
+    // through this shared projection. The HTTP owner adds a visible target.
+    regionId: null,
+    regionName: null,
     name: row.name,
     aliases: row.aliases,
     summary: row.summary,

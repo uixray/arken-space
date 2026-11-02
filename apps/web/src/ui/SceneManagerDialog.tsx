@@ -24,6 +24,7 @@ export type SceneDraft = {
   height: number;
   gridEnabled: boolean;
   gridSize: number;
+  metersPerCell?: number | null;
   gridOffsetX: number;
   gridOffsetY: number;
   gridColor: string;
@@ -80,6 +81,7 @@ function draftFromScene(scene?: SceneDto): SceneDraft {
     height: scene?.height ?? 1080,
     gridEnabled: scene?.grid.enabled ?? true,
     gridSize: scene?.grid.size ?? 64,
+    metersPerCell: scene?.grid.metersPerCell ?? null,
     gridOffsetX: scene?.grid.offsetX ?? 0,
     gridOffsetY: scene?.grid.offsetY ?? 0,
     gridColor: scene?.grid.color ?? "#c8b78b",
@@ -280,6 +282,9 @@ function SceneEditor({
   }, [initial]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const errors: Partial<Record<keyof SceneDraft, string>> = {};
+  const scale = form.state.draft.metersPerCell;
+  if (scale != null && (!Number.isFinite(scale) || scale <= 0 || scale > 1000000))
+    errors.metersPerCell = "Укажите положительный масштаб не более 1 000 000 метров или оставьте поле пустым.";
   if (
     !form.state.draft.name.trim() ||
     form.state.draft.name.trim().length > 100
@@ -469,6 +474,16 @@ function SceneEditor({
           </p>
           <div className="scene-form-grid">
             {numericField("gridSize")}
+            <label className="scene-form-field">
+              <span>Метров в клетке</span>
+              <FormInput type="number" min={0} max={1000000} step="any"
+                value={form.state.draft.metersPerCell ?? ""}
+                aria-invalid={Boolean(errors.metersPerCell)}
+                onChange={(event) => form.update({ metersPerCell:
+                  event.target.value.trim() === "" ? null : Number(event.target.value) })} />
+              <small>Задаётся мастером. Без масштаба область в метрах применять нельзя; линейка по-прежнему показывает клетки.</small>
+              {errors.metersPerCell && <span role="alert">{errors.metersPerCell}</span>}
+            </label>
             {numericField("gridOffsetX")}
             {numericField("gridOffsetY")}
             <label className="scene-form-field">

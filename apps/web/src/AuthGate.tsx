@@ -6,6 +6,7 @@ import { FormInput, FormTextArea } from "./ui/GravityFormControls";
 import { LandingGuide } from "./LandingGuide";
 import { capabilities, changelog, roadmapSections } from "./landing-data";
 import "./landing-public.css";
+import { Brand } from "./Brand";
 import { AccountAuthWorkspace } from "./AccountAuthWorkspace";
 import {
   authenticateCampaignLink,
@@ -288,9 +289,9 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
           <a
             className="wordmark"
             href="/"
-            aria-label="Arken Space — на главную"
+            aria-label="Аркспейс — на главную"
           >
-            arken-space
+            <Brand />
           </a>
           <span className="landing-badge">Ранний доступ</span>
         </div>
@@ -343,7 +344,7 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
             Всё необходимое для игры — в едином пространстве
           </h1>
           <p>
-            Arken Space объединяет тактильность физической настольной игры с
+            Аркспейс объединяет тактильность физической настольной игры с
             плавным 60 FPS мультиплеером. Интерактивная карта, динамический
             туман войны, листы персонажей, броски кубиков и инициатива — всё
             работает в чистом интерфейсе без визуального шума.
@@ -630,7 +631,7 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
       </section>
 
       <footer className="landing-footer">
-        <span>Arken Space</span>
+        <span>Аркспейс</span>
         <div style={{ display: "flex", gap: 16 }}>
           {isDevelopment && (
             <a

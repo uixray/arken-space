@@ -1,4 +1,5 @@
 import { sameInspiration } from "./character-extras-routes.js";
+import { applyAbilityArea } from "./ability-area-apply.js";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
 import type {
@@ -16,6 +17,7 @@ import {
   entryRollRequestSchema,
   characterCountersCommandSchema,
   rechargeEntryCommandSchema,
+  abilityAreaApplySchema,
 } from "@arken/contracts";
 import {
   characterCatalogEntries,
@@ -108,6 +110,64 @@ export function registerCharacterPlayRoutes(
     ) => Promise<void>;
   },
 ) {
+  app.post("/api/abilities/area/apply", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const parsed = abilityAreaApplySchema.safeParse(request.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: "INVALID_AREA_COMMAND", message: "Проверьте параметры применения области." });
+    let result: Awaited<ReturnType<typeof applyAbilityArea>>;
+    try {
+      result = await applyAbilityArea(db, auth, parsed.data);
+    } catch (reason) {
+      const code = reason instanceof Error ? reason.message : "";
+      const failures: Record<string, [number, string]> = {
+        AREA_FORBIDDEN: [403, "Нет доступа к применяющему персонажу."],
+        ACTION_CONFLICT: [409, "Этот код действия уже занят. Обновите страницу."],
+        CAMPAIGN_PAUSED: [409, "Игра на перерыве. Применение не выполнено."],
+        AREA_SCENE_UNAVAILABLE: [409, "Сцена больше недоступна. Выберите способность заново."],
+        AREA_SCENE_CHANGED: [409, "Сцена изменилась. Просмотрите область заново."],
+        AREA_ORIGIN_UNAVAILABLE: [409, "Фигурка применяющего недоступна на этой сцене."],
+        AREA_ORIGIN_CHANGED: [409, "Фигурка переместилась. Просмотрите область заново."],
+        ENTRY_CONFLICT: [409, "Способность изменилась. Выберите её заново."],
+        AREA_SCALE_REQUIRED: [409, "Мастер должен задать метров в клетке для этой сцены."],
+        AREA_PROJECTION_UNSUPPORTED: [400, "Область пока поддерживается на обычной 2D-карте."],
+        AREA_EFFECT_REQUIRED: [400, "У способности не настроен эффект области."],
+        ABILITY_ACTION_COST_MISMATCH: [400, "Укажите единую стоимость применения способности."],
+        ABILITY_USES_EXHAUSTED: [409, "Не осталось использований способности."],
+        INSUFFICIENT_CHARACTER_RESOURCE: [409, "Не хватает ресурса на применение способности."],
+        AREA_TARGETS_EMPTY: [409, "Нет подходящих персонажей игроков в области."],
+        AREA_CAMPAIGN_LIMIT: [400, "Слишком много персонажей для применения области."],
+        AREA_SCENE_LIMIT: [400, "Слишком много фигурок на сцене для применения области."],
+      };
+      const failure = failures[code];
+      if (failure) return reply.code(failure[0]).send({ error: code, message: failure[1],
+        // Authorization failure cannot disprove an earlier committed request
+        // after that actor lost access. Do not erase an ambiguous client receipt.
+        notApplied: !["AREA_FORBIDDEN", "ACTION_CONFLICT"].includes(code) });
+      if (reason instanceof z.ZodError)
+        return reply.code(400).send({ error: "AREA_CONFIGURATION_INVALID", notApplied: true,
+          message: "Проверьте настройки способности и ресурс маны у участников. Изменения не применены." });
+      // Drizzle may wrap PostgreSQL errors. A failed transaction is not a new
+      // roll: offer an explicit retry of the exact same action, never auto-retry.
+      let cause: unknown = reason;
+      for (let depth = 0; depth < 3 && cause && typeof cause === "object"; depth++) {
+        if ("code" in cause && ["40001", "40P01", "23505"].includes(String(cause.code)))
+          return reply.code(409).send({ error: "AREA_RETRY",
+            message: "Состояние изменилось одновременно. Повторите тот же запрос." });
+        cause = "cause" in cause ? cause.cause : null;
+      }
+      request.log.error({ event: "ability.area.failed", actionId: parsed.data.actionId });
+      return reply.code(500).send({ error: "AREA_RESULT_UNKNOWN",
+        message: "Результат не подтверждён. Повторите тот же запрос, не создавая новое применение." });
+    }
+    // Commit has already succeeded. Projection failure must not turn it into an
+    // apparently failed mutation. Full snapshots retain role/owner filtering.
+    try { await broadcast(auth.campaignId); }
+    catch { request.log.warn({ event: "ability.area.broadcast_failed", actionId: parsed.data.actionId }); }
+    return result;
+  });
+
   app.patch("/api/characters/:id/counters", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
@@ -562,6 +622,10 @@ export function registerCharacterPlayRoutes(
       );
       if (!parsedData.success)
         return reply.code(400).send({ error: "INVALID_ENTRY_DATA" });
+      // Area effects must never fall through to the legacy single-character
+      // execution path (which would spend a use without applying the area).
+      if (mode === "EXECUTE" && parsedData.data.areaEffect)
+        return reply.code(409).send({ error: "AREA_EFFECT_REQUIRES_TARGETED_EXECUTION" });
       const rollsThread = await ensureStreamThread(
         db,
         auth.campaignId,

@@ -1250,6 +1250,8 @@ export function ActivityPanel({
 }
 
 export function DirectChatPanel({
+  focusedMessageId = null,
+  onMessageFocused,
   snapshot,
   visible = true,
   activeThreadId,
@@ -1262,6 +1264,8 @@ export function DirectChatPanel({
 }: {
   snapshot: GameSnapshot;
   visible?: boolean;
+  focusedMessageId?: string | null;
+  onMessageFocused?: () => void;
   activeThreadId: string | null;
   onActiveThreadChange: (threadId: string | null) => void;
   onCreateThread: ChatActions["onCreateDirectThread"];
@@ -1280,8 +1284,20 @@ export function DirectChatPanel({
       "",
   );
   const [selectingPeer, setSelectingPeer] = useState(false);
+  const [sending, setSending] = useState(false);
+  const currentThreadRef = useRef(activeThreadId);
+  currentThreadRef.current = activeThreadId;
+  const sendingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const directDraft = useSubmissionDraft(
-    `${snapshot.campaign.id}:${snapshot.me.id}:${activeThread?.id ?? "none"}`,
+    `${snapshot.campaign.id}:${snapshot.me.id}:${selectedPeerId || "none"}`,
+    true,
   );
   const composer = directDraft.value;
   const setComposer = directDraft.setValue;
@@ -1326,33 +1342,47 @@ export function DirectChatPanel({
   );
 
   useEffect(() => {
-    const restored = restoreDirectSelection(window.localStorage, snapshot);
-    if (!restored) {
+    if (focusedMessageId && activeThread) {
+      const peer = activeThread.participants.find(
+        (participant) => participant.membershipId !== snapshot.me.id,
+      );
+      if (peer && peer.membershipId !== selectedPeerId) {
+        replaceAttachment(null, "");
+        setSelectedPeerId(peer.membershipId);
+        return;
+      }
+    }
+    if (!selectedPeerId) return;
+    if (!contacts.some((contact) => contact.membershipId === selectedPeerId)) {
       setSelectedPeerId("");
-      if (activeThreadId) onActiveThreadChange(null);
+      onActiveThreadChange(null);
       return;
     }
-    setSelectedPeerId(restored.peerMembershipId);
-    if (activeThreadId !== restored.threadId)
-      onActiveThreadChange(restored.threadId);
-  }, [activeThreadId, onActiveThreadChange, snapshot]);
-
-  useEffect(() => {
-    if (!selectedPeerId) return;
     const thread = directThreadForPeer(snapshot, selectedPeerId);
     if (thread && activeThreadId !== thread.id) {
+      if (!mountedRef.current) return;
       onActiveThreadChange(thread.id);
       persistDirectSelection(window.localStorage, snapshot, {
         peerMembershipId: selectedPeerId,
         threadId: thread.id,
       });
     }
-  }, [activeThreadId, onActiveThreadChange, selectedPeerId, snapshot]);
+  }, [
+    activeThreadId,
+    onActiveThreadChange,
+    selectedPeerId,
+    snapshot,
+    focusedMessageId,
+  ]);
 
   useEffect(() => {
     if (!visible || !activeThread || latestSequence === undefined) return;
     const timer = window.setTimeout(
-      () => void onMarkChatRead(activeThread.id, latestSequence),
+      () =>
+        void onMarkChatRead(activeThread.id, latestSequence).catch(() => {
+          if (mountedRef.current)
+            setError("Не удалось отметить сообщения прочитанными.");
+        }),
       350,
     );
     return () => window.clearTimeout(timer);
@@ -1372,13 +1402,22 @@ export function DirectChatPanel({
   }
 
   async function attachFile(file: File) {
+    const uploadThreadId = activeThreadId;
     setUploading(true);
     setError("");
     try {
       const previewUrl = URL.createObjectURL(file);
       try {
         directDraft.touch();
-        replaceAttachment(await onUploadAttachment(file), previewUrl);
+        const uploaded = await onUploadAttachment(file);
+        if (
+          !mountedRef.current ||
+          currentThreadRef.current !== uploadThreadId
+        ) {
+          URL.revokeObjectURL(previewUrl);
+          return;
+        }
+        replaceAttachment(uploaded, previewUrl);
       } catch (error) {
         URL.revokeObjectURL(previewUrl);
         throw error;
@@ -1398,7 +1437,15 @@ export function DirectChatPanel({
   }
 
   async function selectPeer(peerMembershipId: string) {
+    if (uploading || sendingRef.current || selectingPeer) return;
+    replaceAttachment(null, "");
     setSelectedPeerId(peerMembershipId);
+    onActiveThreadChange(null);
+    persistDirectSelection(
+      window.localStorage,
+      snapshot,
+      peerMembershipId ? { peerMembershipId, threadId: null } : null,
+    );
     setError("");
     if (!peerMembershipId) {
       onActiveThreadChange(null);
@@ -1417,6 +1464,7 @@ export function DirectChatPanel({
     setSelectingPeer(true);
     try {
       const thread = await onCreateThread(peerMembershipId);
+      if (!mountedRef.current) return;
       onActiveThreadChange(thread.id);
       persistDirectSelection(window.localStorage, snapshot, {
         peerMembershipId,
@@ -1435,7 +1483,16 @@ export function DirectChatPanel({
   async function submit(event: FormEvent) {
     event.preventDefault();
     const body = composer.trim();
-    if (!activeThread || (!body && !attachment)) return;
+    if (
+      !activeThread ||
+      selectingPeer ||
+      uploading ||
+      sendingRef.current ||
+      (!body && !attachment)
+    )
+      return;
+    sendingRef.current = true;
+    setSending(true);
     const consumed = directDraft.consume();
     const sentAttachment = attachment;
     setError("");
@@ -1456,8 +1513,27 @@ export function DirectChatPanel({
       directDraft.restore(consumed.token, consumed.value);
       if (directDraft.isCurrentScope(consumed.token))
         setError("Не удалось отправить личное сообщение.");
+    } finally {
+      sendingRef.current = false;
+      if (mountedRef.current) setSending(false);
     }
   }
+
+  useEffect(() => {
+    if (!visible || !focusedMessageId) return;
+    const message = document.getElementById(`chat-message-${focusedMessageId}`);
+    if (!message || !listRef.current?.contains(message)) return;
+    message.scrollIntoView({ block: "center" });
+    message.focus({ preventScroll: true });
+    onMessageFocused?.();
+  }, [
+    visible,
+    focusedMessageId,
+    activeThreadId,
+    selectedPeerId,
+    onMessageFocused,
+    listRef,
+  ]);
 
   const timeline = buildChatTimeline(messages);
 
@@ -1468,12 +1544,18 @@ export function DirectChatPanel({
       id="chat-panel-direct"
       aria-labelledby="chat-tab-direct"
     >
+      <p className="chat-empty">
+        Переписку видите только вы и собеседник. Мастер не имеет отдельного
+        доступа.
+      </p>
       <div className="direct-thread-toolbar">
         <select
           className="direct-peer-select"
           aria-label="Собеседник"
           value={selectedPeerId}
-          disabled={selectingPeer || contacts.length === 0}
+          disabled={
+            selectingPeer || uploading || sending || contacts.length === 0
+          }
           onChange={(event) => void selectPeer(event.target.value)}
         >
           <option value="">Выберите собеседника</option>
@@ -1512,7 +1594,11 @@ export function DirectChatPanel({
         )}
         {!activeThread && (
           <p className="chat-empty">
-            Выберите получателя, чтобы начать личный диалог.
+            {contacts.length === 0
+              ? "В кампании пока нет других собеседников."
+              : selectingPeer
+                ? "Открываю диалог…"
+                : "Выберите получателя, чтобы начать личный диалог."}
           </p>
         )}
         {activeThread && messages.length === 0 && (
@@ -1531,6 +1617,8 @@ export function DirectChatPanel({
               key={item.message.id}
               className="message text"
               data-thread-id={activeThread?.id}
+              id={`chat-message-${item.message.id}`}
+              tabIndex={-1}
             >
               <header>
                 <strong>{item.message.displayName}</strong>
@@ -1611,7 +1699,12 @@ export function DirectChatPanel({
           <Button
             className="primary"
             type="submit"
-            disabled={uploading || (!composer.trim() && !attachment)}
+            disabled={
+              selectingPeer ||
+              sending ||
+              uploading ||
+              (!composer.trim() && !attachment)
+            }
           >
             Отправить
           </Button>

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { and, eq, sum } from "drizzle-orm";
+import { createHash, randomUUID } from "node:crypto";
+import { and, eq, sum, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   actionIdSchema,
@@ -38,6 +39,7 @@ import {
   readStoredImage,
   removeStoredUpload,
   renderTokenAsset,
+  renderTokenSpriteFrame,
   storeGeneratedToken,
   prepareUpload,
   storeDiceFrame,
@@ -242,6 +244,181 @@ export function registerAssetRoutes(
         "asset.token_generation_rejected",
       );
       return reply.code(400).send({ error: errorCode });
+    } finally {
+      if (reserved)
+        await releaseCampaignMediaBytes(db, auth.campaignId, reservationKey);
+    }
+  });
+
+  app.post("/api/assets/sprite-frame", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const actionId = actionIdSchema.parse(request.headers["x-action-id"]);
+    const file = await request.file({
+      limits: { fileSize: env.MAX_IMAGE_BYTES, files: 1 },
+    });
+    if (!file) return reply.code(400).send({ error: "FILE_REQUIRED" });
+    const source = await file.toBuffer();
+    if (file.file.truncated)
+      return reply.code(413).send({ error: "IMAGE_TOO_LARGE" });
+    const name = displayNameFromUpload(file.filename);
+    const requestHash = createHash("sha256")
+      .update(name)
+      .update("\0")
+      .update(source)
+      .digest("hex");
+    const reservationKey = `sprite:${actionId}:${randomUUID()}`;
+    // A retry must not require free quota for a second temporary derivative.
+    const priorUpload = await findAction(db, auth.campaignId, actionId);
+    if (priorUpload) {
+      const payload = priorUpload.payload as {
+        requestHash?: string;
+        spriteStorageKey?: string;
+      } | null;
+      if (
+        priorUpload.type !== "asset.sprite_frame_created" ||
+        priorUpload.membershipId !== auth.membershipId ||
+        payload?.requestHash !== requestHash ||
+        !priorUpload.entityId
+      )
+        return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
+      const [existing] = await db
+        .select()
+        .from(assets)
+        .where(
+          and(
+            eq(assets.id, priorUpload.entityId),
+            eq(assets.campaignId, auth.campaignId),
+          ),
+        )
+        .limit(1);
+      if (!existing || existing.storageKey !== payload.spriteStorageKey)
+        return reply
+          .code(409)
+          .send({ error: "SPRITE_UPLOAD_NO_LONGER_AVAILABLE" });
+      return reply.send(assetDto(existing));
+    }
+    let reserved = false;
+    let committed = false;
+    let stored: StoredUpload | undefined;
+    try {
+      // Original multipart bytes: ordinary image upload would discard animation
+      // before we could reject it. No source file is persisted by this endpoint.
+      const rendered = await renderTokenSpriteFrame(source);
+      await reserveCampaignMediaBytes(
+        db,
+        auth.campaignId,
+        reservationKey,
+        rendered.length,
+      );
+      reserved = true;
+      stored = await storeGeneratedToken(rendered);
+      const result = await db.transaction(async (tx) => {
+        await lockCampaignMediaQuota(tx, auth.campaignId);
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${auth.campaignId + ":" + actionId}, 0))`,
+        );
+        const [prior] = await tx
+          .select()
+          .from(gameEvents)
+          .where(
+            and(
+              eq(gameEvents.campaignId, auth.campaignId),
+              eq(gameEvents.actionId, actionId),
+            ),
+          )
+          .limit(1);
+        if (prior) {
+          const payload = prior.payload as {
+            requestHash?: string;
+            spriteStorageKey?: string;
+          } | null;
+          if (
+            prior.type !== "asset.sprite_frame_created" ||
+            prior.membershipId !== auth.membershipId ||
+            payload?.requestHash !== requestHash ||
+            !prior.entityId
+          )
+            throw new Error("ACTION_ID_CONFLICT");
+          const [existing] = await tx
+            .select()
+            .from(assets)
+            .where(
+              and(
+                eq(assets.id, prior.entityId),
+                eq(assets.campaignId, auth.campaignId),
+              ),
+            )
+            .limit(1);
+          if (!existing || existing.storageKey !== payload.spriteStorageKey)
+            throw new Error("SPRITE_UPLOAD_NO_LONGER_AVAILABLE");
+          return { asset: existing, created: false };
+        }
+        await requireLiveCampaignMediaReservation(
+          tx,
+          auth.campaignId,
+          reservationKey,
+          stored!.sizeBytes,
+        );
+        const [asset] = await tx
+          .insert(assets)
+          .values({
+            campaignId: auth.campaignId,
+            uploadedByMembershipId: auth.membershipId,
+            kind: "TOKEN",
+            name,
+            ...stored!,
+          })
+          .returning();
+        if (!asset) throw new Error("ASSET_CREATE_FAILED");
+        await tx.insert(gameEvents).values({
+          campaignId: auth.campaignId,
+          actionId,
+          membershipId: auth.membershipId,
+          type: "asset.sprite_frame_created",
+          entityType: "asset",
+          entityId: asset.id,
+          payload: {
+            requestHash,
+            spriteStorageKey: asset.storageKey,
+            assetId: asset.id,
+          },
+        });
+        return { asset, created: true };
+      });
+      committed = result.created;
+      if (!committed) {
+        await removeStoredUpload(stored.storageKey);
+        stored = undefined;
+      }
+      // A failed notification is not a failed upload; retries keep the receipt.
+      await broadcast(auth.campaignId).catch(() =>
+        request.log.warn({ actionId }, "sprite.broadcast_failed"),
+      );
+      return reply
+        .code(result.created ? 201 : 200)
+        .send(assetDto(result.asset));
+    } catch (error) {
+      if (!committed && stored) await removeStoredUpload(stored.storageKey);
+      const known = new Set([
+        "ACTION_ID_CONFLICT",
+        "SPRITE_UPLOAD_NO_LONGER_AVAILABLE",
+        "SPRITE_TRANSPARENT_IMAGE_REQUIRED",
+        "SPRITE_STATIC_SQUARE_REQUIRED",
+        "SPRITE_DERIVATIVE_TOO_LARGE",
+      ]);
+      const message = error instanceof Error ? error.message : "";
+      const errorCode = known.has(message) ? message : publicUploadError(error);
+      return reply
+        .code(
+          message === "ACTION_ID_CONFLICT" ||
+            message === "SPRITE_UPLOAD_NO_LONGER_AVAILABLE"
+            ? 409
+            : 400,
+        )
+        .send({ error: errorCode });
     } finally {
       if (reserved)
         await releaseCampaignMediaBytes(db, auth.campaignId, reservationKey);

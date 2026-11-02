@@ -34,6 +34,7 @@ import {
   cursorMoveSchema,
   fogHiddenTokenIds,
   moveTokenSchema,
+  normalizeTokenSpriteSet,
   rulerPolylineDistance,
   rulerUpdateSchema,
   sceneViewSchema,
@@ -116,6 +117,7 @@ export async function clearCampaignCanvasEphemera(
 }
 
 type EditableToken = Omit<typeof tokens.$inferSelect, "name"> & {
+  spriteSet?: TokenDto["spriteSet"];
   /** UIX-400: разрешённое имя — своё либо унаследованное от персонажа. */
   name: string;
   controllerMembershipIds: string[];
@@ -212,6 +214,7 @@ export async function projectedToken(
       ...row.token,
       characterId: row.definition.characterId,
       assetId: row.definition.defaultAssetId,
+      spriteSet: normalizeTokenSpriteSet(row.definition.spriteSet),
       name: resolveTokenName({
         name: row.definition.name,
         characterName: row.characterName,
@@ -834,6 +837,7 @@ export function registerRealtime(
         ...result.updated,
         characterId: latestToken.characterId,
         assetId: latestToken.assetId,
+        spriteSet: latestToken.spriteSet,
         name: latestToken.name,
         controllerMembershipIds: latestToken.controllerMembershipIds,
         definitionRevision: latestToken.definitionRevision,
@@ -1658,10 +1662,8 @@ export function registerRealtime(
     type RulerRelayIntent =
       | { kind: "update"; data: z.infer<typeof rulerUpdateSchema> }
       | { kind: "clear"; sceneId: string; previousSceneId?: string };
-    let pendingRulerClear: Extract<
-      RulerRelayIntent,
-      { kind: "clear" }
-    > | null = null;
+    let pendingRulerClear: Extract<RulerRelayIntent, { kind: "clear" }> | null =
+      null;
     let pendingRulerUpdate: Extract<
       RulerRelayIntent,
       { kind: "update" }
@@ -1760,9 +1762,7 @@ export function registerRealtime(
           void drainRulerIntents();
       }
     };
-    const enqueueRulerUpdate = (
-      data: z.infer<typeof rulerUpdateSchema>,
-    ) => {
+    const enqueueRulerUpdate = (data: z.infer<typeof rulerUpdateSchema>) => {
       pendingRulerUpdate = { kind: "update", data };
       void drainRulerIntents();
     };
@@ -1797,9 +1797,7 @@ export function registerRealtime(
     });
 
     socket.on("ruler:clear", (input) => {
-      const parsed = z
-        .object({ sceneId: z.string().uuid() })
-        .safeParse(input);
+      const parsed = z.object({ sceneId: z.string().uuid() }).safeParse(input);
       if (!parsed.success) return;
       enqueueRulerClear(parsed.data.sceneId);
     });

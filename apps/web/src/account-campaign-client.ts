@@ -53,7 +53,7 @@ export const createAccountCampaignInvite = (
     body: JSON.stringify({ campaignId, label, expiresInHours: 72 }),
   });
 export const claimAccountCampaignInvite = (token: string, csrfToken: string) =>
-  api<{ campaignId: string; membershipId: string; role: "PLAYER" }>(
+  api<{ campaignId: string; membershipId: string; role: "GM" | "PLAYER" }>(
     "/api/account/campaigns/invites/claim",
     {
       method: "POST",

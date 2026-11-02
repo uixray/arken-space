@@ -40,6 +40,7 @@ export interface SceneActions {
 const sceneGrid = (draft: SceneDraft) => ({
   enabled: draft.gridEnabled,
   size: draft.gridSize,
+  metersPerCell: draft.metersPerCell ?? null,
   offsetX: draft.gridOffsetX,
   offsetY: draft.gridOffsetY,
   color: draft.gridColor,

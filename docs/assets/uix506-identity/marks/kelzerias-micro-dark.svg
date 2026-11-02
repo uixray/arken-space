@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="currentColor" color="#20201d" role="img" aria-labelledby="title description">
+<title id="title">Келзериас — микро, тёмные линии</title>
+<desc id="description">Черновая оптическая адаптация выбранного знака Келзериаса: рогатая маска, центральное острие, боковые лезвия и кольцо портала. Редактируемая геометрия; исходный PNG не изменён. Не утверждено для приложения.</desc>
+<circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="2"/>
+<path d="M16 1 18 5H14ZM16 31 14 27H18ZM1 16 5 14V18ZM31 16 27 18V14Z"/>
+<path d="M11 13C6 11 7 7 10 5C9 8 10 10 13 11Z"/>
+<path d="M21 13C26 11 25 7 22 5C23 8 22 10 19 11Z"/>
+<path d="M7 12 9 11 8 17 11 23 13 26 9 24 6 19 7 20 5 16ZM25 12 23 11 24 17 21 23 19 26 23 24 26 19 25 20 27 16Z"/>
+<path fill-rule="evenodd" d="M16 3 18 12 23 15 22 21 18 25 16 29 14 25 10 21 9 15 14 12ZM11 16 15 18 14 20 11 18ZM21 16 21 18 18 20 17 18Z"/>
+</svg>
+

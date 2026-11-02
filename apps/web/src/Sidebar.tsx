@@ -19,6 +19,7 @@ import { useThreadHistory } from "./use-thread-history";
 import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
 import { WorldContentWorkspace } from "./WorldContentWorkspace";
+import { EconomyWorkspace } from "./EconomyWorkspace";
 import { SpellSchoolsWorkspace } from "./SpellSchoolsWorkspace";
 import { WorldEncyclopediaWorkspace } from "./WorldEncyclopediaWorkspace";
 import { PlayerRequestsWorkspace } from "./PlayerRequestsWorkspace";
@@ -48,17 +49,26 @@ import { SetupPanel } from "./sidebar/SetupPanel";
 import { MediaPanel } from "./sidebar/MediaPanel";
 import { CampaignStatLabelsProvider } from "./campaign-stat-labels-context";
 
+import {
+  directThreads,
+  directUnreadCount,
+  persistDirectSelection,
+} from "./direct-chat-state";
+
 type SidebarFeed = "ACTIVITY" | ChatStream;
 
 // UIX-467: порядок больше не модульная константа — он зависит от роли, потому
 // что «Сюжет» у игрока скрыт. Список берётся из `chatFeedOrder`, чтобы стрелки
 // не уводили на вкладку, которой в разметке нет.
 function nextChatFeed(
-  current: SidebarFeed,
+  current: SidebarFeed | "DIRECT",
   key: string,
   isGm: boolean,
-): SidebarFeed | null {
-  const order = chatFeedOrder(isGm);
+): SidebarFeed | "DIRECT" | null {
+  const order: Array<SidebarFeed | "DIRECT"> = [
+    ...chatFeedOrder(isGm),
+    "DIRECT",
+  ];
   const index = order.indexOf(current);
   if (key === "Home") return order[0] ?? null;
   if (key === "End") return order.at(-1) ?? null;
@@ -105,6 +115,7 @@ export type Props = {
     | "player-requests"
     | "world-encyclopedia"
     | "spell-schools"
+    | "shops"
     | "world-codex"
     | null;
   operatorFeedbackAllowed: boolean;
@@ -113,7 +124,10 @@ export type Props = {
 function SidebarComponent(props: Props) {
   return (
     <CampaignStatLabelsProvider layout={props.snapshot.campaign.statLayout}>
-      <SidebarContent {...props} />
+      <SidebarContent
+        key={props.snapshot.campaign.id + ":" + props.snapshot.me.id}
+        {...props}
+      />
     </CampaignStatLabelsProvider>
   );
 }
@@ -270,6 +284,24 @@ function SidebarContent(props: Props) {
   ]);
   useEffect(() => {
     if (!requestedChatMessageId) return;
+    const requestedMessage = props.snapshot.messages.find(
+      (message) => message.id === requestedChatMessageId,
+    );
+    const direct = directThreads(props.snapshot).find(
+      (thread) => thread.id === requestedMessage?.threadId,
+    );
+    if (direct) {
+      const peer = direct.participants.find(
+        (participant) => participant.membershipId !== props.snapshot.me.id,
+      );
+      if (peer)
+        persistDirectSelection(window.localStorage, props.snapshot, {
+          peerMembershipId: peer.membershipId,
+          threadId: direct.id,
+        });
+      setDirectMode(true);
+      setActiveDirectThreadId(direct.id);
+    }
     const requestedStream = streamForMessage(
       props.snapshot.messages,
       requestedChatMessageId,
@@ -299,7 +331,7 @@ function SidebarContent(props: Props) {
       id="activity-sidebar"
       tabIndex={-1}
       aria-label="Журнал"
-      className={`sidebar ${!isGm ? "player-sidebar" : "sidebar--single-feed"}`}
+      className="sidebar"
       hidden={!chatVisible}
       inert={!chatVisible}
       aria-hidden={!chatVisible}
@@ -325,16 +357,21 @@ function SidebarContent(props: Props) {
       >
         <AppIcon icon={SidebarCollapseIcon} />
       </button>
-      {isGm && chatFeedOrder(isGm).length > 1 && (
+      {
         <nav
           className="tabs chat-stream-tabs"
           aria-label="Потоки чата"
           role="tablist"
           onKeyDown={(event) => {
-            const nextFeed = nextChatFeed(activeFeed, event.key, isGm);
+            const nextFeed = nextChatFeed(
+              directMode ? "DIRECT" : activeFeed,
+              event.key,
+              isGm,
+            );
             if (!nextFeed) return;
             event.preventDefault();
-            setActiveFeed(nextFeed);
+            setDirectMode(nextFeed === "DIRECT");
+            if (nextFeed !== "DIRECT") setActiveFeed(nextFeed);
             requestAnimationFrame(() =>
               document
                 .getElementById(`chat-tab-${nextFeed.toLowerCase()}`)
@@ -386,14 +423,48 @@ function SidebarContent(props: Props) {
                 </Button>
               );
             })}
-          {/* UIX-365: direct-message tab hidden pending a dedicated redesign of the mechanic. */}
+          <Button
+            view="flat"
+            role="tab"
+            id="chat-tab-direct"
+            aria-controls="chat-panel-direct"
+            aria-selected={directMode}
+            tabIndex={directMode ? 0 : -1}
+            onClick={() => setDirectMode(true)}
+          >
+            Личные
+            {directThreads(props.snapshot).reduce(
+              (sum, thread) =>
+                sum + directUnreadCount(props.snapshot, thread.id),
+              0,
+            ) > 0 && (
+              <span
+                className="chat-unread-badge"
+                aria-label="Непрочитанные личные сообщения"
+              >
+                {directThreads(props.snapshot).reduce(
+                  (sum, thread) =>
+                    sum + directUnreadCount(props.snapshot, thread.id),
+                  0,
+                )}
+              </span>
+            )}
+          </Button>
         </nav>
-      )}
+      }
       <div className="panel-scroll chat-scroll">
-        {directMode ? (
+        <div
+          className="chat-feed-slot"
+          hidden={!directMode}
+          inert={!directMode}
+        >
           <DirectChatPanel
+            focusedMessageId={
+              chatVisible && directMode ? focusedMessageId : null
+            }
+            onMessageFocused={() => setFocusedMessageId(null)}
             snapshot={props.snapshot}
-            visible={chatVisible}
+            visible={chatVisible && directMode}
             activeThreadId={activeDirectThreadId}
             onActiveThreadChange={setActiveDirectThreadId}
             onCreateThread={chatActions.onCreateDirectThread}
@@ -402,45 +473,52 @@ function SidebarContent(props: Props) {
             onUploadAttachment={chatActions.onUploadChatAttachment}
             onMarkChatRead={chatActions.onMarkChatRead}
           />
-        ) : activeFeed === "ACTIVITY" ? (
-          <ActivityPanel
-            snapshot={props.snapshot}
-            storyPosts={props.storyPosts}
-            activityFilters={activityFilters}
-            onActivityFiltersChange={setActivityFilters}
-            onChat={chatActions.onChat}
-            onSticker={chatActions.onSticker}
-            onRoll={diceActions.onRoll}
-            focusedMessageId={focusedMessageId}
-            onMessageFocused={() => setFocusedMessageId(null)}
-            onOpenPlayerRequestCreate={
-              playerRequestActions.onOpenPlayerRequestCreate
-            }
-            onUpdateCounters={characterActions.updateCharacterCounters}
-            selectedTokenIds={props.selectedTokenIds}
-            onUpdateInitiative={initiativeActions.onUpdateInitiative}
-            onSetOwnInitiative={initiativeActions.onSetOwnInitiative}
-            onRollInitiative={initiativeActions.onRollInitiative}
-            onRecruitFromBattleZone={
-              props.canRecruitFromBattleZone
-                ? initiativeActions.onRecruitFromBattleZone
-                : undefined
-            }
-          />
-        ) : (
-          <ChatPanel
-            snapshot={props.snapshot}
-            visible={chatVisible}
-            onChat={chatActions.onChat}
-            onSticker={chatActions.onSticker}
-            onRoll={diceActions.onRoll}
-            onMarkChatRead={chatActions.onMarkChatRead}
-            activeStream={activeFeed}
-            focusedMessageId={focusedMessageId}
-            onMessageFocused={() => setFocusedMessageId(null)}
-            onOpenPlayerRequests={() => onWorkspaceChange("player-requests")}
-          />
-        )}
+        </div>
+        <div className="chat-feed-slot" hidden={directMode} inert={directMode}>
+          {activeFeed === "ACTIVITY" ? (
+            <ActivityPanel
+              snapshot={props.snapshot}
+              storyPosts={props.storyPosts}
+              activityFilters={activityFilters}
+              onActivityFiltersChange={setActivityFilters}
+              onChat={chatActions.onChat}
+              onSticker={chatActions.onSticker}
+              onRoll={diceActions.onRoll}
+              focusedMessageId={
+                chatVisible && !directMode ? focusedMessageId : null
+              }
+              onMessageFocused={() => setFocusedMessageId(null)}
+              onOpenPlayerRequestCreate={
+                playerRequestActions.onOpenPlayerRequestCreate
+              }
+              onUpdateCounters={characterActions.updateCharacterCounters}
+              selectedTokenIds={props.selectedTokenIds}
+              onUpdateInitiative={initiativeActions.onUpdateInitiative}
+              onSetOwnInitiative={initiativeActions.onSetOwnInitiative}
+              onRollInitiative={initiativeActions.onRollInitiative}
+              onRecruitFromBattleZone={
+                props.canRecruitFromBattleZone
+                  ? initiativeActions.onRecruitFromBattleZone
+                  : undefined
+              }
+            />
+          ) : (
+            <ChatPanel
+              snapshot={props.snapshot}
+              visible={chatVisible && !directMode}
+              onChat={chatActions.onChat}
+              onSticker={chatActions.onSticker}
+              onRoll={diceActions.onRoll}
+              onMarkChatRead={chatActions.onMarkChatRead}
+              activeStream={activeFeed}
+              focusedMessageId={
+                chatVisible && !directMode ? focusedMessageId : null
+              }
+              onMessageFocused={() => setFocusedMessageId(null)}
+              onOpenPlayerRequests={() => onWorkspaceChange("player-requests")}
+            />
+          )}
+        </div>
         {(props.workspace === "characters" ||
           props.keepCharacterWorkspaceMounted) && (
           <CharacterWorkspace
@@ -603,6 +681,18 @@ function SidebarContent(props: Props) {
           <WorldEncyclopediaWorkspace
             open
             assets={props.snapshot.assets}
+            onClose={closeWorkspace}
+          />
+        )}
+        {props.workspace === "shops" && (
+          <EconomyWorkspace
+            key={`${props.snapshot.campaign.id}:${props.snapshot.me.id}:${props.snapshot.me.role}`}
+            campaignId={props.snapshot.campaign.id}
+            membershipId={props.snapshot.me.id}
+            gm={isGm}
+            characters={props.snapshot.characters.filter((character) => character.lifecycle === "ACTIVE" &&
+              (isGm || character.ownerMembershipId === props.snapshot.me.id ||
+                character.controllerMembershipIds.includes(props.snapshot.me.id)))}
             onClose={closeWorkspace}
           />
         )}

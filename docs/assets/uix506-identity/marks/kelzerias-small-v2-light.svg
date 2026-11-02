@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="32" height="32" color="#e8e4da" fill="currentColor" role="img" aria-labelledby="title description">
+  <title id="title">Келзериас — малый, редакция 2, светлые линии</title>
+  <desc id="description">Ручная векторная адаптация выбранного оригинала: вытянутая маска, изогнутые рога, гребень и нижнее острие, многослойные крылья-лезвия, кольцо и четыре полых ромба. Двойное кольцо и дополнительные прорези для пробы в 24–48 пикселях. Прозрачный фон. Форма и читаемость пока не приняты.</desc>
+  <defs>
+    <mask id="portal-gaps" x="0" y="0" width="1000" height="1000" maskUnits="userSpaceOnUse" style="mask-type:luminance">
+      <rect width="1000" height="1000" fill="#fff"/>
+      <path d="M500 10 556 96 500 172 444 96ZM18 500 99 450 178 500 99 550ZM982 500 901 450 822 500 901 550ZM500 990 438 902 500 828 562 902Z" fill="#000"/>
+    </mask>
+    <mask id="face-openings" x="0" y="0" width="1000" height="1000" maskUnits="userSpaceOnUse" style="mask-type:luminance">
+      <rect width="1000" height="1000" fill="#fff"/>
+      <path d="M392 481C422 482 447 503 466 532C432 541 406 525 397 506Z M396 553 453 616 460 658 425 620Z" fill="#000"/>
+      <path d="M392 481C422 482 447 503 466 532C432 541 406 525 397 506Z M396 553 453 616 460 658 425 620Z" fill="#000" transform="translate(1000 0) scale(-1 1)"/>
+      <path d="M354 236 386 250M341 281 390 290M351 323 415 323" stroke="#000" stroke-width="9" fill="none"/><path d="M354 236 386 250M341 281 390 290M351 323 415 323" stroke="#000" stroke-width="9" fill="none" transform="translate(1000 0) scale(-1 1)"/><path d="M500 183 500 382M500 437 500 497M500 584 500 779" stroke="#000" stroke-width="5" fill="none"/>
+    </mask>
+    <mask id="wing-openings" x="0" y="0" width="1000" height="1000" maskUnits="userSpaceOnUse" style="mask-type:luminance">
+      <rect width="1000" height="1000" fill="#fff"/>
+      <path d="M277 377C242 445 235 518 275 563M245 472C224 536 235 592 288 645M244 564C239 634 270 690 333 735M275 656C289 719 337 779 406 805" fill="none" stroke="#000" stroke-width="11" stroke-linecap="round"/>
+    </mask>
+    <path id="left-horn" d="M424 161C367 198 339 247 342 300C344 341 367 367 396 380L449 318C412 315 391 291 388 260C385 222 405 188 424 161Z"/>
+    <path id="left-upper-plate" d="M459 309C447 334 426 350 410 367C397 390 391 421 392 447L425 452 473 503 472 427 456 406 456 381 471 370Z"/>
+    <path id="left-lower-plate" d="M377 406C362 445 359 504 366 556C374 616 406 673 443 713L457 682 435 650C405 614 392 577 395 526L411 520 440 564 459 618 461 560 459 502 426 477 397 458 385 435Z"/>
+    <g id="left-wing" mask="url(#wing-openings)"><path d="M318 307C277 313 244 337 224 368C246 354 257 354 274 372C235 397 200 449 167 487C211 468 239 436 252 407C222 470 214 531 157 594C197 575 215 556 234 529C220 582 210 628 186 666C218 650 229 640 244 619C240 681 244 721 270 754C272 716 282 691 294 676C312 743 354 793 445 818C390 780 356 734 337 685C312 634 302 589 306 550C280 492 279 422 318 307Z"/></g>
+  </defs>
+  <g mask="url(#portal-gaps)" fill="none" stroke="currentColor">
+    <circle cx="500" cy="508" r="403" stroke-width="20"/>
+    <circle cx="500" cy="508" r="382" stroke-width="6"/>
+  </g>
+  <path fill-rule="evenodd" d="M500 24 545 96 500 158 455 96ZM500 57 523 98 500 130 477 98ZM31 500 99 461 163 500 99 539ZM67 500 100 480 133 500 100 520ZM969 500 901 461 837 500 901 539ZM933 500 900 480 867 500 900 520ZM500 975 450 902 500 842 550 902ZM500 942 474 904 500 869 526 904Z"/>
+  <use href="#left-wing"/>
+  <use href="#left-wing" transform="translate(1000 0) scale(-1 1)"/>
+  <g mask="url(#face-openings)">
+    <use href="#left-horn"/>
+    <use href="#left-horn" transform="translate(1000 0) scale(-1 1)"/>
+    <use href="#left-upper-plate"/>
+    <use href="#left-upper-plate" transform="translate(1000 0) scale(-1 1)"/>
+    <use href="#left-lower-plate"/>
+    <use href="#left-lower-plate" transform="translate(1000 0) scale(-1 1)"/>
+    <path d="M500 101C488 184 479 250 467 306C461 334 460 354 468 372L500 405 532 372C540 354 539 334 533 306C521 250 512 184 500 101Z"/>
+    <path d="M465 379 474 416 472 489 500 522 528 489 526 416 535 379 521 399 500 416 479 399Z"/>
+    <path d="M343 461C365 439 397 436 430 451C459 467 482 500 500 529C518 500 541 467 570 451C603 436 635 439 657 461L645 474C609 457 576 473 552 492C532 511 514 537 500 559C486 537 468 511 448 492C424 473 391 457 355 474Z"/>
+    <path d="M500 550 522 524 515 706 500 845 485 706 478 524Z"/>
+  </g>
+</svg>

@@ -105,6 +105,7 @@ export interface CampaignActions {
         | "player-requests"
         | "world-encyclopedia"
         | "spell-schools"
+        | "shops"
         | "world-codex"
         | null,
     ) => void;

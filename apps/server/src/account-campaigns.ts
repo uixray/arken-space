@@ -5,7 +5,6 @@ import {
   eq,
   gt,
   isNull,
-  isNotNull,
   inArray,
   sql,
 } from "drizzle-orm";
@@ -29,12 +28,14 @@ import {
   accountCampaignListSchema,
 } from "@arken/contracts";
 import { hashToken, randomToken, safeEqual } from "./security.js";
+import { accountAssuranceWhere } from "./account-assurance.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type RealtimeSessions = {
   in: (room: string) => { disconnectSockets: (close?: boolean) => unknown };
 };
 export type AccountCampaignOptions = {
+  localInstanceId?: string;
   enabled: boolean;
   creationEnabled: boolean;
   creationLimit: number;
@@ -70,7 +71,7 @@ async function accountForRequest(
         eq(accountSessions.tokenHash, hashToken(token)),
         isNull(accountSessions.revokedAt),
         gt(accountSessions.expiresAt, new Date()),
-        isNotNull(users.verifiedAt),
+        accountAssuranceWhere(options.localInstanceId),
         isNull(users.disabledAt),
       ),
     )
@@ -162,7 +163,7 @@ async function replaceSelectedGameSession(
           eq(accountSessions.id, accountSessionId),
           isNull(accountSessions.revokedAt),
           sql`${accountSessions.expiresAt} > clock_timestamp()`,
-          isNotNull(users.verifiedAt),
+          accountAssuranceWhere(options.localInstanceId),
           isNull(users.disabledAt),
         ),
       )
@@ -655,6 +656,35 @@ export function registerAccountCampaignRoutes(
       const now = new Date();
       try {
         const claimed = await db.transaction(async (tx) => {
+          // A lost response must not strand the account after the one-time
+          // invitation has already been consumed. Replay only for the same
+          // verified account and an existing membership; never recreate access.
+          const [previous] = await tx
+            .select({
+              campaignId: accountCampaignInvites.campaignId,
+              claimedAt: accountCampaignInvites.claimedAt,
+              claimedByUserId: accountCampaignInvites.claimedByUserId,
+              revokedAt: accountCampaignInvites.revokedAt,
+            })
+            .from(accountCampaignInvites)
+            .where(eq(accountCampaignInvites.tokenHash, hashToken(body.data.token)))
+            .for("update")
+            .limit(1);
+          if (!previous || previous.revokedAt) return null;
+          if (previous.claimedAt) {
+            if (previous.claimedByUserId !== account.userId) return null;
+            const [membership] = await tx
+              .select({ id: memberships.id, role: memberships.role })
+              .from(memberships)
+              .where(and(
+                eq(memberships.campaignId, previous.campaignId),
+                eq(memberships.userId, account.userId),
+              ))
+              .limit(1);
+            return membership
+              ? { campaignId: previous.campaignId, membershipId: membership.id, role: membership.role }
+              : null;
+          }
           const [invite] = await tx
             .update(accountCampaignInvites)
             .set({ claimedAt: now, claimedByUserId: account.userId })
@@ -666,7 +696,7 @@ export function registerAccountCampaignRoutes(
                 ),
                 isNull(accountCampaignInvites.claimedAt),
                 isNull(accountCampaignInvites.revokedAt),
-                gt(accountCampaignInvites.expiresAt, now),
+                sql`${accountCampaignInvites.expiresAt} > clock_timestamp()`,
               ),
             )
             .returning({
@@ -684,7 +714,7 @@ export function registerAccountCampaignRoutes(
             })
             .returning({ id: memberships.id });
           if (!membership) throw new Error("INVITE_CLAIM_FAILED");
-          return { campaignId: invite.campaignId, membershipId: membership.id };
+          return { campaignId: invite.campaignId, membershipId: membership.id, role: "PLAYER" as const };
         });
         if (!claimed)
           return reply.code(400).send({ error: "INVITE_INVALID_OR_EXPIRED" });
@@ -700,7 +730,7 @@ export function registerAccountCampaignRoutes(
           ))
         )
           return;
-        return reply.code(201).send({ ...claimed, role: "PLAYER" });
+        return reply.code(201).send(claimed);
       } catch (error) {
         if (
           typeof error === "object" &&

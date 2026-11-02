@@ -1,0 +1,14 @@
+.economy-workspace { display: grid; gap: 1rem; max-width: 68rem; }
+.economy-workspace fieldset, .economy-workspace section, .economy-workspace details { min-width: 0; }
+.economy-workspace fieldset { display: grid; gap: .75rem; border: 1px solid var(--g-color-line-generic); border-radius: .5rem; }
+.economy-workspace label { display: grid; gap: .25rem; margin: .5rem 0; }
+.economy-workspace input:not([type="checkbox"]), .economy-workspace select { min-height: 2.75rem; max-width: 100%; width: 100%; box-sizing: border-box; font: inherit; }
+.economy-workspace button { min-height: 2.75rem; padding: .4rem .75rem; font: inherit; cursor: pointer; }
+.economy-workspace button:disabled { cursor: default; opacity: .6; }
+.economy-workspace summary { cursor: pointer; padding: .75rem 0; font-weight: 600; }
+.economy-workspace pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; }
+.economy-workspace small { display: block; overflow-wrap: anywhere; }
+.economy-row, .economy-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; }
+.economy-row > label { flex: 1 1 9rem; min-width: 0; }
+.economy-manager details { border-top: 1px solid var(--g-color-line-generic); padding-bottom: 1rem; }
+@media (max-width: 640px) { .economy-row > label { flex-basis: 100%; } }

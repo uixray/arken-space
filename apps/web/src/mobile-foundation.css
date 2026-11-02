@@ -1180,3 +1180,47 @@
     height: 44px;
   }
 }
+
+/* UIX-625: let the composer remain reachable in a keyboard-sized viewport. */
+@media (max-width: 1023px) {
+  .app-shell--compact .activity-feed > .message-list {
+    flex-basis: 80px;
+    min-height: 0;
+  }
+  .app-shell--compact .direct-chat-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .app-shell--compact .direct-chat-panel > .message-list {
+    flex: 1 1 80px;
+    min-height: 0;
+  }
+  .app-shell--compact .direct-compose,
+  .app-shell--compact .direct-thread-toolbar {
+    flex-shrink: 0;
+  }
+  .app-shell--compact .direct-peer-select {
+    min-width: 0;
+    width: 100%;
+    min-height: 44px;
+  }
+  .app-shell--compact .direct-compose textarea {
+    font-size: 16px;
+    max-height: 120px;
+  }
+  .app-shell--compact .direct-compose {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .app-shell--compact .direct-compose > .chat-composer-input {
+    grid-column: 1 / -1;
+  }
+  .app-shell--compact .activity-feed > .chat-compose {
+    flex-shrink: 0;
+    max-height: 45%;
+    overflow-y: auto;
+  }
+}

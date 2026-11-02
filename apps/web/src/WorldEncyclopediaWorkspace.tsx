@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
+import { WorldRegionPicker } from "./WorldRegionPicker";
 import type {
   AssetDto,
   WorldContentInstancePlayerDto,
@@ -76,6 +77,8 @@ export const WorldEncyclopediaWorkspace = memo(
     const [listError, setListError] = useState("");
     const [filterType, setFilterType] = useState<WorldContentType | "">("");
     const [filterTags, setFilterTags] = useState("");
+    const [filterRegion, setFilterRegion] = useState("");
+    const [filterEra, setFilterEra] = useState("");
     const [filterQ, setFilterQ] = useState("");
     const [activeRelation, setActiveRelation] = useState<{
       id: string;
@@ -83,6 +86,7 @@ export const WorldEncyclopediaWorkspace = memo(
     } | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const latestRequest = useRef(0);
+    const [detailEpoch, setDetailEpoch] = useState(0);
 
     const load = async (
       relatedTo: string | null | undefined = activeRelation?.id,
@@ -94,18 +98,38 @@ export const WorldEncyclopediaWorkspace = memo(
         const list = await fetchWorldContentPlayerList({
           type: filterType || undefined,
           tags: parseTagList(filterTags),
+          regionId: filterRegion || undefined,
+          era: filterEra.trim() || undefined,
           q: filterQ.trim() || undefined,
           relatedTo: relatedTo ?? undefined,
         });
         if (requestId !== latestRequest.current) return;
         setItems(list);
+        setDetailEpoch((epoch) => epoch + 1);
       } catch (reason) {
         if (requestId !== latestRequest.current) return;
+        setItems([]);
+        setSelectedId(null);
         setListError(formatApiError(reason, safeError));
       } finally {
         if (requestId === latestRequest.current) setLoading(false);
       }
     };
+
+    const refreshRef = useRef(load);
+    refreshRef.current = load;
+    useEffect(() => {
+      if (!open) return;
+      const refresh = () => {
+        if (!document.hidden) void refreshRef.current();
+      };
+      window.addEventListener("focus", refresh);
+      document.addEventListener("visibilitychange", refresh);
+      return () => {
+        window.removeEventListener("focus", refresh);
+        document.removeEventListener("visibilitychange", refresh);
+      };
+    }, [open]);
 
     useEffect(() => {
       if (!open) {
@@ -130,6 +154,18 @@ export const WorldEncyclopediaWorkspace = memo(
         <div className="world-encyclopedia-workspace__grid">
           <section className="world-encyclopedia-workspace__list-pane">
             <div className="world-encyclopedia-workspace__filters">
+              <WorldRegionPicker
+                value={filterRegion}
+                onChange={setFilterRegion}
+              />
+              <label className="field">
+                Эпоха
+                <FormInput
+                  value={filterEra}
+                  maxLength={80}
+                  onChange={(event) => setFilterEra(event.target.value)}
+                />
+              </label>
               <label className="field">
                 Тип
                 <FormSelect
@@ -239,7 +275,7 @@ export const WorldEncyclopediaWorkspace = memo(
           <section className="world-encyclopedia-workspace__detail-pane">
             {selectedId ? (
               <EntityPage
-                key={selectedId}
+                key={`${selectedId}:${detailEpoch}`}
                 id={selectedId}
                 assets={assets}
                 onNavigate={setSelectedId}
@@ -375,6 +411,8 @@ function EntityPage({
           {entity.summary}
         </p>
       )}
+      {entity.regionName && <p>Регион: {entity.regionName}</p>}
+      {entity.era && <p>Эпоха: {entity.era}</p>}
       {entity.publicText && (
         // No markdown renderer exists anywhere in this codebase yet (checked
         // for a reuse candidate near GM story notes / UIX-320 and found

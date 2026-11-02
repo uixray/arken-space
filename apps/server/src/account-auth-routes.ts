@@ -12,6 +12,7 @@ import {
   accountActionTokenSchema,
   accountEmailInputSchema,
   accountLoginSchema,
+  localAccountLoginSchema,
   accountPasswordChangeSchema,
   accountPasswordResetSchema,
   accountRegistrationSchema,
@@ -28,12 +29,14 @@ import {
   verifyPassword,
 } from "./password-security.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
+import { accountIdentityDto, hasAccountAssurance } from "./account-assurance.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type RealtimeSessions = {
   in: (room: string) => { disconnectSockets: (close?: boolean) => unknown };
 };
 export type AccountAuthOptions = {
+  localInstanceId?: string;
   enabled: boolean;
   registrationEnabled: boolean;
   legacyDevEnabled: boolean;
@@ -169,13 +172,17 @@ async function revokeCurrentAccountSession(
   await invalidateGameSessions(db, io, [row.id]);
 }
 
-async function findActiveAccountSession(db: Database, token?: string) {
+async function findActiveAccountSession(db: Database, token?: string, localInstanceId?: string) {
   if (!token) return null;
   const [row] = await db
     .select({
       id: accountSessions.id,
       userId: users.id,
-      email: users.emailDisplay,
+      emailDisplay: users.emailDisplay,
+      identityKind: users.identityKind,
+      localInstanceId: users.localInstanceId,
+      localApprovedAt: users.localApprovedAt,
+      localLogin: users.localLogin,
       verifiedAt: users.verifiedAt,
       disabledAt: users.disabledAt,
       csrfHash: accountSessions.csrfHash,
@@ -190,7 +197,7 @@ async function findActiveAccountSession(db: Database, token?: string) {
     !row ||
     row.revokedAt ||
     row.disabledAt ||
-    !row.verifiedAt ||
+    !hasAccountAssurance(row, localInstanceId) ||
     row.expiresAt <= new Date()
   )
     return null;
@@ -230,6 +237,9 @@ async function setSessionCookies(
         id: users.id,
         passwordHash: users.passwordHash,
         verifiedAt: users.verifiedAt,
+        identityKind: users.identityKind,
+        localInstanceId: users.localInstanceId,
+        localApprovedAt: users.localApprovedAt,
         disabledAt: users.disabledAt,
       })
       .from(users)
@@ -239,7 +249,7 @@ async function setSessionCookies(
     if (
       !current ||
       current.passwordHash !== expectedPasswordHash ||
-      !current.verifiedAt ||
+      !hasAccountAssurance(current, options.localInstanceId) ||
       current.disabledAt
     )
       return false;
@@ -302,6 +312,7 @@ async function requireAccountCsrf(
   const account = await findActiveAccountSession(
     db,
     request.cookies[options.accountCookieName],
+    options.localInstanceId,
   );
   if (!account) {
     await reply.code(401).send({ error: "ACCOUNT_AUTH_REQUIRED" });
@@ -342,6 +353,10 @@ export function registerAccountAuthRoutes(
   io: RealtimeSessions,
   options: AccountAuthOptions,
 ) {
+  app.addHook("onRequest", async (request, reply) => {
+    if (options.localInstanceId && /^\/api\/account\/(?:register|verification(?:\/|$)|password\/reset(?:\/|$))/.test(request.url))
+      return reply.code(404).send({ error: "EMAIL_ACCOUNTS_UNAVAILABLE_LOCALLY" });
+  });
   // Account/session/token responses must never enter a browser or intermediary
   // cache. onSend also covers validation, 404, and error-handler responses.
   app.addHook("onSend", async (request, reply, payload) => {
@@ -375,6 +390,7 @@ export function registerAccountAuthRoutes(
         campaignLinkAccessEnabled: options.campaignLinkAccessEnabled,
         campaignCreationEnabled:
           options.enabled && options.campaignCreationEnabled,
+        ...(options.localInstanceId ? { localAccounts: true } : {}),
       }),
     );
   });
@@ -418,7 +434,7 @@ export function registerAccountAuthRoutes(
               await enqueueAccountAction(tx, {
                 keyring: options.mailKeyring!,
                 publicUrl: options.publicUrl,
-                email: account.emailDisplay,
+                email: account.emailDisplay!,
                 userId: account.id,
                 purpose: VERIFY,
               });
@@ -454,7 +470,7 @@ export function registerAccountAuthRoutes(
             await enqueueAccountAction(tx, {
               keyring: options.mailKeyring!,
               publicUrl: options.publicUrl,
-              email: locked.emailDisplay,
+              email: locked.emailDisplay!,
               userId: locked.id,
               purpose: VERIFY,
             });
@@ -477,23 +493,27 @@ export function registerAccountAuthRoutes(
     async (request, reply) => {
       if (!requireEnabled()) return unavailable(reply);
       if (!(await requireWriteOrigin(request, reply))) return;
-      const body = parse(accountLoginSchema, request.body);
+      const localBody = options.localInstanceId ? parse(localAccountLoginSchema, request.body) : null;
+      const emailBody = options.localInstanceId ? null : parse(accountLoginSchema, request.body);
+      const body = localBody ?? emailBody;
       if (!body)
         return reply.code(400).send({ error: "INVALID_ACCOUNT_INPUT" });
-      const email = normalizedEmail(body.email);
+      const email = localBody ? localBody.login : normalizedEmail(emailBody!.email);
       if (!emailLimiter(request, "login", email))
         return reply.code(429).send({ error: "ACCOUNT_RATE_LIMITED" });
       try {
         const [account] = await db
           .select()
           .from(users)
-          .where(eq(users.emailNormalized, email))
+          .where(options.localInstanceId
+            ? and(eq(users.identityKind, "LOCAL"), eq(users.localInstanceId, options.localInstanceId), eq(users.localLogin, email))
+            : and(eq(users.identityKind, "EMAIL"), eq(users.emailNormalized, email)))
           .limit(1);
         const valid =
           account && !account.disabledAt
             ? await verifyPassword(body.password, account.passwordHash)
             : await verifyPassword(body.password, await getDummyVerifier());
-        if (!account || account.disabledAt || !valid || !account.verifiedAt)
+        if (!account || account.disabledAt || !valid || !hasAccountAssurance(account, options.localInstanceId))
           return reply.code(401).send({ error: "INVALID_CREDENTIALS" });
         await revokeCurrentAccountSession(
           db,
@@ -518,8 +538,7 @@ export function registerAccountAuthRoutes(
             authenticated: true,
             account: {
               id: account.id,
-              email: account.emailDisplay,
-              verified: true,
+              ...accountIdentityDto(account),
             },
             csrfToken,
           }),
@@ -536,6 +555,7 @@ export function registerAccountAuthRoutes(
       const account = await findActiveAccountSession(
         db,
         request.cookies[options.accountCookieName],
+        options.localInstanceId,
       );
       if (!account) return reply.send({ authenticated: false });
       const csrfToken = await ensureCsrfCookie(
@@ -548,7 +568,7 @@ export function registerAccountAuthRoutes(
       return reply.send(
         accountSessionSchema.parse({
           authenticated: true,
-          account: { id: account.userId, email: account.email, verified: true },
+          account: { id: account.userId, ...accountIdentityDto(account) },
           csrfToken,
         }),
       );
@@ -566,6 +586,7 @@ export function registerAccountAuthRoutes(
       const account = await findActiveAccountSession(
         db,
         request.cookies[options.accountCookieName],
+        options.localInstanceId,
       );
       if (account) {
         const auth = await requireAccountCsrf(request, reply, db, options);
@@ -621,7 +642,7 @@ export function registerAccountAuthRoutes(
               await enqueueAccountAction(tx, {
                 keyring: options.mailKeyring!,
                 publicUrl: options.publicUrl,
-                email: locked.emailDisplay,
+                email: locked.emailDisplay!,
                 userId: locked.id,
                 purpose: VERIFY,
               });
@@ -754,7 +775,7 @@ export function registerAccountAuthRoutes(
               await enqueueAccountAction(tx, {
                 keyring: options.mailKeyring!,
                 publicUrl: options.publicUrl,
-                email: locked.emailDisplay,
+                email: locked.emailDisplay!,
                 userId: locked.id,
                 purpose: RESET,
               });

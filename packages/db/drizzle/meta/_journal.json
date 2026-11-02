@@ -477,6 +477,97 @@
       "when": 1793538000000,
       "tag": "0067_instance_bindings_achievements",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1793563200000,
+      "tag": "0068_character_inventory",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1793566800000,
+      "tag": "0069_token_sprite_facing",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1793570400000,
+      "tag": "0070_world_region_era",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1793574000000,
+      "tag": "0071_bug_intake_queue",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1793656800000,
+      "tag": "0072_bug_intake_updates",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1793660400000,
+      "tag": "0073_bug_intake_conflicts",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1793664000000,
+      "tag": "0074_bug_intake_update_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1793667600000,
+      "tag": "0075_bug_intake_deliveries",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "breakpoints": true,
+      "version": "7",
+      "when": 1793671200000,
+      "tag": "0076_bug_intake_upload_receipts"
+    },
+    {
+      "tag": "0077_bug_intake_albums",
+      "when": 1793674800000,
+      "idx": 77,
+      "breakpoints": true,
+      "version": "7"
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1793678400000,
+      "tag": "0078_bug_intake_album_deliveries",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1793682000000,
+      "tag": "0079_local_host_accounts",
+      "breakpoints": true
+    },
+    {
+      "version": "7",
+      "when": 1793682000001,
+      "tag": "0080_economy_shops",
+      "breakpoints": true,
+      "idx": 80
     }
   ]
 }

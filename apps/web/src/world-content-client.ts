@@ -147,6 +147,8 @@ export function computeWorldContentMediaSwap(
 }
 
 export type WorldContentListQuery = {
+  regionId?: string;
+  era?: string;
   type?: WorldContentType;
   tags?: string[];
   q?: string;
@@ -162,6 +164,8 @@ export function worldContentListQueryString(
     params.set("tags", query.tags.join(","));
   if (query.q) params.set("q", query.q);
   if (query.relatedTo) params.set("relatedTo", query.relatedTo);
+  if (query.regionId) params.set("regionId", query.regionId);
+  if (query.era?.trim()) params.set("era", query.era.trim());
   const qs = params.toString();
   return qs ? `?${qs}` : "";
 }
@@ -206,6 +210,8 @@ export const fetchWorldContentMedia = (id: string) =>
   );
 
 export type CreateWorldContentInput = {
+  regionId?: string | null;
+  era?: string | null;
   slug: string;
   type: WorldContentType;
   subtype?: string | null;
@@ -233,6 +239,8 @@ export const createWorldContentWithActionId = (
   });
 
 export type UpdateWorldContentInput = {
+  regionId?: string | null;
+  era?: string | null;
   revision: number;
   subtype?: string | null;
   name?: string;

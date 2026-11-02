@@ -672,6 +672,8 @@ export function registerCanvasRoutes(
                     frameColor: token.frameColor,
                     revision: nextRevision,
                     updatedAt: new Date(token.updatedAt),
+                    facing: token.facing ?? "FRONT",
+                    conditions: token.conditions ?? [],
                   })
                   .returning();
                 const restoredRow = restored ?? conflict();

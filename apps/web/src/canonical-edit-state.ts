@@ -7,6 +7,8 @@ import {
 export type CanonicalEntityDraft = {
   name: string;
   subtype: string;
+  regionId: string;
+  era: string;
   aliases: string;
   summary: string;
   publicText: string;
@@ -32,6 +34,8 @@ export function canonicalDraftFromEntity(
   return {
     name: entity.name,
     subtype: entity.subtype ?? "",
+    regionId: entity.regionId ?? "",
+    era: entity.era ?? "",
     aliases: entity.aliases.join(", "),
     summary: entity.summary,
     publicText: entity.publicText,
@@ -56,6 +60,10 @@ export function canonicalEditPatch(
   const aliases = parseTagList(draft.aliases);
   const tags = parseTagList(draft.tags);
   const coverAssetId = draft.coverAssetId || null;
+  if ((draft.regionId || null) !== (base.regionId ?? null))
+    patch.regionId = draft.regionId || null;
+  if ((draft.era.trim() || null) !== (base.era ?? null))
+    patch.era = draft.era.trim() || null;
 
   if (name !== base.name) patch.name = name;
   if (subtype !== base.subtype) patch.subtype = subtype;
@@ -91,6 +99,10 @@ export function reapplyCanonicalEditPatch(
 ): CanonicalEntityDraft {
   return {
     ...canonicalDraftFromEntity(latest),
+    ...(payload.regionId !== undefined
+      ? { regionId: payload.regionId ?? "" }
+      : {}),
+    ...(payload.era !== undefined ? { era: payload.era ?? "" } : {}),
     ...(payload.name !== undefined ? { name: payload.name } : {}),
     ...(payload.subtype !== undefined
       ? { subtype: payload.subtype ?? "" }
@@ -118,6 +130,8 @@ export function canonicalEditFieldLabel(
   const labels: Record<keyof CanonicalEditPatch, string> = {
     name: "Название",
     subtype: "Подтип",
+    regionId: "Регион",
+    era: "Эпоха",
     aliases: "Алиасы",
     summary: "Краткое описание",
     publicText: "Текст для игроков",
@@ -135,6 +149,8 @@ export function canonicalEditFieldValue(
   const values: Record<keyof CanonicalEditPatch, string | string[] | null> = {
     name: entity.name,
     subtype: entity.subtype,
+    regionId: entity.regionId ?? null,
+    era: entity.era ?? null,
     aliases: entity.aliases,
     summary: entity.summary,
     publicText: entity.publicText,

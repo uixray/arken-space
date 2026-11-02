@@ -111,9 +111,13 @@ export function persistDirectSelection(
   snapshot: GameSnapshot,
   selection: StoredDirectSelection | null,
 ) {
-  const key = directSelectionStorageKey(snapshot);
-  if (!selection) storage.removeItem(key);
-  else storage.setItem(key, JSON.stringify(selection));
+  try {
+    const key = directSelectionStorageKey(snapshot);
+    if (!selection) storage.removeItem(key);
+    else storage.setItem(key, JSON.stringify(selection));
+  } catch {
+    // Disabled storage must not prevent using the current dialog.
+  }
 }
 
 export function messagesForDirectThread(

@@ -591,7 +591,16 @@ export function QuickRollPanel({
             >
               {abilityEntries.map((entry) => (
                 <div className="quick-roll-panel__entry" key={entry.id}>
-                  {(entry.data.rollActions?.length ?? 0) > 0 ? (
+                  {entry.data.areaEffect ? (
+                    <Button
+                      title={`Показать область: радиус ${entry.data.areaEffect.radiusMeters} м, общий 1к6 маны`}
+                      disabled={!canControlCharacter || entryPending !== null || !onEntryAction}
+                      onClick={() => void submitEntry(entry, "EXECUTE")}
+                    >
+                      <CatalogActionIcon kind="CUSTOM" semanticText={entry.name} />
+                      {entry.name} · {entry.data.areaEffect.radiusMeters} м · область
+                    </Button>
+                  ) : (entry.data.rollActions?.length ?? 0) > 0 ? (
                     <>
                       <Button
                         disabled={

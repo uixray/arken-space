@@ -23,6 +23,7 @@ export const TOKEN_CONDITION_BADGE: Readonly<
   UNCONSCIOUS: { color: "#8e7cc3", short: "С" },
   RESTRAINED: { color: "#c9862e", short: "О" },
   PRONE: { color: "#5b8fb0", short: "Л" },
+  FLYING: { color: "#6bb4c4", short: "П" },
 };
 
 /**
