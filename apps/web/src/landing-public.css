@@ -1,5 +1,6 @@
 .landing-section-nav {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: clamp(8px, 1.6vw, 20px);
@@ -88,6 +89,7 @@
 @media (max-width: 760px) {
   .landing-section-nav {
     order: 3;
+    flex-wrap: nowrap;
     width: 100%;
     justify-content: flex-start;
     gap: 6px 14px;

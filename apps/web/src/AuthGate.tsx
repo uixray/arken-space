@@ -285,7 +285,7 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   return (
     <main className="landing-shell">
       <header className="landing-header">
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div className="landing-branding">
           <a
             className="wordmark"
             href="/"

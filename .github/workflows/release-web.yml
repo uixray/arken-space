@@ -1,0 +1,68 @@
+name: release-web
+
+# Manual production artifact only. No tests, deployment or server image rebuild.
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: "Exact 40-character web revision already in origin/main"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-web-${{ inputs.revision }}
+  cancel-in-progress: false
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      REVISION: ${{ inputs.revision }}
+    steps:
+      - name: Validate revision
+        run: printf '%s' "$REVISION" | grep -Eq '^[0-9a-f]{40}$'
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require main ancestry
+        run: |
+          test "$(git rev-parse HEAD)" = "$REVISION"
+          git merge-base --is-ancestor "$REVISION" origin/main
+      - name: Build web artifact
+        run: |
+          docker build --file Dockerfile.web --build-arg BUILD_REVISION="$REVISION" \
+            --label "org.opencontainers.image.revision=$REVISION" \
+            --tag "arken-release-web:$REVISION" .
+      - name: Save web image and manifest
+        run: |
+          mkdir -p release-web
+          archive="release-web/arken-release-web-$REVISION.tar"
+          docker save --output "$archive" "arken-release-web:$REVISION"
+          image_id="$(docker image inspect --format '{{.Id}}' "arken-release-web:$REVISION")"
+          archive_sha="$(sha256sum "$archive" | cut -d' ' -f1)"
+          archive_size="$(stat -c '%s' "$archive")"
+          node -e '
+            const [revision, id, sha256, size, githubRunId] = process.argv.slice(1);
+            console.log(JSON.stringify({
+              format: "arken-release-web-v1", revision,
+              images: { web: { tag: `arken-release-web:${revision}`, id } },
+              archive: { name: `arken-release-web-${revision}.tar`, sha256, size: Number(size) },
+              githubRunId, builtAt: new Date().toISOString(),
+              scope: "web-only; server and database are not rebuilt or deployed by this workflow"
+            }, null, 2));
+          ' "$REVISION" "$image_id" "$archive_sha" "$archive_size" "$GITHUB_RUN_ID" > release-web/manifest.json
+          cat release-web/manifest.json
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arken-release-web-${{ inputs.revision }}
+          path: release-web/
+          retention-days: 1
+          if-no-files-found: error
+          compression-level: 6
