@@ -3965,7 +3965,7 @@ html[data-player-theme="light"] .character-card--combat {
   place-items: center;
   width: 100%;
   height: 100%;
-  background: #171715;
+  background: var(--bg);
 }
 .landing-shell {
   flex: 1 1 auto;
@@ -3984,7 +3984,7 @@ html[data-player-theme="light"] .character-card--combat {
       rgba(201, 113, 70, 0.1),
       transparent 35rem
     ),
-    #171715;
+    var(--bg);
   color: var(--text);
 }
 html:has(.landing-shell),
@@ -4010,10 +4010,22 @@ body:has(.landing-shell) {
 }
 .landing-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 12px 24px;
   min-height: 64px;
+  padding-block: 12px;
   border-bottom: 1px solid var(--line);
+}
+.landing-branding {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
 }
 .landing-header .wordmark {
   color: inherit;
