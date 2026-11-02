@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isAbsolute } from "node:path";
 
 const bytes = z.coerce.number().int().positive();
 const uuidList = z.string().refine(
@@ -19,6 +20,10 @@ export const env = z
     APP_VERSION: z.string().default("0.2.0-dev"),
     BUILD_REVISION: z.string().trim().min(1).max(64).default("development"),
     SCHEMA_VERSION: z.coerce.number().int().positive().default(2),
+    DEPLOYMENT_MODE: z.enum(["HOSTED", "LOCAL_HOST"]).default("HOSTED"),
+    LOCAL_INSTANCE_ID: z.string().default(""),
+    LOCAL_DATA_ROOT: z.string().default(""),
+    LOCAL_WEB_ROOT: z.string().default(""),
     PORT: z.coerce.number().int().min(1).max(65535).default(4100),
     WEB_ORIGIN: z.string().url().default("http://localhost:5173"),
     PUBLIC_URL: z.string().url().default("http://localhost:5173"),
@@ -87,6 +92,16 @@ export const env = z
     PERFORMANCE_LOG_DIR: z.string().default(""),
     PERFORMANCE_MIN_FREE_DISK_BYTES: bytes.default(3 * 1024 * 1024 * 1024),
     MEDIA_ROOT: z.string().default("./media"),
+    // Local review UI/API only; never starts a Telegram adapter or sender.
+    BUG_INTAKE_ENABLED: z.enum(["true", "false"]).default("false"),
+    BUG_INTAKE_ROOT: z.string().trim().default(""),
+    BUG_INTAKE_ASSET_ORIGINS: z.string().trim().max(4096).default(""),
+    BUG_INTAKE_MAX_FILE_BYTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(100 * 1024 * 1024)
+      .default(20 * 1024 * 1024),
     GLOBAL_STICKERS_ENABLED: z
       .enum(["true", "false"])
       .default("true")
@@ -96,6 +111,7 @@ export const env = z
     MAX_IMAGE_BYTES: bytes.default(20 * 1024 ** 2),
     MAX_AUDIO_BYTES: bytes.default(100 * 1024 ** 2),
     OPERATOR_MEMBERSHIP_IDS: uuidList.default(""),
+    GEOMETRIC_DICE_MEMBERSHIP_IDS: uuidList.default(""),
     OPERATOR_FEEDBACK_RATE_LIMIT_MAX: z.coerce
       .number()
       .int()
@@ -114,6 +130,25 @@ export const env = z
    * конфигурации, а не повод угадывать.
    */
   .superRefine((value, ctx) => {
+    if (value.DEPLOYMENT_MODE === "LOCAL_HOST") {
+      const issue = (path: string, message: string) => ctx.addIssue({ code: "custom", path: [path], message });
+      if (value.NODE_ENV !== "production" || value.DEV_DATABASE_DRIVER !== "postgres")
+        issue("DEPLOYMENT_MODE", "Local host requires production settings and PostgreSQL");
+      if (!z.string().uuid().safeParse(value.LOCAL_INSTANCE_ID).success)
+        issue("LOCAL_INSTANCE_ID", "A local instance UUID is required");
+      for (const key of ["LOCAL_DATA_ROOT", "LOCAL_WEB_ROOT", "MEDIA_ROOT", "PERFORMANCE_LOG_DIR"] as const)
+        if (!isAbsolute(value[key])) issue(key, "Local host requires an explicit absolute path");
+      const origin = `http://localhost:${value.PORT}`;
+      if (value.WEB_ORIGIN !== origin || value.PUBLIC_URL !== origin)
+        issue("WEB_ORIGIN", "This local pool permits loopback only; LAN requires a separate transport policy");
+      if (value.ACCOUNT_REGISTRATION_ENABLED || value.ACCOUNT_MAIL_RUNTIME_ENABLED || value.LEGACY_DEV_AUTH_ENABLED || value.CAMPAIGN_LINK_ACCESS_ENABLED)
+        issue("DEPLOYMENT_MODE", "Public email, legacy login and secret-link access must remain disabled locally");
+      try {
+        const database = new URL(value.DATABASE_URL);
+        if (!["127.0.0.1", "localhost"].includes(database.hostname) || database.pathname !== "/arken")
+          issue("DATABASE_URL", "Local host may only connect to its own loopback arken database");
+      } catch { issue("DATABASE_URL", "Invalid local database URL"); }
+    }
     if (
       value.DEV_DATABASE_DRIVER === "pglite" &&
       value.NODE_ENV !== "development"

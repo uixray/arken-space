@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { createHash } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -13,6 +14,9 @@ import {
   revisionCommandSchema,
   tokenDefinitionUpdateSchema,
   changeTokenLayerSchema,
+  actionIdSchema,
+  tokenSpriteSetSchema,
+  tokenSpriteAssetIds,
 } from "@arken/contracts";
 import {
   assets,
@@ -1224,6 +1228,139 @@ export function registerTokenRoutes(
     return updated;
   });
 
+  app.put("/api/token-definitions/:id/sprite-set", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM")
+      return reply.code(403).send({ error: "GM_REQUIRED" });
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = z
+      .object({
+        actionId: actionIdSchema,
+        revision: z.number().int().nonnegative(),
+        spriteSet: tokenSpriteSetSchema.nullable(),
+      })
+      .strict()
+      .parse(request.body);
+    const requestHash = createHash("sha256")
+      .update(JSON.stringify({ id, ...body }))
+      .digest("hex");
+    const result = await canvasTx(auth.campaignId).transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${auth.campaignId + ":" + body.actionId}, 0))`,
+      );
+      const [prior] = await tx
+        .select()
+        .from(gameEvents)
+        .where(
+          and(
+            eq(gameEvents.campaignId, auth.campaignId),
+            eq(gameEvents.actionId, body.actionId),
+          ),
+        )
+        .limit(1);
+      if (prior) {
+        const payload = prior.payload as { requestHash?: string } | null;
+        return prior.type === "token_definition.sprite_set" &&
+          prior.entityId === id &&
+          prior.membershipId === auth.membershipId &&
+          payload?.requestHash === requestHash
+          ? { status: 200, data: { duplicate: true } }
+          : { status: 409, data: { error: "ACTION_ID_REUSED" } };
+      }
+      // Acquire asset locks before definition CAS, matching deletion/replacement.
+      // SHARE conflicts with their UPDATE locks; sorted order avoids set/set deadlocks.
+      const ids = tokenSpriteAssetIds(body.spriteSet).sort();
+      const rows = ids.length
+        ? await tx
+            .select()
+            .from(assets)
+            .where(
+              and(
+                eq(assets.campaignId, auth.campaignId),
+                inArray(assets.id, ids),
+              ),
+            )
+            .orderBy(assets.id)
+            .for("share")
+        : [];
+      if (
+        rows.length !== ids.length ||
+        rows.some(
+          (asset) =>
+            asset.kind !== "TOKEN" ||
+            asset.mimeType !== "image/webp" ||
+            asset.width !== 512 ||
+            asset.height !== 512 ||
+            asset.sizeBytes > 1024 * 1024,
+        )
+      )
+        return { status: 400, data: { error: "SPRITE_FRAME_INVALID" } };
+      // Dimensions alone do not prove a sprite derivative. Require the dedicated
+      // encoder's receipt for the *current* blob, not an asset replaced afterwards.
+      const receipts = ids.length
+        ? await tx
+            .select()
+            .from(gameEvents)
+            .where(
+              and(
+                eq(gameEvents.campaignId, auth.campaignId),
+                eq(gameEvents.type, "asset.sprite_frame_created"),
+                inArray(gameEvents.entityId, ids),
+              ),
+            )
+        : [];
+      if (
+        rows.some(
+          (asset) =>
+            !receipts.some((event) => {
+              const payload = event.payload as {
+                spriteStorageKey?: string;
+              } | null;
+              return (
+                event.entityId === asset.id &&
+                payload?.spriteStorageKey === asset.storageKey
+              );
+            }),
+        )
+      )
+        return { status: 400, data: { error: "SPRITE_DERIVATIVE_REQUIRED" } };
+      const [updated] = await tx
+        .update(tokenDefinitions)
+        .set({
+          spriteSet: body.spriteSet,
+          revision: body.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(tokenDefinitions.id, id),
+            eq(tokenDefinitions.campaignId, auth.campaignId),
+            eq(tokenDefinitions.revision, body.revision),
+          ),
+        )
+        .returning();
+      if (!updated)
+        return { status: 409, data: { error: "TOKEN_DEFINITION_CONFLICT" } };
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: body.actionId,
+        membershipId: auth.membershipId,
+        type: "token_definition.sprite_set",
+        entityType: "token_definition",
+        entityId: id,
+        entityRevision: updated.revision,
+        payload: { requestHash },
+      });
+      return {
+        status: 200,
+        data: { revision: updated.revision, spriteSet: body.spriteSet },
+      };
+    });
+    if (result.status === 200) await broadcast(auth.campaignId);
+    return reply.code(result.status).send(result.data);
+  });
+
   app.delete("/api/token-definitions/:id", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
@@ -1333,12 +1470,10 @@ export function registerTokenRoutes(
       };
     });
     if (result.outcome === "bound")
-      return reply
-        .code(409)
-        .send({
-          error: "TOKEN_DEFINITION_BOUND",
-          message: "Сначала уберите привязку токена в экземпляре NPC/монстра.",
-        });
+      return reply.code(409).send({
+        error: "TOKEN_DEFINITION_BOUND",
+        message: "Сначала уберите привязку токена в экземпляре NPC/монстра.",
+      });
     if (result.outcome === "missing")
       return reply.code(404).send({ error: "TOKEN_DEFINITION_NOT_FOUND" });
     if (result.outcome === "conflict")

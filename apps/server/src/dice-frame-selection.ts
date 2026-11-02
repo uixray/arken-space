@@ -12,7 +12,7 @@ type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
  * пути, откуда её взять, ещё нет. Место в `resolveDiceFrame` оставлено.
  */
 export async function selectDiceFrame(
-  db: Database,
+  db: Pick<Database, "select">,
   input: {
     campaignId: string;
     membershipId: string;

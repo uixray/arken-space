@@ -1,0 +1,292 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-02",
+  "issue": "UIX-506",
+  "authoringIteration": 2,
+  "status": "WEB_SOURCE_INTEGRATED_RELEASE_AUTHORISED_NOT_PUBLISHED",
+  "revision": "b7cf522d64d776da380792e6d828ccb6a8d13bb8",
+  "sourceInventoryOnly": true,
+  "originalSha256": "7fe50b1dda2ea798bedf442c15e0c34b15d8bfc9f9fb26649bcc13d095218845",
+  "appIntegrated": true,
+  "originalPreserved": true,
+  "previousSmallMarkDecision": "REJECTED_REQUEST_CLOSER_ORIGINAL",
+  "ownerWordmarkChoice": "Yeseva One; temporary until separately accepted ArkenHar font",
+  "svgAuthorship": "Manual native SVG correction from the selected original: elongated plates, curved horns, layered blade wings, hollow diamonds; internal use/masks, no embedded raster",
+  "rasterStudies": "Preserved unchanged; not selected for favicon",
+  "fontSource": "Official google/fonts immutable commits; unmodified TTF + original OFL and METADATA; see font-provenance.json",
+  "verification": {
+    "acceptedOriginalViewed": true,
+    "nativeSourceInspection": true,
+    "svgPreview": "NOT_RENDERED",
+    "renderedSheet": "NOT_VERIFIED",
+    "actual16pxReadability": "NOT_VERIFIED",
+    "fontShaping": "NOT_VERIFIED",
+    "appRuntime": "NOT_RUN",
+    "testsCiBuild": "NOT_RUN",
+    "ownerSmallMarkAcceptance": "V2_ACCEPTED",
+    "ownerWordmarkChoice": "YESEVA_ONE_SELECTED",
+    "previousProtectedAssetsUnchanged": true
+  },
+  "preservedFromPreviousInventory": [
+    {
+      "file": "font-provenance.json",
+      "sha256": "78bf48392b38e95d50afeafc0101a54781ecadc7854d571d4c4d728898cae569"
+    },
+    {
+      "file": "fonts/forum/Forum-Regular.ttf",
+      "sha256": "5c9fbe9c4ce76d0269f5088d921d57e58082fd9c28433eacb6de95baf938adf8"
+    },
+    {
+      "file": "fonts/forum/METADATA.pb",
+      "sha256": "2c7c2615aafda9e6d8acc763bf3c89c7ede5c28e3aa115486b5d492076357ca2"
+    },
+    {
+      "file": "fonts/forum/OFL.txt",
+      "sha256": "1bfe7d2aca99042eabf37079152fef8abdda2c36dad454ae89b858a3cb1078c5"
+    },
+    {
+      "file": "fonts/unbounded/METADATA.pb",
+      "sha256": "1783291bc9f242703a27cc385f9094c0a0672e74905d23c889eb80e96e70bb75"
+    },
+    {
+      "file": "fonts/unbounded/OFL.txt",
+      "sha256": "31e5d4e83955e7103c34570dd49b0570ef490800bd65b42923c0dd02445263b3"
+    },
+    {
+      "file": "fonts/unbounded/Unbounded[wght].ttf",
+      "sha256": "323b511be380c8d474ef030686b71aedde501f8d9cd46da558b7c40454372c3f"
+    },
+    {
+      "file": "fonts/yesevaone/METADATA.pb",
+      "sha256": "405967b7e007d961366e28ebaaa29c5bb8e26ab5af6dd447dbb292c45c44aab9"
+    },
+    {
+      "file": "fonts/yesevaone/OFL.txt",
+      "sha256": "ab592d1abca19428b89d851706fa7815ec25139c6affb45d366577ca63fb91b7"
+    },
+    {
+      "file": "fonts/yesevaone/YesevaOne-Regular.ttf",
+      "sha256": "88362b33820f0011e163e67b1d570fecd442aa8c05eaac89d5162f9c40d9dac3"
+    },
+    {
+      "file": "generation-prompts.md",
+      "sha256": "20e8ad6508578920503cedf17840e07d040213b364b64a20469f38afd2a694b8"
+    },
+    {
+      "file": "marks/kelzerias-micro-dark.svg",
+      "sha256": "8d78d25e5567e8ad0bb04acfd7ba0ae771028c2a43262199717881466830d891"
+    },
+    {
+      "file": "marks/kelzerias-micro-light.svg",
+      "sha256": "85fa2c9b44a2a4a8f7f6eceba6d2269e3cd664ff6971c4e346137074bcfefb71"
+    },
+    {
+      "file": "marks/kelzerias-small-dark.svg",
+      "sha256": "17b95ee63f83b7943005185d9809dc86e8e2e15cc2889346a994e28718077f60"
+    },
+    {
+      "file": "marks/kelzerias-small-light.svg",
+      "sha256": "ad1f71440952eb1ebd030cadd0780d5b572532b4ceb516df472c78e793207389"
+    },
+    {
+      "file": "preview.js",
+      "sha256": "ca08f7cdcc72520793e0dfb4f169439388d7a41b43e56704a80fd471c001fb1b"
+    },
+    {
+      "file": "reference/kelzerias-original.png",
+      "sha256": "7fe50b1dda2ea798bedf442c15e0c34b15d8bfc9f9fb26649bcc13d095218845"
+    },
+    {
+      "file": "reference/raster-study-01.png",
+      "sha256": "da08ce626f9be39e9636b11736d8ccf1a1dee19a4a7ab9485fc391dfb0aaa65f"
+    },
+    {
+      "file": "reference/raster-study-02.png",
+      "sha256": "066ca5ead8b4a900ad9d84a093cbdd32f99c9679743f3faba2cace3a8295dc6a"
+    }
+  ],
+  "files": [
+    {
+      "file": "font-provenance.json",
+      "bytes": 3136,
+      "sha256": "78bf48392b38e95d50afeafc0101a54781ecadc7854d571d4c4d728898cae569"
+    },
+    {
+      "file": "fonts/forum/Forum-Regular.ttf",
+      "bytes": 303316,
+      "sha256": "5c9fbe9c4ce76d0269f5088d921d57e58082fd9c28433eacb6de95baf938adf8"
+    },
+    {
+      "file": "fonts/forum/METADATA.pb",
+      "bytes": 724,
+      "sha256": "2c7c2615aafda9e6d8acc763bf3c89c7ede5c28e3aa115486b5d492076357ca2"
+    },
+    {
+      "file": "fonts/forum/OFL.txt",
+      "bytes": 4399,
+      "sha256": "1bfe7d2aca99042eabf37079152fef8abdda2c36dad454ae89b858a3cb1078c5"
+    },
+    {
+      "file": "fonts/unbounded/METADATA.pb",
+      "bytes": 1047,
+      "sha256": "1783291bc9f242703a27cc385f9094c0a0672e74905d23c889eb80e96e70bb75"
+    },
+    {
+      "file": "fonts/unbounded/OFL.txt",
+      "bytes": 4392,
+      "sha256": "31e5d4e83955e7103c34570dd49b0570ef490800bd65b42923c0dd02445263b3"
+    },
+    {
+      "file": "fonts/unbounded/Unbounded[wght].ttf",
+      "bytes": 778272,
+      "sha256": "323b511be380c8d474ef030686b71aedde501f8d9cd46da558b7c40454372c3f"
+    },
+    {
+      "file": "fonts/yesevaone/METADATA.pb",
+      "bytes": 684,
+      "sha256": "405967b7e007d961366e28ebaaa29c5bb8e26ab5af6dd447dbb292c45c44aab9"
+    },
+    {
+      "file": "fonts/yesevaone/OFL.txt",
+      "bytes": 4405,
+      "sha256": "ab592d1abca19428b89d851706fa7815ec25139c6affb45d366577ca63fb91b7"
+    },
+    {
+      "file": "fonts/yesevaone/YesevaOne-Regular.ttf",
+      "bytes": 108016,
+      "sha256": "88362b33820f0011e163e67b1d570fecd442aa8c05eaac89d5162f9c40d9dac3"
+    },
+    {
+      "file": "generation-prompts.md",
+      "bytes": 3853,
+      "sha256": "20e8ad6508578920503cedf17840e07d040213b364b64a20469f38afd2a694b8"
+    },
+    {
+      "file": "index.html",
+      "bytes": 18426,
+      "sha256": "b165ac4afc22bc25dbfd1f24e40bcbd615b72b3e94a3d09da83dfe080ef3ee3e"
+    },
+    {
+      "file": "marks/kelzerias-micro-dark.svg",
+      "bytes": 1187,
+      "sha256": "8d78d25e5567e8ad0bb04acfd7ba0ae771028c2a43262199717881466830d891"
+    },
+    {
+      "file": "marks/kelzerias-micro-light.svg",
+      "bytes": 1189,
+      "sha256": "85fa2c9b44a2a4a8f7f6eceba6d2269e3cd664ff6971c4e346137074bcfefb71"
+    },
+    {
+      "file": "marks/kelzerias-micro-v2-dark.svg",
+      "bytes": 4424,
+      "sha256": "e28358d8e41410e7dabb5e11e710caf863ac8fa846d422e8803772b82e4a7583"
+    },
+    {
+      "file": "marks/kelzerias-micro-v2-light.svg",
+      "bytes": 4426,
+      "sha256": "453aa9be12a5642ade7c99a7fa1568bc3b8834f4bc7edff17f5529970b9bab1b"
+    },
+    {
+      "file": "marks/kelzerias-small-dark.svg",
+      "bytes": 1556,
+      "sha256": "17b95ee63f83b7943005185d9809dc86e8e2e15cc2889346a994e28718077f60"
+    },
+    {
+      "file": "marks/kelzerias-small-light.svg",
+      "bytes": 1558,
+      "sha256": "ad1f71440952eb1ebd030cadd0780d5b572532b4ceb516df472c78e793207389"
+    },
+    {
+      "file": "marks/kelzerias-small-v2-dark.svg",
+      "bytes": 4801,
+      "sha256": "8eb2273a7ca9032e7a961829ce1a6f2a61ba7930073c1bf52314a1bfd4215edd"
+    },
+    {
+      "file": "marks/kelzerias-small-v2-light.svg",
+      "bytes": 4803,
+      "sha256": "2b7e9496129cfb5a4193eeccf3568fd6017abb51b0d01d31fd5c4e5b63eb3f1d"
+    },
+    {
+      "file": "preview.css",
+      "bytes": 6860,
+      "sha256": "db12d20d3481c9e8aa6be34cb9080a0b9507ca4a27066841e6182aa33f261d1e"
+    },
+    {
+      "file": "preview.js",
+      "bytes": 1235,
+      "sha256": "ca08f7cdcc72520793e0dfb4f169439388d7a41b43e56704a80fd471c001fb1b"
+    },
+    {
+      "file": "README.md",
+      "bytes": 10321,
+      "sha256": "4b34006e7acb12ac16e0df6d76a3d6d836ad292f48af5ec98242fbfd052179ab"
+    },
+    {
+      "file": "reference/kelzerias-original.png",
+      "bytes": 2019504,
+      "sha256": "7fe50b1dda2ea798bedf442c15e0c34b15d8bfc9f9fb26649bcc13d095218845"
+    },
+    {
+      "file": "reference/raster-study-01.png",
+      "bytes": 881832,
+      "sha256": "da08ce626f9be39e9636b11736d8ccf1a1dee19a4a7ab9485fc391dfb0aaa65f"
+    },
+    {
+      "file": "reference/raster-study-02.png",
+      "bytes": 802397,
+      "sha256": "066ca5ead8b4a900ad9d84a093cbdd32f99c9679743f3faba2cace3a8295dc6a"
+    }
+  ],
+  "ownerFormAcceptance": {
+    "date": "2026-11-02",
+    "decision": "Принимаю А2/Б2",
+    "scope": "Shape of micro-v2 and small-v2 only",
+    "integrationAuthorized": false,
+    "publicationAuthorized": false
+  },
+  "ownerWebReleaseAuthorization": {
+    "date": "2026-11-02",
+    "decision": "Сначала веб-пул и айдентика; остальное отдельным обновлением",
+    "integrationAuthorized": true,
+    "publicationAuthorized": true,
+    "newTestsCiBackupAuthorized": false
+  },
+  "webCopies": [
+    {
+      "source": "marks/kelzerias-micro-v2-dark.svg",
+      "destination": "apps/web/public/assets/brand/kelzerias-micro-v2-dark.svg",
+      "bytes": 4424,
+      "sha256": "e28358d8e41410e7dabb5e11e710caf863ac8fa846d422e8803772b82e4a7583"
+    },
+    {
+      "source": "marks/kelzerias-micro-v2-light.svg",
+      "destination": "apps/web/public/assets/brand/kelzerias-micro-v2-light.svg",
+      "bytes": 4426,
+      "sha256": "453aa9be12a5642ade7c99a7fa1568bc3b8834f4bc7edff17f5529970b9bab1b"
+    },
+    {
+      "source": "marks/kelzerias-small-v2-dark.svg",
+      "destination": "apps/web/public/assets/brand/kelzerias-small-v2-dark.svg",
+      "bytes": 4801,
+      "sha256": "8eb2273a7ca9032e7a961829ce1a6f2a61ba7930073c1bf52314a1bfd4215edd"
+    },
+    {
+      "source": "marks/kelzerias-small-v2-light.svg",
+      "destination": "apps/web/public/assets/brand/kelzerias-small-v2-light.svg",
+      "bytes": 4803,
+      "sha256": "2b7e9496129cfb5a4193eeccf3568fd6017abb51b0d01d31fd5c4e5b63eb3f1d"
+    },
+    {
+      "source": "fonts/yesevaone/YesevaOne-Regular.ttf",
+      "destination": "apps/web/public/assets/brand/yeseva-one/YesevaOne-Regular.ttf",
+      "bytes": 108016,
+      "sha256": "88362b33820f0011e163e67b1d570fecd442aa8c05eaac89d5162f9c40d9dac3"
+    },
+    {
+      "source": "fonts/yesevaone/OFL.txt",
+      "destination": "apps/web/public/assets/brand/yeseva-one/OFL.txt",
+      "bytes": 4405,
+      "sha256": "ab592d1abca19428b89d851706fa7815ec25139c6affb45d366577ca63fb91b7"
+    }
+  ]
+}

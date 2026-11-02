@@ -7,6 +7,14 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "Yeseva One";
+  src: url("/assets/brand/yeseva-one/YesevaOne-Regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
   /* Токены приходят из `design-system/tokens.generated.css`, который собран из
    * `tokens/*.tokens.json` командой `pnpm tokens:build`. Здесь остаются только
@@ -19,6 +27,10 @@
    * `var(--color-*)`), поэтому убирать их одним диффом нельзя. */
   color-scheme: dark;
   --font-size-root: 14px;
+  /* Temporary owner-selected wordmark. Future ArkenHar replaces this one
+     family token/face, not the interface's Pragmatica typography. */
+  --font-family-brand: "Yeseva One", Georgia, serif;
+  --brand-mark-image: url("/assets/brand/kelzerias-small-v2-light.svg");
 
   /* Existing component vocabulary. Do not remove until selectors have been
    * migrated deliberately; aliases keep this foundation non-breaking. */
@@ -232,16 +244,46 @@ code {
 .brand__mark {
   display: block;
   width: 28px;
-  height: 30px;
+  height: 28px;
   flex: 0 0 28px;
-  background-image: url("/assets/brand/arkpath-hat-white.png");
+  background-image: var(--brand-mark-image);
   background-repeat: no-repeat;
   background-size: contain;
   background-position: center;
   overflow: hidden;
 }
-html[data-player-theme="light"] .brand__mark {
-  filter: brightness(0);
+html[data-player-theme="light"] {
+  --brand-mark-image: url("/assets/brand/kelzerias-small-v2-dark.svg");
+}
+.brand__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+}
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  max-width: 100%;
+  vertical-align: middle;
+}
+.brand-lockup .brand__mark {
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-basis: 2.75rem;
+}
+.brand__wordmark {
+  font-family: var(--font-family-brand);
+  font-size: 1.75rem;
+  font-style: normal;
+  font-weight: 400;
+  font-synthesis: none;
+  line-height: 1.15;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
 }
 .scene-switcher,
 .status-line,
@@ -8295,4 +8337,30 @@ button:not([role="tab"]),
 .dice-frame-picker:disabled .dice-frame-picker__option {
   cursor: progress;
   opacity: 0.7;
+}
+
+/* UIX-625: cached feeds retain drafts and scroll without hidden layout. */
+.chat-feed-slot {
+  display: contents;
+}
+.chat-feed-slot[hidden] {
+  display: none !important;
+}
+
+.direct-chat-panel {
+  display: flex;
+  flex-direction: column;
+}
+.direct-chat-panel > .message-list {
+  flex: 1 1 0;
+  min-height: 0;
+}
+.direct-chat-panel > .direct-compose,
+.direct-chat-panel > .direct-thread-toolbar {
+  flex-shrink: 0;
+}
+
+/* UIX-626: only canvas gestures belong to the map, not its overlay controls. */
+.map-viewport canvas {
+  touch-action: none;
 }

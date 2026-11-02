@@ -22,6 +22,7 @@ import type { TokenDefinitionActions } from "../use-token-definition-actions";
 import type { AssetActions } from "../use-asset-actions";
 import { Empty } from "./MediaPanel";
 import { canPlaceTokenDefinition } from "../token-placement";
+import { TokenSpriteEditor } from "./TokenSpriteEditor";
 
 export function PalettePanel(props: Props) {
   const {
@@ -34,6 +35,10 @@ export function PalettePanel(props: Props) {
     (typeof definitions)[number] | "NEW" | null
   >(null);
   const [editorNotice, setEditorNotice] = useState("");
+  const [spriteEditorId, setSpriteEditorId] = useState<string | null>(null);
+  const spriteDefinition = definitions.find(
+    (item) => item.id === spriteEditorId,
+  );
   const [deleteDefinition, setDeleteDefinition] = useState<
     (typeof definitions)[number] | null
   >(null);
@@ -189,6 +194,9 @@ export function PalettePanel(props: Props) {
                 )}
                 {props.snapshot.me.role === "GM" && (
                   <div className="inline-fields">
+                    <Button onClick={() => setSpriteEditorId(definition.id)}>
+                      Фигурка
+                    </Button>
                     <Button
                       onClick={() => {
                         setEditorNotice("");
@@ -212,6 +220,14 @@ export function PalettePanel(props: Props) {
           );
         })}
       </div>
+      {spriteDefinition && props.snapshot.me.role === "GM" && (
+        <TokenSpriteEditor
+          key={`${props.snapshot.campaign.id}:${props.snapshot.me.id}:${spriteDefinition.id}`}
+          definition={spriteDefinition}
+          refresh={assetActions.refreshAssets}
+          onClose={() => setSpriteEditorId(null)}
+        />
+      )}
       {editor && (
         <TokenDefinitionEditor
           key={editor === "NEW" ? "new" : `${editor.id}:${editor.revision}`}

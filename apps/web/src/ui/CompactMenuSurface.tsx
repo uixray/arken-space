@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useRef, useState } from "react";
 import type { GameSnapshot } from "@arken/contracts";
 import { AppIcon } from "./AppIcon";
 import {
@@ -13,6 +13,7 @@ import {
   PublishSceneIcon,
   SendIcon,
   SettingsIcon,
+  PauseIcon,
   TokenTrayIcon,
   CharacterSurfaceIcon,
 } from "./icons";
@@ -31,6 +32,7 @@ export interface CompactMenuSurfaceProps {
   onOpenShortcuts: () => void;
   onOpenPlayerHandoff: () => void;
   onLogout: () => Promise<void> | void;
+  onTogglePause?: () => Promise<void>;
   onMusicControlsTarget: (target: HTMLElement | null) => void;
   onSoundpadLauncherTarget: (target: HTMLElement | null) => void;
 }
@@ -46,12 +48,48 @@ export const CompactMenuSurface = memo(function CompactMenuSurface({
   onOpenShortcuts,
   onOpenPlayerHandoff,
   onLogout,
+  onTogglePause,
   onMusicControlsTarget,
   onSoundpadLauncherTarget,
 }: CompactMenuSurfaceProps) {
   // Preview must expose the viewed player's navigation, not GM-only sections.
   const isGm = viewSnapshot.me.role === "GM";
   const navItems = workspaceNavItems({ isGm, operatorFeedbackAllowed });
+  const preparationIds: readonly WorkspaceId[] = [
+    "setup",
+    "world-encyclopedia",
+    "world-maps",
+    "spell-schools",
+    "media",
+  ];
+  const preparation = isGm
+    ? navItems.filter((item) => preparationIds.includes(item.id))
+    : [];
+  const liveItems = navItems.filter((item) => !preparation.includes(item));
+  const [pausePending, setPausePending] = useState(false);
+  const [pauseError, setPauseError] = useState("");
+  const pauseInFlight = useRef(false);
+  const togglePause = async () => {
+    if (
+      !isGm ||
+      snapshot.me.role !== "GM" ||
+      !onTogglePause ||
+      connection !== "ONLINE" ||
+      pauseInFlight.current
+    )
+      return;
+    pauseInFlight.current = true;
+    setPausePending(true);
+    setPauseError("");
+    try {
+      await onTogglePause();
+    } catch {
+      setPauseError("Не удалось изменить перерыв. Попробуйте ещё раз.");
+    } finally {
+      pauseInFlight.current = false;
+      setPausePending(false);
+    }
+  };
 
   const getSectionIcon = (id: WorkspaceId) => {
     switch (id) {
@@ -120,7 +158,7 @@ export const CompactMenuSurface = memo(function CompactMenuSurface({
 
       {/* Main Navigation Sections */}
       <section className="compact-menu-section">
-        <h3 className="compact-menu-section-title">Разделы стола</h3>
+        <h3 className="compact-menu-section-title">Во время игры</h3>
         <div className="compact-menu-grid">
           <button
             type="button"
@@ -144,7 +182,7 @@ export const CompactMenuSurface = memo(function CompactMenuSurface({
             <span className="compact-menu-tile-label">Журнал и чат</span>
           </button>
 
-          {navItems.map((item) => (
+          {liveItems.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -160,6 +198,37 @@ export const CompactMenuSurface = memo(function CompactMenuSurface({
         </div>
       </section>
 
+      {isGm && snapshot.me.role === "GM" && onTogglePause && (
+        <section className="compact-menu-section" aria-label="Перерыв">
+          <h3 className="compact-menu-section-title">Перерыв</h3>
+          <p role="status">
+            {snapshot.campaign.paused
+              ? "Игра на перерыве. Чат и броски доступны."
+              : "Игра идёт."}
+          </p>
+          <button
+            type="button"
+            className="compact-menu-action-btn"
+            disabled={pausePending || connection !== "ONLINE"}
+            aria-busy={pausePending}
+            onClick={() => void togglePause()}
+          >
+            <AppIcon icon={PauseIcon} />
+            <span>
+              {pausePending
+                ? "Сохраняю…"
+                : snapshot.campaign.paused
+                  ? "Продолжить игру"
+                  : "Начать перерыв"}
+            </span>
+          </button>
+          {connection !== "ONLINE" && (
+            <p>Управление перерывом доступно после восстановления связи.</p>
+          )}
+          {pauseError && <p role="alert">{pauseError}</p>}
+        </section>
+      )}
+
       {/* Audio & Ambience */}
       <section className="compact-menu-section">
         <h3 className="compact-menu-section-title">Звуки и музыка</h3>
@@ -171,6 +240,41 @@ export const CompactMenuSurface = memo(function CompactMenuSurface({
         />
         <div ref={onMusicControlsTarget} className="compact-menu-audio-card" />
       </section>
+
+      {preparation.length > 0 && (
+        <section
+          className="compact-menu-section"
+          aria-labelledby="compact-preparation-title"
+        >
+          <h3
+            id="compact-preparation-title"
+            className="compact-menu-section-title"
+          >
+            Подготовка
+          </h3>
+          <p id="compact-preparation-hint">
+            Сложную подготовку удобнее делать на компьютере. Все разделы
+            доступны и здесь.
+          </p>
+          <div className="compact-menu-grid">
+            {preparation.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="compact-menu-tile"
+                aria-describedby="compact-preparation-hint"
+                onClick={() => onSelectWorkspace(item.id)}
+              >
+                <span className="compact-menu-tile-icon">
+                  <AppIcon icon={getSectionIcon(item.id)} />
+                </span>
+                <span className="compact-menu-tile-label">{item.label}</span>
+                <small>Удобнее на компьютере</small>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Settings & Session Actions */}
       <section className="compact-menu-section">

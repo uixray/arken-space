@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { spriteReferencesAsset } from "./token-sprite-assets.js";
 import { actionIdSchema, audioPurposeSchema } from "@arken/contracts";
 import type {
   AssetUsageDto,
@@ -121,13 +122,17 @@ export async function resolveAssetUsages(
         id: tokenDefinitions.id,
         name: tokenDefinitions.name,
         characterName: characters.name,
+        spriteReference: spriteReferencesAsset(assetId),
       })
       .from(tokenDefinitions)
       .leftJoin(characters, eq(tokenDefinitions.characterId, characters.id))
       .where(
         and(
           eq(tokenDefinitions.campaignId, campaignId),
-          eq(tokenDefinitions.defaultAssetId, assetId),
+          or(
+            eq(tokenDefinitions.defaultAssetId, assetId),
+            spriteReferencesAsset(assetId),
+          ),
         ),
       ),
     db
@@ -316,9 +321,13 @@ export async function resolveAssetUsages(
       kind: "TOKEN_DEFINITION" as const,
       entityId: row.id,
       label: row.name ?? row.characterName ?? "Токен",
-      location: "Каталог токенов",
+      location: row.spriteReference
+        ? "Набор фигурки — сначала снимите набор с токена"
+        : "Каталог токенов",
       visibility: "GM_ONLY" as const,
-      deletionPolicy: "DETACH" as const,
+      deletionPolicy: row.spriteReference
+        ? ("BLOCK" as const)
+        : ("DETACH" as const),
     })),
     ...tokenRows.map((row) => ({
       kind: "TOKEN_INSTANCE" as const,
@@ -962,6 +971,19 @@ export function registerAssetLifecycleRoutes(
           .for("update")
           .limit(1);
         if (!locked) return null;
+        // Replacing a referenced frame through the general image endpoint
+        // could introduce a huge/non-square original. Replace the set instead.
+        const [spriteUse] = await tx
+          .select({ id: tokenDefinitions.id })
+          .from(tokenDefinitions)
+          .where(
+            and(
+              eq(tokenDefinitions.campaignId, auth.campaignId),
+              spriteReferencesAsset(id),
+            ),
+          )
+          .limit(1);
+        if (spriteUse) throw new Error("SPRITE_ASSET_IN_USE");
         const beforeVersion = assetContentVersion(locked.storageKey);
         if (beforeVersion !== expectedVersion)
           throw new Error("ASSET_VERSION_CONFLICT");
@@ -1031,6 +1053,8 @@ export function registerAssetLifecycleRoutes(
       });
     } catch (error) {
       if (!committed && stored) await removeStoredUpload(stored.storageKey);
+      if (error instanceof Error && error.message === "SPRITE_ASSET_IN_USE")
+        return reply.code(409).send({ error: "SPRITE_ASSET_IN_USE" });
       if (
         error instanceof Error &&
         error.message === "ASSET_VERSION_CONFLICT"

@@ -310,6 +310,41 @@ export async function renderTokenAsset(
     .toBuffer();
 }
 
+/**
+ * UIX-715: a static square frame, not a circular portrait crop. The author
+ * supplies a common canvas/pivot; preserve it (never trim transparent padding).
+ * Pure encoding only: callers reserve quota before persisting the derivative.
+ */
+export async function renderTokenSpriteFrame(source: Buffer) {
+  if (source.length > env.MAX_IMAGE_BYTES) throw new Error("IMAGE_TOO_LARGE");
+  const detected = await fileTypeFromBuffer(source);
+  if (!detected || !["image/png", "image/webp"].includes(detected.mime))
+    throw new Error("SPRITE_TRANSPARENT_IMAGE_REQUIRED");
+  const metadata = await sharp(source, {
+    limitInputPixels: 64_000_000,
+  }).metadata();
+  const dimensions = autoOrientedDimensions(metadata);
+  if (
+    !dimensions.width ||
+    !dimensions.height ||
+    dimensions.width !== dimensions.height ||
+    dimensions.width * dimensions.height > 64_000_000 ||
+    !metadata.hasAlpha ||
+    (metadata.pages ?? 1) !== 1
+  )
+    throw new Error("SPRITE_STATIC_SQUARE_REQUIRED");
+  const rendered = await sharp(source, { limitInputPixels: 64_000_000 })
+    .rotate()
+    .resize(TOKEN_ASSET_SIZE, TOKEN_ASSET_SIZE, { fit: "fill" })
+    .ensureAlpha()
+    .webp({ quality: 90, alphaQuality: 100, effort: 4 })
+    .toBuffer();
+  // Hard output bound independent of image compressibility.
+  if (rendered.length > 1024 * 1024)
+    throw new Error("SPRITE_DERIVATIVE_TOO_LARGE");
+  return rendered;
+}
+
 export async function readStoredImage(storageKey: string) {
   const path = storedPath(storageKey);
   const info = await stat(path);

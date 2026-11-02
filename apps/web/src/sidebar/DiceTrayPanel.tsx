@@ -8,6 +8,16 @@ import { DiceShapeIcon } from "./DiceShapeIcon";
 import "./bugpool-ui2.css";
 import { useRepeatRoll } from "./use-repeat-roll";
 
+const geometricNames: Record<number, { name: string; genitive: string }> = {
+  2: { name: "диэдрон", genitive: "диэдрона" },
+  4: { name: "тетраэдр", genitive: "тетраэдра" },
+  6: { name: "гексаэдр", genitive: "гексаэдра" },
+  8: { name: "октаэдр", genitive: "октаэдра" },
+  10: { name: "декаэдр", genitive: "декаэдра" },
+  12: { name: "додекаэдр", genitive: "додекаэдра" },
+  20: { name: "икосаэдр", genitive: "икосаэдра" },
+};
+
 const pureRollNames: Record<number, string> = {
   2: "чеканной монеты",
   4: "калтропа",
@@ -26,11 +36,13 @@ const pureRollNames: Record<number, string> = {
  * Высота списка характеристик регулируется отдельно в QuickRollPanel.
  */
 export function DiceTrayPanel({
+  personalDiceNames,
   characterId,
   visibility,
   onVisibilityChange,
   onRoll,
 }: {
+  personalDiceNames?: "GEOMETRIC";
   characterId: string | null;
   /**
    * UIX-388 follow-up: visibility is owned by `ActivityPanel` and shared with
@@ -90,7 +102,12 @@ export function DiceTrayPanel({
             <button
               key={sides}
               type="button"
-              title={`Бросить d${sides} · ${ROLL_MODIFIER_HINT}`}
+              title={`Бросить ${personalDiceNames === "GEOMETRIC" && geometricNames[sides] ? `${geometricNames[sides].name} (d${sides})` : `d${sides}`} · ${ROLL_MODIFIER_HINT}`}
+              aria-label={
+                personalDiceNames === "GEOMETRIC" && geometricNames[sides]
+                  ? `${geometricNames[sides].name} (d${sides})`
+                  : undefined
+              }
               onClick={(event) => {
                 const mode = rollModeFromEvent(
                   event.nativeEvent,
@@ -103,7 +120,7 @@ export function DiceTrayPanel({
                   void sendRolls(
                     count,
                     `1d${sides}`,
-                    `Чистый бросок ${pureRollNames[sides]}`,
+                    `Чистый бросок ${personalDiceNames === "GEOMETRIC" ? (geometricNames[sides]?.genitive ?? pureRollNames[sides]) : pureRollNames[sides]}`,
                     visibility,
                     characterId,
                     mode,

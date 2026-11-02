@@ -73,6 +73,19 @@ async function receipt(
         (prior.payload as { commandHash?: string })?.commandHash === hash,
       "ACTION_ID_CONFLICT",
     );
+  if (!prior && type === "instance.bindings") {
+    const [instanceAction] = await tx
+      .select({ actionId: worldContentInstanceActions.actionId })
+      .from(worldContentInstanceActions)
+      .where(
+        and(
+          eq(worldContentInstanceActions.campaignId, auth.campaignId),
+          eq(worldContentInstanceActions.actionId, actionId),
+        ),
+      )
+      .limit(1);
+    ensure(!instanceAction, "ACTION_ID_CONFLICT");
+  }
   return Boolean(prior);
 }
 async function record(
@@ -523,12 +536,22 @@ export function registerAwardsBindingsRoutes(
             ensure(token, "TOKEN_NOT_FOUND", 404);
           }
           if (body.containerInstanceId) {
+            ensure(
+              !row.instance.inventoryCharacterId,
+              "INVENTORY_DETACH_BEFORE_CONTAINER",
+              409,
+            );
             const container = await instance(
               tx,
               auth.campaignId,
               body.containerInstanceId,
             );
             ensure(container.type === "ITEM", "CONTAINER_REQUIRES_ITEM", 400);
+            ensure(
+              !container.instance.inventoryCharacterId,
+              "INVENTORY_DETACH_BEFORE_CONTAINER",
+              409,
+            );
             const seen = new Set([id]);
             let parent: string | null = body.containerInstanceId;
             while (parent) {

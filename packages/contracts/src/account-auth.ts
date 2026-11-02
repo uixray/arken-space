@@ -20,6 +20,8 @@ export type AccountRegistrationInput = z.infer<
 
 export const accountLoginSchema = accountRegistrationSchema;
 export type AccountLoginInput = AccountRegistrationInput;
+export const localLoginNameSchema = z.string().trim().toLowerCase().min(3).max(40).regex(/^[a-z0-9][a-z0-9_.-]*$/);
+export const localAccountLoginSchema = z.object({ login: localLoginNameSchema, password: passwordSchema }).strict();
 
 export const accountEmailInputSchema = z
   .object({ email: emailSchema })
@@ -46,10 +48,17 @@ export const accountSessionSchema = z
     account: z
       .object({
         id: z.string().uuid(),
-        email: emailSchema,
+        email: emailSchema.nullable(),
         verified: z.boolean(),
+        identityKind: z.literal("LOCAL").optional(),
+        login: localLoginNameSchema.optional(),
       })
-      .strict(),
+      .strict().superRefine((account, ctx) => {
+        if (account.identityKind === "LOCAL"
+          ? account.email !== null || account.verified || !account.login
+          : account.email === null || account.login !== undefined)
+          ctx.addIssue({ code: "custom", message: "Invalid account identity" });
+      }),
     csrfToken: bearerSchema,
   })
   .strict();
@@ -70,6 +79,7 @@ export const accountCapabilitiesSchema = z
     legacyDevEnabled: z.boolean(),
     campaignLinkAccessEnabled: z.boolean(),
     campaignCreationEnabled: z.boolean(),
+    localAccounts: z.boolean().optional(),
   })
   .strict();
 export type AccountCapabilities = z.infer<typeof accountCapabilitiesSchema>;

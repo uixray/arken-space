@@ -12,6 +12,7 @@ import { requireOperator } from "./auth.js";
 import { env } from "./env.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type FeedbackStatus = typeof feedbackReports.$inferSelect.status;
 
 const idSchema = z.string().uuid();
@@ -167,7 +168,7 @@ export function redactedFeedbackCopy(row: FeedbackExportRow) {
   };
 }
 async function audit(
-  db: Database,
+  db: Database | Transaction,
   request: FastifyRequest,
   reportId: string,
   operatorMembershipId: string,
@@ -202,7 +203,11 @@ export function registerOperatorFeedbackRoutes(
     async (request, reply) => {
       const auth = await requireOperator(request, reply, db);
       if (!auth) return;
-      return { allowed: true };
+      reply.header("Cache-Control", "private, no-store");
+      return {
+        allowed: true,
+        bugIntakeEnabled: env.BUG_INTAKE_ENABLED === "true",
+      };
     },
   );
 
@@ -212,6 +217,7 @@ export function registerOperatorFeedbackRoutes(
     async (request, reply) => {
       const auth = await requireOperator(request, reply, db);
       if (!auth) return;
+      reply.header("Cache-Control", "private, no-store");
       let query: z.infer<typeof listQuerySchema>;
       try {
         query = listQuerySchema.parse(request.query);
@@ -270,6 +276,7 @@ export function registerOperatorFeedbackRoutes(
     async (request, reply) => {
       const auth = await requireOperator(request, reply, db);
       if (!auth) return;
+      reply.header("Cache-Control", "private, no-store");
       const params = z.object({ id: idSchema }).safeParse(request.params);
       const query = detailQuerySchema.safeParse(request.query);
       const reveal = query.success && query.data.reveal === "true";
@@ -315,26 +322,75 @@ export function registerOperatorFeedbackRoutes(
     async (request, reply) => {
       const auth = await requireOperator(request, reply, db);
       if (!auth) return;
-      const params = z.object({ id: idSchema }).safeParse(request.params);
-      if (!params.success)
-        return reply.code(400).send({ error: "INVALID_REQUEST" });
-      const [row] = await db
-        .select(feedbackExportColumns)
-        .from(feedbackReports)
-        .where(eq(feedbackReports.id, params.data.id))
-        .limit(1);
-      if (!row) return reply.code(404).send({ error: "FEEDBACK_NOT_FOUND" });
-      await audit(db, request, row.id, auth.membershipId, "REDACTED_EXPORT");
-      return redactedFeedbackCopy(row);
+      return reply
+        .header("Cache-Control", "private, no-store")
+        .code(409)
+        .send({ error: "MANUAL_REVIEW_REQUIRED" });
     },
   );
-
+  app.post(
+    "/api/operator/feedback/:id/export",
+    operatorFeedbackRateLimit(),
+    async (request, reply) => {
+      const auth = await requireOperator(request, reply, db);
+      if (!auth) return;
+      reply.header("Cache-Control", "private, no-store");
+      const params = z.object({ id: idSchema }).safeParse(request.params);
+      const body = z
+        .object({
+          reviewed: z.literal(true),
+          expectedUpdatedAt: z.string().datetime(),
+          title: z.string().max(500),
+          description: z.string().max(20000),
+        })
+        .strict()
+        .safeParse(request.body);
+      if (!params.success || !body.success)
+        return reply.code(400).send({ error: "MANUAL_REVIEW_REQUIRED" });
+      const result = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .select(feedbackExportColumns)
+          .from(feedbackReports)
+          .where(eq(feedbackReports.id, params.data.id))
+          .limit(1)
+          .for("share");
+        if (!row) return { kind: "missing" as const };
+        if (row.updatedAt.toISOString() !== body.data.expectedUpdatedAt)
+          return { kind: "stale" as const };
+        await audit(
+          tx,
+          request,
+          row.id,
+          auth.membershipId,
+          "MANUALLY_REVIEWED_EXPORT",
+        );
+        return {
+          kind: "ok" as const,
+          copy: redactedFeedbackCopy({
+            ...row,
+            title: body.data.title,
+            description: body.data.description,
+          }),
+        };
+      });
+      if (result.kind === "missing")
+        return reply.code(404).send({ error: "FEEDBACK_NOT_FOUND" });
+      if (result.kind === "stale")
+        return reply.code(409).send({ error: "FEEDBACK_REVIEW_STALE" });
+      return {
+        ...result.copy,
+        reviewPolicy:
+          "operator-reviewed; automatic filtering is best-effort, not anonymity proof",
+      };
+    },
+  );
   app.get(
     "/api/operator/feedback/:id/attachments/:attachmentId",
     operatorFeedbackRateLimit(),
     async (request, reply) => {
       const auth = await requireOperator(request, reply, db);
       if (!auth) return;
+      reply.header("Cache-Control", "private, no-store");
       const params = z
         .object({ id: idSchema, attachmentId: idSchema })
         .safeParse(request.params);
@@ -389,6 +445,7 @@ export function registerOperatorFeedbackRoutes(
     async (request, reply) => {
       const auth = await requireOperator(request, reply, db);
       if (!auth) return;
+      reply.header("Cache-Control", "private, no-store");
       const params = z.object({ id: idSchema }).safeParse(request.params);
       const body = updateSchema.safeParse(request.body);
       if (!params.success || !body.success)
@@ -407,30 +464,41 @@ export function registerOperatorFeedbackRoutes(
         return reply.code(404).send({ error: "FEEDBACK_NOT_FOUND" });
       if (!transitions[current.status].includes(body.data.status))
         return reply.code(409).send({ error: "INVALID_STATUS_TRANSITION" });
-      const [updated] = await db
-        .update(feedbackReports)
-        .set({
-          status: body.data.status,
-          linearKey:
-            body.data.status === "LINKED"
-              ? body.data.linearKey
-              : current.linearKey,
-          linearUrl:
-            body.data.status === "LINKED"
-              ? body.data.linearUrl
-              : current.linearUrl,
-          updatedAt: new Date(),
-        })
-        .where(eq(feedbackReports.id, current.id))
-        .returning(feedbackExportColumns);
-      await audit(
-        db,
-        request,
-        current.id,
-        auth.membershipId,
-        `STATUS_${body.data.status}`,
-      );
-      return redactedFeedbackCopy(updated!);
+      const updated = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(feedbackReports)
+          .set({
+            status: body.data.status,
+            linearKey:
+              body.data.status === "LINKED"
+                ? body.data.linearKey
+                : current.linearKey,
+            linearUrl:
+              body.data.status === "LINKED"
+                ? body.data.linearUrl
+                : current.linearUrl,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(feedbackReports.id, current.id),
+              eq(feedbackReports.status, current.status),
+            ),
+          )
+          .returning(feedbackExportColumns);
+        if (!row) return null;
+        await audit(
+          tx,
+          request,
+          current.id,
+          auth.membershipId,
+          `STATUS_${body.data.status}`,
+        );
+        return row;
+      });
+      if (!updated)
+        return reply.code(409).send({ error: "FEEDBACK_STATUS_CONFLICT" });
+      return redactedFeedbackCopy(updated);
     },
   );
 }

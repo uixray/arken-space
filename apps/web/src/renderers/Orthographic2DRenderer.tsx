@@ -1,3 +1,4 @@
+import { useMapTouch } from "./useMapTouch";
 import { mapDeleteScope, type MapDeleteRequest } from "./map-delete";
 import {
   memo,
@@ -26,7 +27,11 @@ import Konva from "konva";
 import { TokenConditionMenu } from "./TokenConditionMenu";
 import type { SceneRendererProps } from "./SceneRenderer";
 import type { DrawingDto, TokenDto } from "@arken/contracts";
-import { rulerPolylineDistance } from "@arken/contracts";
+import {
+  rulerPolylineDistance,
+  resolveTokenSpriteFrame,
+  tokenSpriteBounds,
+} from "@arken/contracts";
 import { shouldIgnoreGlobalShortcut } from "../input-diagnostics";
 import { fogHiddenTokenIds, isRectFullyRevealed } from "./fog";
 import { FogPatternOverlay } from "./FogPatternOverlay";
@@ -470,7 +475,61 @@ function TokenImage({
   return <Image image={imageState.displayedImage ?? undefined} {...props} />;
 }
 
+/** Static billboard, deliberately no circular clipping or retained previous pose. */
+function SpriteImage({
+  src,
+  bounds,
+  opacity,
+  onFailure,
+}: {
+  src: string;
+  bounds: { x: number; y: number; width: number; height: number };
+  opacity: number;
+  onFailure: (url: string) => void;
+}) {
+  const [image, status] = useImage(src, "anonymous");
+  useEffect(() => {
+    if (status === "failed") onFailure(src);
+  }, [status, src, onFailure]);
+  return (
+    <Group opacity={opacity}>
+      {/* Same visual rectangle for pointer and touch intersection, including alpha. */}
+      <Rect {...bounds} fill="rgba(0,0,0,0.001)" />
+      {status !== "loaded" && (
+        <Circle
+          x={bounds.x + bounds.width / 2}
+          y={bounds.y + bounds.height / 2}
+          radius={Math.min(bounds.width, bounds.height) / 4}
+          fill="#808080"
+          listening={false}
+        />
+      )}
+      {status === "loaded" && image && (
+        <Image image={image} {...bounds} listening={false} />
+      )}
+    </Group>
+  );
+}
+
 function Orthographic2DRendererComponent(props: SceneRendererProps) {
+  const [failedSpriteUrls, setFailedSpriteUrls] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const spriteFailure = useCallback(
+    (url: string) =>
+      setFailedSpriteUrls((current) =>
+        current.has(url) ? current : new Set([...current, url]),
+      ),
+    [],
+  );
+  // Versioned URLs permit retries after replacement without retaining old failures.
+  useEffect(() => {
+    const urls = new Set(props.assets.map((asset) => asset.url));
+    setFailedSpriteUrls((current) => {
+      const next = new Set([...current].filter((url) => urls.has(url)));
+      return next.size === current.size ? current : next;
+    });
+  }, [props.assets]);
   const {
     canvasEditMode,
     onCanvasEditCancel,
@@ -911,6 +970,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   const [pendingDrawings, setPendingDrawings] = useState<
     { tempId: string; points: number[]; color: string; strokeWidth: number }[]
   >([]);
+  const cancelToolDraftRef = useRef<() => void>(() => undefined);
   const finishDrawingRef = useRef<() => void>(() => undefined);
   const trackDrawingRef = useRef<(event: MouseEvent) => void>(() => undefined);
   const brushUpRef = useRef<() => void>(() => undefined);
@@ -2413,6 +2473,22 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   };
 
   useEffect(() => {
+    cancelToolDraftRef.current = () => {
+      drawingActiveRef.current = false;
+      drawingPointsRef.current = [];
+      setDrawingPoints([]);
+      brushActiveRef.current = false;
+      brushPointsRef.current = [];
+      setBrushPoints([]);
+      setBrushHover(null);
+      setFogStart(null);
+      setFogDraft(null);
+      finishStampRef.current(false);
+      if (rulerDraftRef.current) {
+        props.socket?.emit("ruler:clear", { sceneId: props.scene.id });
+        setRulerDraftState(null);
+      }
+    };
     finishDrawingRef.current = () => void handlePointerUp();
     finishStampRef.current = (commit) => {
       const stroke = textureDraftRef.current;
@@ -2462,6 +2538,12 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     const trackOutsideStage = (event: MouseEvent) =>
       trackDrawingRef.current(event);
     const finishOutsideStage = (event: Event) => {
+      if ("pointerType" in event && event.pointerType === "touch") return;
+      if (event.type === "pointercancel" || event.type === "blur") {
+        panStartRef.current = null;
+        cancelToolDraftRef.current();
+        return;
+      }
       // Pointer capture is not guaranteed for mouse right/middle drags. Always
       // terminate a pending pan when release/cancel happens outside the Stage,
       // otherwise the next hover move would resume the stale gesture.
@@ -2489,6 +2571,26 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
 
   const assetUrl = (assetId: string | null) =>
     props.assets.find((asset) => asset.id === assetId)?.url;
+  const spritePresentation = (token: TokenDto) => {
+    const frame = resolveTokenSpriteFrame(
+      token.spriteSet,
+      token.conditions,
+      token.facing,
+      (id) => {
+        const url = assetUrl(id);
+        return Boolean(url && !failedSpriteUrls.has(url));
+      },
+    );
+    const url = frame ? assetUrl(frame.assetId) : undefined;
+    if (!url || !token.spriteSet) return null;
+    return {
+      url,
+      bounds: tokenSpriteBounds(
+        { ...token, x: 0, y: 0 },
+        token.spriteSet.pivot,
+      ),
+    };
+  };
   const snap = (value: number) =>
     props.scene.grid.enabled
       ? Math.round(value / props.scene.grid.size) * props.scene.grid.size
@@ -2766,6 +2868,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
         controllerMembershipIds: token.controllerMembershipIds,
       });
     const url = assetUrl(token.assetId);
+    const sprite = spritePresentation(token);
     const dragPosition = dragPositions[token.id];
     const tokenStack =
       tokenStacks[
@@ -3021,6 +3124,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     return (
       <Group
         key={token.id}
+        touchTokenId={token.id}
         x={dragPosition?.x ?? token.x}
         y={dragPosition?.y ?? token.y}
         draggable={canMove}
@@ -3071,8 +3175,8 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       >
         {selectedTokenIds.includes(token.id) && (
           <Rect
-            x={-4 / scale}
-            y={-4 / scale}
+            x={(sprite?.bounds.x ?? 0) - 4 / scale}
+            y={(sprite?.bounds.y ?? 0) - 4 / scale}
             width={token.width + 8 / scale}
             height={token.height + 8 / scale}
             stroke={visual.color.selection}
@@ -3092,7 +3196,15 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
             listening={false}
           />
         )}
-        {url ? (
+        {sprite ? (
+          <SpriteImage
+            key={sprite.url}
+            src={sprite.url}
+            bounds={sprite.bounds}
+            opacity={common.opacity}
+            onFailure={spriteFailure}
+          />
+        ) : url ? (
           <>
             <Group
               clipFunc={(context) => {
@@ -3296,6 +3408,235 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     );
   };
 
+  const touchPending = useRef(new Set<string>());
+  const touch = useMapTouch({
+    scope:
+      props.scene.id +
+      ":" +
+      props.membershipId +
+      ":" +
+      props.role +
+      ":" +
+      props.tool +
+      ":" +
+      Boolean(props.socket?.connected) +
+      ":" +
+      brushRadius +
+      ":" +
+      drawingColor +
+      ":" +
+      drawingStrokeWidth,
+    enabled: !props.paused,
+    camera: { position, scale },
+    cameraChange: (next, zoom) => {
+      setPosition(next);
+      setScale(zoom);
+    },
+    startTool: (screenPoint) => {
+      const tool = props.tool;
+      const brush = tool === "FOG_BRUSH" || tool === "COVER_BRUSH";
+      if (tool !== "DRAW" && tool !== "RULER" && !brush) return null;
+      if (
+        props.paused ||
+        !props.socket?.connected ||
+        (brush && props.role !== "GM")
+      )
+        return null;
+      const worldPoint = (point: { x: number; y: number }) =>
+        clampToWorld({
+          x: (point.x - position.x) / scale,
+          y: (point.y - position.y) / scale,
+        });
+      const start = worldPoint(screenPoint);
+      let points = [start];
+      let ruler = startRulerDraft(start);
+      let ended = false;
+      const clear = () => {
+        if (tool === "DRAW") setDrawingPoints([]);
+        if (brush) {
+          setBrushPoints([]);
+          setBrushHover(null);
+        }
+        if (tool === "RULER") {
+          setRulerDraftState(null);
+          props.socket?.emit("ruler:clear", { sceneId: props.scene.id });
+        }
+      };
+      if (tool === "DRAW") setDrawingPoints([start.x, start.y]);
+      if (brush) {
+        setBrushPoints(points);
+        setBrushHover(start);
+      }
+      if (tool === "RULER") setRulerDraftState(ruler);
+      return {
+        move: (screen) => {
+          if (ended) return;
+          const point = worldPoint(screen);
+          const previous = points[points.length - 1];
+          if (point.x === previous.x && point.y === previous.y) return;
+          points = [...points, point];
+          if (tool === "DRAW")
+            setDrawingPoints(points.flatMap((item) => [item.x, item.y]));
+          if (brush) {
+            setBrushPoints(points);
+            setBrushHover(point);
+          }
+          if (tool === "RULER") {
+            ruler = moveRulerDraft(ruler, point);
+            setRulerDraftState(ruler);
+            props.socket?.emit("ruler:update", {
+              sceneId: props.scene.id,
+              points: rulerDraftPoints(ruler),
+            });
+          }
+        },
+        cancel: () => {
+          if (ended) return;
+          ended = true;
+          clear();
+        },
+        finish: () => {
+          if (ended) return;
+          ended = true;
+          clear();
+          if (brush) {
+            void props
+              .onFogCreate({
+                geometry: { type: "BRUSH", points, radius: brushRadius },
+              })
+              .catch(() => undefined);
+          } else if (tool === "DRAW" && points.length > 1) {
+            const line = points.flatMap((item) => [item.x, item.y]);
+            const tempId = crypto.randomUUID();
+            setPendingDrawings((current) => [
+              ...current,
+              {
+                tempId,
+                points: line,
+                color: drawingColor,
+                strokeWidth: drawingStrokeWidth,
+              },
+            ]);
+            void persistDrawingDraft(
+              {
+                points: line,
+                color: drawingColor,
+                strokeWidth: drawingStrokeWidth,
+              },
+              props.onDrawingCreate,
+              () =>
+                setPendingDrawings((current) =>
+                  current.filter((item) => item.tempId !== tempId),
+                ),
+            ).catch(() => undefined);
+          }
+        },
+      };
+    },
+    hit: (point) => {
+      if (props.tool !== "PAN") return null;
+      let node: Konva.Node | null =
+        stageRef.current?.getIntersection(point) ?? null;
+      while (node && !node.getAttr("touchTokenId")) node = node.getParent();
+      const token = tokensOnStage.find(
+        (item) => item.id === node?.getAttr("touchTokenId"),
+      );
+      return token &&
+        !token.id.startsWith("pending:") &&
+        canSelectToken(token, {
+          role: props.role,
+          membershipId: props.membershipId,
+          fogReveals: orderedFogReveals,
+          world: worldDraft,
+          showGmLayer,
+        })
+        ? token
+        : null;
+    },
+    movable: (origin) => {
+      const token = tokensOnStage.find((item) => item.id === origin.id);
+      return Boolean(
+        token &&
+        token.revision === origin.revision &&
+        !props.paused &&
+        props.socket?.connected &&
+        props.onBulkMove &&
+        !touchPending.current.has(token.id) &&
+        canSelectToken(token, {
+          role: props.role,
+          membershipId: props.membershipId,
+          fogReveals: orderedFogReveals,
+          world: worldDraft,
+          showGmLayer,
+        }) &&
+        canMoveMapToken({
+          tool: props.tool,
+          role: props.role,
+          locked: token.locked,
+          membershipId: props.membershipId,
+          controllerMembershipIds: token.controllerMembershipIds,
+        }),
+      );
+    },
+    select: (origin) => {
+      const token = tokensOnStage.find((item) => item.id === origin.id);
+      if (
+        !token ||
+        props.paused ||
+        !canSelectToken(token, {
+          role: props.role,
+          membershipId: props.membershipId,
+          fogReveals: orderedFogReveals,
+          world: worldDraft,
+          showGmLayer,
+        })
+      )
+        return;
+      selectObject({
+        kind: "token",
+        objectId: token.id,
+        revision: token.revision,
+      });
+    },
+    preview: (token, delta) =>
+      setDragPositions((current) => {
+        const next = { ...current };
+        if (!delta) delete next[token.id];
+        else
+          next[token.id] = {
+            x: token.x + delta.x,
+            y: token.y + delta.y,
+            revision: token.revision,
+            dragging: true,
+          };
+        return next;
+      }),
+    commit: (token, delta) => {
+      if (!props.onBulkMove) return;
+      const snapped = {
+        x: snap(token.x + delta.x) - token.x,
+        y: snap(token.y + delta.y) - token.y,
+      };
+      if (!snapped.x && !snapped.y) return;
+      touchPending.current.add(token.id);
+      // Same authoritative bulk command used by keyboard/group moves; no second socket path.
+      void props
+        .onBulkMove(
+          crypto.randomUUID(),
+          [
+            {
+              targetType: "TOKEN",
+              targetId: token.id,
+              revision: token.revision,
+            },
+          ],
+          snapped,
+        )
+        .catch((error) => props.onBulkMoveFailure?.(error))
+        .finally(() => touchPending.current.delete(token.id));
+    },
+  });
+
   return (
     <div
       className="map-viewport"
@@ -3314,7 +3655,27 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       role="region"
       aria-label="Интерактивная карта сцены"
       aria-keyshortcuts={mapViewportAriaKeyShortcuts(props.role)}
+      onPointerMoveCapture={touch.move}
+      onPointerUpCapture={touch.up}
+      onPointerCancelCapture={touch.pointerCancel}
+      onLostPointerCapture={touch.lostCapture}
+      onTouchStartCapture={(event) => {
+        if (event.target instanceof HTMLCanvasElement) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
+      onTouchEndCapture={(event) => {
+        if (event.target instanceof HTMLCanvasElement) event.stopPropagation();
+      }}
+      onTouchMoveCapture={(event) => {
+        if (event.target instanceof HTMLCanvasElement) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
       onPointerDownCapture={(event) => {
+        if (touch.down(event)) return;
         // Canvas does not take native focus; Enter/Escape must belong to the map.
         if (event.target instanceof HTMLCanvasElement)
           event.currentTarget.focus({ preventScroll: true });
@@ -3337,6 +3698,9 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       }}
       onFocus={() => dispatchInteraction({ type: "focus" })}
       onBlur={(event) => {
+        // Focusing an ability confirmation or another control abandons a touch
+        // draft; releasing the still-held finger must not move/create anything.
+        touch.cancel();
         if (!event.currentTarget.contains(event.relatedTarget))
           dispatchInteraction({ type: "blur" });
       }}
@@ -3450,7 +3814,9 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                 setAreaSelectionMode(!areaSelectionMode);
               }}
             >
-              {areaSelectionMode ? "Завершить выбор области" : "Выбрать область"}
+              {areaSelectionMode
+                ? "Завершить выбор области"
+                : "Выбрать область"}
             </button>
             {areaSelectionMode && (
               <p role="status">
@@ -3872,8 +4238,8 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
               >
                 {selectedTokenIds.includes(token.id) && (
                   <Rect
-                    x={-4 / scale}
-                    y={-4 / scale}
+                    x={(spritePresentation(token)?.bounds.x ?? 0) - 4 / scale}
+                    y={(spritePresentation(token)?.bounds.y ?? 0) - 4 / scale}
                     width={token.width + 8 / scale}
                     height={token.height + 8 / scale}
                     stroke={visual.color.selection}
@@ -3882,7 +4248,20 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
                     listening={false}
                   />
                 )}
-                {assetUrl(token.assetId) ? (
+                {spritePresentation(token) ? (
+                  (() => {
+                    const sprite = spritePresentation(token)!;
+                    return (
+                      <SpriteImage
+                        key={sprite.url}
+                        src={sprite.url}
+                        bounds={sprite.bounds}
+                        opacity={1}
+                        onFailure={spriteFailure}
+                      />
+                    );
+                  })()
+                ) : assetUrl(token.assetId) ? (
                   <>
                     <TokenImage
                       src={assetUrl(token.assetId)!}
@@ -4270,6 +4649,19 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
         )}
 
         <Layer listening={false}>
+          {(() => {
+            const preview = props.abilityAreaPreview;
+            if (!preview || preview.sceneId !== props.scene.id) return null;
+            const origin = props.tokens.find((token) => token.id === preview.tokenId && token.sceneId === props.scene.id);
+            if (!origin || (props.role !== "GM" && (!origin.visible || origin.layer !== "PLAYER"))) return null;
+            const circle = preview.circle;
+            return <Group listening={false}>
+              <Circle {...circle} fill="rgba(90,180,240,0.12)" stroke="#65c8ff"
+                strokeWidth={2 / scale} dash={[8 / scale, 5 / scale]} />
+              <Text x={circle.x} y={circle.y - circle.radius} text={`${preview.radiusMeters} м`}
+                fontSize={14 / scale} fill="#ffffff" stroke="#15202b" strokeWidth={0.5 / scale} />
+            </Group>;
+          })()}
           {displayRulers.map((ruler) => {
             const style = rulerStyle(
               ruler.rulerColor,

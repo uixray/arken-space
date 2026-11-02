@@ -1,0 +1,25 @@
+.ability-area-panel {
+  position: absolute;
+  z-index: 25;
+  right: 12px;
+  bottom: 12px;
+  width: min(360px, calc(100% - 24px));
+  max-height: min(480px, 65%);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 8px 28px #0004;
+}
+.ability-area-panel h2 { margin: 0; font-size: 16px; }
+.ability-area-panel p { margin: 8px 0; font-size: 13px; line-height: 1.45; }
+.ability-area-panel label { display: grid; gap: 4px; font-size: 13px; }
+.ability-area-panel select { width: 100%; min-width: 0; min-height: 44px; }
+.ability-area-panel__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ability-area-panel__actions button { min-height: 44px; }
+@media (max-width: 767px) {
+  .ability-area-panel { max-height: 42%; }
+}

@@ -11,7 +11,7 @@ import { api, formatApiError } from "./api";
  * `/api/characters/:id/catalog` in a different module from the four under
  * `/api/catalog` that define what they are.
  *
- * Nothing reads render-scoped state, so no ref is needed.
+ * Live area-ability selection is delegated to the stable prepareArea callback.
  */
 export interface CatalogActions {
   onCreateCatalogEntry: (
@@ -76,8 +76,9 @@ export function useCatalogActions(dependencies: {
   /** Stable — `useCallback` with an empty dependency list in App. */
   load: () => Promise<void>;
   setError: (message: string) => void;
+  prepareArea?: (characterId: string, entryId: string, revision: number) => boolean;
 }): CatalogActions {
-  const { run, load, setError } = dependencies;
+  const { run, load, setError, prepareArea } = dependencies;
 
   return useMemo<CatalogActions>(
     () => ({
@@ -162,8 +163,11 @@ export function useCatalogActions(dependencies: {
           true,
         ),
 
-      onRollEntry: (characterId, entryId, input) => {
+      onRollEntry: async (characterId, entryId, input) => {
         const { mode, ...request } = input;
+        // EXECUTE on a structured area first opens a local, cancellable map
+        // preview. SHARE and all non-area abilities keep their existing path.
+        if (mode === "EXECUTE" && prepareArea?.(characterId, entryId, input.entryRevision)) return;
         return run(
           () =>
             api(`/api/characters/${characterId}/catalog/${entryId}/roll`, {
@@ -191,6 +195,6 @@ export function useCatalogActions(dependencies: {
           true,
         ),
     }),
-    [run, load, setError],
+    [run, load, setError, prepareArea],
   );
 }

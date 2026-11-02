@@ -12,7 +12,8 @@ export type SubmissionDraftToken = Readonly<{
  * it consumed; later typing, an intentional clear, another submit, a scope
  * change, or unmount permanently invalidates the token.
  */
-export function useSubmissionDraft(scope: string) {
+export function useSubmissionDraft(scope: string, retainScopes = false) {
+  const drafts = useRef(new Map<string, string>());
   const [value, setStoredValue] = useState("");
   const valueRef = useRef(value);
   const generationRef = useRef(0);
@@ -22,10 +23,16 @@ export function useSubmissionDraft(scope: string) {
 
   useLayoutEffect(() => {
     if (scopeRef.current === scope) return;
+    if (retainScopes) {
+      drafts.current.set(scopeRef.current, valueRef.current);
+      const next = drafts.current.get(scope) ?? "";
+      valueRef.current = next;
+      setStoredValue(next);
+    }
     scopeRef.current = scope;
     scopeEpochRef.current += 1;
     generationRef.current += 1;
-  }, [scope]);
+  }, [scope, retainScopes]);
 
   useLayoutEffect(() => {
     mountedRef.current = true;
@@ -67,6 +74,7 @@ export function useSubmissionDraft(scope: string) {
   const isUntouched = (token: SubmissionDraftToken) =>
     mountedRef.current &&
     scopeRef.current === token.scope &&
+    scopeEpochRef.current === token.scopeEpoch &&
     generationRef.current === token.generation &&
     valueRef.current === "";
 

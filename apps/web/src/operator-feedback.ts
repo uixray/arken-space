@@ -109,9 +109,18 @@ export const fetchFeedbackDetail = (id: string, reveal = false) =>
   api<FeedbackDetail>(
     `/api/operator/feedback/${encodeURIComponent(id)}${reveal ? "?reveal=true" : ""}`,
   );
-export const fetchRedactedExport = (id: string) =>
+export const fetchRedactedExport = (
+  id: string,
+  review?: {
+    reviewed: true;
+    expectedUpdatedAt: string;
+    title: string;
+    description: string;
+  },
+) =>
   api<Record<string, unknown>>(
     `/api/operator/feedback/${encodeURIComponent(id)}/export`,
+    { method: "POST", body: JSON.stringify(review) },
   );
 export const updateFeedback = (
   id: string,

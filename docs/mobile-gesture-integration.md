@@ -1,0 +1,75 @@
+# UIX-626/627/430 — связность отмены touch-жестов
+
+2026-11-02. Общий локальный пул, HEAD `b7cf522d64d776da380792e6d828ccb6a8d13bb8`
+плюс незакоммиченные исходники. **Ниже source review, не device/runtime evidence.**
+
+## Граница
+
+Ранее владелец согласовал pan/pinch, выбор/перемещение разрешённых токенов,
+Draw/Ruler/Fog с безопасной отменой и видимую область способности до применения.
+Этот этап исправляет их стык. Новых инструментов, правил способности, сетевых
+команд или разрешений не добавлено. Исторические AC Linear о CI не отменяют
+последний запрет владельца на запуск тестов/CI без отдельной команды.
+
+## Найденные разрывы и изменения
+
+| Разрыв в прежних исходниках | Изменение |
+|---|---|
+| Все `lostpointercapture` вызывали общий `cancel`, стиравший контакты. После обычного отпускания одного пальца оставшаяся pinch-последовательность терялась | Отдельный обработчик различает уже завершённый pointer ID и неожиданную потерю захвата активного ID; обычный release не сбрасывает остальные пальцы |
+| Отмена стирала сами pointer IDs, хотя пальцы могли оставаться на карте; следующий палец мог начать новую одиночную команду | Сбросить draft, но удерживать группу контактов до их terminal events; новые пальцы этой группы не создают команду |
+| Фокус панели способности/другого контрола не отменял touch-token draft, если инструмент оставался PAN | `onBlur` renderer отменяет touch; нажатие вне canvas отменяет его до действия другого контрола; Escape сбрасывает touch draft независимо от ветки map Escape |
+| После потери capture отпускание могло оказаться вне renderer | Window-capture terminal handler только отменяет/завершает учёт таких контактов; игровой commit остаётся исключительно в валидном локальном `up` |
+| При отпускании одного из трёх пальцев менялась используемая пара, но baseline pinch оставался от прежней | Пересчитать baseline по оставшейся паре и текущей камере; один оставшийся палец не превращается в token drag |
+| Без промежуточного move token release мог стать select, хотя конечное смещение превышало порог | Тот же порог 8px проверяется и по конечной точке; movable/permissions/revision вновь проверяет существующий адаптер |
+
+Основание различать обычный release и отмену —
+[Pointer Events, implicit release](https://www.w3.org/TR/pointerevents3/#implicit-release-of-pointer-capture):
+браузер освобождает capture после terminal events. Это правило API, не результат
+проверки устройства. [Primary pointer](https://www.w3.org/TR/pointerevents3/#the-primary-pointer)
+используется только для допуска нового одиночного жеста: неизвестная non-primary
+последовательность может перейти к навигации двумя пальцами, но не к изменению игры.
+После browser suspension новая primary sequence может убрать оставшийся учёт
+старых контактов лишь когда renderer больше не держит их capture.
+
+## Что сохранено
+
+- `Orthographic2DRenderer` по-прежнему владеет выбором/правами/геометрией и вызывает
+  существующие callbacks. `useMapTouch` не отправляет API-команды самостоятельно.
+- Второй палец отменяет локальные Draw/Fog/Ruler/token drafts до навигации.
+- Потеря доступа/ревизии, пауза, смена сцены/инструмента/участника и скрытие карты
+  не дают завершить старую локальную команду. Scope guard остаётся перед commit.
+- Уже отправленный HTTP-запрос способности или перемещения не объявляется
+  отменённым из-за закрытия панели/отпускания пальца. Его receipt/replay не менялись.
+- Круг способности остаётся в канонической геометрии snapshot, а не в
+  неподтверждённой позиции drag. Сервер самостоятельно выбирает актуальные цели.
+- Обработчик `pointercancel` мыши/пера не становится новым touch-коммитом;
+  существующие mouse/keyboard command paths не заменены вторым игровым state.
+
+## Источники и изменённые файлы
+
+- `apps/web/src/renderers/useMapTouch.ts`: lifecycle контактов, cancellation,
+  terminal listeners, pinch rebasing, final-point threshold.
+- `apps/web/src/renderers/Orthographic2DRenderer.tsx`: отдельные cancel/lost handlers
+  и cancellation при потере DOM-фокуса.
+- Прочитаны `App.tsx`, `AbilityAreaPanel.tsx`, `use-ability-area.ts`,
+  `SceneRenderer.ts`, shared `ability-area-geometry.ts`, renderer touch-tool
+  adapters/keyboard Escape/pointer cleanup и callback перемещения.
+
+## Ещё не доказано
+
+Не запускались тесты, typecheck, build, CI или браузер. Не проводилась проверка
+на физическом устройстве; UIX-626/627/629 и родитель316 не закрыты.
+
+В будущий разрешённый общий прогон включить:
+1. Touch token/draw/fog/ruler → второй палец → release первого → новый палец:
+   навигация без возобновления отменённого изменения.
+2. Те же drafts → focus панели способности / DOM-control / Escape / blur /
+   orientation / hidden/inert / смена scope → release без commit.
+3. Неожиданный lost capture и release вне карты; обычный lost capture после up;
+   третий палец и смена пары; новая sequence после suspension/cancel.
+4. Capture failure; terminal-only перемещение; pending move, revoked ownership,
+   stale revision, locked/hidden/foreign token, pause и отсутствие соединения.
+5. Полный PLAYER и GM путь на физических поддерживаемых устройствах, включая
+   hybrid touch+keyboard/mouse и обычные desktop-сценарии.
+
+Это список требуемых доказательств, **не выполненные проверки и не PASS**.

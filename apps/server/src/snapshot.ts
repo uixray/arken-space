@@ -15,6 +15,8 @@ import {
 import { starterStatLayout } from "@arken/system";
 import {
   fogHiddenTokenIds,
+  normalizeTokenSpriteSet,
+  tokenSpriteAssetIds,
   statLayoutSchema,
   type StatLayout,
 } from "@arken/contracts";
@@ -46,6 +48,7 @@ import {
   worldContentMedia,
 } from "@arken/db";
 import type { AuthContext } from "./auth.js";
+import { nonShopInstance } from "./economy-stock-visibility.js";
 import type { CatalogEntryDto, GameSnapshot } from "@arken/contracts";
 import { env } from "./env.js";
 import { normalizeLegacyEntryData } from "./entry-data.js";
@@ -71,7 +74,11 @@ type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
 /** A GM preview is another member's view, never their private preference. */
 export function withoutPersonalTheme(snapshot: GameSnapshot): GameSnapshot {
-  const { personalTheme: _personalTheme, ...safe } = snapshot;
+  const {
+    personalTheme: _personalTheme,
+    personalDiceNames: _personalDiceNames,
+    ...safe
+  } = snapshot;
   return safe;
 }
 
@@ -357,6 +364,7 @@ const loadPublishedWorldAssets = async (db: Database, campaignId: string) => {
         and(
           eq(worldContentInstances.campaignId, campaignId),
           eq(worldContentInstances.discovered, true),
+          nonShopInstance(),
           worldContentPlayerVisibleIn(campaignId),
           eq(assets.campaignId, campaignId),
         ),
@@ -803,6 +811,7 @@ export async function buildSnapshot(
       definitionRevision: definition.revision,
       characterId: definition.characterId,
       assetId: definition.defaultAssetId,
+      spriteSet: normalizeTokenSpriteSet(definition.spriteSet),
       // UIX-400: имя разрешается в одном месте — здесь. Собственное, либо
       // унаследованное от персонажа.
       name: resolveTokenName({
@@ -834,6 +843,8 @@ export async function buildSnapshot(
   }
   for (const token of projectedTokens) {
     if (token.assetId) visibleAssetIds.add(token.assetId);
+    for (const id of tokenSpriteAssetIds(token.spriteSet))
+      visibleAssetIds.add(id);
   }
   const visibleDefinitions = definitionRows.filter(
     (definition) =>
@@ -842,9 +853,14 @@ export async function buildSnapshot(
         auth.membershipId,
       ),
   );
-  for (const definition of visibleDefinitions)
+  for (const definition of visibleDefinitions) {
+    for (const id of tokenSpriteAssetIds(
+      normalizeTokenSpriteSet(definition.spriteSet),
+    ))
+      visibleAssetIds.add(id);
     if (definition.defaultAssetId)
       visibleAssetIds.add(definition.defaultAssetId);
+  }
   for (const character of visibleCharacters) {
     if (character.portraitAssetId)
       visibleAssetIds.add(character.portraitAssetId);
@@ -1025,6 +1041,11 @@ export async function buildSnapshot(
       diceFrameAssetId: me.diceFrameAssetId,
     },
     personalTheme: personalThemeDto(me),
+    ...(env.GEOMETRIC_DICE_MEMBERSHIP_IDS.split(",").some(
+      (id) => id.trim().toLowerCase() === me.id.toLowerCase(),
+    )
+      ? { personalDiceNames: "GEOMETRIC" as const }
+      : {}),
     members: (auth.role === "GM"
       ? memberRows
       : memberRows.filter((member) => member.id === auth.membershipId)
@@ -1098,6 +1119,7 @@ export async function buildSnapshot(
       id: definition.id,
       characterId: definition.characterId,
       defaultAssetId: definition.defaultAssetId,
+      spriteSet: normalizeTokenSpriteSet(definition.spriteSet),
       name: resolveTokenName({
         name: definition.name,
         characterName: characterNameById.get(definition.characterId ?? ""),

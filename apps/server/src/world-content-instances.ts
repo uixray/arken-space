@@ -1,12 +1,31 @@
+import { createHash } from "node:crypto";
+import {
+  InventoryAssignmentError,
+  lockInventoryGraph,
+  validateInventoryAssignment,
+} from "./inventory-assignment.js";
+import { canAccessCharacter } from "./character-access.js";
 import { postgresErrorCode } from "./database-errors.js";
-import { and, eq } from "drizzle-orm";
+import {
+  and,
+  eq,
+  gt,
+  isNull,
+  isNotNull,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
   assets,
+  characters,
+  gameEvents,
   worldContent,
   worldContentInstanceActions,
   worldContentInstances,
+  worldInstanceBindings,
   memberships,
   worldMapLocations,
 } from "@arken/db";
@@ -19,6 +38,7 @@ import {
 } from "@arken/contracts";
 import { requireAuth } from "./auth.js";
 import { worldContentPlayerVisibleIn } from "./world-content.js";
+import { nonShopInstance } from "./economy-stock-visibility.js";
 
 /**
  * HTTP CRUD routes for campaign-scoped World Content instances (UIX-264,
@@ -68,6 +88,52 @@ async function findAction(db: RequestDb, campaignId: string, actionId: string) {
   return row ?? null;
 }
 
+class InstanceReplay extends Error {
+  constructor(readonly matches: boolean) {
+    super("ACTION_ID_REUSED");
+  }
+}
+const requestFingerprint = (
+  operation: string,
+  id: string | null,
+  body: unknown,
+) =>
+  createHash("sha256")
+    .update(JSON.stringify({ operation, id, body }))
+    .digest("hex");
+function matchingReceipt(
+  row: NonNullable<Awaited<ReturnType<typeof findAction>>>,
+  hash: string,
+  actor: string,
+) {
+  const payload = row.payload as { requestHash?: unknown } | null;
+  return row.actorMembershipId === actor && payload?.requestHash === hash;
+}
+async function lockRequest(
+  tx: Transaction,
+  campaignId: string,
+  actionId: string,
+  hash: string,
+  actor: string,
+) {
+  // Same action lock as bindings; acquire before the graph lock everywhere.
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${campaignId + ":" + actionId}, 0))`,
+  );
+  const old = await findAction(tx, campaignId, actionId);
+  if (old) throw new InstanceReplay(matchingReceipt(old, hash, actor));
+  const [other] = await tx
+    .select({ actionId: gameEvents.actionId })
+    .from(gameEvents)
+    .where(
+      and(
+        eq(gameEvents.campaignId, campaignId),
+        eq(gameEvents.actionId, actionId),
+      ),
+    )
+    .limit(1);
+  if (other) throw new InstanceReplay(false);
+}
 function toDto(row: WorldContentInstanceRow): WorldContentInstanceDto {
   return {
     id: row.id,
@@ -78,6 +144,7 @@ function toDto(row: WorldContentInstanceRow): WorldContentInstanceDto {
     gmNotes: row.gmNotes,
     portraitAssetId: row.portraitAssetId,
     ownerMembershipId: row.ownerMembershipId,
+    inventoryCharacterId: row.inventoryCharacterId,
     currentLocationId: row.currentLocationId,
     quantity: row.quantity,
     condition: row.condition,
@@ -94,6 +161,7 @@ function toPlayerDto(
 ): WorldContentInstancePlayerDto {
   const {
     gmNotes: _gmNotes,
+    inventoryCharacterId: _inventoryCharacterId,
     currentLocationId: _currentLocationId,
     ...visible
   } = toDto(row);
@@ -216,6 +284,99 @@ export function registerWorldContentInstanceRoutes(
   app: FastifyInstance,
   db: Database,
 ) {
+  app.get("/api/characters/:id/inventory", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const { id } = idParams.parse(request.params);
+    const query = z
+      .object({
+        cursor: z.string().uuid().optional(),
+        available: z.enum(["true"]).optional(),
+      })
+      .strict()
+      .parse(request.query);
+    if (query.available && auth.role !== "GM")
+      return fail(reply, 403, "GM_REQUIRED");
+    reply.header("Cache-Control", "private, no-store");
+    // canAccessCharacter alone is NOT a campaign boundary.
+    const [character] = await db
+      .select()
+      .from(characters)
+      .where(
+        and(eq(characters.id, id), eq(characters.campaignId, auth.campaignId)),
+      )
+      .limit(1);
+    if (!character || !(await canAccessCharacter(db, auth, character)))
+      return fail(reply, 404, "CHARACTER_NOT_FOUND");
+    const conditions = [
+      eq(worldContentInstances.campaignId, auth.campaignId),
+      query.available
+        ? isNull(worldContentInstances.inventoryCharacterId)
+        : eq(worldContentInstances.inventoryCharacterId, id),
+      eq(worldContent.type, "ITEM"),
+    ];
+    if (query.cursor)
+      conditions.push(gt(worldContentInstances.id, query.cursor));
+    if (query.available)
+      conditions.push(
+        gt(worldContentInstances.quantity, 0),
+        notExists(
+          db
+            .select({ id: worldInstanceBindings.instanceId })
+            .from(worldInstanceBindings)
+            .where(
+              and(
+                eq(worldInstanceBindings.campaignId, auth.campaignId),
+                or(
+                  and(
+                    eq(
+                      worldInstanceBindings.instanceId,
+                      worldContentInstances.id,
+                    ),
+                    isNotNull(worldInstanceBindings.containerInstanceId),
+                  ),
+                  eq(
+                    worldInstanceBindings.containerInstanceId,
+                    worldContentInstances.id,
+                  ),
+                ),
+              ),
+            ),
+        ),
+      );
+    if (auth.role !== "GM")
+      conditions.push(
+        eq(worldContentInstances.discovered, true),
+        worldContentPlayerVisibleIn(auth.campaignId),
+      );
+    const rows = await db
+      .select({
+        id: worldContentInstances.id,
+        name: worldContent.name,
+        displayNameOverride: worldContentInstances.displayNameOverride,
+        quantity: worldContentInstances.quantity,
+        condition: worldContentInstances.condition,
+        revision: worldContentInstances.revision,
+      })
+      .from(worldContentInstances)
+      .innerJoin(
+        worldContent,
+        eq(worldContent.id, worldContentInstances.worldContentId),
+      )
+      .where(and(...conditions))
+      .orderBy(worldContentInstances.id)
+      .limit(101);
+    // No secret counts, location, notes, editorial metadata or media URLs.
+    return reply.send({
+      items: rows
+        .slice(0, 100)
+        .map(({ displayNameOverride, name, ...row }) => ({
+          ...row,
+          name: displayNameOverride ?? name,
+        })),
+      nextCursor: rows.length > 100 ? rows[99]!.id : null,
+    });
+  });
   app.get("/api/world-content-instances", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
@@ -245,6 +406,7 @@ export function registerWorldContentInstanceRoutes(
         and(
           ...conditions,
           eq(worldContentInstances.discovered, true),
+          nonShopInstance(),
           worldContentPlayerVisibleIn(auth.campaignId),
         ),
       );
@@ -266,8 +428,12 @@ export function registerWorldContentInstanceRoutes(
     if (!auth) return;
     if (auth.role !== "GM") return fail(reply, 403, "GM_REQUIRED");
     const body = createWorldContentInstanceSchema.parse(request.body);
-    if (await findAction(db, auth.campaignId, body.actionId))
-      return reply.code(200).send({ duplicate: true });
+    const requestHash = requestFingerprint("create", null, body);
+    const previous = await findAction(db, auth.campaignId, body.actionId);
+    if (previous)
+      return matchingReceipt(previous, requestHash, auth.membershipId)
+        ? reply.code(200).send({ duplicate: true })
+        : fail(reply, 409, "ACTION_ID_REUSED");
     if (
       !(await ownerBelongsToCampaign(
         db,
@@ -295,6 +461,24 @@ export function registerWorldContentInstanceRoutes(
     let created: WorldContentInstanceRow;
     try {
       created = await db.transaction(async (tx) => {
+        await lockRequest(
+          tx,
+          auth.campaignId,
+          body.actionId,
+          requestHash,
+          auth.membershipId,
+        );
+        await lockInventoryGraph(tx, auth.campaignId);
+        await validateInventoryAssignment(
+          tx,
+          auth.campaignId,
+          {
+            worldContentId: body.worldContentId,
+            inventoryCharacterId: body.inventoryCharacterId ?? null,
+            quantity: body.quantity ?? null,
+          },
+          true,
+        );
         const [row] = await tx
           .insert(worldContentInstances)
           .values({
@@ -305,6 +489,7 @@ export function registerWorldContentInstanceRoutes(
             gmNotes: body.gmNotes ?? null,
             portraitAssetId: body.portraitAssetId ?? null,
             ownerMembershipId: body.ownerMembershipId ?? null,
+            inventoryCharacterId: body.inventoryCharacterId ?? null,
             currentLocationId: body.currentLocationId ?? null,
             quantity: body.quantity ?? null,
             condition: body.condition ?? null,
@@ -320,11 +505,17 @@ export function registerWorldContentInstanceRoutes(
           entityId: row.id,
           entityRevision: row.revision,
           actorMembershipId: auth.membershipId,
-          payload: row,
+          payload: { ...row, requestHash },
         });
         return row;
       });
     } catch (reason) {
+      if (reason instanceof InstanceReplay)
+        return reason.matches
+          ? reply.code(200).send({ duplicate: true })
+          : fail(reply, 409, "ACTION_ID_REUSED");
+      if (reason instanceof InventoryAssignmentError)
+        return fail(reply, 400, reason.message);
       if (isInstanceLocationForeignKeyFailure(reason))
         return fail(reply, 400, "WORLD_CONTENT_LOCATION_NOT_IN_CAMPAIGN");
       throw reason;
@@ -338,12 +529,28 @@ export function registerWorldContentInstanceRoutes(
     if (auth.role !== "GM") return fail(reply, 403, "GM_REQUIRED");
     const { id } = idParams.parse(request.params);
     const body = updateWorldContentInstanceSchema.parse(request.body);
-    if (await findAction(db, auth.campaignId, body.actionId))
-      return reply.code(200).send({ duplicate: true });
+    const requestHash = requestFingerprint("update", id, body);
+    const previous = await findAction(db, auth.campaignId, body.actionId);
+    if (previous)
+      return matchingReceipt(previous, requestHash, auth.membershipId)
+        ? reply.code(200).send({ duplicate: true })
+        : fail(reply, 409, "ACTION_ID_REUSED");
     const existing = await findInstance(db, auth.campaignId, id);
-    if (!existing) return fail(reply, 404, "WORLD_CONTENT_INSTANCE_NOT_FOUND");
-    if (existing.revision !== body.revision)
-      return fail(reply, 409, "WORLD_CONTENT_INSTANCE_CONFLICT");
+    if (!existing || existing.revision !== body.revision) {
+      // A same-action transaction may have committed after the fast receipt lookup.
+      const committed = await findAction(db, auth.campaignId, body.actionId);
+      if (committed)
+        return matchingReceipt(committed, requestHash, auth.membershipId)
+          ? reply.code(200).send({ duplicate: true })
+          : fail(reply, 409, "ACTION_ID_REUSED");
+      return fail(
+        reply,
+        existing ? 409 : 404,
+        existing
+          ? "WORLD_CONTENT_INSTANCE_CONFLICT"
+          : "WORLD_CONTENT_INSTANCE_NOT_FOUND",
+      );
+    }
     if (
       !(await ownerBelongsToCampaign(
         db,
@@ -377,6 +584,21 @@ export function registerWorldContentInstanceRoutes(
     let updated: WorldContentInstanceRow | null;
     try {
       updated = await db.transaction(async (tx) => {
+        await lockRequest(
+          tx,
+          auth.campaignId,
+          body.actionId,
+          requestHash,
+          auth.membershipId,
+        );
+        await lockInventoryGraph(tx, auth.campaignId);
+        await validateInventoryAssignment(
+          tx,
+          auth.campaignId,
+          { ...existing, ...changes },
+          changes.inventoryCharacterId != null &&
+            changes.inventoryCharacterId !== existing.inventoryCharacterId,
+        );
         const [row] = await tx
           .update(worldContentInstances)
           .set({
@@ -401,11 +623,17 @@ export function registerWorldContentInstanceRoutes(
           entityId: id,
           entityRevision: row.revision,
           actorMembershipId: auth.membershipId,
-          payload: row,
+          payload: { ...row, requestHash, before: existing },
         });
         return row;
       });
     } catch (reason) {
+      if (reason instanceof InstanceReplay)
+        return reason.matches
+          ? reply.code(200).send({ duplicate: true })
+          : fail(reply, 409, "ACTION_ID_REUSED");
+      if (reason instanceof InventoryAssignmentError)
+        return fail(reply, 400, reason.message);
       if (isInstanceLocationForeignKeyFailure(reason))
         return fail(reply, 400, "WORLD_CONTENT_LOCATION_NOT_IN_CAMPAIGN");
       throw reason;
@@ -432,14 +660,40 @@ export function registerWorldContentInstanceRoutes(
     if (auth.role !== "GM") return fail(reply, 403, "GM_REQUIRED");
     const { id } = idParams.parse(request.params);
     const body = deleteWorldContentInstanceSchema.parse(request.body);
-    if (await findAction(db, auth.campaignId, body.actionId))
-      return reply.code(200).send({ duplicate: true });
+    const requestHash = requestFingerprint("delete", id, body);
+    const previous = await findAction(db, auth.campaignId, body.actionId);
+    if (previous)
+      return matchingReceipt(previous, requestHash, auth.membershipId)
+        ? reply.code(200).send({ duplicate: true })
+        : fail(reply, 409, "ACTION_ID_REUSED");
     const existing = await findInstance(db, auth.campaignId, id);
-    if (!existing) return fail(reply, 404, "WORLD_CONTENT_INSTANCE_NOT_FOUND");
-    if (existing.revision !== body.revision)
-      return fail(reply, 409, "WORLD_CONTENT_INSTANCE_CONFLICT");
+    if (!existing || existing.revision !== body.revision) {
+      // A same-action transaction may have committed after the fast receipt lookup.
+      const committed = await findAction(db, auth.campaignId, body.actionId);
+      if (committed)
+        return matchingReceipt(committed, requestHash, auth.membershipId)
+          ? reply.code(200).send({ duplicate: true })
+          : fail(reply, 409, "ACTION_ID_REUSED");
+      return fail(
+        reply,
+        existing ? 409 : 404,
+        existing
+          ? "WORLD_CONTENT_INSTANCE_CONFLICT"
+          : "WORLD_CONTENT_INSTANCE_NOT_FOUND",
+      );
+    }
+    if (existing.inventoryCharacterId)
+      return fail(reply, 409, "INVENTORY_DETACH_BEFORE_DELETE");
     const deleted = await db
       .transaction(async (tx) => {
+        await lockRequest(
+          tx,
+          auth.campaignId,
+          body.actionId,
+          requestHash,
+          auth.membershipId,
+        );
+        await lockInventoryGraph(tx, auth.campaignId);
         const rows = await tx
           .delete(worldContentInstances)
           .where(
@@ -459,14 +713,19 @@ export function registerWorldContentInstanceRoutes(
           entityId: id,
           entityRevision: existing.revision,
           actorMembershipId: auth.membershipId,
-          payload: existing,
+          payload: { ...existing, requestHash },
         });
         return true;
       })
       .catch((error: unknown) => {
+        if (error instanceof InstanceReplay)
+          return error.matches ? ("DUPLICATE" as const) : ("REUSED" as const);
         if (postgresErrorCode(error) === "23503") return "REFERENCED" as const;
         throw error;
       });
+    if (deleted === "DUPLICATE")
+      return reply.code(200).send({ duplicate: true });
+    if (deleted === "REUSED") return fail(reply, 409, "ACTION_ID_REUSED");
     if (deleted === "REFERENCED")
       return fail(reply, 409, "INSTANCE_CONTAINER_IN_USE");
     if (!deleted) return fail(reply, 409, "WORLD_CONTENT_INSTANCE_CONFLICT");

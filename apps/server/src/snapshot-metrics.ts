@@ -11,12 +11,87 @@
  * молчит и не стоит ничего: при выключенном флаге счётчики не заводятся, а
  * замеры не считаются. Постоянной она станет отдельным решением, если станет.
  *
- * Ничего из измеренного не содержит игровых данных: наружу идут только числа —
- * количество запросов, байты и миллисекунды. Размер по полям считается по
- * ключам верхнего уровня, а не по их содержимому.
+ * В новом формате v2 наружу идут числа, время записи и фиксированные метки
+ * модулей, но не campaignId или значения игровых данных. Старые логи могут
+ * содержать campaignId. Размер по полям считается по ключам верхнего уровня,
+ * а не по их содержимому.
  */
 export const SNAPSHOT_METRICS_ENABLED =
   process.env.ARKEN_SNAPSHOT_METRICS === "1";
+
+// Fixed source labels, never a request path, entity ID or user-provided value.
+// Keep the standalone report's allowlist in sync when extending this list.
+export const SNAPSHOT_TRIGGER_DOMAINS = [
+  "world-map",
+  "progression",
+  "character-extras",
+  "awards",
+  "character-archive",
+  "encounter",
+  "economy",
+  "asset-lifecycle",
+  "campaign-pause",
+  "membership-rename",
+  "character",
+  "scene",
+  "token",
+  "canvas",
+  "sticker",
+  "campaign",
+  "character-play",
+  "asset",
+  "drawing-fallback",
+  "unattributed",
+] as const;
+
+export type SnapshotTriggerDomain = (typeof SNAPSHOT_TRIGGER_DOMAINS)[number];
+
+export interface SnapshotTriggerBatch {
+  scope: "ROUTE_MODULE";
+  counts: Partial<Record<SnapshotTriggerDomain, number>>;
+  requestedCalls: number;
+  truncated: boolean;
+}
+
+/**
+ * UIX-708: attribution for the existing coalescer, not a new delivery queue.
+ * Record EVERY request, including callers that join an already queued run.
+ * Take/delete synchronously when the actual run starts (before its first await).
+ * Later requests then belong to the next run, never to the in-flight snapshot.
+ * Instantiate only when SNAPSHOT_METRICS_ENABLED; no timers or retained history.
+ */
+export function createSnapshotTriggerCollector() {
+  const pending = new Map<string, SnapshotTriggerBatch>();
+  const allowed = new Set<string>(SNAPSHOT_TRIGGER_DOMAINS);
+  // A bounded diagnostic counter, not an assertion about production traffic.
+  const maxCallsPerBatch = 1_000_000;
+  return {
+    record(campaignId: string, domain: SnapshotTriggerDomain) {
+      let batch = pending.get(campaignId);
+      if (!batch) {
+        batch = {
+          scope: "ROUTE_MODULE",
+          counts: {},
+          requestedCalls: 0,
+          truncated: false,
+        };
+        pending.set(campaignId, batch);
+      }
+      if (batch.requestedCalls === maxCallsPerBatch) {
+        batch.truncated = true;
+        return;
+      }
+      const label = allowed.has(domain) ? domain : "unattributed";
+      batch.requestedCalls += 1;
+      batch.counts[label] = (batch.counts[label] ?? 0) + 1;
+    },
+    take(campaignId: string): SnapshotTriggerBatch | null {
+      const batch = pending.get(campaignId) ?? null;
+      pending.delete(campaignId);
+      return batch;
+    },
+  };
+}
 
 let queryCount = 0;
 

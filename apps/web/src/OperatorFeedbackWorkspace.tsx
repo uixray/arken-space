@@ -1,3 +1,4 @@
+import { OptionalBugIntakeWorkspace } from "./BugIntakeWorkspace";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "./design-system/Button";
 import { ArkenDialog } from "./ui/ArkenDialog";
@@ -45,6 +46,13 @@ export const OperatorFeedbackWorkspace = memo(
     const filters = useRef<FeedbackListQuery>({});
     const retryCursor = useRef<string | undefined>(undefined);
     const [detail, setDetail] = useState<FeedbackDetail | null>(null);
+    const [exportDraft, setExportDraft] = useState<{
+      id: string;
+      updatedAt: string;
+      title: string;
+      description: string;
+    } | null>(null);
+    const [exportReviewed, setExportReviewed] = useState(false);
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [linearKey, setLinearKey] = useState("");
     const [linearUrl, setLinearUrl] = useState("");
@@ -55,6 +63,11 @@ export const OperatorFeedbackWorkspace = memo(
     const image = useRef<string | null>(null);
     const detailHeading = useRef<HTMLHeadingElement | null>(null);
     const selectedReportId = detail?.id;
+    const copyInFlight = useRef(false);
+    useEffect(() => {
+      setExportDraft(null);
+      setExportReviewed(false);
+    }, [detail?.id, detail?.updatedAt]);
     useEffect(() => {
       if (selectedReportId) detailHeading.current?.focus();
     }, [selectedReportId]);
@@ -67,6 +80,8 @@ export const OperatorFeedbackWorkspace = memo(
     const clearSensitive = useCallback(() => {
       scope.current += 1;
       setDetail(null);
+      setExportDraft(null);
+      setExportReviewed(false);
       setLinearKey("");
       setLinearUrl("");
       setBusy(false);
@@ -193,6 +208,8 @@ export const OperatorFeedbackWorkspace = memo(
         if (requestScope !== scope.current) return;
         if (closeIfUnauthorized(reason)) return;
         setDetail(null);
+        setExportDraft(null);
+        setExportReviewed(false);
         setError(safeError);
       } finally {
         if (requestScope === scope.current) setBusy(false);
@@ -211,27 +228,51 @@ export const OperatorFeedbackWorkspace = memo(
         if (requestScope !== scope.current) return;
         if (closeIfUnauthorized(reason)) return;
         setDetail(null);
+        setExportDraft(null);
+        setExportReviewed(false);
         setError(safeError);
       } finally {
         if (requestScope === scope.current) setBusy(false);
       }
     }
     async function copy() {
-      if (!detail) return;
+      if (
+        !detail ||
+        !exportDraft ||
+        !exportReviewed ||
+        copyInFlight.current ||
+        exportDraft.id !== detail.id ||
+        exportDraft.updatedAt !== detail.updatedAt
+      )
+        return;
+      copyInFlight.current = true;
       const requestScope = scope.current;
       setBusy(true);
       setError("");
       setNotice("");
       try {
-        const data = await fetchRedactedExport(detail.id);
+        const data = await fetchRedactedExport(detail.id, {
+          reviewed: true,
+          expectedUpdatedAt: exportDraft.updatedAt,
+          title: exportDraft.title,
+          description: exportDraft.description,
+        });
         if (requestScope !== scope.current) return;
         await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
         if (requestScope === scope.current)
-          setNotice("Обезличенная копия скопирована.");
+          setNotice("Проверенная оператором копия скопирована.");
       } catch (reason) {
-        if (requestScope === scope.current && !closeIfUnauthorized(reason))
-          setError("Не удалось скопировать. Попробуйте снова.");
+        if (requestScope === scope.current && !closeIfUnauthorized(reason)) {
+          setExportReviewed(false);
+          setError(
+            reason instanceof ApiError &&
+              reason.code === "FEEDBACK_REVIEW_STALE"
+              ? "Отчёт изменился. Откройте его заново и повторите просмотр."
+              : "Не удалось скопировать. Попробуйте снова.",
+          );
+        }
       } finally {
+        copyInFlight.current = false;
         if (requestScope === scope.current) setBusy(false);
       }
     }
@@ -266,6 +307,7 @@ export const OperatorFeedbackWorkspace = memo(
           onClose();
         }}
       >
+        {open && <OptionalBugIntakeWorkspace />}
         <div className="operator-feedback__grid">
           <nav aria-label={OPERATOR_FEEDBACK_TITLE}>
             <OperatorFeedbackFilters
@@ -376,8 +418,19 @@ export const OperatorFeedbackWorkspace = memo(
                   <Button disabled={busy} onClick={() => void reveal()}>
                     Показать чувствительные данные
                   </Button>
-                  <Button disabled={busy} onClick={() => void copy()}>
-                    Копировать обезличенную версию
+                  <Button
+                    disabled={busy}
+                    onClick={() => {
+                      setExportDraft({
+                        id: detail.id,
+                        updatedAt: detail.updatedAt,
+                        title: detail.title,
+                        description: detail.description,
+                      });
+                      setExportReviewed(false);
+                    }}
+                  >
+                    Подготовить копию
                   </Button>
                   {detail.attachments.map((attachment) => (
                     <Button
@@ -389,6 +442,73 @@ export const OperatorFeedbackWorkspace = memo(
                     </Button>
                   ))}
                 </div>
+                {exportDraft?.id === detail.id &&
+                  exportDraft.updatedAt === detail.updatedAt && (
+                    <fieldset disabled={busy}>
+                      <legend>Проверка текста перед копированием</legend>
+                      <p>
+                        Удалите личные сведения, секреты и закрытое содержимое
+                        игры. Автоматическая фильтрация не гарантирует
+                        обезличивание. Контакты, диагностика и вложения не
+                        включаются.
+                      </p>
+                      <label>
+                        Заголовок копии
+                        <input
+                          value={exportDraft.title}
+                          maxLength={500}
+                          onChange={(event) => {
+                            setExportDraft({
+                              ...exportDraft,
+                              title: event.target.value,
+                            });
+                            setExportReviewed(false);
+                          }}
+                        />
+                      </label>
+                      <label>
+                        Текст копии
+                        <textarea
+                          rows={8}
+                          value={exportDraft.description}
+                          maxLength={20000}
+                          onChange={(event) => {
+                            setExportDraft({
+                              ...exportDraft,
+                              description: event.target.value,
+                            });
+                            setExportReviewed(false);
+                          }}
+                        />
+                      </label>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={exportReviewed}
+                          onChange={(event) =>
+                            setExportReviewed(event.target.checked)
+                          }
+                        />
+                        Я просмотрел текст и удалил сведения, которые нельзя
+                        передавать.
+                      </label>
+                      <Button
+                        disabled={busy || !exportReviewed}
+                        onClick={() => void copy()}
+                      >
+                        Копировать проверенный текст
+                      </Button>
+                      <Button
+                        disabled={busy}
+                        onClick={() => {
+                          setExportDraft(null);
+                          setExportReviewed(false);
+                        }}
+                      >
+                        Отмена
+                      </Button>
+                    </fieldset>
+                  )}{" "}
                 {detail.contact !== undefined && (
                   <pre>
                     {detail.contact}

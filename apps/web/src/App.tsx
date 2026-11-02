@@ -70,6 +70,8 @@ import {
 import { useChatActions } from "./use-chat-actions";
 import { useAccessActions } from "./use-access-actions";
 import { useCatalogActions } from "./use-catalog-actions";
+import { useAbilityArea } from "./use-ability-area";
+import { AbilityAreaPanel } from "./AbilityAreaPanel";
 import { useStatLayoutActions } from "./use-stat-layout-actions";
 import {
   createBattleZoneRecruitHandler,
@@ -132,6 +134,7 @@ type WorkspaceDestination =
   | "player-requests"
   | "world-encyclopedia"
   | "spell-schools"
+  | "shops"
   | "world-codex";
 
 function replacePersonalTheme(
@@ -887,7 +890,16 @@ export function App() {
     placeOptimistically,
   });
   const accessActions = useAccessActions({ run });
-  const catalogActions = useCatalogActions({ run, load, setError });
+  const openAbilityArea = useCallback(() => {
+    selectCompactSurface("map");
+    setTool("PAN");
+    setCanvasEditMode(null);
+    setGridPreview(null);
+  }, [selectCompactSurface]);
+  const abilityArea = useAbilityArea({ snapshot, scene: activeSceneValue,
+    previewing: Boolean(previewSnapshot), editingGrid: Boolean(gridPreview), load, setError,
+    onOpen: openAbilityArea });
+  const catalogActions = useCatalogActions({ run, load, setError, prepareArea: abilityArea.prepare });
   const assetActions = useAssetActions({ load });
   const statLayoutActions = useStatLayoutActions({ load });
   /**
@@ -1858,6 +1870,7 @@ export function App() {
               {!previewSnapshot && (
                 <div className="map-dice-tray" aria-label="Броски на карте">
                   <DiceTrayPanel
+                    personalDiceNames={snapshot.personalDiceNames}
                     characterId={snapshot.me.characterId}
                     visibility={mapRollVisibility}
                     onVisibilityChange={setMapRollVisibility}
@@ -1950,6 +1963,7 @@ export function App() {
                 >
                   <Orthographic2DRenderer
                     key={`${activeScene.id}:${snapshot.campaign.paused}`}
+                    abilityAreaPreview={abilityArea.preview}
                     paused={snapshot.campaign.paused}
                     externalObjectListOpen={mapObjectsOpen}
                     onObjectListToggle={handleObjectListToggle}
@@ -2014,6 +2028,7 @@ export function App() {
               ) : (
                 <div className="empty-map">Мастер ещё не создал сцену.</div>
               )}
+              {!previewSnapshot && <AbilityAreaPanel area={abilityArea} isGm={snapshot.me.role === "GM"} />}
               {rollToasts.length > 0 && (
                 <div className="roll-toast-stack" aria-live="polite">
                   {rollToasts.map(({ message, appearanceId }) => (
@@ -2112,6 +2127,18 @@ export function App() {
             )}
             {compact && compactSurface === "menu" && (
               <CompactMenuSurface
+                key={
+                  snapshot.campaign.id +
+                  ":" +
+                  viewSnapshot.me.id +
+                  ":" +
+                  viewSnapshot.me.role
+                }
+                onTogglePause={
+                  !previewSnapshot && snapshot.me.role === "GM"
+                    ? toggleCampaignPause
+                    : undefined
+                }
                 snapshot={snapshot}
                 viewSnapshot={viewSnapshot}
                 connection={connection}

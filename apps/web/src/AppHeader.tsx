@@ -1,4 +1,5 @@
 import { memo, useRef } from "react";
+import { Brand } from "./Brand";
 import type { GameSnapshot } from "@arken/contracts";
 import { AppIcon } from "./ui/AppIcon";
 import {
@@ -104,8 +105,8 @@ export const AppHeader = memo(function AppHeader({
         </>
       )}
       <div className="brand">
-        <a href="/?home=1" aria-label="Открыть главную страницу Arken Space">
-          <span className="brand__mark" role="img" aria-label="ARKPATH" />
+        <a className="brand__link" href="/?home=1" aria-label="Открыть главную страницу Аркспейс">
+          <Brand compact />
         </a>
       </div>
       <div className="scene-switcher">

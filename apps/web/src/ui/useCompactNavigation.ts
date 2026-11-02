@@ -160,6 +160,7 @@ export function useCompactNavigation(
     if (!compact) return;
     const root = document.documentElement;
     const viewport = window.visualViewport;
+    let focusFrame = 0;
     const update = () => {
       root.style.setProperty(
         "--compact-viewport-height",
@@ -169,12 +170,31 @@ export function useCompactNavigation(
         "--compact-viewport-top",
         `${viewport?.offsetTop ?? 0}px`,
       );
+      cancelAnimationFrame(focusFrame);
+      focusFrame = requestAnimationFrame(() => {
+        const field = document.activeElement;
+        if (
+          !(field instanceof HTMLElement) ||
+          !field.matches('input, textarea, select, [contenteditable="true"]') ||
+          !field.closest("#activity-sidebar, #character-workspace") ||
+          field.closest("[hidden], [inert]")
+        )
+          return;
+        const bounds = field.getBoundingClientRect();
+        const top = viewport?.offsetTop ?? 0;
+        const bottom = top + (viewport?.height ?? window.innerHeight);
+        if (bounds.top < top || bounds.bottom > bottom)
+          field.scrollIntoView({ block: "nearest", inline: "nearest" });
+      });
     };
     update();
     viewport?.addEventListener("resize", update);
     viewport?.addEventListener("scroll", update);
     window.addEventListener("resize", update);
+    document.addEventListener("focusin", update);
     return () => {
+      cancelAnimationFrame(focusFrame);
+      document.removeEventListener("focusin", update);
       viewport?.removeEventListener("resize", update);
       viewport?.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
