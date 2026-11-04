@@ -97,6 +97,13 @@ async function setup() {
   };
 }
 
+async function prepareReviewedExport(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "Подготовить копию" }));
+  await user.click(
+    screen.getByRole("checkbox", { name: /Я просмотрел текст/ }),
+  );
+}
+
 it("does not restore revealed data after close and reopen", async () => {
   const view = await setup();
   const pending = deferred<FeedbackDetail>();
@@ -120,8 +127,9 @@ it("does not write a late export to the clipboard after close", async () => {
   const pending = deferred<Record<string, unknown>>();
   const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
   vi.mocked(feedback.fetchRedactedExport).mockReturnValueOnce(pending.promise);
+  await prepareReviewedExport(view.user);
   await view.user.click(
-    screen.getByRole("button", { name: "Копировать обезличенную версию" }),
+    screen.getByRole("button", { name: "Копировать проверенный текст" }),
   );
   view.open(false);
   await act(async () => pending.resolve({ redacted: true }));
@@ -157,7 +165,7 @@ it.each(
     const denied = new ApiError(status, "DENIED", "Denied");
     const label =
       action === "export"
-        ? "Копировать обезличенную версию"
+        ? "Копировать проверенный текст"
         : action === "attachment"
           ? "Открыть изображение"
           : action === "reveal"
@@ -174,6 +182,7 @@ it.each(
     const write = vi
       .spyOn(navigator.clipboard, "writeText")
       .mockResolvedValue();
+    if (action === "export") await prepareReviewedExport(view.user);
     await view.user.click(screen.getByRole("button", { name: label }));
     expect(view.onClose).toHaveBeenCalledOnce();
     expect(screen.queryByText("PRIVATE-CONTACT")).not.toBeInTheDocument();

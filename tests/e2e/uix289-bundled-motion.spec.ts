@@ -629,7 +629,9 @@ test("UIX-289 styleFrame uses the shared bounded lifecycle and static history/re
     "src",
     `/api/assets/${STYLE_FRAME_ID}/content?variant=poster`,
   );
-  expect(fixture.styleRequests).not.toContain(`/api/assets/${STYLE_FRAME_ID}/content`);
+  expect(fixture.styleRequests).not.toContain(
+    `/api/assets/${STYLE_FRAME_ID}/content`,
+  );
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await expect(active).toHaveAttribute(
     "src",
@@ -664,9 +666,11 @@ test("UIX-289 styleFrame uses the shared bounded lifecycle and static history/re
     "src",
     `/api/assets/${STYLE_FRAME_ID}/content?variant=poster`,
   );
-  expect(fixture.styleRequests.filter(
-    (url) => url === `/api/assets/${STYLE_FRAME_ID}/content`,
-  )).toHaveLength(animatedRequests);
+  expect(
+    fixture.styleRequests.filter(
+      (url) => url === `/api/assets/${STYLE_FRAME_ID}/content`,
+    ),
+  ).toHaveLength(animatedRequests);
   expect(fixture.requests).toEqual([]);
   expect(fixture.unexpectedWrites).toEqual([]);
 });
@@ -718,9 +722,16 @@ function compositeFrameMessage(mixed: boolean): ChatMessageDto {
 
 for (const width of [390, 1280]) {
   for (const mixed of [false, true]) {
-    test(`UIX-289 one ${mixed ? "critical" : "style"} owner survives history/reload at ${width}px`, async ({ page }) => {
+    test(`UIX-289 one ${mixed ? "critical" : "style"} owner survives history/reload at ${width}px`, async ({
+      page,
+    }) => {
       const message = compositeFrameMessage(mixed);
-      const fixture = await startApp(page, snapshotWith([message]), width, true);
+      const fixture = await startApp(
+        page,
+        snapshotWith([message]),
+        width,
+        true,
+      );
       const card = page.locator("#chat-message-single-owner");
       const rows = card.locator(".skill-chat-card__roll");
       const expectedTotals = mixed ? ["18", "6", "25"] : ["18", "19", "20"];
@@ -728,14 +739,20 @@ for (const width of [390, 1280]) {
       const animatedSelector = `.outcome-frame img[src^="${FRAME_PREFIX}"], .outcome-frame img[src="/api/assets/${STYLE_FRAME_ID}/content"]`;
       const animated = card.locator(animatedSelector);
       await expect(rows).toHaveCount(3);
-      await expect(card.locator(".roll-total__value")).toHaveText(expectedTotals);
+      await expect(card.locator(".roll-total__value")).toHaveText(
+        expectedTotals,
+      );
       await expect(animated).toHaveCount(0);
       expect(fixture.requests).toEqual([]);
-      expect(fixture.styleRequests).not.toContain(`/api/assets/${STYLE_FRAME_ID}/content`);
+      expect(fixture.styleRequests).not.toContain(
+        `/api/assets/${STYLE_FRAME_ID}/content`,
+      );
       await rows.nth(ownerIndex).scrollIntoViewIfNeeded();
       await page.emulateMedia({ reducedMotion: "no-preference" });
       await expect(animated).toHaveCount(1);
-      await expect(rows.nth(ownerIndex).locator(animatedSelector)).toHaveCount(1);
+      await expect(rows.nth(ownerIndex).locator(animatedSelector)).toHaveCount(
+        1,
+      );
       await expect(animated).toHaveAttribute(
         "src",
         mixed
@@ -743,7 +760,9 @@ for (const width of [390, 1280]) {
           : `/api/assets/${STYLE_FRAME_ID}/content`,
       );
       await expect
-        .poll(() => animated.evaluate((img: HTMLImageElement) => img.naturalWidth))
+        .poll(() =>
+          animated.evaluate((img: HTMLImageElement) => img.naturalWidth),
+        )
         .toBe(mixed ? 224 : 96);
       // Exhaustion cannot promote the later critical/style result.
       await expect(animated).toHaveCount(0, { timeout: 4000 });
@@ -751,17 +770,26 @@ for (const width of [390, 1280]) {
       await page.emulateMedia({ reducedMotion: "no-preference" });
       await settleRenderedUi(page);
       await expect(animated).toHaveCount(0);
-      expect(fixture.requests).not.toContain(`${FRAME_PREFIX}critical-success.png`);
+      expect(fixture.requests).not.toContain(
+        `${FRAME_PREFIX}critical-success.png`,
+      );
 
-      const withText = snapshotWith([message, textMessage("after-batch", 2)], 2);
+      const withText = snapshotWith(
+        [message, textMessage("after-batch", 2)],
+        2,
+      );
       fixture.replaceSnapshot(withText);
       fixture.pushSnapshot(withText);
       await expect(page.locator("#chat-message-after-batch")).toBeVisible();
-      await expect(card.locator(".roll-total__value")).toHaveText(expectedTotals);
+      await expect(card.locator(".roll-total__value")).toHaveText(
+        expectedTotals,
+      );
       await expect(animated).toHaveCount(0);
       await page.reload();
       await openActivity(page, width, true);
-      await expect(card.locator(".roll-total__value")).toHaveText(expectedTotals);
+      await expect(card.locator(".roll-total__value")).toHaveText(
+        expectedTotals,
+      );
       await expect(animated).toHaveCount(0);
       // Replacing the latest TEXT by the persisted batch on reload gives it
       // a fresh mount budget, with the same deterministic result owner.
@@ -771,9 +799,15 @@ for (const width of [390, 1280]) {
       await rows.nth(ownerIndex).scrollIntoViewIfNeeded();
       await page.emulateMedia({ reducedMotion: "no-preference" });
       await expect(animated).toHaveCount(1);
-      await expect(rows.nth(ownerIndex).locator(animatedSelector)).toHaveCount(1);
-      await expect(card.locator(".roll-total__value")).toHaveText(expectedTotals);
-      expect(fixture.requests).not.toContain(`${FRAME_PREFIX}critical-success.png`);
+      await expect(rows.nth(ownerIndex).locator(animatedSelector)).toHaveCount(
+        1,
+      );
+      await expect(card.locator(".roll-total__value")).toHaveText(
+        expectedTotals,
+      );
+      expect(fixture.requests).not.toContain(
+        `${FRAME_PREFIX}critical-success.png`,
+      );
       expect(fixture.unexpectedWrites).toEqual([]);
     });
   }

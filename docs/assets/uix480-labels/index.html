@@ -1,130 +1,329 @@
 <!doctype html>
 <html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>UIX-480 — два варианта картографических подписей</title>
-  <link rel="stylesheet" href="../../../apps/web/src/design-system/tokens.generated.css">
-  <link rel="stylesheet" href="preview.css">
-</head>
-<body>
-<svg class="label-shapes" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
-  <defs><path id="ribbon-tail-outline" d="M1 1H19V43H1L7 22Z" vector-effect="non-scaling-stroke" /></defs>
-</svg>
-<main>
-  <header class="intro">
-    <p class="eyebrow">Arken Space · UIX-480 · выбрана лента</p>
-    <h1>Подписи локаций и сцен</h1>
-    <p class="lead">Два обрамления на существующих цветах и шрифте приложения.
-      Выбрана лента; картуш оставлен для сравнения. Обычные подписи сохраняются.</p>
-    <p class="notice">Изолированный статический макет. Не подключён к игре.
-      Подложки и названия — синтетические примеры, не канон и не реальные партии.</p>
-  </header>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UIX-480 — два варианта картографических подписей</title>
+    <link
+      rel="stylesheet"
+      href="../../../apps/web/src/design-system/tokens.generated.css"
+    />
+    <link rel="stylesheet" href="preview.css" />
+  </head>
+  <body>
+    <svg
+      class="label-shapes"
+      aria-hidden="true"
+      focusable="false"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        <path
+          id="ribbon-tail-outline"
+          d="M1 1H19V43H1L7 22Z"
+          vector-effect="non-scaling-stroke"
+        />
+      </defs>
+    </svg>
+    <main>
+      <header class="intro">
+        <p class="eyebrow">Arken Space · UIX-480 · выбрана лента</p>
+        <h1>Подписи локаций и сцен</h1>
+        <p class="lead">
+          Два обрамления на существующих цветах и шрифте приложения. Выбрана
+          лента; картуш оставлен для сравнения. Обычные подписи сохраняются.
+        </p>
+        <p class="notice">
+          Изолированный статический макет. Не подключён к игре. Подложки и
+          названия — синтетические примеры, не канон и не реальные партии.
+        </p>
+      </header>
 
-  <section class="directions" aria-label="Варианты оформления">
-    <article class="direction">
-      <header class="direction-heading"><span class="number">01</span><div>
-        <h2>Картуш</h2><p>Компактная тёмная табличка, тонкая внутренняя рамка.</p>
-      </div></header>
-      <div class="map map--light" aria-label="Картуш на светлой схематичной карте">
-        <span class="map-caption">Светлая подложка</span>
-        <h3 class="scene-label cartouche"><span class="label-text">Первая сцена</span></h3>
-        <span class="token token--a" aria-hidden="true">А</span>
-        <span class="token token--b" aria-hidden="true">Б</span>
-        <div class="location-anchor"><span class="location-point" aria-hidden="true"></span>
-          <button class="map-label cartouche" type="button" aria-label="Локация: Восточный вход (пример)"><span class="label-text">Восточный вход</span></button>
-        </div>
-      </div>
-      <div class="map map--dark" aria-label="Картуш на тёмной схематичной карте">
-        <span class="map-caption">Тёмная подложка</span>
-        <h3 class="scene-label cartouche"><span class="label-text">Ночная сцена</span></h3>
-        <span class="token token--a" aria-hidden="true">А</span>
-        <span class="token token--b" aria-hidden="true">Б</span>
-        <div class="location-anchor"><span class="location-point" aria-hidden="true"></span>
-          <button class="map-label cartouche is-selected" type="button" aria-label="Выбранная локация: Восточный вход (пример)"><span class="label-text">Восточный вход</span></button>
-        </div>
-      </div>
-      <div class="direction-note"><strong>Предпочтительный вариант для плотной карты.</strong>
-        <p>Меньше декоративных выступов. На тёмной карте силуэт отделяет светлая рамка;
-          читаемость ещё требуется проверить на реальных материалах.</p></div>
-    </article>
+      <section class="directions" aria-label="Варианты оформления">
+        <article class="direction">
+          <header class="direction-heading">
+            <span class="number">01</span>
+            <div>
+              <h2>Картуш</h2>
+              <p>Компактная тёмная табличка, тонкая внутренняя рамка.</p>
+            </div>
+          </header>
+          <div
+            class="map map--light"
+            aria-label="Картуш на светлой схематичной карте"
+          >
+            <span class="map-caption">Светлая подложка</span>
+            <h3 class="scene-label cartouche">
+              <span class="label-text">Первая сцена</span>
+            </h3>
+            <span class="token token--a" aria-hidden="true">А</span>
+            <span class="token token--b" aria-hidden="true">Б</span>
+            <div class="location-anchor">
+              <span class="location-point" aria-hidden="true"></span>
+              <button
+                class="map-label cartouche"
+                type="button"
+                aria-label="Локация: Восточный вход (пример)"
+              >
+                <span class="label-text">Восточный вход</span>
+              </button>
+            </div>
+          </div>
+          <div
+            class="map map--dark"
+            aria-label="Картуш на тёмной схематичной карте"
+          >
+            <span class="map-caption">Тёмная подложка</span>
+            <h3 class="scene-label cartouche">
+              <span class="label-text">Ночная сцена</span>
+            </h3>
+            <span class="token token--a" aria-hidden="true">А</span>
+            <span class="token token--b" aria-hidden="true">Б</span>
+            <div class="location-anchor">
+              <span class="location-point" aria-hidden="true"></span>
+              <button
+                class="map-label cartouche is-selected"
+                type="button"
+                aria-label="Выбранная локация: Восточный вход (пример)"
+              >
+                <span class="label-text">Восточный вход</span>
+              </button>
+            </div>
+          </div>
+          <div class="direction-note">
+            <strong>Предпочтительный вариант для плотной карты.</strong>
+            <p>
+              Меньше декоративных выступов. На тёмной карте силуэт отделяет
+              светлая рамка; читаемость ещё требуется проверить на реальных
+              материалах.
+            </p>
+          </div>
+        </article>
 
-    <article class="direction">
-      <header class="direction-heading"><span class="number">02</span><div>
-        <h2>Лента</h2><p>Светлая бумажная полоса с короткими боковыми хвостами.</p>
-      </div></header>
-      <div class="map map--light" aria-label="Лента на светлой схематичной карте">
-        <span class="map-caption">Светлая подложка</span>
-        <h3 class="scene-label ribbon">
-          <svg class="ribbon-tail ribbon-tail--start" viewBox="0 0 20 44" preserveAspectRatio="none" aria-hidden="true" focusable="false"><use href="#ribbon-tail-outline" /></svg>
-          <svg class="ribbon-tail ribbon-tail--end" viewBox="0 0 20 44" preserveAspectRatio="none" aria-hidden="true" focusable="false"><use href="#ribbon-tail-outline" /></svg>
-          <span class="label-text">Первая сцена</span></h3>
-        <span class="token token--a" aria-hidden="true">А</span>
-        <span class="token token--b" aria-hidden="true">Б</span>
-        <div class="location-anchor"><span class="location-point" aria-hidden="true"></span>
-          <button class="map-label ribbon" type="button" aria-label="Локация: Восточный вход (пример)">
-            <svg class="ribbon-tail ribbon-tail--start" viewBox="0 0 20 44" preserveAspectRatio="none" aria-hidden="true" focusable="false"><use href="#ribbon-tail-outline" /></svg>
-            <svg class="ribbon-tail ribbon-tail--end" viewBox="0 0 20 44" preserveAspectRatio="none" aria-hidden="true" focusable="false"><use href="#ribbon-tail-outline" /></svg>
-            <span class="label-text">Восточный вход</span></button>
-        </div>
-      </div>
-      <div class="map map--dark" aria-label="Лента на тёмной схематичной карте">
-        <span class="map-caption">Тёмная подложка</span>
-        <h3 class="scene-label ribbon">
-          <svg class="ribbon-tail ribbon-tail--start" viewBox="0 0 20 44" preserveAspectRatio="none" aria-hidden="true" focusable="false"><use href="#ribbon-tail-outline" /></svg>
-          <svg class="ribbon-tail ribbon-tail--end" viewBox="0 0 20 44" preserveAspectRatio="none" aria-hidden="true" focusable="false"><use href="#ribbon-tail-outline" /></svg>
-          <span class="label-text">Ночная сцена</span></h3>
-        <span class="token token--a" aria-hidden="true">А</span>
-        <span class="token token--b" aria-hidden="true">Б</span>
-        <div class="location-anchor"><span class="location-point" aria-hidden="true"></span>
-          <button class="map-label ribbon is-selected" type="button" aria-label="Выбранная локация: Восточный вход (пример)">
-            <svg class="ribbon-tail ribbon-tail--start" viewBox="0 0 20 44" preserveAspectRatio="none" aria-hidden="true" focusable="false"><use href="#ribbon-tail-outline" /></svg>
-            <svg class="ribbon-tail ribbon-tail--end" viewBox="0 0 20 44" preserveAspectRatio="none" aria-hidden="true" focusable="false"><use href="#ribbon-tail-outline" /></svg>
-            <span class="label-text">Восточный вход</span></button>
-        </div>
-      </div>
-      <div class="direction-note"><strong>Выбранное направление.</strong>
-        <p>Хвосты затемнены и обведены по контуру, включая вырез. Боковые выступы требуют дополнительного места. Не предназначено для
-          автоматической замены всех мелких маркеров без проверки плотности.</p></div>
-    </article>
-  </section>
+        <article class="direction">
+          <header class="direction-heading">
+            <span class="number">02</span>
+            <div>
+              <h2>Лента</h2>
+              <p>Светлая бумажная полоса с короткими боковыми хвостами.</p>
+            </div>
+          </header>
+          <div
+            class="map map--light"
+            aria-label="Лента на светлой схематичной карте"
+          >
+            <span class="map-caption">Светлая подложка</span>
+            <h3 class="scene-label ribbon">
+              <svg
+                class="ribbon-tail ribbon-tail--start"
+                viewBox="0 0 20 44"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <use href="#ribbon-tail-outline" />
+              </svg>
+              <svg
+                class="ribbon-tail ribbon-tail--end"
+                viewBox="0 0 20 44"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <use href="#ribbon-tail-outline" />
+              </svg>
+              <span class="label-text">Первая сцена</span>
+            </h3>
+            <span class="token token--a" aria-hidden="true">А</span>
+            <span class="token token--b" aria-hidden="true">Б</span>
+            <div class="location-anchor">
+              <span class="location-point" aria-hidden="true"></span>
+              <button
+                class="map-label ribbon"
+                type="button"
+                aria-label="Локация: Восточный вход (пример)"
+              >
+                <svg
+                  class="ribbon-tail ribbon-tail--start"
+                  viewBox="0 0 20 44"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <use href="#ribbon-tail-outline" />
+                </svg>
+                <svg
+                  class="ribbon-tail ribbon-tail--end"
+                  viewBox="0 0 20 44"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <use href="#ribbon-tail-outline" />
+                </svg>
+                <span class="label-text">Восточный вход</span>
+              </button>
+            </div>
+          </div>
+          <div
+            class="map map--dark"
+            aria-label="Лента на тёмной схематичной карте"
+          >
+            <span class="map-caption">Тёмная подложка</span>
+            <h3 class="scene-label ribbon">
+              <svg
+                class="ribbon-tail ribbon-tail--start"
+                viewBox="0 0 20 44"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <use href="#ribbon-tail-outline" />
+              </svg>
+              <svg
+                class="ribbon-tail ribbon-tail--end"
+                viewBox="0 0 20 44"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <use href="#ribbon-tail-outline" />
+              </svg>
+              <span class="label-text">Ночная сцена</span>
+            </h3>
+            <span class="token token--a" aria-hidden="true">А</span>
+            <span class="token token--b" aria-hidden="true">Б</span>
+            <div class="location-anchor">
+              <span class="location-point" aria-hidden="true"></span>
+              <button
+                class="map-label ribbon is-selected"
+                type="button"
+                aria-label="Выбранная локация: Восточный вход (пример)"
+              >
+                <svg
+                  class="ribbon-tail ribbon-tail--start"
+                  viewBox="0 0 20 44"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <use href="#ribbon-tail-outline" />
+                </svg>
+                <svg
+                  class="ribbon-tail ribbon-tail--end"
+                  viewBox="0 0 20 44"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <use href="#ribbon-tail-outline" />
+                </svg>
+                <span class="label-text">Восточный вход</span>
+              </button>
+            </div>
+          </div>
+          <div class="direction-note">
+            <strong>Выбранное направление.</strong>
+            <p>
+              Хвосты затемнены и обведены по контуру, включая вырез. Боковые
+              выступы требуют дополнительного места. Не предназначено для
+              автоматической замены всех мелких маркеров без проверки плотности.
+            </p>
+          </div>
+        </article>
+      </section>
 
-  <section class="details" aria-labelledby="long-title">
-    <div class="section-heading"><p class="eyebrow">Границы поведения</p>
-      <h2 id="long-title">Длинное имя остаётся текстом</h2>
-      <p>Узкие контейнеры ниже — примеры компоновки, не результаты проверки устройств.
-        Рамка растёт по высоте; название не превращается в изображение.</p>
-    </div>
-    <div class="long-examples">
-      <div class="narrow-sample"><span class="sample-caption">Картуш · узкая колонка</span>
-        <button class="map-label cartouche" type="button"><span class="label-text">Длинное название локации на границе карты</span></button>
-      </div>
-      <div class="narrow-sample narrow-sample--light"><span class="sample-caption">Лента · светлый фон · узкая колонка</span>
-        <button class="map-label ribbon" type="button">
-          <svg class="ribbon-tail ribbon-tail--start" viewBox="0 0 20 44" preserveAspectRatio="none" aria-hidden="true" focusable="false"><use href="#ribbon-tail-outline" /></svg>
-          <svg class="ribbon-tail ribbon-tail--end" viewBox="0 0 20 44" preserveAspectRatio="none" aria-hidden="true" focusable="false"><use href="#ribbon-tail-outline" /></svg>
-          <span class="label-text">Длинное название локации на границе карты</span></button>
-      </div>
-      <div class="narrow-sample"><span class="sample-caption">Обычная подпись сохраняется</span>
-        <button class="map-label plain" type="button"><span class="label-text">Восточный вход</span></button>
-      </div>
-    </div>
-  </section>
+      <section class="details" aria-labelledby="long-title">
+        <div class="section-heading">
+          <p class="eyebrow">Границы поведения</p>
+          <h2 id="long-title">Длинное имя остаётся текстом</h2>
+          <p>
+            Узкие контейнеры ниже — примеры компоновки, не результаты проверки
+            устройств. Рамка растёт по высоте; название не превращается в
+            изображение.
+          </p>
+        </div>
+        <div class="long-examples">
+          <div class="narrow-sample">
+            <span class="sample-caption">Картуш · узкая колонка</span>
+            <button class="map-label cartouche" type="button">
+              <span class="label-text"
+                >Длинное название локации на границе карты</span
+              >
+            </button>
+          </div>
+          <div class="narrow-sample narrow-sample--light">
+            <span class="sample-caption"
+              >Лента · светлый фон · узкая колонка</span
+            >
+            <button class="map-label ribbon" type="button">
+              <svg
+                class="ribbon-tail ribbon-tail--start"
+                viewBox="0 0 20 44"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <use href="#ribbon-tail-outline" />
+              </svg>
+              <svg
+                class="ribbon-tail ribbon-tail--end"
+                viewBox="0 0 20 44"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <use href="#ribbon-tail-outline" />
+              </svg>
+              <span class="label-text"
+                >Длинное название локации на границе карты</span
+              >
+            </button>
+          </div>
+          <div class="narrow-sample">
+            <span class="sample-caption">Обычная подпись сохраняется</span>
+            <button class="map-label plain" type="button">
+              <span class="label-text">Восточный вход</span>
+            </button>
+          </div>
+        </div>
+      </section>
 
-  <section class="principles" aria-labelledby="behavior-title">
-    <h2 id="behavior-title">Что предлагаем сохранить в реализации</h2>
-    <ol>
-      <li><strong>По умолчанию — обычная подпись.</strong> Декор включает мастер; старые карты не меняют вид сами.</li>
-      <li><strong>Название и права — прежние.</strong> Скрытая локация не раскрывается из-за декоративной рамки.</li>
-      <li><strong>Смещается подпись, не точка локации.</strong> Положение можно вернуть к исходному.</li>
-      <li><strong>Текст не уменьшается вместе с картой.</strong> Компенсация масштаба и края экрана требуют реализации и отдельной проверки.</li>
-      <li><strong>Без анимации.</strong> Декор не перехватывает жесты; для фокуса и выбора есть отдельное обрамление.</li>
-    </ol>
-  </section>
-  <footer>
-    <p>Кнопки здесь служат образцами подписи и клавиатурного фокуса; не выбирают игровые объекты.</p>
-    <p>Владелец выбрал ленту. Места использования и внедрение в игру ещё предстоит согласовать. Код приложения и данные не изменены.</p>
-  </footer>
-</main>
-</body>
+      <section class="principles" aria-labelledby="behavior-title">
+        <h2 id="behavior-title">Что предлагаем сохранить в реализации</h2>
+        <ol>
+          <li>
+            <strong>По умолчанию — обычная подпись.</strong> Декор включает
+            мастер; старые карты не меняют вид сами.
+          </li>
+          <li>
+            <strong>Название и права — прежние.</strong> Скрытая локация не
+            раскрывается из-за декоративной рамки.
+          </li>
+          <li>
+            <strong>Смещается подпись, не точка локации.</strong> Положение
+            можно вернуть к исходному.
+          </li>
+          <li>
+            <strong>Текст не уменьшается вместе с картой.</strong> Компенсация
+            масштаба и края экрана требуют реализации и отдельной проверки.
+          </li>
+          <li>
+            <strong>Без анимации.</strong> Декор не перехватывает жесты; для
+            фокуса и выбора есть отдельное обрамление.
+          </li>
+        </ol>
+      </section>
+      <footer>
+        <p>
+          Кнопки здесь служат образцами подписи и клавиатурного фокуса; не
+          выбирают игровые объекты.
+        </p>
+        <p>
+          Владелец выбрал ленту. Места использования и внедрение в игру ещё
+          предстоит согласовать. Код приложения и данные не изменены.
+        </p>
+      </footer>
+    </main>
+  </body>
 </html>

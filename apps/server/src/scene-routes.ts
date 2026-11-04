@@ -59,6 +59,7 @@ function sceneDto(
   return {
     id: scene.id,
     name: scene.name,
+    titleLabel: scene.titleLabel,
     projection: scene.projection,
     mapAssetId: scene.mapAssetId,
     width: scene.width,

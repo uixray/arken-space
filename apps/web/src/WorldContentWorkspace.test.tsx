@@ -7,7 +7,10 @@ import { fireEvent, renderComponent, screen } from "./test-support/render";
 const apiMock = vi.hoisted(() => vi.fn());
 vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
-  api: apiMock,
+  api: (path: string, ...args: unknown[]) =>
+    path.startsWith("/api/world-content-regions?")
+      ? Promise.resolve({ items: [], hasMore: false })
+      : apiMock(path, ...args),
 }));
 const { WorldContentWorkspace } = await import("./WorldContentWorkspace");
 

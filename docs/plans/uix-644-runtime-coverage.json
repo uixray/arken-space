@@ -395,6 +395,46 @@
   },
   "sites": [
     {
+      "file": "apps/web/src/AbilityAreaPanel.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable-static-runtime-evidence-pending",
+      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+    },
+    {
+      "file": "apps/web/src/Achievements.tsx",
+      "kind": "tag:AssetPicker",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable-static-runtime-evidence-pending",
+      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+    },
+    {
+      "file": "apps/web/src/Achievements.tsx",
+      "kind": "tag:details",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "reachable-static-runtime-evidence-pending",
+      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+    },
+    {
+      "file": "apps/web/src/Achievements.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable-static-runtime-evidence-pending",
+      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+    },
+    {
       "file": "apps/web/src/AppHeader.tsx",
       "kind": "tag:details",
       "count": 1,
@@ -403,6 +443,16 @@
       "scope": "Session menu details element in topbar.",
       "evidence": ["remainingMenus"],
       "next": "No blanket current-SHA/full lifecycle claim: session desktop content actions and full combined matrix remain separate."
+    },
+    {
+      "file": "apps/web/src/CartographicLabelFields.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable-static-runtime-evidence-pending",
+      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
     },
     {
       "file": "apps/web/src/CatalogEntryForm.tsx",
@@ -425,6 +475,26 @@
       "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
     },
     {
+      "file": "apps/web/src/CharacterProgression.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable-static-runtime-evidence-pending",
+      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+    },
+    {
+      "file": "apps/web/src/CharacterProgression.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable-static-runtime-evidence-pending",
+      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+    },
+    {
       "file": "apps/web/src/CharacterSpellBranches.tsx",
       "kind": "tag:select",
       "count": 1,
@@ -433,6 +503,46 @@
       "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
       "evidence": [],
       "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+    },
+    {
+      "file": "apps/web/src/EconomyManager.tsx",
+      "kind": "tag:details",
+      "count": 4,
+      "status": "BLOCKED",
+      "classification": "reachable-static-runtime-evidence-pending",
+      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+    },
+    {
+      "file": "apps/web/src/EconomyManager.tsx",
+      "kind": "tag:select",
+      "count": 6,
+      "status": "BLOCKED",
+      "classification": "reachable-static-runtime-evidence-pending",
+      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+    },
+    {
+      "file": "apps/web/src/EconomyWorkspace.tsx",
+      "kind": "tag:details",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "reachable-static-runtime-evidence-pending",
+      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+    },
+    {
+      "file": "apps/web/src/EconomyWorkspace.tsx",
+      "kind": "tag:select",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "reachable-static-runtime-evidence-pending",
+      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
     },
     {
       "file": "apps/web/src/FeedbackReporter.tsx",
@@ -463,6 +573,16 @@
       "scope": "GM-only native select for choosing an owned global pack, conditional on packs being present. No runtime render, keyboard, focus, popup or selection evidence is recorded.",
       "evidence": [],
       "next": "With an authorized GM fixture containing packs, verify actual open/select/close, focus and placement in desktop/compact browsers; do not infer runtime PASS from static discovery."
+    },
+    {
+      "file": "apps/web/src/InstanceBindings.tsx",
+      "kind": "tag:FormSelect",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "reachable-static-runtime-evidence-pending",
+      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
     },
     {
       "file": "apps/web/src/LandingGuide.tsx",
@@ -595,12 +715,12 @@
     {
       "file": "apps/web/src/SpellSchoolsWorkspace.tsx",
       "kind": "tag:select",
-      "count": 7,
+      "count": 8,
       "status": "BLOCKED",
       "classification": "current-source-runtime-evidence-pending",
-      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "scope": "Eight static selects reviewed; added occurrence has no current browser acceptance.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Verify all reachable selects on a frozen candidate and attach scoped evidence."
     },
     {
       "file": "apps/web/src/StickerPackManager.tsx",
@@ -733,6 +853,16 @@
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
+      "file": "apps/web/src/WorldRegionPicker.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable-static-runtime-evidence-pending",
+      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+    },
+    {
       "file": "apps/web/src/design-system/Dialog.tsx",
       "kind": "tag:Popup",
       "count": 1,
@@ -829,6 +959,16 @@
       "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
       "evidence": [],
       "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+    },
+    {
+      "file": "apps/web/src/sidebar/CharacterInventory.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "reachable-static-runtime-evidence-pending",
+      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "evidence": [],
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
     },
     {
       "file": "apps/web/src/sidebar/CharacterMediaGallery.tsx",

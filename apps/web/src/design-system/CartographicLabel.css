@@ -1,0 +1,58 @@
+/* Owner-selected UIX-480 ribbon, including outlined tails on light backgrounds.
+ * Intrinsic side margins reserve decoration width. No animation or fixed map
+ * coordinates; the owning map must handle layout, zoom and visibility. */
+.cartographic-label {
+  position: relative;
+  isolation: isolate;
+  display: inline-block;
+  box-sizing: border-box;
+  max-width: calc(100% - 24px);
+  min-width: 0;
+  margin-inline: 12px;
+  color: var(--palette-ink-900);
+  vertical-align: middle;
+}
+.cartographic-label__text {
+  position: relative;
+  display: block;
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--palette-ink-100);
+  border: 1px solid var(--palette-ink-400);
+  box-shadow: 0 2px 0 var(--palette-ink-500);
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  text-align: center;
+}
+.cartographic-label__tail {
+  position: absolute;
+  top: 4px;
+  width: 20px;
+  height: 100%;
+  fill: var(--palette-ink-300);
+  stroke: var(--palette-ink-500);
+  stroke-width: 1px;
+  stroke-linejoin: round;
+  z-index: -1;
+  pointer-events: none;
+}
+.cartographic-label__tail--start {
+  left: -12px;
+}
+.cartographic-label__tail--end {
+  right: -12px;
+  transform: scaleX(-1);
+}
+@media (forced-colors: active) {
+  .cartographic-label {
+    color: CanvasText;
+  }
+  .cartographic-label__text {
+    background: Canvas;
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+  .cartographic-label__tail {
+    fill: Canvas;
+    stroke: CanvasText;
+  }
+}

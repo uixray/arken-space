@@ -289,8 +289,8 @@ export function registerCharacterExtrasRoutes(
               return payload.result;
             }
             const before = inspirationState(character.resources);
-            let after = before,
-              messageId: string | null = null;
+            let after: typeof before;
+            let messageId: string;
             if ("state" in body) {
               insist(auth.role === "GM", "GM_REQUIRED", 403);
               insist(

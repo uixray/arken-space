@@ -670,7 +670,9 @@ describe("character action feedback", () => {
     ).toBeVisible();
     expect(within(panel).getByText("Дополнительные ресурсы")).toBeVisible();
     expect(
-      within(panel).getByLabelText(/Инвентарь \(один предмет на строку\)/),
+      within(panel).getByLabelText(
+        /Текстовые записи инвентаря \(сохранены отдельно\)/,
+      ),
     ).toBeVisible();
     expect(within(panel).getByLabelText("Заметки")).toBeVisible();
   });

@@ -5,7 +5,10 @@ import { claimBugAlbumDelivery } from "./bug-intake-album-outbox.js";
 import { recordBugAlbumDeliveryOutcome } from "./bug-intake-album-outcome.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
-type Claim = Extract<Awaited<ReturnType<typeof claimBugAlbumDelivery>>, { ok: true }>;
+type Claim = Extract<
+  Awaited<ReturnType<typeof claimBugAlbumDelivery>>,
+  { ok: true }
+>;
 type Outcome = z.infer<typeof deliveryOutcomeSchema>;
 
 /** Dormant orchestration seam, no scheduler or transport instantiated here.
@@ -43,7 +46,12 @@ export async function sendQueuedBugAlbumOnce(
     outcome = { state: "UNKNOWN", failureCode: "EXTERNAL_RESULT_UNKNOWN" };
   }
   try {
-    const receipt = await recordBugAlbumDeliveryOutcome(db, deliveryId, claimId, outcome);
+    const receipt = await recordBugAlbumDeliveryOutcome(
+      db,
+      deliveryId,
+      claimId,
+      outcome,
+    );
     if (receipt.ok) return { state: receipt.state, deliveryId };
   } catch {
     // Do not resend after a failed receipt write, even if external work succeeded.
@@ -58,4 +66,3 @@ export async function sendQueuedBugAlbumOnce(
     receiptCandidate: outcome,
   };
 }
-

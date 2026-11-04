@@ -57,6 +57,7 @@ function mapDto(map: typeof worldMaps.$inferSelect) {
 function locationDto(location: typeof worldMapLocations.$inferSelect) {
   return {
     id: location.id,
+    label: location.label,
     mapId: location.mapId,
     canonicalLocationId: location.canonicalLocationId,
     name: location.name,
@@ -871,6 +872,7 @@ export function registerWorldMapRoutes(
               kind: body.kind,
               summary: body.summary,
               gmNotes: body.gmNotes,
+              label: body.label ?? null,
               visibility: body.visibility,
               x: body.x,
               y: body.y,
@@ -973,6 +975,7 @@ export function registerWorldMapRoutes(
               ...(body.kind !== undefined ? { kind: body.kind } : {}),
               ...(body.summary !== undefined ? { summary: body.summary } : {}),
               ...(body.gmNotes !== undefined ? { gmNotes: body.gmNotes } : {}),
+              ...(body.label !== undefined ? { label: body.label } : {}),
               ...(body.visibility !== undefined
                 ? { visibility: body.visibility }
                 : {}),

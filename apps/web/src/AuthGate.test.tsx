@@ -151,10 +151,9 @@ describe("AuthGate quick player login", () => {
     expect(
       await screen.findByRole("heading", { name: "Войти в аккаунт" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "arken-space" })).toHaveAttribute(
-      "href",
-      "/",
-    );
+    expect(
+      screen.getByRole("link", { name: "Аркспейс — на главную" }),
+    ).toHaveAttribute("href", "/");
   });
   it("provides accessible links to the landing page sections", async () => {
     window.history.replaceState({}, "", "/");

@@ -54,6 +54,7 @@ const safeNodeErrorCodes = new Set([
 ]);
 
 export const requiredMembershipColumns = Object.freeze([
+  "access_revoked_at",
   "campaign_id",
   "created_at",
   "default_theme_id",

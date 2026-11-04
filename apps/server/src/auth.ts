@@ -59,7 +59,12 @@ async function sessionSourceIsValid(db: Database, row: SessionSourceRow) {
           eq(accountSessions.id, row.accountSessionId),
           isNull(accountSessions.revokedAt),
           gt(accountSessions.expiresAt, new Date()),
-          accountAssuranceWhere(env.DEPLOYMENT_MODE === "LOCAL_HOST" ? env.LOCAL_INSTANCE_ID : undefined),
+          accountAssuranceWhere(
+            env.DEPLOYMENT_MODE === "LOCAL_HOST"
+              ? env.LOCAL_INSTANCE_ID
+              : undefined,
+          ),
+          eq(users.passwordChangeRequired, false),
           isNull(users.disabledAt),
         ),
       )
@@ -159,6 +164,7 @@ export async function authFromSessionToken(
     .where(
       and(
         eq(sessions.tokenHash, hashToken(token)),
+        isNull(memberships.accessRevokedAt),
         gt(sessions.expiresAt, new Date()),
       ),
     )
@@ -190,7 +196,13 @@ export async function sessionIsActive(
     })
     .from(sessions)
     .innerJoin(memberships, eq(sessions.membershipId, memberships.id))
-    .where(and(eq(sessions.id, sessionId), gt(sessions.expiresAt, new Date())))
+    .where(
+      and(
+        eq(sessions.id, sessionId),
+        gt(sessions.expiresAt, new Date()),
+        isNull(memberships.accessRevokedAt),
+      ),
+    )
     .limit(1);
   if (!session) return false;
   if (!session.authSource && !env.ACCOUNT_AUTH_ENABLED) return true;
@@ -254,10 +266,16 @@ export async function createSession(
         and(
           eq(memberships.id, membershipId),
           eq(memberships.userId, accountSessions.userId),
+          isNull(memberships.accessRevokedAt),
           eq(accountSessions.id, provenance.accountSessionId),
           isNull(accountSessions.revokedAt),
           gt(accountSessions.expiresAt, new Date()),
-          accountAssuranceWhere(env.DEPLOYMENT_MODE === "LOCAL_HOST" ? env.LOCAL_INSTANCE_ID : undefined),
+          accountAssuranceWhere(
+            env.DEPLOYMENT_MODE === "LOCAL_HOST"
+              ? env.LOCAL_INSTANCE_ID
+              : undefined,
+          ),
+          eq(users.passwordChangeRequired, false),
           isNull(users.disabledAt),
         ),
       )

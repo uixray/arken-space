@@ -1,0 +1,46 @@
+.positioned-cartographic-label {
+  display: inline-block;
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding-bottom: 4px;
+}
+/* Configured captions must not determine the point button's dimensions:
+ * its percentage translation otherwise moves the icon when text/style changes.
+ * Keep the legacy inline layout for locations without explicit configuration. */
+.world-map-marker--configured > .world-map-marker__label--configured {
+  position: absolute;
+  left: calc(100% + 4px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: max-content;
+  max-width: max(1px, calc(var(--world-map-width, 320px) - 16px));
+  overflow: visible;
+}
+.world-map-marker--configured:focus-visible .positioned-cartographic-label {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.cartographic-label-fields {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.cartographic-label-fields label {
+  display: grid;
+  gap: 4px;
+}
+.cartographic-label-fields input[type="range"] {
+  width: 100%;
+}
+.scene-cartographic-title {
+  position: absolute;
+  top: 72px;
+  left: 16px;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  z-index: 3;
+  font-size: 18px;
+  pointer-events: none;
+}

@@ -129,7 +129,10 @@ const snapshotCoalescers = new WeakMap<
   ReturnType<typeof createBroadcastCoalescer>
 >();
 const snapshotTriggers = SNAPSHOT_METRICS_ENABLED
-  ? new WeakMap<RealtimeServer, ReturnType<typeof createSnapshotTriggerCollector>>()
+  ? new WeakMap<
+      RealtimeServer,
+      ReturnType<typeof createSnapshotTriggerCollector>
+    >()
   : null;
 
 /**
@@ -149,7 +152,9 @@ function broadcastSnapshots(
     snapshotCoalescers.set(io, coalesce);
   }
   if (!snapshotTriggers)
-    return coalesce(campaignId, () => emitCampaignSnapshots(io, db, campaignId));
+    return coalesce(campaignId, () =>
+      emitCampaignSnapshots(io, db, campaignId),
+    );
   let collector = snapshotTriggers.get(io);
   if (!collector) {
     collector = createSnapshotTriggerCollector();
@@ -447,7 +452,8 @@ export function registerRoutes(
     await performanceJournal?.drain();
   });
   registerAccountAuthRoutes(app, db, io, {
-    localInstanceId: env.DEPLOYMENT_MODE === "LOCAL_HOST" ? env.LOCAL_INSTANCE_ID : undefined,
+    localInstanceId:
+      env.DEPLOYMENT_MODE === "LOCAL_HOST" ? env.LOCAL_INSTANCE_ID : undefined,
     enabled: env.ACCOUNT_AUTH_ENABLED,
     registrationEnabled: env.ACCOUNT_REGISTRATION_ENABLED,
     legacyDevEnabled:
@@ -466,7 +472,8 @@ export function registerRoutes(
     mailKeyring: mailContext.keyring,
   });
   registerAccountCampaignRoutes(app, db, io, {
-    localInstanceId: env.DEPLOYMENT_MODE === "LOCAL_HOST" ? env.LOCAL_INSTANCE_ID : undefined,
+    localInstanceId:
+      env.DEPLOYMENT_MODE === "LOCAL_HOST" ? env.LOCAL_INSTANCE_ID : undefined,
     enabled: env.ACCOUNT_AUTH_ENABLED,
     creationEnabled: env.ACCOUNT_CAMPAIGN_CREATION_ENABLED,
     creationLimit: env.ACCOUNT_CAMPAIGN_CREATION_LIMIT,
@@ -834,7 +841,8 @@ export function registerRoutes(
   );
 
   registerCharacterRoutes(app, db, {
-    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId, "character"),
+    broadcast: (campaignId) =>
+      broadcastSnapshots(io, db, campaignId, "character"),
     publishCharacter: (campaignId, change) =>
       publishCharacterChange(io, campaignId, change),
   });
@@ -865,13 +873,15 @@ export function registerRoutes(
   });
 
   registerStickerRoutes(app, db, {
-    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId, "sticker"),
+    broadcast: (campaignId) =>
+      broadcastSnapshots(io, db, campaignId, "sticker"),
   });
 
   registerChatRoutes(app, db, io);
 
   registerCampaignRoutes(app, db, {
-    broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId, "campaign"),
+    broadcast: (campaignId) =>
+      broadcastSnapshots(io, db, campaignId, "campaign"),
   });
 
   registerCharacterPlayRoutes(app, db, io, {

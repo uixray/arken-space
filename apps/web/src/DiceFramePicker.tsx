@@ -126,9 +126,7 @@ export function PersonalDiceFrameSettings({
         Сохраняется сразу, отдельно от темы. Рамка навыка, назначенная мастером,
         важнее личной; критический бросок всегда показывает свою.
       </p>
-      {error ? (
-        <div role="alert">{error}</div>
-      ) : null}
+      {error ? <div role="alert">{error}</div> : null}
     </section>
   );
 }

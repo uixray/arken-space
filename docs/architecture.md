@@ -174,7 +174,7 @@ multi-campaign provisioning service.
 
 ### HTTP API по доменам
 
-Всего **212** HTTP-маршрутов во всех server route-модулях: 4 остаются непосредственно в
+Всего **246** HTTP-маршрутов во всех server route-модулях: 4 остаются непосредственно в
 `routes.ts`, остальные регистрируются специализированными доменными модулями, включая
 4 маршрута `asset-routes.ts`, и разделены по персонажам, столкновениям, паузе кампании,
 operator feedback, заявкам игроков, сюжетному каналу, картам, магии и
@@ -391,7 +391,7 @@ sequenceDiagram
 
 ## Данные
 
-Drizzle schema содержит **71** прикладных таблиц.
+Drizzle schema содержит **110** прикладных таблиц.
 
 | Группа             | Таблицы                                                                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -425,6 +425,8 @@ Drizzle schema содержит **71** прикладных таблиц.
 | Новые доменные данные | `campaign_sound_packs` |
 | Новые доменные данные | `campaign_soundpad_settings` |
 | Новые доменные данные | `campaign_sounds` |
+
+| Дополнительные домены | `local_host_instances`, `character_private_notebooks`, `world_instance_bindings`, `achievement_definitions`, `achievement_awards`, `achievement_history`, `bug_intake_albums`, `bug_intake_messages`, `bug_intake_versions`, `bug_intake_files`, `bug_intake_actions`, `bug_intake_updates`, `bug_intake_update_actions`, `bug_intake_deliveries`, `bug_intake_album_deliveries`, `campaign_economies`, `economy_merchants`, `economy_offers`, `economy_quotes`, `economy_purchases`, `creation_rule_packs`, `creation_rule_versions`, `creation_templates`, `creation_template_versions`, `creation_reviews`, `creation_actions`, `creation_recipes`, `creation_recipe_versions`, `creation_objects`, `creation_operation_quotes`, `creation_operations`, `creation_object_edges`, `creation_store_policies`, `creation_listings`, `creation_listing_versions`, `creation_store_quotes`, `creation_purchases`, `creation_licences`, `creation_template_origins` |
 
 Ключевые отношения:
 
@@ -464,7 +466,7 @@ Drizzle schema содержит **71** прикладных таблиц.
   удалении меняйте content version и не считайте browser cache persistence;
 - `game_events` и `action_journal` обеспечивают разные виды истории.
 
-Миграции `0000`–`0064` (65 SQL files) применяются при старте server-контейнера
+Миграции `0000`–`0087` (88 SQL files) применяются при старте server-контейнера
 до запуска Fastify. Изменение schema обязано сопровождаться migration, тестами, обновлением
 backup/restore manifests и проверкой role-filtered snapshot.
 

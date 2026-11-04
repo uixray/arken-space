@@ -261,7 +261,7 @@ describe("operator feedback boundary", () => {
     ).toBe(415);
   });
 
-  it("enforces transitions and strict Linear links, and exports a redacted copy", async () => {
+  it("enforces transitions and strict Linear links, and exports only reviewed text", async () => {
     const row = await report({
       title: "Bearer top-secret-token",
       description: [
@@ -329,11 +329,31 @@ describe("operator feedback boundary", () => {
         })
       ).statusCode,
     ).toBe(200);
-    const exported = await app.inject({
+    const unreviewed = await app.inject({
       method: "GET",
       url: `/api/operator/feedback/${row.id}/export`,
       headers: auth(tokens.operator),
     });
+    expect(unreviewed.statusCode).toBe(409);
+    expect(unreviewed.json()).toEqual({ error: "MANUAL_REVIEW_REQUIRED" });
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/operator/feedback/${row.id}`,
+      headers: auth(tokens.operator),
+    });
+    expect(detail.statusCode).toBe(200);
+    const exported = await app.inject({
+      method: "POST",
+      url: `/api/operator/feedback/${row.id}/export`,
+      headers: auth(tokens.operator),
+      payload: {
+        reviewed: true,
+        expectedUpdatedAt: detail.json().updatedAt,
+        title: "Reviewed title",
+        description: "Safe reproduction step",
+      },
+    });
+    expect(exported.statusCode).toBe(200);
     for (const forbidden of [
       "contact",
       "diagnostics",
@@ -351,7 +371,6 @@ describe("operator feedback boundary", () => {
       "10.0.0.8",
     ])
       expect(exported.body).not.toContain(secret);
-    expect(exported.body).toContain("[REDACTED]");
     expect(exported.body).toContain("Safe reproduction step");
   });
 

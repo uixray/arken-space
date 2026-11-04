@@ -37,15 +37,15 @@ favicon16–32px: этот критерий всё ещё открыт.
 Срез checkout: `b7cf522d64d776da380792e6d828ccb6a8d13bb8` + общий dirty pool.
 Это чтение источников, не проверка живого сайта.
 
-| Поверхность | Найдено в источнике | Граница последующего изменения |
-|---|---|---|
-| `apps/web/index.html` | title `arken-space`, favicon `arkpath-hat-white.png` | Пользовательский title и ссылка на принятый favicon; не менять entrypoint/пути проекта |
-| `apps/web/src/AppHeader.tsx` | `brand__mark`, aria-label `ARKPATH`, ссылка с названием Arken Space | Принятый знак и доступное название; не потерять место навигации в узкой шапке |
-| `apps/web/src/AuthGate.tsx` | текстовый `arken-space`, Arken Space в aria/описании/footer | Кириллический wordmark и пользовательские подписи, без изменения auth/navigation |
-| `apps/web/src/styles.css` | mark28×30px, старый PNG и brightness(0) для light | Отдельная проверяемая light/dark адаптация нового ассета; не переносить старый фильтр вслепую |
-| `apps/web/src/AccountAuthWorkspace.tsx` | Подсказка про окно «Arken Space — локальный сервер» | Синхронизировать с настоящим пользовательским заголовком Windows-host |
-| `tools/windows-host/{MainForm.cs,HelpForm.cs,Program.cs,help.ru.txt}` | Видимые названия, сообщения, справка | Только copy/заголовки. Исполняемые имена, namespace, каталоги и instance identity не переименовывать |
-| `apps/web/src/design-system/Philosophy.stories.tsx` и MDX | Документационные упоминания бренда | Выделить пользовательские заголовки отдельно от исторических/технических названий |
+| Поверхность                                                           | Найдено в источнике                                                 | Граница последующего изменения                                                                       |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `apps/web/index.html`                                                 | title `arken-space`, favicon `arkpath-hat-white.png`                | Пользовательский title и ссылка на принятый favicon; не менять entrypoint/пути проекта               |
+| `apps/web/src/AppHeader.tsx`                                          | `brand__mark`, aria-label `ARKPATH`, ссылка с названием Arken Space | Принятый знак и доступное название; не потерять место навигации в узкой шапке                        |
+| `apps/web/src/AuthGate.tsx`                                           | текстовый `arken-space`, Arken Space в aria/описании/footer         | Кириллический wordmark и пользовательские подписи, без изменения auth/navigation                     |
+| `apps/web/src/styles.css`                                             | mark28×30px, старый PNG и brightness(0) для light                   | Отдельная проверяемая light/dark адаптация нового ассета; не переносить старый фильтр вслепую        |
+| `apps/web/src/AccountAuthWorkspace.tsx`                               | Подсказка про окно «Arken Space — локальный сервер»                 | Синхронизировать с настоящим пользовательским заголовком Windows-host                                |
+| `tools/windows-host/{MainForm.cs,HelpForm.cs,Program.cs,help.ru.txt}` | Видимые названия, сообщения, справка                                | Только copy/заголовки. Исполняемые имена, namespace, каталоги и instance identity не переименовывать |
+| `apps/web/src/design-system/Philosophy.stories.tsx` и MDX             | Документационные упоминания бренда                                  | Выделить пользовательские заголовки отдельно от исторических/технических названий                    |
 
 Это предметная карта найденных точек, не обещание исчерпывающего глобального
 replace. Перед интеграцией дополнительно сверить installer display names и
@@ -57,11 +57,11 @@ replace. Перед интеграцией дополнительно свери
 Сохранены три направления из исходной задачи, без подмены шрифтом интерфейса.
 Проверены официальные metadata/OFL в google/fonts02.11.2026:
 
-| Кандидат | Что подтверждено metadata | Лицензионный источник |
-|---|---|---|
-| [Forum](https://raw.githubusercontent.com/google/fonts/main/ofl/forum/METADATA.pb) | Cyrillic и Cyrillic-ext, normal400, `Forum-Regular.ttf` | [OFL1.1](https://raw.githubusercontent.com/google/fonts/main/ofl/forum/OFL.txt) |
-| [Unbounded](https://raw.githubusercontent.com/google/fonts/main/ofl/unbounded/METADATA.pb) | Cyrillic и Cyrillic-ext, variablewght200–900, `Unbounded[wght].ttf` | [OFL1.1](https://raw.githubusercontent.com/google/fonts/main/ofl/unbounded/OFL.txt) |
-| [Yeseva One](https://raw.githubusercontent.com/google/fonts/main/ofl/yesevaone/METADATA.pb) | Cyrillic и Cyrillic-ext, normal400, `YesevaOne-Regular.ttf` | [OFL1.1](https://raw.githubusercontent.com/google/fonts/main/ofl/yesevaone/OFL.txt) |
+| Кандидат                                                                                    | Что подтверждено metadata                                           | Лицензионный источник                                                               |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [Forum](https://raw.githubusercontent.com/google/fonts/main/ofl/forum/METADATA.pb)          | Cyrillic и Cyrillic-ext, normal400, `Forum-Regular.ttf`             | [OFL1.1](https://raw.githubusercontent.com/google/fonts/main/ofl/forum/OFL.txt)     |
+| [Unbounded](https://raw.githubusercontent.com/google/fonts/main/ofl/unbounded/METADATA.pb)  | Cyrillic и Cyrillic-ext, variablewght200–900, `Unbounded[wght].ttf` | [OFL1.1](https://raw.githubusercontent.com/google/fonts/main/ofl/unbounded/OFL.txt) |
+| [Yeseva One](https://raw.githubusercontent.com/google/fonts/main/ofl/yesevaone/METADATA.pb) | Cyrillic и Cyrillic-ext, normal400, `YesevaOne-Regular.ttf`         | [OFL1.1](https://raw.githubusercontent.com/google/fonts/main/ofl/yesevaone/OFL.txt) |
 
 Metadata не доказывает качество конкретного написания «Аркспейс». Бинарные
 шрифты не скачивались, не устанавливались и не подключались. После допуска

@@ -1,5 +1,15 @@
 import { z } from "zod";
 
+// Fetch errors may contain the bot token in their URL. Never preserve them as
+// error causes or return them to callers, including in debug output.
+function sanitizedTelegramDownloadError(error: unknown): Error {
+  return new Error(
+    error instanceof Error && error.message === "BUG_FILE_TOO_LARGE"
+      ? "BUG_FILE_TOO_LARGE"
+      : "TELEGRAM_DOWNLOAD_FAILED",
+  );
+}
+
 async function readSmallJson(response: Response, maxBytes: number) {
   if (!response.body) throw new Error("TELEGRAM_RESPONSE_INVALID");
   const reader = response.body.getReader();
@@ -113,11 +123,7 @@ export function createTelegramBugFileSource(token: string, maxBytes: number) {
             throw new Error("TELEGRAM_FILE_INCOMPLETE");
         } catch (error) {
           // Strip fetch errors: they may embed secret-bearing request URLs.
-          throw new Error(
-            error instanceof Error && error.message === "BUG_FILE_TOO_LARGE"
-              ? "BUG_FILE_TOO_LARGE"
-              : "TELEGRAM_DOWNLOAD_FAILED",
-          );
+          throw sanitizedTelegramDownloadError(error);
         } finally {
           await close();
           bodyReader.releaseLock();
@@ -126,11 +132,7 @@ export function createTelegramBugFileSource(token: string, maxBytes: number) {
       return { chunks: chunks(), close };
     } catch (error) {
       await close();
-      throw new Error(
-        error instanceof Error && error.message === "BUG_FILE_TOO_LARGE"
-          ? "BUG_FILE_TOO_LARGE"
-          : "TELEGRAM_DOWNLOAD_FAILED",
-      );
+      throw sanitizedTelegramDownloadError(error);
     }
   };
 }

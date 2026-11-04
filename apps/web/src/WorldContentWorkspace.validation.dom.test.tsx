@@ -13,7 +13,10 @@ import { WorldContentWorkspace } from "./WorldContentWorkspace";
 const { apiMock } = vi.hoisted(() => ({ apiMock: vi.fn() }));
 vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
-  api: apiMock,
+  api: (path: string, ...args: unknown[]) =>
+    path.startsWith("/api/world-content-regions?")
+      ? Promise.resolve({ items: [], hasMore: false })
+      : apiMock(path, ...args),
 }));
 
 beforeEach(() => {

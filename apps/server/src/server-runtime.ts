@@ -46,8 +46,13 @@ export async function startServer() {
   });
 
   app.addHook("onRequest", async (request, reply) => {
-    if (env.DEPLOYMENT_MODE === "LOCAL_HOST" &&
-        (request.headers.host !== `localhost:${env.PORT}` || !["127.0.0.1", "::ffff:127.0.0.1", "::1"].includes(request.socket.remoteAddress ?? "")))
+    if (
+      env.DEPLOYMENT_MODE === "LOCAL_HOST" &&
+      (request.headers.host !== `localhost:${env.PORT}` ||
+        !["127.0.0.1", "::ffff:127.0.0.1", "::1"].includes(
+          request.socket.remoteAddress ?? "",
+        ))
+    )
       return reply.code(403).send({ error: "LOCAL_HOST_ONLY" });
     reply.header("x-request-id", request.id);
     const actionId = requestActionId(request.headers["x-action-id"]);
@@ -76,7 +81,9 @@ export async function startServer() {
       await result.client`SELECT 1`;
     } catch {
       await result.client.end().catch(() => undefined);
-      throw new Error("Не удалось подключиться к PostgreSQL при запуске сервера");
+      throw new Error(
+        "Не удалось подключиться к PostgreSQL при запуске сервера",
+      );
     }
     client = result.client;
     db = result.db as Parameters<typeof registerRoutes>[1];
@@ -86,8 +93,12 @@ export async function startServer() {
   if (env.DEPLOYMENT_MODE === "LOCAL_HOST") {
     try {
       await assertLocalDatabaseRole(db, "runtime");
-      if (!(await inspectLocalHost(db, env.LOCAL_INSTANCE_ID)).initialized) throw new Error("LOCAL_SETUP_REQUIRED");
-    } catch (error) { await client.end().catch(() => undefined); throw error; }
+      if (!(await inspectLocalHost(db, env.LOCAL_INSTANCE_ID)).initialized)
+        throw new Error("LOCAL_SETUP_REQUIRED");
+    } catch (error) {
+      await client.end().catch(() => undefined);
+      throw error;
+    }
   }
 
   if (!env.ACCOUNT_AUTH_ENABLED) {
@@ -99,19 +110,25 @@ export async function startServer() {
     }
   }
 
-  const io = new Server<ClientToServerEvents, ServerToClientEvents>(app.server, {
-    cors: { origin: env.WEB_ORIGIN, credentials: true },
-    connectionStateRecovery: {
-      maxDisconnectionDuration: 120_000,
-      skipMiddlewares: false,
+  const io = new Server<ClientToServerEvents, ServerToClientEvents>(
+    app.server,
+    {
+      cors: { origin: env.WEB_ORIGIN, credentials: true },
+      connectionStateRecovery: {
+        maxDisconnectionDuration: 120_000,
+        skipMiddlewares: false,
+      },
+      allowRequest: (request, callback) => {
+        const localPeer =
+          env.DEPLOYMENT_MODE !== "LOCAL_HOST" ||
+          (request.headers.host === `localhost:${env.PORT}` &&
+            ["127.0.0.1", "::ffff:127.0.0.1", "::1"].includes(
+              request.socket.remoteAddress ?? "",
+            ));
+        callback(null, localPeer && request.headers.origin === env.WEB_ORIGIN);
+      },
     },
-    allowRequest: (request, callback) => {
-      const localPeer = env.DEPLOYMENT_MODE !== "LOCAL_HOST" ||
-        (request.headers.host === `localhost:${env.PORT}` &&
-          ["127.0.0.1", "::ffff:127.0.0.1", "::1"].includes(request.socket.remoteAddress ?? ""));
-      callback(null, localPeer && request.headers.origin === env.WEB_ORIGIN);
-    },
-  });
+  );
 
   const accountMailRuntime = createAccountMailRuntime({
     enabled: accountMailContext.runtimeEnabled,
@@ -129,62 +146,66 @@ export async function startServer() {
   });
 
   try {
-  registerRealtime(io, db, app.log);
-  registerRoutes(app, db, io, accountMailContext);
-  if (env.DEPLOYMENT_MODE === "LOCAL_HOST") await registerLocalHostWeb(app, env.LOCAL_WEB_ROOT);
+    registerRealtime(io, db, app.log);
+    registerRoutes(app, db, io, accountMailContext);
+    if (env.DEPLOYMENT_MODE === "LOCAL_HOST")
+      await registerLocalHostWeb(app, env.LOCAL_WEB_ROOT);
 
-  app.setErrorHandler((error, request, reply) => {
-    const problem = error as Error & {
-      validation?: unknown;
-      statusCode?: number;
-    };
-    const isValidationError =
-      Boolean(problem.validation) || problem.name === "ZodError";
-    const statusCode = isValidationError ? 400 : (problem.statusCode ?? 500);
-    const sensitiveAccountRoute =
-      request.url.startsWith("/api/account/") ||
-      request.url.startsWith("/api/auth/");
-    const details = {
-      ...(sensitiveAccountRoute
-        ? accountErrorLogDetails({
-            requestId: request.id,
-            actionId: requestActionId(request.headers["x-action-id"]),
-            statusCode,
-            validation: isValidationError,
-          })
-        : { err: problem }),
-      requestId: request.id,
-      actionId: requestActionId(request.headers["x-action-id"]),
-      statusCode,
-    };
-    if (statusCode >= 500)
-      request.log.error(details, "request.unexpected_failure");
-    else request.log.warn(details, "request.rejected");
-    if (isCampaignCanvasGuardError(error))
-      return reply.code(error.statusCode).send({ error: error.code });
-    if (isValidationError)
-      return reply.code(400).send({
-        error: "VALIDATION_ERROR",
+    app.setErrorHandler((error, request, reply) => {
+      const problem = error as Error & {
+        validation?: unknown;
+        statusCode?: number;
+      };
+      const isValidationError =
+        Boolean(problem.validation) || problem.name === "ZodError";
+      const statusCode = isValidationError ? 400 : (problem.statusCode ?? 500);
+      const sensitiveAccountRoute =
+        request.url.startsWith("/api/account/") ||
+        request.url.startsWith("/api/auth/");
+      const details = {
+        ...(sensitiveAccountRoute
+          ? accountErrorLogDetails({
+              requestId: request.id,
+              actionId: requestActionId(request.headers["x-action-id"]),
+              statusCode,
+              validation: isValidationError,
+            })
+          : { err: problem }),
+        requestId: request.id,
+        actionId: requestActionId(request.headers["x-action-id"]),
+        statusCode,
+      };
+      if (statusCode >= 500)
+        request.log.error(details, "request.unexpected_failure");
+      else request.log.warn(details, "request.rejected");
+      if (isCampaignCanvasGuardError(error))
+        return reply.code(error.statusCode).send({ error: error.code });
+      if (isValidationError)
+        return reply.code(400).send({
+          error: "VALIDATION_ERROR",
+          message: sensitiveAccountRoute
+            ? "Не удалось выполнить запрос"
+            : env.NODE_ENV === "production"
+              ? "Некорректные данные запроса"
+              : problem.message,
+        });
+      return reply.code(statusCode).send({
+        error: "REQUEST_FAILED",
         message: sensitiveAccountRoute
           ? "Не удалось выполнить запрос"
           : env.NODE_ENV === "production"
-            ? "Некорректные данные запроса"
+            ? "Не удалось выполнить запрос"
             : problem.message,
       });
-    return reply.code(statusCode).send({
-      error: "REQUEST_FAILED",
-      message: sensitiveAccountRoute
-        ? "Не удалось выполнить запрос"
-        : env.NODE_ENV === "production"
-          ? "Не удалось выполнить запрос"
-          : problem.message,
     });
-  });
 
-  await app.listen({ host: env.DEPLOYMENT_MODE === "LOCAL_HOST" ? "127.0.0.1" : "0.0.0.0", port: env.PORT });
-  // Start only after the listener is live. Default runtime/SMTP config is off.
-  accountMailRuntime.start();
-  return app;
+    await app.listen({
+      host: env.DEPLOYMENT_MODE === "LOCAL_HOST" ? "127.0.0.1" : "0.0.0.0",
+      port: env.PORT,
+    });
+    // Start only after the listener is live. Default runtime/SMTP config is off.
+    accountMailRuntime.start();
+    return app;
   } catch (error) {
     await app.close().catch(() => undefined);
     throw error;

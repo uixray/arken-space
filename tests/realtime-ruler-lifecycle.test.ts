@@ -36,7 +36,12 @@ const viewerSession = "ruler-lifecycle-viewer-session";
 
 type GameClient = Socket<ServerToClientEvents, ClientToServerEvents>;
 type RulerEvent =
-  | { kind: "updated"; membershipId: string; at: number }
+  | {
+      kind: "updated";
+      membershipId: string;
+      at: number;
+      points: Array<{ x: number; y: number }>;
+    }
   | { kind: "cleared"; membershipId: string; at: number };
 
 const productionRecovery: Partial<ServerOptions> = {
@@ -120,6 +125,7 @@ function record(socket: GameClient) {
       kind: "updated",
       membershipId: ruler.membershipId,
       at: Date.now(),
+      points: ruler.points,
     }),
   );
   socket.on("ruler:cleared", (ruler) =>
@@ -203,10 +209,10 @@ describe.each([
     await sleep(3_000);
 
     for (const events of [authorEvents, viewerEvents]) {
-      // Server FIFO relays every accepted update; none may follow the clear.
-      expect(events.filter((event) => event.kind === "updated")).toHaveLength(
-        40,
-      );
+      // Intermediate pointer updates can be coalesced; no update may follow clear.
+      const updates = events.filter((event) => event.kind === "updated");
+      expect(updates.length).toBeGreaterThan(0);
+      expect(updates.length).toBeLessThanOrEqual(40);
       expect(events.filter((event) => event.kind === "cleared")).toHaveLength(
         1,
       );
@@ -214,6 +220,25 @@ describe.each([
       expect(events.filter((event) => event.at > clearedAt)).toEqual([]);
       expect(visibleRulers(events)).toEqual([]);
     }
+  }, 15_000);
+
+  it("delivers the latest position of a coalesced drag before release", async () => {
+    await startServer(options);
+    const author = await connect(authorSession);
+    const viewer = await connect(viewerSession);
+    const events = record(viewer);
+    drag(author, 40);
+    await waitFor(() =>
+      events.some(
+        (event) =>
+          event.kind === "updated" &&
+          event.points.at(-1)?.x === 640 &&
+          event.points.at(-1)?.y === 320,
+      ),
+    );
+    release(author);
+    await waitFor(() => events.at(-1)?.kind === "cleared");
+    expect(visibleRulers(events)).toEqual([]);
   }, 15_000);
 
   it("a viewer reconnect after the clear receives no stale ruler replay", async () => {
@@ -241,10 +266,7 @@ describe.each([
     const viewerEvents = record(viewer);
 
     drag(author, 5);
-    await waitFor(
-      () =>
-        viewerEvents.filter((event) => event.kind === "updated").length === 5,
-    );
+    await waitFor(() => viewerEvents.some((event) => event.kind === "updated"));
     await dropTransport(author);
     await waitFor(() => viewerEvents.at(-1)?.kind === "cleared");
     const clearedAt = Date.now();
@@ -270,9 +292,8 @@ describe("UIX-682 C20 ruler clear missed during a viewer outage", () => {
       const viewerEvents = record(viewer);
 
       drag(author, 3);
-      await waitFor(
-        () =>
-          viewerEvents.filter((event) => event.kind === "updated").length === 3,
+      await waitFor(() =>
+        viewerEvents.some((event) => event.kind === "updated"),
       );
       expect(visibleRulers(viewerEvents)).toEqual([ids.author]);
 

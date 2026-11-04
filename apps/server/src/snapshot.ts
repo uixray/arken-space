@@ -1083,6 +1083,7 @@ export async function buildSnapshot(
     ),
     scenes: visibleScenes.map((scene) => ({
       id: scene.id,
+      titleLabel: scene.titleLabel,
       name: scene.name,
       projection: scene.projection,
       mapAssetId: scene.mapAssetId,

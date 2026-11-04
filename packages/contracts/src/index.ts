@@ -2,6 +2,11 @@ export * from "./awards-bindings.js";
 export * from "./token-sprites.js";
 export * from "./bug-intake.js";
 import { z } from "zod";
+import {
+  cartographicLabelSchema,
+  type CartographicLabelConfig,
+} from "./cartographic-label.js";
+export * from "./cartographic-label.js";
 export * from "./economy.js";
 import {
   soundpadTriggerSchema,
@@ -650,31 +655,47 @@ export const abilityUsesSchema = z
 /** First approved area mechanic: one shared d6 mana restoration for player
  * characters, including the caster when eligible. Never infer from prose. */
 export { abilityAreaCircle } from "./ability-area-geometry.js";
-export const abilityAreaEffectSchema = z.object({
-  kind: z.literal("RESTORE_MANA"),
-  radiusMeters: z.number().finite().positive().max(1000000),
-  origin: z.literal("CASTER"),
-  targets: z.literal("PLAYER_CHARACTERS"),
-  dice: z.literal("1d6"),
-  includeCaster: z.literal(true),
-}).strict();
+export const abilityAreaEffectSchema = z
+  .object({
+    kind: z.literal("RESTORE_MANA"),
+    radiusMeters: z.number().finite().positive().max(1000000),
+    origin: z.literal("CASTER"),
+    targets: z.literal("PLAYER_CHARACTERS"),
+    dice: z.literal("1d6"),
+    includeCaster: z.literal(true),
+  })
+  .strict();
 
 /** Only identity/revisions cross the boundary; targets and dice are server-owned. */
-export const abilityAreaApplySchema = z.object({
-  actionId: z.string().uuid(),
-  characterId: z.string().uuid(),
-  entryId: z.string().uuid(),
-  entryRevision: z.number().int().nonnegative(),
-  sceneId: z.string().uuid(),
-  sceneRevision: z.number().int().nonnegative(),
-  casterTokenId: z.string().uuid(),
-  casterTokenRevision: z.number().int().nonnegative(),
-}).strict();
+export const abilityAreaApplySchema = z
+  .object({
+    actionId: z.string().uuid(),
+    characterId: z.string().uuid(),
+    entryId: z.string().uuid(),
+    entryRevision: z.number().int().nonnegative(),
+    sceneId: z.string().uuid(),
+    sceneRevision: z.number().int().nonnegative(),
+    casterTokenId: z.string().uuid(),
+    casterTokenRevision: z.number().int().nonnegative(),
+  })
+  .strict();
 export type AbilityAreaApply = z.infer<typeof abilityAreaApplySchema>;
-export const abilityAreaResultSchema = z.object({
-  duplicate: z.boolean(),
-  messageId: z.string().uuid(),
-}).strict();
+export const abilityAreaResultSchema = z.union([
+  z
+    .object({
+      actionId: z.string().uuid().optional(),
+      duplicate: z.boolean(),
+      messageId: z.string().uuid(),
+    })
+    .strict(),
+  z
+    .object({
+      actionId: z.string().uuid(),
+      cancelled: z.literal(true),
+      notApplied: z.literal(true),
+    })
+    .strict(),
+]);
 
 export const entryDataSchema = z
   .object({
@@ -1175,7 +1196,13 @@ export interface PlayerAccessSecretDto {
 
 export const gridSchema = z.object({
   /** GM-authored scale; absent/null means metres cannot be inferred. */
-  metersPerCell: z.number().finite().positive().max(1000000).nullable().optional(),
+  metersPerCell: z
+    .number()
+    .finite()
+    .positive()
+    .max(1000000)
+    .nullable()
+    .optional(),
   enabled: z.boolean().default(true),
   size: z.number().int().min(16).max(256).default(64),
   offsetX: z.number().finite().default(0),
@@ -1190,6 +1217,7 @@ export const gridSchema = z.object({
 export const createSceneSchema = z
   .object({
     actionId: actionIdSchema,
+    titleLabel: cartographicLabelSchema.nullable().optional(),
     name: z.string().trim().min(1).max(100),
     mapAssetId: z.string().uuid().nullable().optional(),
     width: z.number().int().min(320).max(16384).default(1920),
@@ -1539,6 +1567,7 @@ export const drawingCommandSchema = z.object({
 });
 export const sceneCanvasConfigSchema = z.object({
   actionId: actionIdSchema,
+  titleLabel: cartographicLabelSchema.nullable().optional(),
   revision: z.number().int().nonnegative(),
   name: z.string().trim().min(1).max(100).optional(),
   mapAssetId: z.string().uuid().nullable().optional(),
@@ -2137,6 +2166,7 @@ export type ArchiveWorldMap = z.infer<typeof archiveWorldMapSchema>;
 export const createWorldMapLocationSchema = z
   .object({
     actionId: actionIdSchema,
+    label: cartographicLabelSchema.nullable().optional(),
     mapId: z.string().uuid(),
     canonicalLocationId: z.string().uuid().nullable().optional(),
     name: z.string().trim().min(1).max(120),
@@ -2157,6 +2187,7 @@ export type CreateWorldMapLocation = z.infer<
 export const updateWorldMapLocationSchema = z
   .object({
     actionId: actionIdSchema,
+    label: cartographicLabelSchema.nullable().optional(),
     locationId: z.string().uuid(),
     revision: z.number().int().nonnegative(),
     name: z.string().trim().min(1).max(120).optional(),
@@ -2178,7 +2209,8 @@ export const updateWorldMapLocationSchema = z
       command.visibility !== undefined ||
       command.x !== undefined ||
       command.y !== undefined ||
-      command.canonicalLocationId !== undefined,
+      command.canonicalLocationId !== undefined ||
+      command.label !== undefined,
     "At least one location field is required",
   );
 export type UpdateWorldMapLocation = z.infer<
@@ -2679,6 +2711,7 @@ export interface CharacterCatalogEntryDto extends CatalogEntryDto {
 
 export interface SceneDto {
   id: string;
+  titleLabel?: CartographicLabelConfig | null;
   name: string;
   projection: Projection;
   mapAssetId: string | null;
@@ -2776,6 +2809,7 @@ export interface WorldMapDto {
 /** Location cards contain no inferred routes, distances, or travel state. */
 export interface WorldMapLocationDto {
   id: string;
+  label?: CartographicLabelConfig | null;
   mapId: string;
   /** Omitted when the associated canonical location is not visible to this viewer. */
   canonicalLocationId?: string | null;
@@ -3504,7 +3538,13 @@ export const worldContentDtoSchema = z.object({
   regionId: z.string().uuid().nullable().optional(),
   era: z.string().trim().min(1).max(80).nullable().optional(),
   name: z.string(),
-  basePriceCopper: z.number().int().min(0).max(1_000_000_000_000).nullable().optional(),
+  basePriceCopper: z
+    .number()
+    .int()
+    .min(0)
+    .max(1_000_000_000_000)
+    .nullable()
+    .optional(),
   aliases: worldContentAliasesSchema,
   summary: z.string(),
   publicText: z.string(),
@@ -3548,7 +3588,13 @@ export const createWorldContentSchema = z
     actionId: z.string().uuid(),
     slug: worldContentSlugSchema,
     type: worldContentTypeSchema,
-    basePriceCopper: z.number().int().min(0).max(1_000_000_000_000).nullable().optional(),
+    basePriceCopper: z
+      .number()
+      .int()
+      .min(0)
+      .max(1_000_000_000_000)
+      .nullable()
+      .optional(),
     regionId: z.string().uuid().nullable().optional(),
     era: z.string().trim().min(1).max(80).nullable().optional(),
     subtype: z.string().trim().min(1).max(120).nullable().optional(),
@@ -3569,7 +3615,13 @@ export const updateWorldContentSchema = z
   .object({
     actionId: z.string().uuid(),
     revision: z.number().int().nonnegative(),
-    basePriceCopper: z.number().int().min(0).max(1_000_000_000_000).nullable().optional(),
+    basePriceCopper: z
+      .number()
+      .int()
+      .min(0)
+      .max(1_000_000_000_000)
+      .nullable()
+      .optional(),
     regionId: z.string().uuid().nullable().optional(),
     era: z.string().trim().min(1).max(80).nullable().optional(),
     subtype: z.string().trim().min(1).max(120).nullable().optional(),

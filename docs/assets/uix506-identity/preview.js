@@ -10,18 +10,25 @@ for (const specimen of specimens) {
   if (!row || !status) continue;
   if (!document.fonts?.load) {
     row.dataset.fontState = "error";
-    status.textContent = "Браузер не сообщает о загрузке шрифта. Сравнение скрыто.";
+    status.textContent =
+      "Браузер не сообщает о загрузке шрифта. Сравнение скрыто.";
     continue;
   }
-  document.fonts.load(specimen.face, "Аркспейс").then((faces) => {
-    if (faces.length === 0 || faces.some((face) => face.status !== "loaded")) {
-      throw new Error("Local font is unavailable");
-    }
-    row.dataset.fontState = "loaded";
-    status.textContent = "Локальный шрифт загружен";
-  }).catch(() => {
-    row.dataset.fontState = "error";
-    status.textContent = "Локальный файл шрифта не загрузился. Сравнение скрыто, чтобы не показать подмену.";
-  });
+  document.fonts
+    .load(specimen.face, "Аркспейс")
+    .then((faces) => {
+      if (
+        faces.length === 0 ||
+        faces.some((face) => face.status !== "loaded")
+      ) {
+        throw new Error("Local font is unavailable");
+      }
+      row.dataset.fontState = "loaded";
+      status.textContent = "Локальный шрифт загружен";
+    })
+    .catch(() => {
+      row.dataset.fontState = "error";
+      status.textContent =
+        "Локальный файл шрифта не загрузился. Сравнение скрыто, чтобы не показать подмену.";
+    });
 }
-

@@ -94,6 +94,7 @@ export async function buildWorldMapsSnapshot(
   const visibleCanonicalIds = new Set(canonicalRows.map((row) => row.id));
   const locations = visibleLocations.map((location) => ({
     id: location.id,
+    label: location.label,
     mapId: location.mapId,
     ...(location.canonicalLocationId === null ||
     visibleCanonicalIds.has(location.canonicalLocationId)

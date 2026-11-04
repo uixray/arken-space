@@ -13,6 +13,7 @@ import {
   accountEmailInputSchema,
   accountLoginSchema,
   localAccountLoginSchema,
+  hostedAccountLoginSchema,
   accountPasswordChangeSchema,
   accountPasswordResetSchema,
   accountRegistrationSchema,
@@ -29,7 +30,10 @@ import {
   verifyPassword,
 } from "./password-security.js";
 import { hashToken, randomToken, safeEqual } from "./security.js";
-import { accountIdentityDto, hasAccountAssurance } from "./account-assurance.js";
+import {
+  accountIdentityDto,
+  hasAccountAssurance,
+} from "./account-assurance.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type RealtimeSessions = {
@@ -172,7 +176,11 @@ async function revokeCurrentAccountSession(
   await invalidateGameSessions(db, io, [row.id]);
 }
 
-async function findActiveAccountSession(db: Database, token?: string, localInstanceId?: string) {
+async function findActiveAccountSession(
+  db: Database,
+  token?: string,
+  localInstanceId?: string,
+) {
   if (!token) return null;
   const [row] = await db
     .select({
@@ -183,6 +191,9 @@ async function findActiveAccountSession(db: Database, token?: string, localInsta
       localInstanceId: users.localInstanceId,
       localApprovedAt: users.localApprovedAt,
       localLogin: users.localLogin,
+      hostedLogin: users.hostedLogin,
+      hostedApprovedAt: users.hostedApprovedAt,
+      passwordChangeRequired: users.passwordChangeRequired,
       verifiedAt: users.verifiedAt,
       disabledAt: users.disabledAt,
       csrfHash: accountSessions.csrfHash,
@@ -240,6 +251,7 @@ async function setSessionCookies(
         identityKind: users.identityKind,
         localInstanceId: users.localInstanceId,
         localApprovedAt: users.localApprovedAt,
+        hostedApprovedAt: users.hostedApprovedAt,
         disabledAt: users.disabledAt,
       })
       .from(users)
@@ -354,8 +366,15 @@ export function registerAccountAuthRoutes(
   options: AccountAuthOptions,
 ) {
   app.addHook("onRequest", async (request, reply) => {
-    if (options.localInstanceId && /^\/api\/account\/(?:register|verification(?:\/|$)|password\/reset(?:\/|$))/.test(request.url))
-      return reply.code(404).send({ error: "EMAIL_ACCOUNTS_UNAVAILABLE_LOCALLY" });
+    if (
+      options.localInstanceId &&
+      /^\/api\/account\/(?:register|verification(?:\/|$)|password\/reset(?:\/|$))/.test(
+        request.url,
+      )
+    )
+      return reply
+        .code(404)
+        .send({ error: "EMAIL_ACCOUNTS_UNAVAILABLE_LOCALLY" });
   });
   // Account/session/token responses must never enter a browser or intermediary
   // cache. onSend also covers validation, 404, and error-handler responses.
@@ -493,27 +512,58 @@ export function registerAccountAuthRoutes(
     async (request, reply) => {
       if (!requireEnabled()) return unavailable(reply);
       if (!(await requireWriteOrigin(request, reply))) return;
-      const localBody = options.localInstanceId ? parse(localAccountLoginSchema, request.body) : null;
-      const emailBody = options.localInstanceId ? null : parse(accountLoginSchema, request.body);
-      const body = localBody ?? emailBody;
+      const localBody = options.localInstanceId
+        ? parse(localAccountLoginSchema, request.body)
+        : null;
+      const emailBody = options.localInstanceId
+        ? null
+        : parse(accountLoginSchema, request.body);
+      const hostedBody =
+        options.localInstanceId || emailBody
+          ? null
+          : parse(hostedAccountLoginSchema, request.body);
+      const body = localBody ?? emailBody ?? hostedBody;
       if (!body)
         return reply.code(400).send({ error: "INVALID_ACCOUNT_INPUT" });
-      const email = localBody ? localBody.login : normalizedEmail(emailBody!.email);
+      const email = localBody
+        ? localBody.login
+        : hostedBody
+          ? hostedBody.login
+          : normalizedEmail(emailBody!.email);
       if (!emailLimiter(request, "login", email))
         return reply.code(429).send({ error: "ACCOUNT_RATE_LIMITED" });
       try {
         const [account] = await db
           .select()
           .from(users)
-          .where(options.localInstanceId
-            ? and(eq(users.identityKind, "LOCAL"), eq(users.localInstanceId, options.localInstanceId), eq(users.localLogin, email))
-            : and(eq(users.identityKind, "EMAIL"), eq(users.emailNormalized, email)))
+          .where(
+            options.localInstanceId
+              ? and(
+                  eq(users.identityKind, "LOCAL"),
+                  eq(users.localInstanceId, options.localInstanceId),
+                  eq(users.localLogin, email),
+                )
+              : hostedBody
+                ? and(
+                    eq(users.identityKind, "HOSTED"),
+                    eq(users.hostedLogin, email),
+                  )
+                : and(
+                    eq(users.identityKind, "EMAIL"),
+                    eq(users.emailNormalized, email),
+                  ),
+          )
           .limit(1);
         const valid =
           account && !account.disabledAt
             ? await verifyPassword(body.password, account.passwordHash)
             : await verifyPassword(body.password, await getDummyVerifier());
-        if (!account || account.disabledAt || !valid || !hasAccountAssurance(account, options.localInstanceId))
+        if (
+          !account ||
+          account.disabledAt ||
+          !valid ||
+          !hasAccountAssurance(account, options.localInstanceId)
+        )
           return reply.code(401).send({ error: "INVALID_CREDENTIALS" });
         await revokeCurrentAccountSession(
           db,
@@ -539,6 +589,7 @@ export function registerAccountAuthRoutes(
             account: {
               id: account.id,
               ...accountIdentityDto(account),
+              passwordChangeRequired: account.passwordChangeRequired,
             },
             csrfToken,
           }),
@@ -568,7 +619,11 @@ export function registerAccountAuthRoutes(
       return reply.send(
         accountSessionSchema.parse({
           authenticated: true,
-          account: { id: account.userId, ...accountIdentityDto(account) },
+          account: {
+            id: account.userId,
+            ...accountIdentityDto(account),
+            passwordChangeRequired: account.passwordChangeRequired,
+          },
           csrfToken,
         }),
       );
@@ -934,6 +989,13 @@ export function registerAccountAuthRoutes(
           !(await verifyPassword(body.currentPassword, account.passwordHash))
         )
           return reply.code(401).send({ error: "CURRENT_PASSWORD_INVALID" });
+        if (
+          account.passwordChangeRequired &&
+          body.currentPassword === body.newPassword
+        )
+          return reply
+            .code(400)
+            .send({ error: "PASSWORD_CHANGE_REQUIRED_NEW" });
         const passwordHash = await hashPassword(body.newPassword);
         const now = new Date();
         const revoked = await db.transaction(async (tx) => {
@@ -954,7 +1016,11 @@ export function registerAccountAuthRoutes(
             return null;
           const [changed] = await tx
             .update(users)
-            .set({ passwordHash, updatedAt: now })
+            .set({
+              passwordHash,
+              passwordChangeRequired: false,
+              updatedAt: now,
+            })
             .where(
               and(
                 eq(users.id, account.id),

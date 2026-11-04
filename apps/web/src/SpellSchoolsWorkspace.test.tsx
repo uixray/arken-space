@@ -233,6 +233,21 @@ describe("SpellSchoolsWorkspace", () => {
       (screen.getAllByLabelText("Описание")[0] as HTMLTextAreaElement).matches(
         ":disabled",
       ),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", {
+        name: "Скачать копию конфликтного черновика",
+      }),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Удалить сохранённую копию и разрешить закрытие",
+      }),
+    );
+    expect(
+      (screen.getAllByLabelText("Описание")[0] as HTMLTextAreaElement).matches(
+        ":disabled",
+      ),
     ).toBe(false);
   });
 

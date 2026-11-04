@@ -108,7 +108,7 @@ function ProgressionRecord({
       )}
       {p.adjustment && (
         <p>
-          Значение: {p.adjustment.before} → {p.adjustment.after}
+          Значение: с {p.adjustment.before} до {p.adjustment.after}
         </p>
       )}
       {p.proposedSp !== null && p.state === "PENDING" && (

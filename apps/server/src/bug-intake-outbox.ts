@@ -16,7 +16,9 @@ export async function enqueueApprovedBug(
 ) {
   z.string().uuid().parse(id);
   z.number().int().nonnegative().parse(revision);
-  return db.transaction((tx) => enqueueApprovedBugInTransaction(tx, id, revision));
+  return db.transaction((tx) =>
+    enqueueApprovedBugInTransaction(tx, id, revision),
+  );
 }
 
 export async function enqueueApprovedBugInTransaction(
@@ -24,89 +26,89 @@ export async function enqueueApprovedBugInTransaction(
   id: string,
   revision: number,
 ) {
-    const [message] = await tx
-      .select()
-      .from(bugIntakeMessages)
-      .where(eq(bugIntakeMessages.id, id))
-      .for("update");
-    if (!message) return { ok: false as const, error: "NOT_FOUND" };
-    const [existing] = await tx
-      .select()
-      .from(bugIntakeDeliveries)
-      .where(
-        and(
-          eq(bugIntakeDeliveries.messageId, id),
-          eq(bugIntakeDeliveries.approvedRevision, revision),
-        ),
-      );
-    // Return the actual durable state, never turn UNKNOWN/CANCELLED into queued.
-    if (existing)
-      return {
-        ok: true as const,
-        id: existing.id,
-        state: existing.state,
-        duplicate: true,
-      };
-    if (message.revision !== revision)
-      return { ok: false as const, error: "REVISION_CONFLICT" };
-    const [ambiguous] = await tx
-      .select({ id: bugIntakeDeliveries.id })
-      .from(bugIntakeDeliveries)
-      .where(
-        and(
-          eq(bugIntakeDeliveries.messageId, id),
-          inArray(bugIntakeDeliveries.state, ["CLAIMED", "UNKNOWN"]),
-        ),
-      );
-    if (ambiguous)
-      return { ok: false as const, error: "DELIVERY_RECONCILIATION_REQUIRED" };
-    const preview = await previewApprovedBugInTransaction(tx, id);
-    if (!preview.ok) return preview;
-    // Per-message consent cannot authorize all parts of an album. Keep grouped
-    // delivery gated until its reviewed membership/snapshot protocol is implemented.
-    if (message.albumId)
-      return { ok: false as const, error: "ALBUM_REVIEW_REQUIRED" };
-    const payload = {
-      title: preview.title,
-      description: preview.description,
-      attachments: [...preview.attachments].sort((a, b) =>
-        a.id.localeCompare(b.id),
+  const [message] = await tx
+    .select()
+    .from(bugIntakeMessages)
+    .where(eq(bugIntakeMessages.id, id))
+    .for("update");
+  if (!message) return { ok: false as const, error: "NOT_FOUND" };
+  const [existing] = await tx
+    .select()
+    .from(bugIntakeDeliveries)
+    .where(
+      and(
+        eq(bugIntakeDeliveries.messageId, id),
+        eq(bugIntakeDeliveries.approvedRevision, revision),
       ),
-      existingLinearIssueId: preview.existingLinearIssueId,
+    );
+  // Return the actual durable state, never turn UNKNOWN/CANCELLED into queued.
+  if (existing)
+    return {
+      ok: true as const,
+      id: existing.id,
+      state: existing.state,
+      duplicate: true,
     };
-    if (
-      payload.attachments.some(
-        (file) => file.sha256 === null || file.sizeBytes === null,
-      )
+  if (message.revision !== revision)
+    return { ok: false as const, error: "REVISION_CONFLICT" };
+  const [ambiguous] = await tx
+    .select({ id: bugIntakeDeliveries.id })
+    .from(bugIntakeDeliveries)
+    .where(
+      and(
+        eq(bugIntakeDeliveries.messageId, id),
+        inArray(bugIntakeDeliveries.state, ["CLAIMED", "UNKNOWN"]),
+      ),
+    );
+  if (ambiguous)
+    return { ok: false as const, error: "DELIVERY_RECONCILIATION_REQUIRED" };
+  const preview = await previewApprovedBugInTransaction(tx, id);
+  if (!preview.ok) return preview;
+  // Per-message consent cannot authorize all parts of an album. Keep grouped
+  // delivery gated until its reviewed membership/snapshot protocol is implemented.
+  if (message.albumId)
+    return { ok: false as const, error: "ALBUM_REVIEW_REQUIRED" };
+  const payload = {
+    title: preview.title,
+    description: preview.description,
+    attachments: [...preview.attachments].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    ),
+    existingLinearIssueId: preview.existingLinearIssueId,
+  };
+  if (
+    payload.attachments.some(
+      (file) => file.sha256 === null || file.sizeBytes === null,
     )
-      return { ok: false as const, error: "INVALID_FILE_METADATA" };
-    const payloadHash = createHash("sha256")
-      .update(JSON.stringify(payload))
-      .digest("hex");
-    // Cancel old unclaimed revisions, retaining their immutable evidence.
-    await tx
-      .update(bugIntakeDeliveries)
-      .set({ state: "CANCELLED", updatedAt: new Date() })
-      .where(
-        and(
-          eq(bugIntakeDeliveries.messageId, id),
-          eq(bugIntakeDeliveries.state, "QUEUED"),
-        ),
-      );
-    const [delivery] = await tx
-      .insert(bugIntakeDeliveries)
-      .values({
-        messageId: id,
-        approvedRevision: revision,
-        payload,
-        payloadHash,
-      })
-      .returning({
-        id: bugIntakeDeliveries.id,
-        state: bugIntakeDeliveries.state,
-      });
-    if (!delivery) throw new Error("DELIVERY_ENQUEUE_FAILED");
-    return { ok: true as const, ...delivery, duplicate: false };
+  )
+    return { ok: false as const, error: "INVALID_FILE_METADATA" };
+  const payloadHash = createHash("sha256")
+    .update(JSON.stringify(payload))
+    .digest("hex");
+  // Cancel old unclaimed revisions, retaining their immutable evidence.
+  await tx
+    .update(bugIntakeDeliveries)
+    .set({ state: "CANCELLED", updatedAt: new Date() })
+    .where(
+      and(
+        eq(bugIntakeDeliveries.messageId, id),
+        eq(bugIntakeDeliveries.state, "QUEUED"),
+      ),
+    );
+  const [delivery] = await tx
+    .insert(bugIntakeDeliveries)
+    .values({
+      messageId: id,
+      approvedRevision: revision,
+      payload,
+      payloadHash,
+    })
+    .returning({
+      id: bugIntakeDeliveries.id,
+      state: bugIntakeDeliveries.state,
+    });
+  if (!delivery) throw new Error("DELIVERY_ENQUEUE_FAILED");
+  return { ok: true as const, ...delivery, duplicate: false };
 }
 
 /** Claim is durable and has no automatic expiry/replay. Crash after claim requires
@@ -254,8 +256,10 @@ export async function recordBugDeliveryOutcome(
     }
     if (delivery.state !== "CLAIMED")
       return { ok: false as const, error: "NOT_CLAIMED" };
-    if (outcome.state === "SENT" &&
-        !bugUploadsComplete(delivery.payload, delivery.uploadReceipts))
+    if (
+      outcome.state === "SENT" &&
+      !bugUploadsComplete(delivery.payload, delivery.uploadReceipts)
+    )
       return { ok: false as const, error: "UPLOAD_RECEIPTS_INCOMPLETE" };
     if (
       outcome.state === "SENT" &&
@@ -292,4 +296,3 @@ export async function recordBugDeliveryOutcome(
     return { ok: true as const, duplicate: false, state: outcome.state };
   });
 }
-

@@ -246,13 +246,11 @@ describe("durable performance acknowledgement", () => {
       .limit(1);
     if (!gm) throw new Error("seed failed");
     const session = "p".repeat(40);
-    await db
-      .insert(schema.sessions)
-      .values({
-        membershipId: gm.id,
-        tokenHash: hashToken(session),
-        expiresAt: new Date(Date.now() + 60_000),
-      });
+    await db.insert(schema.sessions).values({
+      membershipId: gm.id,
+      tokenHash: hashToken(session),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
     return `${env.SESSION_COOKIE_NAME}=${session}`;
   }
   const payload = {

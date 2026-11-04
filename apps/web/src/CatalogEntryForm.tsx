@@ -255,8 +255,12 @@ export function CatalogEntryForm({
   const [activationConsumesUse, setActivationConsumesUse] = useState(
     existing?.data.activation?.consumeUse ?? Boolean(existing?.data.uses),
   );
-  const [areaEnabled, setAreaEnabled] = useState(Boolean(existing?.data.areaEffect));
-  const [areaRadius, setAreaRadius] = useState(String(existing?.data.areaEffect?.radiusMeters ?? 15));
+  const [areaEnabled, setAreaEnabled] = useState(
+    Boolean(existing?.data.areaEffect),
+  );
+  const [areaRadius, setAreaRadius] = useState(
+    String(existing?.data.areaEffect?.radiusMeters ?? 15),
+  );
   const [activationCostType, setActivationCostType] = useState<
     "none" | "physical" | "magic"
   >(existing?.data.activation?.cost?.type ?? "none");
@@ -479,9 +483,16 @@ export function CatalogEntryForm({
       return setError("Проверьте стоимость применения.");
     }
 
-    if (kind === "ABILITY" && areaEnabled &&
-        (!Number.isFinite(Number(areaRadius)) || Number(areaRadius) <= 0 || Number(areaRadius) > 1000000))
-      return setError("Укажите положительный радиус области в метрах, не более 1 000 000.");
+    if (
+      kind === "ABILITY" &&
+      areaEnabled &&
+      (!Number.isFinite(Number(areaRadius)) ||
+        Number(areaRadius) <= 0 ||
+        Number(areaRadius) > 1000000)
+    )
+      return setError(
+        "Укажите положительный радиус области в метрах, не более 1 000 000.",
+      );
     const rollActions: RollAction[] = actions.map((action, index) => {
       const selectedModifier: RollModifier | null =
         action.modifierSource === "CHARACTERISTIC"
@@ -539,10 +550,17 @@ export function CatalogEntryForm({
     );
     const data: CatalogEntryDto["data"] = {
       ...(existing?.data ?? {}),
-      areaEffect: kind === "ABILITY" && areaEnabled ? {
-        kind: "RESTORE_MANA", radiusMeters: Number(areaRadius), origin: "CASTER",
-        targets: "PLAYER_CHARACTERS", dice: "1d6", includeCaster: true,
-      } : undefined,
+      areaEffect:
+        kind === "ABILITY" && areaEnabled
+          ? {
+              kind: "RESTORE_MANA",
+              radiusMeters: Number(areaRadius),
+              origin: "CASTER",
+              targets: "PLAYER_CHARACTERS",
+              dice: "1d6",
+              includeCaster: true,
+            }
+          : undefined,
       rollActions: rollActions.length ? rollActions : undefined,
       skillValue:
         kind === "SKILL" && skillValue.trim()
@@ -664,23 +682,48 @@ export function CatalogEntryForm({
         </label>
       )}
 
-      {kind === "ABILITY" && <fieldset>
-        <legend>Область восстановления маны</legend>
-        <label><input type="checkbox" checked={areaEnabled}
-          onChange={(event) => setAreaEnabled(event.target.checked)} />
-          Восстановить ману персонажам игроков вокруг применяющего</label>
-        {areaEnabled && <>
-          <label>Радиус в метрах<FormInput type="number" min={0} max={1000000} step="any"
-            value={areaRadius} onChange={(event) => setAreaRadius(event.target.value)} /></label>
-          <p className="muted">Один общий серверный бросок 1к6. Применяющий включён,
-            если это персонаж игрока; один персонаж учитывается один раз.
-            Масштаб сцены задаёт мастер. Без масштаба применение блокируется.</p>
-          <p className="muted">Перед применением на карте показывается круг области.
-            Эффект области использует только общий 1к6, а не отдельные действия бросков ниже.</p>
-          <p className="muted">Настройка области не меняет автоматически лимит использований:
-            для «Лучезарного» укажите одно использование в день.</p>
-        </>}
-      </fieldset>}
+      {kind === "ABILITY" && (
+        <fieldset>
+          <legend>Область восстановления маны</legend>
+          <label>
+            <input
+              type="checkbox"
+              checked={areaEnabled}
+              onChange={(event) => setAreaEnabled(event.target.checked)}
+            />
+            Восстановить ману персонажам игроков вокруг применяющего
+          </label>
+          {areaEnabled && (
+            <>
+              <label>
+                Радиус в метрах
+                <FormInput
+                  type="number"
+                  min={0}
+                  max={1000000}
+                  step="any"
+                  value={areaRadius}
+                  onChange={(event) => setAreaRadius(event.target.value)}
+                />
+              </label>
+              <p className="muted">
+                Один общий серверный бросок 1к6. Применяющий включён, если это
+                персонаж игрока; один персонаж учитывается один раз. Масштаб
+                сцены задаёт мастер. Без масштаба применение блокируется.
+              </p>
+              <p className="muted">
+                Перед применением на карте показывается круг области. Эффект
+                области использует только общий 1к6, а не отдельные действия
+                бросков ниже.
+              </p>
+              <p className="muted">
+                Настройка области не меняет автоматически лимит использований:
+                для «Лучезарного» укажите одно использование в день.
+              </p>
+            </>
+          )}
+        </fieldset>
+      )}
       {kind === "ABILITY" && (
         <fieldset>
           <legend>Стоимость применения</legend>

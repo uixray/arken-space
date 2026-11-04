@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { WorldRegionPicker } from "./WorldRegionPicker";
 import type {
   AssetDto,
@@ -117,7 +117,9 @@ export const WorldEncyclopediaWorkspace = memo(
     };
 
     const refreshRef = useRef(load);
-    refreshRef.current = load;
+    useLayoutEffect(() => {
+      refreshRef.current = load;
+    });
     useEffect(() => {
       if (!open) return;
       const refresh = () => {

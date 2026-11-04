@@ -21,7 +21,10 @@ import type { ArkenDialogProps } from "./ui/ArkenDialog";
 const { apiMock } = vi.hoisted(() => ({ apiMock: vi.fn() }));
 vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
-  api: apiMock,
+  api: (path: string, ...args: unknown[]) =>
+    path.startsWith("/api/world-content-regions?")
+      ? Promise.resolve({ items: [], hasMore: false })
+      : apiMock(path, ...args),
 }));
 // Only toolkit chrome and unrelated asset selection are replaced. The actual
 // editor, reader, client query/payload builders and copy are exercised below.

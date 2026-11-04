@@ -7,6 +7,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { SpellProgressionGraph } from "@arken/contracts";
 import * as schema from "../packages/db/src/schema.js";
 import { registerCharacterMediaRoutes } from "../apps/server/src/character-media.js";
+import { registerCharacterExtrasRoutes } from "../apps/server/src/character-extras-routes.js";
+import { registerAwardsBindingsRoutes } from "../apps/server/src/awards-bindings-routes.js";
+import { registerProgressionRoutes } from "../apps/server/src/progression-routes.js";
+import { registerTokenRoutes } from "../apps/server/src/token-routes.js";
+import { campaignCanvasDatabase } from "../apps/server/src/campaign-pause-guard.js";
 import { registerEncounterRoutes } from "../apps/server/src/encounters.js";
 import { env } from "../apps/server/src/env.js";
 import { registerPlayerRequestRoutes } from "../apps/server/src/player-requests.js";
@@ -31,6 +36,9 @@ const ids = {
   gm: pair(),
   player: pair(),
   character: pair(),
+  inspirationCharacter: pair(),
+  progressionCharacter: pair(),
+  spriteDefinition: pair(),
   characterAsset: pair(),
   mapAsset: pair(),
   scene: pair(),
@@ -58,6 +66,7 @@ const ids = {
   },
   worldContent: uuid(),
   instance: {
+    bindings: pair(),
     get: pair(),
     patch: pair(),
     delete: pair(),
@@ -134,7 +143,7 @@ async function spellVersions(campaignId: string, packId: string) {
 }
 
 type ProbeRequest = {
-  method: "GET" | "PATCH" | "POST" | "DELETE";
+  method: "GET" | "PATCH" | "POST" | "PUT" | "DELETE";
   url: string;
   headers: Record<string, string>;
   payload?: Record<string, unknown>;
@@ -226,6 +235,44 @@ beforeAll(async () => {
       campaignId: ids.campaign.foreign,
       ownerMembershipId: ids.player.foreign,
       name: "Foreign hero",
+    },
+    {
+      id: ids.inspirationCharacter.own,
+      campaignId: ids.campaign.own,
+      ownerMembershipId: ids.player.own,
+      name: "Own inspiration hero",
+    },
+    {
+      id: ids.inspirationCharacter.foreign,
+      campaignId: ids.campaign.foreign,
+      ownerMembershipId: ids.player.foreign,
+      name: "Foreign inspiration hero",
+    },
+    {
+      id: ids.progressionCharacter.own,
+      campaignId: ids.campaign.own,
+      ownerMembershipId: ids.player.own,
+      name: "Own progression hero",
+      stats: { strength: 5 },
+    },
+    {
+      id: ids.progressionCharacter.foreign,
+      campaignId: ids.campaign.foreign,
+      ownerMembershipId: ids.player.foreign,
+      name: "Foreign progression hero",
+      stats: { strength: 5 },
+    },
+  ]);
+  await db.insert(schema.tokenDefinitions).values([
+    {
+      id: ids.spriteDefinition.own,
+      campaignId: ids.campaign.own,
+      name: "Own sprite token",
+    },
+    {
+      id: ids.spriteDefinition.foreign,
+      campaignId: ids.campaign.foreign,
+      name: "Foreign sprite token",
     },
   ]);
   await db.insert(schema.assets).values([
@@ -524,6 +571,14 @@ beforeAll(async () => {
   app = Fastify();
   await app.register(cookie);
   registerCharacterMediaRoutes(app, db as never);
+  registerCharacterExtrasRoutes(app, db as never, async () => {});
+  registerAwardsBindingsRoutes(app, db as never, async () => {});
+  registerProgressionRoutes(app, db as never, async () => {});
+  registerTokenRoutes(app, db as never, {
+    canvasTx: (campaignId) => campaignCanvasDatabase(db as never, campaignId),
+    broadcast: async () => {},
+    publishToken: async () => {},
+  });
   registerEncounterRoutes(app, db as never, async () => {});
   registerPlayerRequestRoutes(app, db as never);
   registerSpellPackRoutes(app, db as never);
@@ -538,6 +593,341 @@ afterAll(async () => {
   );
   await app.close();
   await database.close();
+});
+
+describe("campaign isolation: private notebook and structured inventory", () => {
+  it("keeps notebook reads and writes scoped to the character campaign and author", async () => {
+    const note = (id: string) => `/api/characters/${id}/private-notebook`;
+    await expectForeignNotFound(
+      "GET /api/characters/:characterId/private-notebook",
+      {
+        method: "GET",
+        url: note(ids.character.foreign),
+        headers: ownPlayerHeaders,
+      },
+      "NOT_FOUND",
+    );
+    const payload = {
+      actionId: uuid(),
+      revision: 0,
+      text: "synthetic private note",
+    };
+    await expectForeignNotFound(
+      "PUT /api/characters/:characterId/private-notebook",
+      {
+        method: "PUT",
+        url: note(ids.character.foreign),
+        headers: ownPlayerHeaders,
+        payload,
+      },
+      "NOT_FOUND",
+    );
+    const saved = await app.inject({
+      method: "PUT",
+      url: note(ids.character.own),
+      headers: ownPlayerHeaders,
+      payload,
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({ text: payload.text, revision: 1 });
+    const own = await app.inject({
+      method: "GET",
+      url: note(ids.character.own),
+      headers: ownPlayerHeaders,
+    });
+    expect(own.json()).toMatchObject({ text: payload.text });
+    const gm = await app.inject({
+      method: "GET",
+      url: note(ids.character.own),
+      headers: ownGmHeaders,
+    });
+    expect(gm.statusCode).toBe(200);
+    expect(gm.json()).toEqual({ text: "", revision: 0 });
+  });
+
+  it("never reads a character inventory from another campaign", async () => {
+    const url = (id: string) => `/api/characters/${id}/inventory`;
+    await expectForeignNotFound(
+      "GET /api/characters/:id/inventory",
+      {
+        method: "GET",
+        url: url(ids.character.foreign),
+        headers: ownPlayerHeaders,
+      },
+      "CHARACTER_NOT_FOUND",
+    );
+    const own = await app.inject({
+      method: "GET",
+      url: url(ids.character.own),
+      headers: ownPlayerHeaders,
+    });
+    expect(own.statusCode).toBe(200);
+    expect(own.json()).toMatchObject({ items: [] });
+  });
+
+  it("never reads a character's progression from another campaign", async () => {
+    const url = (id: string) => `/api/characters/${id}/progression`;
+    await expectForeignNotFound(
+      "GET /api/characters/:characterId/progression",
+      {
+        method: "GET",
+        url: url(ids.character.foreign),
+        headers: ownPlayerHeaders,
+      },
+      "NOT_FOUND",
+    );
+    const own = await app.inject({
+      method: "GET",
+      url: url(ids.character.own),
+      headers: ownPlayerHeaders,
+    });
+    expect(own.statusCode).toBe(200);
+  });
+
+  it("keeps instance bindings and selectable targets inside the GM campaign", async () => {
+    const url = (id: string) => `/api/world-content-instances/${id}/bindings`;
+    await expectForeignNotFound(
+      "GET /api/world-content-instances/:id/bindings",
+      {
+        method: "GET",
+        url: url(ids.instance.get.foreign),
+        headers: ownGmHeaders,
+      },
+      "INSTANCE_NOT_FOUND",
+    );
+    const own = await app.inject({
+      method: "GET",
+      url: url(ids.instance.get.own),
+      headers: ownGmHeaders,
+    });
+    expect(own.statusCode).toBe(200);
+    expect(own.body).not.toContain(ids.instance.get.foreign);
+  });
+
+  it("rejects binding changes to a foreign instance and accepts an own instance", async () => {
+    const url = (id: string) => `/api/world-content-instances/${id}/bindings`;
+    const payload = {
+      actionId: uuid(),
+      revision: 0,
+      tokenDefinitionId: null,
+      containerInstanceId: null,
+    };
+    await expectForeignNotFound(
+      "PUT /api/world-content-instances/:id/bindings",
+      {
+        method: "PUT",
+        url: url(ids.instance.bindings.foreign),
+        headers: ownGmHeaders,
+        payload,
+      },
+      "INSTANCE_NOT_FOUND",
+    );
+    const own = await app.inject({
+      method: "PUT",
+      url: url(ids.instance.bindings.own),
+      headers: ownGmHeaders,
+      payload,
+    });
+    expect(own.statusCode).toBe(200);
+    expect(own.json()).toMatchObject({
+      revision: 1,
+      tokenDefinitionId: null,
+      containerInstanceId: null,
+    });
+    expect(
+      await db
+        .select()
+        .from(schema.worldInstanceBindings)
+        .where(
+          eq(
+            schema.worldInstanceBindings.instanceId,
+            ids.instance.bindings.foreign,
+          ),
+        ),
+    ).toHaveLength(0);
+  });
+
+  it("rejects sprite changes to a foreign token and accepts an own token", async () => {
+    const url = (id: string) => `/api/token-definitions/${id}/sprite-set`;
+    const payload = { actionId: uuid(), revision: 0, spriteSet: null };
+    executedProbeKeys.add("PUT /api/token-definitions/:id/sprite-set");
+    const foreign = await app.inject({
+      method: "PUT",
+      url: url(ids.spriteDefinition.foreign),
+      headers: ownGmHeaders,
+      payload,
+    });
+    expect(foreign.statusCode).toBe(409);
+    expect(foreign.json()).toEqual({ error: "TOKEN_DEFINITION_CONFLICT" });
+    const own = await app.inject({
+      method: "PUT",
+      url: url(ids.spriteDefinition.own),
+      headers: ownGmHeaders,
+      payload,
+    });
+    expect(own.statusCode).toBe(200);
+    expect(own.json()).toMatchObject({ revision: 1, spriteSet: null });
+    const [untouched] = await db
+      .select()
+      .from(schema.tokenDefinitions)
+      .where(eq(schema.tokenDefinitions.id, ids.spriteDefinition.foreign));
+    expect(untouched?.revision).toBe(0);
+  });
+
+  it("isolates inspiration adjustment and reroll from foreign characters", async () => {
+    const adjust = (id: string) => `/api/characters/${id}/inspiration/adjust`;
+    const payload = {
+      actionId: uuid(),
+      revision: 0,
+      state: { current: 1, maximum: 1 },
+      reason: "synthetic test",
+    };
+    await expectForeignNotFound(
+      "POST /api/characters/:characterId/inspiration/adjust",
+      {
+        method: "POST",
+        url: adjust(ids.inspirationCharacter.foreign),
+        headers: ownGmHeaders,
+        payload,
+      },
+      "NOT_FOUND",
+    );
+    const ownAdjust = await app.inject({
+      method: "POST",
+      url: adjust(ids.inspirationCharacter.own),
+      headers: ownGmHeaders,
+      payload,
+    });
+    expect(ownAdjust.statusCode).toBe(200);
+    const [thread] = await db
+      .select()
+      .from(schema.chatThreads)
+      .where(
+        and(
+          eq(schema.chatThreads.campaignId, ids.campaign.own),
+          eq(schema.chatThreads.stream, "TABLE"),
+        ),
+      );
+    expect(thread).toBeDefined();
+    const sourceMessageId = uuid();
+    await db.insert(schema.chatMessages).values({
+      id: sourceMessageId,
+      campaignId: ids.campaign.own,
+      membershipId: ids.player.own,
+      characterId: ids.inspirationCharacter.own,
+      kind: "DICE",
+      visibility: "PUBLIC",
+      threadId: thread!.id,
+      body: "Synthetic roll",
+      dice: {
+        formula: "1d20",
+        resolvedFormula: "1d20",
+        terms: [{ notation: "1d20", rolls: [10], subtotal: 10 }],
+        modifiers: [],
+        total: 10,
+      },
+    });
+    const reroll = (id: string) => `/api/characters/${id}/inspiration/reroll`;
+    const rollPayload = { actionId: uuid(), sourceMessageId };
+    await expectForeignNotFound(
+      "POST /api/characters/:characterId/inspiration/reroll",
+      {
+        method: "POST",
+        url: reroll(ids.inspirationCharacter.foreign),
+        headers: ownPlayerHeaders,
+        payload: rollPayload,
+      },
+      "NOT_FOUND",
+    );
+    const ownReroll = await app.inject({
+      method: "POST",
+      url: reroll(ids.inspirationCharacter.own),
+      headers: ownPlayerHeaders,
+      payload: rollPayload,
+    });
+    expect(ownReroll.statusCode).toBe(200);
+    expect(ownReroll.json()).toMatchObject({
+      state: { current: 0, maximum: 1 },
+    });
+  });
+
+  it("isolates progression grants, requests and actions across campaigns", async () => {
+    const url = (id: string, action: string) =>
+      `/api/characters/${id}/progression/${action}`;
+    const grant = { actionId: uuid(), sp: 5, note: "synthetic grant" };
+    await expectForeignNotFound(
+      "POST /api/characters/:characterId/progression/grant",
+      {
+        method: "POST",
+        url: url(ids.progressionCharacter.foreign, "grant"),
+        headers: ownGmHeaders,
+        payload: grant,
+      },
+      "NOT_FOUND",
+    );
+    const granted = await app.inject({
+      method: "POST",
+      url: url(ids.progressionCharacter.own, "grant"),
+      headers: ownGmHeaders,
+      payload: grant,
+    });
+    expect(granted.statusCode).toBe(200);
+    const view = await app.inject({
+      method: "GET",
+      url: `/api/characters/${ids.progressionCharacter.own}/progression`,
+      headers: ownPlayerHeaders,
+    });
+    expect(view.statusCode).toBe(200);
+    const target = view.json().targets[0];
+    expect(target).toBeDefined();
+    const create = {
+      actionId: uuid(),
+      target: { kind: target.kind, key: target.key },
+      sp: 1,
+      comment: "synthetic request",
+    };
+    await expectForeignNotFound(
+      "POST /api/characters/:characterId/progression/create",
+      {
+        method: "POST",
+        url: url(ids.progressionCharacter.foreign, "create"),
+        headers: ownPlayerHeaders,
+        payload: create,
+      },
+      "NOT_FOUND",
+    );
+    const created = await app.inject({
+      method: "POST",
+      url: url(ids.progressionCharacter.own, "create"),
+      headers: ownPlayerHeaders,
+      payload: create,
+    });
+    expect(created.statusCode).toBe(200);
+    const action = {
+      actionId: uuid(),
+      requestId: created.json().id,
+      revision: 0,
+      action: "DECLINE",
+      note: "synthetic rejection",
+    };
+    await expectForeignNotFound(
+      "POST /api/characters/:characterId/progression/action",
+      {
+        method: "POST",
+        url: url(ids.progressionCharacter.foreign, "action"),
+        headers: ownGmHeaders,
+        payload: action,
+      },
+      "NOT_FOUND",
+    );
+    const declined = await app.inject({
+      method: "POST",
+      url: url(ids.progressionCharacter.own, "action"),
+      headers: ownGmHeaders,
+      payload: action,
+    });
+    expect(declined.statusCode).toBe(200);
+  });
 });
 
 describe("UIX-413 campaign isolation: character media sub-router", () => {

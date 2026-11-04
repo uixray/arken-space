@@ -14,12 +14,49 @@
   color: var(--text);
   box-shadow: 0 8px 28px #0004;
 }
-.ability-area-panel h2 { margin: 0; font-size: 16px; }
-.ability-area-panel p { margin: 8px 0; font-size: 13px; line-height: 1.45; }
-.ability-area-panel label { display: grid; gap: 4px; font-size: 13px; }
-.ability-area-panel select { width: 100%; min-width: 0; min-height: 44px; }
-.ability-area-panel__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.ability-area-panel__actions button { min-height: 44px; }
+.ability-area-panel h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.ability-area-panel p {
+  margin: 8px 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.ability-area-panel label {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+.ability-area-panel select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+}
+.ability-area-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.ability-area-panel__actions button {
+  min-height: 44px;
+}
 @media (max-width: 767px) {
-  .ability-area-panel { max-height: 42%; }
+  .ability-area-panel {
+    max-height: 42%;
+  }
+}
+
+/* Sent-command recovery stays outside hidden map/compact surfaces. */
+.ability-area-panel--recovery {
+  position: fixed;
+  z-index: 90;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  width: min(360px, calc(100vw - 24px));
+  max-height: 50dvh;
+}
+.ability-area-panel--recovery .muted {
+  overflow-wrap: anywhere;
 }

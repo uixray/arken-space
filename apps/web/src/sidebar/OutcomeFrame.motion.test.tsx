@@ -764,7 +764,12 @@ function compositeMessage(specs: RollSpec[], id = "batch-1"): ChatMessageDto {
             keptNaturalD20: natural,
           },
           ...(style
-            ? { styleFrame: { assetId: styleAssetId, source: "PLAYER" as const } }
+            ? {
+                styleFrame: {
+                  assetId: styleAssetId,
+                  source: "PLAYER" as const,
+                },
+              }
             : {}),
         };
         return {
@@ -786,20 +791,49 @@ function compositeMessage(specs: RollSpec[], id = "batch-1"): ChatMessageDto {
 
 describe("UIX-289 one animation owner in composite chat cards", () => {
   it.each([
-    { name: "first critical wins among several criticals", specs: [{ natural: 20 }, { natural: 1 }], owner: 0 },
-    { name: "later critical outranks an earlier style frame", specs: [{ natural: 18, style: true }, { natural: 1, style: true }, { natural: 20 }], owner: 1 },
-    { name: "first style wins when no result is critical", specs: [{ natural: 13 }, { natural: 12, style: true }, { natural: 14, style: true }], owner: 1 },
-    { name: "plain results do not manufacture a frame", specs: [{ natural: 13 }, { natural: 14 }], owner: -1 },
+    {
+      name: "first critical wins among several criticals",
+      specs: [{ natural: 20 }, { natural: 1 }],
+      owner: 0,
+    },
+    {
+      name: "later critical outranks an earlier style frame",
+      specs: [
+        { natural: 18, style: true },
+        { natural: 1, style: true },
+        { natural: 20 },
+      ],
+      owner: 1,
+    },
+    {
+      name: "first style wins when no result is critical",
+      specs: [
+        { natural: 13 },
+        { natural: 12, style: true },
+        { natural: 14, style: true },
+      ],
+      owner: 1,
+    },
+    {
+      name: "plain results do not manufacture a frame",
+      specs: [{ natural: 13 }, { natural: 14 }],
+      owner: -1,
+    },
   ])("$name", async ({ specs, owner }) => {
     installMotionApis();
     const { container } = renderComponent(
       <ChatMessageBody isActive message={compositeMessage(specs)} />,
     );
     await intersectAll();
-    const rows = container.querySelectorAll<HTMLElement>(".skill-chat-card__roll");
+    const rows = container.querySelectorAll<HTMLElement>(
+      ".skill-chat-card__roll",
+    );
     expect(rows).toHaveLength(specs.length);
-    expect([...container.querySelectorAll(".roll-total__value")].map((node) => node.textContent))
-      .toEqual(specs.map((spec) => String(spec.natural + 2)));
+    expect(
+      [...container.querySelectorAll(".roll-total__value")].map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(specs.map((spec) => String(spec.natural + 2)));
     expect(animatedImages(container)).toHaveLength(owner < 0 ? 0 : 1);
     rows.forEach((row, index) => {
       expect(animatedImages(row)).toHaveLength(index === owner ? 1 : 0);
@@ -814,37 +848,47 @@ describe("UIX-289 one animation owner in composite chat cards", () => {
     { reason: "exhaustion", critical: true },
     { reason: "failure", critical: false },
     { reason: "exhaustion", critical: false },
-  ])("does not promote after $reason (critical owner: $critical)", async ({ reason, critical }) => {
-    installMotionApis();
-    const specs = critical
-      ? [{ natural: 13, style: true }, { natural: 20 }, { natural: 1 }]
-      : [{ natural: 13, style: true }, { natural: 14, style: true }, { natural: 15, style: true }];
-    const message = compositeMessage(specs);
-    const { container, rerender } = renderComponent(
-      <ChatMessageBody isActive message={message} />,
-    );
-    await intersectAll();
-    expect(animatedImages(container)).toHaveLength(1);
-    const owner = animatedImages(container)[0]!;
-    if (reason === "failure") {
-      fireEvent.error(owner);
-    } else {
-      fireEvent.load(owner);
-      advance(2200);
-    }
-    expect(animatedImages(container)).toHaveLength(0);
-    await intersectAll(false);
-    await intersectAll();
-    rerender(<ChatMessageBody isActive message={{ ...message }} />);
-    expect(animatedImages(container)).toHaveLength(0);
-    expect(container.querySelectorAll(".roll-total__value")).toHaveLength(3);
-    expect(container.querySelectorAll(".roll-critical-label")).toHaveLength(critical ? 2 : 0);
-  });
+  ])(
+    "does not promote after $reason (critical owner: $critical)",
+    async ({ reason, critical }) => {
+      installMotionApis();
+      const specs = critical
+        ? [{ natural: 13, style: true }, { natural: 20 }, { natural: 1 }]
+        : [
+            { natural: 13, style: true },
+            { natural: 14, style: true },
+            { natural: 15, style: true },
+          ];
+      const message = compositeMessage(specs);
+      const { container, rerender } = renderComponent(
+        <ChatMessageBody isActive message={message} />,
+      );
+      await intersectAll();
+      expect(animatedImages(container)).toHaveLength(1);
+      const owner = animatedImages(container)[0]!;
+      if (reason === "failure") {
+        fireEvent.error(owner);
+      } else {
+        fireEvent.load(owner);
+        advance(2200);
+      }
+      expect(animatedImages(container)).toHaveLength(0);
+      await intersectAll(false);
+      await intersectAll();
+      rerender(<ChatMessageBody isActive message={{ ...message }} />);
+      expect(animatedImages(container)).toHaveLength(0);
+      expect(container.querySelectorAll(".roll-total__value")).toHaveLength(3);
+      expect(container.querySelectorAll(".roll-critical-label")).toHaveLength(
+        critical ? 2 : 0,
+      );
+    },
+  );
 
   it("rejects an invalid style reference before choosing the first valid style result", async () => {
     installMotionApis();
     const message = compositeMessage([
-      { natural: 13, style: true }, { natural: 14, style: true },
+      { natural: 13, style: true },
+      { natural: 14, style: true },
     ]);
     if (!message.skillCard?.rolls) throw new Error("Missing batch fixture");
     message.skillCard.rolls[0]!.result.styleFrame = {
@@ -855,7 +899,9 @@ describe("UIX-289 one animation owner in composite chat cards", () => {
       <ChatMessageBody isActive message={message} />,
     );
     await intersectAll();
-    const rows = container.querySelectorAll<HTMLElement>(".skill-chat-card__roll");
+    const rows = container.querySelectorAll<HTMLElement>(
+      ".skill-chat-card__roll",
+    );
     expect(animatedImages(container)).toHaveLength(1);
     expect(animatedImages(rows[0]!)).toHaveLength(0);
     expect(animatedImages(rows[1]!)).toHaveLength(1);
@@ -864,14 +910,19 @@ describe("UIX-289 one animation owner in composite chat cards", () => {
 
   it("keeps history static, resumes only remaining time, and resets on a new message", async () => {
     installMotionApis();
-    const specs = [{ natural: 13, style: true }, { natural: 14, style: true }];
+    const specs = [
+      { natural: 13, style: true },
+      { natural: 14, style: true },
+    ];
     const message = compositeMessage(specs);
     const { container, rerender } = renderComponent(
       <ChatMessageBody isActive={false} message={message} />,
     );
     await intersectAll();
     expect(animatedImages(container)).toHaveLength(0);
-    expect(container.querySelectorAll(`img[src="${posterUrl}"]`)).toHaveLength(2);
+    expect(container.querySelectorAll(`img[src="${posterUrl}"]`)).toHaveLength(
+      2,
+    );
     rerender(<ChatMessageBody isActive message={message} />);
     await intersectAll();
     expect(animatedImages(container)).toHaveLength(1);
@@ -885,7 +936,9 @@ describe("UIX-289 one animation owner in composite chat cards", () => {
     fireEvent.load(animatedImages(container)[0]!);
     advance(1600);
     expect(animatedImages(container)).toHaveLength(0);
-    rerender(<ChatMessageBody isActive message={compositeMessage(specs, "batch-2")} />);
+    rerender(
+      <ChatMessageBody isActive message={compositeMessage(specs, "batch-2")} />,
+    );
     await intersectAll();
     expect(animatedImages(container)).toHaveLength(1);
     fireEvent.load(animatedImages(container)[0]!);

@@ -3645,7 +3645,7 @@ describe("Pool B HTTP boundaries", () => {
         payload: {
           actionId,
           revision: 0,
-          wallet: { gold: 3, silver: 2, copper: 1, sp: 4 },
+          wallet: { gold: 3, silver: 2, copper: 1, sp: 0 },
         },
       });
 
@@ -3657,7 +3657,7 @@ describe("Pool B HTTP boundaries", () => {
       expect(response.json()).toMatchObject({
         id: ids.character,
         revision: 1,
-        wallet: { gold: 3, silver: 2, copper: 1, sp: 4 },
+        wallet: { gold: 3, silver: 2, copper: 1, sp: 0 },
         entries: expect.any(Array),
       });
 
@@ -3668,7 +3668,7 @@ describe("Pool B HTTP boundaries", () => {
     });
     expect(snapshot.json().characters[0]).toMatchObject({
       revision: 1,
-      wallet: { gold: 3, silver: 2, copper: 1, sp: 4 },
+      wallet: { gold: 3, silver: 2, copper: 1, sp: 0 },
     });
     expect(
       snapshot
@@ -3678,6 +3678,21 @@ describe("Pool B HTTP boundaries", () => {
             message.kind === "SYSTEM" && message.characterId === ids.character,
         ),
     ).toHaveLength(1);
+  });
+
+  it("rejects SP changes outside the progression ledger", async () => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/characters/${ids.character}/counters`,
+      headers: headers(secrets.player),
+      payload: {
+        actionId: crypto.randomUUID(),
+        revision: 0,
+        wallet: { gold: 0, silver: 0, copper: 0, sp: 4 },
+      },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ error: "USE_PROGRESSION_SP_LEDGER" });
   });
 
   it("persists manually entered resource points above maximum", async () => {
@@ -4292,13 +4307,13 @@ describe("Pool B HTTP boundaries", () => {
       payload: {
         actionId: countersActionId,
         revision: 0,
-        wallet: { gold: 1, silver: 2, copper: 3, sp: 4 },
+        wallet: { gold: 1, silver: 2, copper: 3, sp: 0 },
         resources: { mana: { current: 5, maximum: 8 } },
       },
     });
     expect(counters.statusCode).toBe(200);
     expect(counters.json()).toMatchObject({
-      wallet: { gold: 1, silver: 2, copper: 3, sp: 4 },
+      wallet: { gold: 1, silver: 2, copper: 3, sp: 0 },
       resources: { mana: { current: 5, maximum: 8 } },
       revision: 1,
     });
@@ -4314,7 +4329,7 @@ describe("Pool B HTTP boundaries", () => {
           (message: { kind: string; body: string }) =>
             message.kind === "SYSTEM" && message.body.includes("кошелёк:"),
         )?.body,
-    ).toContain("кошелёк: золото 0 → 1, серебро 0 → 2, медь 0 → 3, СП 0 → 4");
+    ).toContain("кошелёк: золото 0 → 1, серебро 0 → 2, медь 0 → 3");
     expect(
       countersSnapshot
         .json()
@@ -4339,7 +4354,7 @@ describe("Pool B HTTP boundaries", () => {
       payload: {
         actionId: crypto.randomUUID(),
         revision: 1,
-        wallet: { gold: 1, silver: 2, copper: 3, sp: 4 },
+        wallet: { gold: 1, silver: 2, copper: 3, sp: 0 },
         resources: { mana: { current: 5, maximum: 8 } },
       },
     });
@@ -4366,7 +4381,7 @@ describe("Pool B HTTP boundaries", () => {
     });
     expect(countersReplay.json()).toMatchObject({
       id: ids.character,
-      wallet: { gold: 1, silver: 2, copper: 3, sp: 4 },
+      wallet: { gold: 1, silver: 2, copper: 3, sp: 0 },
       revision: 1,
       entries: expect.any(Array),
     });
@@ -4432,7 +4447,7 @@ describe("Pool B HTTP boundaries", () => {
       campaign: { day: 8, battleActive: false, battleCounter: 1, revision: 3 },
       characters: [
         {
-          wallet: { gold: 1, silver: 2, copper: 3, sp: 4 },
+          wallet: { gold: 1, silver: 2, copper: 3, sp: 0 },
           resources: { mana: { current: 5, maximum: 8 } },
         },
       ],
@@ -4470,13 +4485,13 @@ describe("Pool B HTTP boundaries", () => {
       payload: {
         actionId,
         revision: 0,
-        wallet: { gold: 0, silver: 0, copper: 0, sp: 25 },
+        wallet: { gold: 25, silver: 0, copper: 0, sp: 0 },
       },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       revision: 1,
-      wallet: { gold: 0, silver: 0, copper: 0, sp: 25 },
+      wallet: { gold: 25, silver: 0, copper: 0, sp: 0 },
     });
 
     const messages = await db
@@ -4499,11 +4514,11 @@ describe("Pool B HTTP boundaries", () => {
     );
     expect(walletAudits).toHaveLength(1);
     expect(walletAudits[0]).toMatchObject({
-      body: expect.stringContaining("СП 0 → 25"),
+      body: expect.stringContaining("золото 0 → 25"),
       systemData: {
         type: "WALLET_AUDIT",
         before: { gold: 0, silver: 0, copper: 0, sp: 0 },
-        after: { gold: 0, silver: 0, copper: 0, sp: 25 },
+        after: { gold: 25, silver: 0, copper: 0, sp: 0 },
         operationCount: 1,
       },
     });
@@ -4521,7 +4536,7 @@ describe("Pool B HTTP boundaries", () => {
       actionId,
       entityRevision: 1,
       payload: {
-        wallet: { gold: 0, silver: 0, copper: 0, sp: 25 },
+        wallet: { gold: 25, silver: 0, copper: 0, sp: 0 },
       },
     });
   });

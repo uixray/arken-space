@@ -121,7 +121,16 @@ describe("campaign route inventory", () => {
     expect(exactIdCampaignRoutes.length).toBeGreaterThan(0);
     expect(probeKeys.length).toBeGreaterThan(0);
     expect(new Set(probeKeys).size).toBe(probeKeys.length);
-    expect([...probeKeys].sort()).toEqual([...exactIdCampaignRoutes].sort());
+    for (const key of probeKeys) expect(CAMPAIGN_ROUTE_KEYS).toContain(key);
+    const exactIdProbeKeys = probeKeys.filter((key) =>
+      key
+        .slice(key.indexOf(" ") + 1)
+        .split("/")
+        .includes(":id"),
+    );
+    expect([...exactIdProbeKeys].sort()).toEqual(
+      [...exactIdCampaignRoutes].sort(),
+    );
   });
 
   test("has an exact closed policy for every registered ID route", async () => {

@@ -29,35 +29,48 @@ export async function sendBugAlbumToLinearOnce(
   const result = await sendQueuedBugAlbumOnce(db, deliveryId, async (claim) => {
     const links: string[] = [];
     for (const file of claim.payload.attachments) {
-      const uploaded = await uploadClaimedBugAlbumFileOnce(db, config.storage,
-        config.request, config.policy, deliveryId, claim.claimId, file.id);
+      const uploaded = await uploadClaimedBugAlbumFileOnce(
+        db,
+        config.storage,
+        config.request,
+        config.policy,
+        deliveryId,
+        claim.claimId,
+        file.id,
+      );
       if (!uploaded.ok) {
         if ("recovery" in uploaded) uploadRecovery = uploaded.recovery;
-        return { state: "UNKNOWN" as const,
+        return {
+          state: "UNKNOWN" as const,
           failureCode: "EXTERNAL_RESULT_UNKNOWN" as const,
           ...(claim.payload.existingLinearIssueId
-            ? { linearIssueId: claim.payload.existingLinearIssueId } : {}) };
+            ? { linearIssueId: claim.payload.existingLinearIssueId }
+            : {}),
+        };
       }
       // Angle-delimited Markdown URL: encode syntax breakers, preserve signed-free
       // asset identity. Never embed raw filenames, Telegram URLs or source text.
       const url = uploaded.assetUrl.replace(/</g, "%3C").replace(/>/g, "%3E");
       links.push(`[bug-attachment-${file.id}.bin](<${url}>)`);
     }
-    const description = claim.payload.description +
+    const description =
+      claim.payload.description +
       (links.length ? `\n\n${links.join("\n\n")}` : "");
     if (claim.payload.existingLinearIssueId) {
       return appendBugRevisionComment(config.request, {
-        deliveryId, linearIssueId: claim.payload.existingLinearIssueId,
+        deliveryId,
+        linearIssueId: claim.payload.existingLinearIssueId,
         body: `${claim.payload.title}\n\n${description}`,
       });
     }
     return createReviewedBugIssue(config.request, {
-      teamId: config.teamId, projectId: config.projectId,
-      title: claim.payload.title, description,
+      teamId: config.teamId,
+      projectId: config.projectId,
+      title: claim.payload.title,
+      description,
     });
   });
   // Recovery evidence must go to a private recovery path, not logs/client DTOs.
   // It is intentionally returned even when the overall UNKNOWN receipt persisted.
   return { ...result, ...(uploadRecovery ? { uploadRecovery } : {}) };
 }
-

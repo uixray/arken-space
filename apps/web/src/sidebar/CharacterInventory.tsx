@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   CharacterInventoryItemDto,
   CharacterInventoryPageDto,
@@ -38,10 +38,12 @@ export function CharacterInventory({
   const [busy, setBusy] = useState(false);
   const section = useRef<HTMLElement | null>(null);
   const loadedCounts = useRef({ owned: 0, available: 0 });
-  loadedCounts.current = {
-    owned: owned.items.length,
-    available: available.items.length,
-  };
+  useLayoutEffect(() => {
+    loadedCounts.current = {
+      owned: owned.items.length,
+      available: available.items.length,
+    };
+  }, [owned.items.length, available.items.length]);
   const pending = useRef(false);
   const mounted = useRef(false);
   const generation = useRef(0);
@@ -229,7 +231,7 @@ export function CharacterInventory({
               <option value="">Выберите предмет</option>
               {available.items.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.name} × {item.quantity}
+                  {item.name}, количество: {item.quantity}
                 </option>
               ))}
             </select>

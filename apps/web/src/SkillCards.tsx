@@ -406,16 +406,24 @@ export function CharacterActionCard({
       {entry.kind === "ABILITY" && (
         <div className="character-action-card__action character-action-card__action--primary">
           <span>
-            <b>{entry.data.areaEffect ? "Область действия" : actions.length ? "Выполнить способность" : "Активировать"}</b>
+            <b>
+              {entry.data.areaEffect
+                ? "Область действия"
+                : actions.length
+                  ? "Выполнить способность"
+                  : "Активировать"}
+            </b>
             <code>
               {entry.data.areaEffect
                 ? `Радиус ${entry.data.areaEffect.radiusMeters} м · общий 1к6 маны${uses ? " · 1 использование" : ""}`
                 : actions.length
-                ? `${actions.length} ${actions.length === 1 ? "бросок" : actions.length < 5 ? "броска" : "бросков"} · одно выполнение`
-                : (entry.data.activation?.consumeUse ?? Boolean(uses))
-                  ? "1 использование · без броска"
-                  : "Без броска"}
-              {!entry.data.areaEffect && !actions.length && entry.data.activation?.cost
+                  ? `${actions.length} ${actions.length === 1 ? "бросок" : actions.length < 5 ? "броска" : "бросков"} · одно выполнение`
+                  : (entry.data.activation?.consumeUse ?? Boolean(uses))
+                    ? "1 использование · без броска"
+                    : "Без броска"}
+              {!entry.data.areaEffect &&
+              !actions.length &&
+              entry.data.activation?.cost
                 ? ` · ${entry.data.activation.cost.amount} ${entry.data.activation.cost.type === "physical" ? "физической силы" : "магической силы"}`
                 : ""}
             </code>
@@ -425,10 +433,12 @@ export function CharacterActionCard({
             disabled={
               disabled ||
               pending !== null ||
-              (!entry.data.areaEffect && (actions.length
-                ? actions.some((candidate) => candidate.consumeUse) && exhausted
-                : (entry.data.activation?.consumeUse ?? Boolean(uses)) &&
-                  exhausted))
+              (!entry.data.areaEffect &&
+                (actions.length
+                  ? actions.some((candidate) => candidate.consumeUse) &&
+                    exhausted
+                  : (entry.data.activation?.consumeUse ?? Boolean(uses)) &&
+                    exhausted))
             }
             onClick={() =>
               void submit("EXECUTE", undefined, actions.length > 0)
@@ -440,8 +450,8 @@ export function CharacterActionCard({
               : entry.data.areaEffect
                 ? "Показать область на карте"
                 : actions.length
-                ? "Выполнить способность"
-                : "Активировать"}
+                  ? "Выполнить способность"
+                  : "Активировать"}
           </button>
           <button
             type="button"
@@ -488,56 +498,57 @@ export function CharacterActionCard({
             </button>
           </div>
         )}
-      {!entry.data.areaEffect && actions.map((action) => (
-        <div className="character-action-card__action" key={action.id}>
-          <span>
-            <b>{action.label}</b>
-            <code>
-              {humanizeFormula(
-                previewRollActionFormula(action, entry.data.values, {
-                  characterStats,
+      {!entry.data.areaEffect &&
+        actions.map((action) => (
+          <div className="character-action-card__action" key={action.id}>
+            <span>
+              <b>{action.label}</b>
+              <code>
+                {humanizeFormula(
+                  previewRollActionFormula(action, entry.data.values, {
+                    characterStats,
+                    statLabels,
+                    skillModifiers,
+                  }),
                   statLabels,
-                  skillModifiers,
-                }),
-                statLabels,
-              )}
-            </code>
-          </span>
-          {entry.kind !== "ABILITY" && (
-            <>
-              <button
-                type="button"
-                disabled={
-                  disabled ||
-                  pending !== null ||
-                  (action.consumeUse && exhausted)
-                }
-                onClick={() => void submit("EXECUTE", action.id)}
-              >
-                <AppIcon icon={DiceTrayIcon} />
-                {pending === "EXECUTE"
-                  ? "Выполняем…"
-                  : action.consumeUse
-                    ? "Выполнить · 1 использование"
-                    : "Выполнить"}
-              </button>
-              <button
-                type="button"
-                disabled={disabled || pending !== null}
-                onClick={() =>
-                  prepare(
-                    "ROLL_ACTION",
-                    action.id,
-                    `${entry.name} · ${action.label}`,
-                  )
-                }
-              >
-                Подготовить
-              </button>
-            </>
-          )}
-        </div>
-      ))}
+                )}
+              </code>
+            </span>
+            {entry.kind !== "ABILITY" && (
+              <>
+                <button
+                  type="button"
+                  disabled={
+                    disabled ||
+                    pending !== null ||
+                    (action.consumeUse && exhausted)
+                  }
+                  onClick={() => void submit("EXECUTE", action.id)}
+                >
+                  <AppIcon icon={DiceTrayIcon} />
+                  {pending === "EXECUTE"
+                    ? "Выполняем…"
+                    : action.consumeUse
+                      ? "Выполнить · 1 использование"
+                      : "Выполнить"}
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled || pending !== null}
+                  onClick={() =>
+                    prepare(
+                      "ROLL_ACTION",
+                      action.id,
+                      `${entry.name} · ${action.label}`,
+                    )
+                  }
+                >
+                  Подготовить
+                </button>
+              </>
+            )}
+          </div>
+        ))}
       {entry.kind === "SKILL" &&
         actions.length === 0 &&
         !(

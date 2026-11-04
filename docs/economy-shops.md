@@ -6,12 +6,14 @@
 База b7cf522d + сохранённый общий локальный пул.
 
 ## Решение владельца
+
 Мастер задаёт календарь/сезоны/регионы и цены. Игрок получает серверную цену и
 покупает количество; кошелёк, остаток, инвентарь и журнал должны меняться атомарно.
 **Игрок также сохраняет право вручную менять монеты.** Происхождение денег не
 контролируется магазином, SP не меняется. Новый режим не включается автоматически.
 
 ## Написанные исходники
+
 - `packages/contracts/src/economy.ts`: строгие команды и проекции, явные пределы.
 - `packages/db/src/schema.ts`, `drizzle/0080_economy_shops.sql`, journal/0080 snapshot:
   nullable canonical ITEM base price, campaign config, merchants/offers, quotes,
@@ -34,6 +36,7 @@
   не становится секретным из-за скрытия предложения. GM rules/inputs — только GM history.
 
 ## Семантика
+
 Календарь — повторяющийся год1–36 месяцев, 1–366 дней, один сезон на месяц;
 без високосных исключений. Харизма читается из серверной характеристики, отсутствие
 диапазона блокирует расчёт. Supply/demand — авторский процент, не автоматическая
@@ -47,9 +50,10 @@ GM фиксированная цена заменяет расчёт факто�
 stock/wallet snapshot и hash. Clock reset/смена правил/характеристики/кошелька/
 предмета/остатка требуют новой явной котировки. Purchase принимает только quote/action.
 В рамках одной DB transaction: coins debit + stock decrement + новый buyer instance
-+ receipt + instance audit + GM-only chat + game event. Не копируются GM notes,
-currentState, portrait, старый владелец/локация/контейнер. Даже покупка всей стопки
-создаёт новый buyer instance; исходный остаток становится0.
+
+- receipt + instance audit + GM-only chat + game event. Не копируются GM notes,
+  currentState, portrait, старый владелец/локация/контейнер. Даже покупка всей стопки
+  создаёт новый buyer instance; исходный остаток становится0.
 
 Порядок lock: action → inventory graph → campaign SHARE → membership SHARE →
 economy UPDATE → quote/offer/merchant → canonical → character/controller → instance.
@@ -57,6 +61,7 @@ Legacy CAS wallet writers не изменены. Повтор подтвержд
 историческую actor-owned receipt, не пересчитывает цену и не списывает монеты снова.
 
 ## Итог связанной исходниковой сверки
+
 - Прочитан путь contracts → GM authoring → quote → purchase → DB/журнал → UI,
   а также существующие instance graph/action locks, wallet CAS, inventory ACL,
   player instance/portrait projections и canonical price PATCH.
@@ -76,23 +81,25 @@ Legacy CAS wallet writers не изменены. Повтор подтвержд
   source-проходе нет; это НЕ применение миграции и не валидация Drizzle/SQL-компилятором.
 
 ## Матрица исходных критериев UIX-265
+
 Все строки «код» означают наличие реализации по исходниковой сверке, не runtime PASS.
 
-| Критерий | Источник реализации / оставшееся доказательство |
-|---|---|
-| Base price + currency/unit | Код: nullable ITEM.basePriceCopper, медные/штука в контракте/форме; world-content-routes + schema/0080 |
-| Merchant region/stock/rules | Код: economy-admin, canonical LOCATION, existing instance quantity; строгие GM-команды |
-| Серверная цена и все авторские факторы | Код: economy-state + economy-math; BigInt, одна операция ceil после количества |
-| Ревизии, факторы, округление, итог каждой котировки | Код: private economy_quotes.inputs + inputHash/view; GM history для покупок |
-| Expiry и stale stock/wallet/rules | Код:120с, повторный расчёт под locks, сравнение inputHash, повтор expiry после ожидания |
-| Атомарные wallet/stock/inventory/history | Код: одна transaction в economy-purchase, receipt/instance audit/GM chat/game event внутри неё |
-| Повтор actionId не дублирует покупку | Код: общий action lock, actor/requestHash, unique action/quote и историческая receipt |
-| Нельзя подменить character/stat/region/season/price | Код: campaign/owner/controller ACL, строгая quote-команда, только server rows; session-context guard |
-| GM override с причиной | Код: contracts + DB check, reason сохранена с private inputs |
-| Скрытый stock и правила | Код: отдельные проекции, GM-only inputs, nonShopInstance в общих списках; уже раскрытый lore не отзывается |
-| Проверочные сценарии из AC | НЕ выполнены: concurrent purchase, insufficient funds, stale/expiry, season/reset, charisma, rollback, ACL/replay |
+| Критерий                                            | Источник реализации / оставшееся доказательство                                                                   |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Base price + currency/unit                          | Код: nullable ITEM.basePriceCopper, медные/штука в контракте/форме; world-content-routes + schema/0080            |
+| Merchant region/stock/rules                         | Код: economy-admin, canonical LOCATION, existing instance quantity; строгие GM-команды                            |
+| Серверная цена и все авторские факторы              | Код: economy-state + economy-math; BigInt, одна операция ceil после количества                                    |
+| Ревизии, факторы, округление, итог каждой котировки | Код: private economy_quotes.inputs + inputHash/view; GM history для покупок                                       |
+| Expiry и stale stock/wallet/rules                   | Код:120с, повторный расчёт под locks, сравнение inputHash, повтор expiry после ожидания                           |
+| Атомарные wallet/stock/inventory/history            | Код: одна transaction в economy-purchase, receipt/instance audit/GM chat/game event внутри неё                    |
+| Повтор actionId не дублирует покупку                | Код: общий action lock, actor/requestHash, unique action/quote и историческая receipt                             |
+| Нельзя подменить character/stat/region/season/price | Код: campaign/owner/controller ACL, строгая quote-команда, только server rows; session-context guard              |
+| GM override с причиной                              | Код: contracts + DB check, reason сохранена с private inputs                                                      |
+| Скрытый stock и правила                             | Код: отдельные проекции, GM-only inputs, nonShopInstance в общих списках; уже раскрытый lore не отзывается        |
+| Проверочные сценарии из AC                          | НЕ выполнены: concurrent purchase, insufficient funds, stale/expiry, season/reset, charisma, rollback, ACL/replay |
 
 ## Остаток до приёмки и публикации
+
 После отдельного разрешения нужны компиляция/сборка, миграция и реальные сценарии
 из последней строки, включая два GM с несохранёнными формами, две вкладки и смену
 сессии при неизвестном результате. UI/runtime и concurrency не проверены.

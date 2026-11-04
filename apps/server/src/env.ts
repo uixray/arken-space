@@ -131,23 +131,55 @@ export const env = z
    */
   .superRefine((value, ctx) => {
     if (value.DEPLOYMENT_MODE === "LOCAL_HOST") {
-      const issue = (path: string, message: string) => ctx.addIssue({ code: "custom", path: [path], message });
-      if (value.NODE_ENV !== "production" || value.DEV_DATABASE_DRIVER !== "postgres")
-        issue("DEPLOYMENT_MODE", "Local host requires production settings and PostgreSQL");
+      const issue = (path: string, message: string) =>
+        ctx.addIssue({ code: "custom", path: [path], message });
+      if (
+        value.NODE_ENV !== "production" ||
+        value.DEV_DATABASE_DRIVER !== "postgres"
+      )
+        issue(
+          "DEPLOYMENT_MODE",
+          "Local host requires production settings and PostgreSQL",
+        );
       if (!z.string().uuid().safeParse(value.LOCAL_INSTANCE_ID).success)
         issue("LOCAL_INSTANCE_ID", "A local instance UUID is required");
-      for (const key of ["LOCAL_DATA_ROOT", "LOCAL_WEB_ROOT", "MEDIA_ROOT", "PERFORMANCE_LOG_DIR"] as const)
-        if (!isAbsolute(value[key])) issue(key, "Local host requires an explicit absolute path");
+      for (const key of [
+        "LOCAL_DATA_ROOT",
+        "LOCAL_WEB_ROOT",
+        "MEDIA_ROOT",
+        "PERFORMANCE_LOG_DIR",
+      ] as const)
+        if (!isAbsolute(value[key]))
+          issue(key, "Local host requires an explicit absolute path");
       const origin = `http://localhost:${value.PORT}`;
       if (value.WEB_ORIGIN !== origin || value.PUBLIC_URL !== origin)
-        issue("WEB_ORIGIN", "This local pool permits loopback only; LAN requires a separate transport policy");
-      if (value.ACCOUNT_REGISTRATION_ENABLED || value.ACCOUNT_MAIL_RUNTIME_ENABLED || value.LEGACY_DEV_AUTH_ENABLED || value.CAMPAIGN_LINK_ACCESS_ENABLED)
-        issue("DEPLOYMENT_MODE", "Public email, legacy login and secret-link access must remain disabled locally");
+        issue(
+          "WEB_ORIGIN",
+          "This local pool permits loopback only; LAN requires a separate transport policy",
+        );
+      if (
+        value.ACCOUNT_REGISTRATION_ENABLED ||
+        value.ACCOUNT_MAIL_RUNTIME_ENABLED ||
+        value.LEGACY_DEV_AUTH_ENABLED ||
+        value.CAMPAIGN_LINK_ACCESS_ENABLED
+      )
+        issue(
+          "DEPLOYMENT_MODE",
+          "Public email, legacy login and secret-link access must remain disabled locally",
+        );
       try {
         const database = new URL(value.DATABASE_URL);
-        if (!["127.0.0.1", "localhost"].includes(database.hostname) || database.pathname !== "/arken")
-          issue("DATABASE_URL", "Local host may only connect to its own loopback arken database");
-      } catch { issue("DATABASE_URL", "Invalid local database URL"); }
+        if (
+          !["127.0.0.1", "localhost"].includes(database.hostname) ||
+          database.pathname !== "/arken"
+        )
+          issue(
+            "DATABASE_URL",
+            "Local host may only connect to its own loopback arken database",
+          );
+      } catch {
+        issue("DATABASE_URL", "Invalid local database URL");
+      }
     }
     if (
       value.DEV_DATABASE_DRIVER === "pglite" &&

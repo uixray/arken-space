@@ -60,6 +60,17 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: [
+      "scripts/report-client-performance.mjs",
+      "scripts/report-snapshot-metrics.mjs",
+    ],
+    languageOptions: { globals: { process: "readonly", console: "readonly" } },
+  },
+  {
+    files: ["docs/assets/uix506-identity/preview.js"],
+    languageOptions: { globals: { document: "readonly" } },
+  },
+  {
+    files: [
       "scripts/import-local-qa-stickers.mjs",
       "scripts/verify-local-qa-stickers.mjs",
     ],

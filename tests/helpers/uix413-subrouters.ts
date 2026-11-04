@@ -7,6 +7,18 @@
  * unclassified.
  */
 export const SUBROUTER_CAMPAIGN_PROBE_KEYS = [
+  "GET /api/characters/:characterId/private-notebook",
+  "GET /api/characters/:characterId/progression",
+  "PUT /api/characters/:characterId/private-notebook",
+  "GET /api/characters/:id/inventory",
+  "GET /api/world-content-instances/:id/bindings",
+  "POST /api/characters/:characterId/inspiration/adjust",
+  "POST /api/characters/:characterId/inspiration/reroll",
+  "POST /api/characters/:characterId/progression/create",
+  "POST /api/characters/:characterId/progression/grant",
+  "POST /api/characters/:characterId/progression/action",
+  "PUT /api/world-content-instances/:id/bindings",
+  "PUT /api/token-definitions/:id/sprite-set",
   "PATCH /api/character-media/:id",
   "POST /api/character-media/:id/reorder",
   "POST /api/character-media/:id/detach",

@@ -78,11 +78,11 @@ SHA256 оригинала и локальной копии:
 **зафиксированным commit SHA**, вместе с исходными METADATA.pb и OFL.txt.
 Система не устанавливалась, font conversion/subsetting не выполнялись.
 
-| Шрифт | Начертание в листе | Файл / объём | SHA256 |
-|---|---|---|---|
-| Forum | 400 | Forum-Regular.ttf / 303 316 байт | `5c9fbe9c4ce76d0269f5088d921d57e58082fd9c28433eacb6de95baf938adf8` |
-| Unbounded | 500 из variable 200–900 | Unbounded[wght].ttf / 778 272 байта | `323b511be380c8d474ef030686b71aedde501f8d9cd46da558b7c40454372c3f` |
-| Yeseva One | 400 | YesevaOne-Regular.ttf / 108 016 байт | `88362b33820f0011e163e67b1d570fecd442aa8c05eaac89d5162f9c40d9dac3` |
+| Шрифт      | Начертание в листе      | Файл / объём                         | SHA256                                                             |
+| ---------- | ----------------------- | ------------------------------------ | ------------------------------------------------------------------ |
+| Forum      | 400                     | Forum-Regular.ttf / 303 316 байт     | `5c9fbe9c4ce76d0269f5088d921d57e58082fd9c28433eacb6de95baf938adf8` |
+| Unbounded  | 500 из variable 200–900 | Unbounded[wght].ttf / 778 272 байта  | `323b511be380c8d474ef030686b71aedde501f8d9cd46da558b7c40454372c3f` |
+| Yeseva One | 400                     | YesevaOne-Regular.ttf / 108 016 байт | `88362b33820f0011e163e67b1d570fecd442aa8c05eaac89d5162f9c40d9dac3` |
 
 [Полные URL, commits и hashes](font-provenance.json).
 Metadata заявляет Cyrillic/Cyrillic-ext и OFL. Лицензии:
@@ -115,4 +115,3 @@ Metadata заявляет Cyrillic/Cyrillic-ext и OFL. Лицензии:
 web-ассетов и пользовательских названий по
 [плану](../../plans/uix506-accepted-identity-pool.md).
 Технические идентификаторы остаются прежними; проверки и публикация отдельно.
-

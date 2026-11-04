@@ -224,8 +224,7 @@ export function registerCharacterRoutes(
       !sameInspiration(current.resources, updates.resources)
     )
       return reply.code(409).send({ error: "USE_INSPIRATION_ADJUSTMENT" });
-    if (updates.wallet && updates.wallet.sp !== current.wallet.sp)
-      return reply.code(409).send({ error: "USE_PROGRESSION_SP_LEDGER" });
+    // Wallet mutations use the counters command and its SP ledger guard.
     if (
       auth.role !== "GM" &&
       Object.keys(updates).some(

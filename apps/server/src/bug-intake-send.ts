@@ -1,9 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { claimBugDelivery, recordBugDeliveryOutcome, deliveryOutcomeSchema } from "./bug-intake-outbox.js";
+import {
+  claimBugDelivery,
+  recordBugDeliveryOutcome,
+  deliveryOutcomeSchema,
+} from "./bug-intake-outbox.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
-type Claim = Extract<Awaited<ReturnType<typeof claimBugDelivery>>, { ok: true }>;
+type Claim = Extract<
+  Awaited<ReturnType<typeof claimBugDelivery>>,
+  { ok: true }
+>;
 type Outcome = z.infer<typeof deliveryOutcomeSchema>;
 
 /** Dormant orchestration seam, no scheduler or transport instantiated here.
@@ -41,7 +48,12 @@ export async function sendQueuedBugOnce(
     outcome = { state: "UNKNOWN", failureCode: "EXTERNAL_RESULT_UNKNOWN" };
   }
   try {
-    const receipt = await recordBugDeliveryOutcome(db, deliveryId, claimId, outcome);
+    const receipt = await recordBugDeliveryOutcome(
+      db,
+      deliveryId,
+      claimId,
+      outcome,
+    );
     if (receipt.ok) return { state: receipt.state, deliveryId };
   } catch {
     // Do not resend after a failed receipt write, even if external work succeeded.

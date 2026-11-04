@@ -169,7 +169,7 @@ export function BugIntakeReviewForm({
                     void send({
                       action: "EXCLUDE_FILE",
                       fileId: file.id,
-                      reason: reasons[file.id].trim(),
+                      reason: (reasons[file.id] ?? "").trim(),
                     })
                   }
                 >
@@ -238,14 +238,23 @@ export function BugIntakeReviewForm({
             формы. Постановка в очередь не означает, что отчёт уже отправлен.
             Для связанной задачи изменения будут добавлены комментарием.
           </p>
-          {detail.albumId && <p>Для альбома сначала требуется общая проверка всех частей.
-            Отправка отдельной части пока недоступна.</p>}
-          <button type="button" disabled={busy || Boolean(detail.albumId)}
-            onClick={() => void send({ action: "ENQUEUE" })}>
+          {detail.albumId && (
+            <p>
+              Для альбома сначала требуется общая проверка всех частей. Отправка
+              отдельной части пока недоступна.
+            </p>
+          )}
+          <button
+            type="button"
+            disabled={busy || Boolean(detail.albumId)}
+            onClick={() => void send({ action: "ENQUEUE" })}
+          >
             Поставить подтверждённый отчёт в очередь
           </button>
-          <p>Результат смотрите в истории отправок. Повтор этой команды не
-            перезапускает завершённую или неопределённую отправку.</p>
+          <p>
+            Результат смотрите в истории отправок. Повтор этой команды не
+            перезапускает завершённую или неопределённую отправку.
+          </p>
         </section>
       )}
       {detail.state !== "REVIEW" && (

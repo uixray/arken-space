@@ -293,6 +293,7 @@ describe("world map localized display copy", () => {
         gmNotes: "",
         visibility: "GM_ONLY",
         canonicalLocationId: null,
+        label: null,
         x: 0.5,
         y: 0.5,
       }),

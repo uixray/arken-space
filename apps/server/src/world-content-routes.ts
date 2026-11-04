@@ -698,10 +698,17 @@ export function registerWorldContentRoutes(
     if (auth.role !== "GM") return fail(reply, 403, "GM_REQUIRED");
     // The shop's canonical-price form pins the actor across cookie changes in
     // another tab. Existing non-shop canonical editors keep their API contract.
-    if ((request.headers["x-economy-campaign"] !== undefined || request.headers["x-economy-membership"] !== undefined) &&
-        (request.headers["x-economy-campaign"] !== auth.campaignId || request.headers["x-economy-membership"] !== auth.membershipId))
-      return reply.code(409).send({ error: "ECONOMY_CONTEXT_CHANGED",
-        message: "Сменился аккаунт или кампания. Вернитесь в исходную кампанию, чтобы проверить сохранённый запрос." });
+    if (
+      (request.headers["x-economy-campaign"] !== undefined ||
+        request.headers["x-economy-membership"] !== undefined) &&
+      (request.headers["x-economy-campaign"] !== auth.campaignId ||
+        request.headers["x-economy-membership"] !== auth.membershipId)
+    )
+      return reply.code(409).send({
+        error: "ECONOMY_CONTEXT_CHANGED",
+        message:
+          "Сменился аккаунт или кампания. Вернитесь в исходную кампанию, чтобы проверить сохранённый запрос.",
+      });
     const { id } = idParams.parse(request.params);
     const body = updateWorldContentSchema.parse(request.body);
     const requestHash = createHash("sha256")

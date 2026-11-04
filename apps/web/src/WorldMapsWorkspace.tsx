@@ -18,6 +18,9 @@ import type {
   WorldMapVisibility,
 } from "@arken/contracts";
 import { WorldMapCanonicalLocationPicker } from "./WorldMapCanonicalLocationPicker";
+import { CartographicLabelFields } from "./CartographicLabelFields";
+import { PositionedCartographicLabel } from "./PositionedCartographicLabel";
+import type { CartographicLabelConfig } from "@arken/contracts";
 import { ArkenDialog } from "./ui/ArkenDialog";
 import { AppIcon } from "./ui/AppIcon";
 import { PartyLocationIcon, WorldLocationIcon } from "./ui/icons";
@@ -37,6 +40,7 @@ export type MapDraft = {
 };
 
 export type LocationDraft = {
+  label?: CartographicLabelConfig | null;
   canonicalLocationId: string | null;
   name: string;
   kind: WorldMapLocationKind;
@@ -54,6 +58,7 @@ const newMapDraft = (): MapDraft => ({
 });
 
 const newLocationDraft = (): LocationDraft => ({
+  label: null,
   canonicalLocationId: null,
   name: "",
   kind: "OTHER",
@@ -67,6 +72,7 @@ const toDraft = (
   location: WorldMapLocationDto,
   gmNotes?: string,
 ): LocationDraft => ({
+  label: location.label ?? null,
   canonicalLocationId: location.canonicalLocationId ?? null,
   name: location.name,
   kind: location.kind,
@@ -110,7 +116,12 @@ function WorldMapStageCanvas({
     return () => observer.disconnect();
   }, []);
   return (
-    <div ref={ref} className="world-map-stage__canvas" style={{ aspectRatio }}>
+    <div
+      ref={ref}
+      data-cartographic-boundary
+      className="world-map-stage__canvas"
+      style={{ aspectRatio }}
+    >
       {children}
     </div>
   );
@@ -508,7 +519,7 @@ export function WorldMapsWorkspace({
                     <button
                       key={location.id}
                       type="button"
-                      className={`world-map-marker${location.id === selectedLocation?.id ? " is-selected" : ""}`}
+                      className={`world-map-marker${location.label ? " world-map-marker--configured" : ""}${location.id === selectedLocation?.id ? " is-selected" : ""}`}
                       style={{
                         left: `${location.x * 100}%`,
                         top: `${location.y * 100}%`,
@@ -541,8 +552,18 @@ export function WorldMapsWorkspace({
                           </span>
                         </span>
                       )}
-                      <span className="world-map-marker__label">
-                        {location.name}
+                      <span
+                        className={`world-map-marker__label${location.label ? " world-map-marker__label--configured" : ""}`}
+                      >
+                        {location.label ? (
+                          <PositionedCartographicLabel
+                            text={location.name}
+                            config={location.label}
+                            layoutKey={`${location.mapId}:${location.x}:${location.y}`}
+                          />
+                        ) : (
+                          location.name
+                        )}
                       </span>
                     </button>
                   ))}
@@ -803,6 +824,15 @@ export function WorldMapsWorkspace({
           className="world-map-location-form"
           onSubmit={(event) => void submit(event)}
         >
+          {isGm && (
+            <CartographicLabelFields
+              value={draft.label}
+              name={draft.name}
+              onChange={(label) =>
+                setDraft((current) => ({ ...current, label }))
+              }
+            />
+          )}
           <label>
             Название
             <input

@@ -263,15 +263,40 @@ describe("account campaign workspace", () => {
       role: "PLAYER",
       displayName: "Player One",
     });
+    // A lost response can be replayed only by the same account and must not
+    // create a second membership; another account cannot reuse the token.
+    const replay = await post(
+      "/api/account/campaigns/invites/claim",
+      { token: invite.token },
+      player,
+    );
+    expect(replay.statusCode).toBe(201);
+    expect(replay.json()).toMatchObject({
+      campaignId,
+      membershipId: playerMembership[0]!.id,
+      role: "PLAYER",
+    });
+    const stranger = await makeAccount("stranger@example.invalid");
     expect(
       (
         await post(
           "/api/account/campaigns/invites/claim",
           { token: invite.token },
-          player,
+          stranger,
         )
       ).statusCode,
     ).toBe(400);
+    expect(
+      await db
+        .select()
+        .from(memberships)
+        .where(
+          and(
+            eq(memberships.userId, player.userId),
+            eq(memberships.campaignId, campaignId),
+          ),
+        ),
+    ).toHaveLength(1);
 
     const selection = await post(
       "/api/account/campaigns/select",

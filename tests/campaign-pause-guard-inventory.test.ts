@@ -200,13 +200,38 @@ describe("UIX-583 Canvas guard inventory", () => {
 
   it.each([
     ['socket.on("token:moving",', 'socket.on("token:moved",'],
-    ['socket.on("ruler:update",', 'socket.on("ruler:clear",'],
-    ['socket.on("ruler:clear",', 'socket.on("map:ping",'],
     ['socket.on("map:ping",', 'socket.on("cursor:move",'],
     ['socket.on("cursor:move",', 'socket.on("cursor:gone",'],
     ['socket.on("cursor:gone",', 'socket.on("disconnect",'],
   ])("keeps %s inside the shared relay guard", (start, end) => {
     expect(between(realtime, start, end)).toContain("runCampaignCanvasRelay(");
+  });
+
+  it("routes both ruler handlers through the guarded queued relay", () => {
+    expect(
+      between(
+        realtime,
+        'socket.on("ruler:update",',
+        'socket.on("ruler:clear",',
+      ),
+    ).toContain("enqueueRulerUpdate(parsed.data)");
+    expect(
+      between(realtime, 'socket.on("ruler:clear",', 'socket.on("map:ping",'),
+    ).toContain("enqueueRulerClear(parsed.data.sceneId)");
+    expect(
+      between(
+        realtime,
+        "const relayRulerIntent =",
+        "const drainRulerIntents =",
+      ),
+    ).toContain("runCampaignCanvasRelay(");
+    expect(
+      between(
+        realtime,
+        "const drainRulerIntents =",
+        "const enqueueRulerUpdate =",
+      ),
+    ).toContain("await relayRulerIntent(intent)");
   });
 
   it.each([
@@ -217,8 +242,8 @@ describe("UIX-583 Canvas guard inventory", () => {
       'socket.to(delivery.rooms).emit("token:moving"',
     ],
     [
-      'socket.on("ruler:update",',
-      'socket.on("ruler:clear",',
+      "const relayRulerIntent =",
+      "const drainRulerIntents =",
       ".limit(1);",
       "canvasEphemera.rulerSceneId = scene.id",
     ],
