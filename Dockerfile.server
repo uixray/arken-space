@@ -47,7 +47,7 @@ COPY --from=native-build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-ce
 # deliberately historical, immutable snapshot.
 RUN corepack enable \
  && test "$(dpkg --print-architecture)" = amd64 \
- && printf '%s\n' 'deb https://snapshot.debian.org/archive/debian/20260518T000000Z/ bookworm main' 'deb https://snapshot.debian.org/archive/debian/20260518T000000Z/ bookworm-proposed-updates main' > /tmp/arken-runtime-snapshot.list \
+ && printf '%s\n' 'deb https://snapshot-fastly.debian.org/archive/debian/20260518T000000Z/ bookworm main' 'deb https://snapshot-fastly.debian.org/archive/debian/20260518T000000Z/ bookworm-proposed-updates main' > /tmp/arken-runtime-snapshot.list \
  && apt-get update -o Acquire::Check-Valid-Until=false -o Dir::Etc::sourcelist=/tmp/arken-runtime-snapshot.list -o Dir::Etc::sourceparts=- \
  && apt-get install -y --no-install-recommends -o Acquire::Check-Valid-Until=false -o Dir::Etc::sourcelist=/tmp/arken-runtime-snapshot.list -o Dir::Etc::sourceparts=- libglib2.0-0 libexpat1 libjpeg62-turbo libpng16-16 libwebp7 libwebpmux3 libwebpdemux2 libtiff6 libaom3 libdav1d6 librsvg2-2 libpango-1.0-0 libpangocairo-1.0-0 liblcms2-2 libexif12 libarchive13 libcgif0 libimagequant0 fontconfig 'ffmpeg=7:5.1.9-0+deb12u1' \
  && ffmpeg -version | head -n 1 | grep -F '5.1.9' \
