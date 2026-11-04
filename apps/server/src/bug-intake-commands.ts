@@ -150,17 +150,15 @@ export async function applyBugReviewCommand(
         workerTerminationVerified: true,
         evidence: command.evidence,
       };
-      await tx
-        .insert(bugIntakeActions)
-        .values({
-          actionId: command.actionId,
-          messageId,
-          operatorMembershipId: operatorId,
-          action: command.action,
-          requestHash,
-          resultingRevision: message.revision,
-          receipt,
-        });
+      await tx.insert(bugIntakeActions).values({
+        actionId: command.actionId,
+        messageId,
+        operatorMembershipId: operatorId,
+        action: command.action,
+        requestHash,
+        resultingRevision: message.revision,
+        receipt,
+      });
       return { ok: true as const, receipt, duplicate: false };
     }
     if (await bugDeliveryInFlight(tx, messageId))
@@ -233,17 +231,15 @@ export async function applyBugReviewCommand(
         externalContentVerified: true,
         evidence: command.evidence,
       };
-      await tx
-        .insert(bugIntakeActions)
-        .values({
-          actionId: command.actionId,
-          messageId,
-          operatorMembershipId: operatorId,
-          action: command.action,
-          requestHash,
-          resultingRevision: message.revision + 1,
-          receipt,
-        });
+      await tx.insert(bugIntakeActions).values({
+        actionId: command.actionId,
+        messageId,
+        operatorMembershipId: operatorId,
+        action: command.action,
+        requestHash,
+        resultingRevision: message.revision + 1,
+        receipt,
+      });
       return { ok: true as const, receipt, duplicate: false };
     }
     if (command.action === "CONFIRM_DELIVERY_NOT_SENT") {
@@ -302,17 +298,15 @@ export async function applyBugReviewCommand(
         externalAbsenceVerified: true,
         evidence: command.evidence,
       };
-      await tx
-        .insert(bugIntakeActions)
-        .values({
-          actionId: command.actionId,
-          messageId,
-          operatorMembershipId: operatorId,
-          action: command.action,
-          requestHash,
-          resultingRevision: message.revision + 1,
-          receipt,
-        });
+      await tx.insert(bugIntakeActions).values({
+        actionId: command.actionId,
+        messageId,
+        operatorMembershipId: operatorId,
+        action: command.action,
+        requestHash,
+        resultingRevision: message.revision + 1,
+        receipt,
+      });
       return { ok: true as const, receipt, duplicate: false };
     }
     if (command.action === "ENQUEUE") {
@@ -329,17 +323,15 @@ export async function applyBugReviewCommand(
         deliveryId: queued.id,
         deliveryState: queued.state,
       };
-      await tx
-        .insert(bugIntakeActions)
-        .values({
-          actionId: command.actionId,
-          messageId,
-          operatorMembershipId: operatorId,
-          action: command.action,
-          requestHash,
-          resultingRevision: message.revision,
-          receipt,
-        });
+      await tx.insert(bugIntakeActions).values({
+        actionId: command.actionId,
+        messageId,
+        operatorMembershipId: operatorId,
+        action: command.action,
+        requestHash,
+        resultingRevision: message.revision,
+        receipt,
+      });
       return { ok: true as const, receipt, duplicate: false };
     }
     const [version] = await tx

@@ -125,18 +125,16 @@ export async function recordEconomyAction(
   entityId: string | null,
   revision: number | null,
 ) {
-  await tx
-    .insert(gameEvents)
-    .values({
-      campaignId: auth.campaignId,
-      membershipId: auth.membershipId,
-      actionId,
-      type,
-      entityType: "economy",
-      entityId,
-      entityRevision: revision,
-      payload: { requestHash: hash },
-    });
+  await tx.insert(gameEvents).values({
+    campaignId: auth.campaignId,
+    membershipId: auth.membershipId,
+    actionId,
+    type,
+    entityType: "economy",
+    entityId,
+    entityRevision: revision,
+    payload: { requestHash: hash },
+  });
 }
 
 export async function requireStock(

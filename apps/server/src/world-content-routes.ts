@@ -704,13 +704,11 @@ export function registerWorldContentRoutes(
       (request.headers["x-economy-campaign"] !== auth.campaignId ||
         request.headers["x-economy-membership"] !== auth.membershipId)
     )
-      return reply
-        .code(409)
-        .send({
-          error: "ECONOMY_CONTEXT_CHANGED",
-          message:
-            "Сменился аккаунт или кампания. Вернитесь в исходную кампанию, чтобы проверить сохранённый запрос.",
-        });
+      return reply.code(409).send({
+        error: "ECONOMY_CONTEXT_CHANGED",
+        message:
+          "Сменился аккаунт или кампания. Вернитесь в исходную кампанию, чтобы проверить сохранённый запрос.",
+      });
     const { id } = idParams.parse(request.params);
     const body = updateWorldContentSchema.parse(request.body);
     const requestHash = createHash("sha256")

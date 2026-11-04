@@ -163,61 +163,51 @@ export function registerEconomyRoutes(
           request.headers["x-economy-campaign"] !== auth.campaignId ||
           request.headers["x-economy-membership"] !== auth.membershipId
         )
-          return reply
-            .code(409)
-            .send({
-              error: "ECONOMY_CONTEXT_CHANGED",
-              message:
-                "Сменился аккаунт или кампания. Вернитесь в исходную кампанию, чтобы проверить сохранённый запрос.",
-            });
+          return reply.code(409).send({
+            error: "ECONOMY_CONTEXT_CHANGED",
+            message:
+              "Сменился аккаунт или кампания. Вернитесь в исходную кампанию, чтобы проверить сохранённый запрос.",
+          });
         let result: unknown;
         try {
           result = await operation.run(auth, request.body, request.query);
         } catch (reason) {
           if (reason instanceof z.ZodError)
-            return reply
-              .code(400)
-              .send({
-                error: "ECONOMY_INVALID_INPUT",
-                message:
-                  "Проверьте поля: границы, сезоны и диапазоны не должны конфликтовать.",
-                notApplied: true,
-              });
+            return reply.code(400).send({
+              error: "ECONOMY_INVALID_INPUT",
+              message:
+                "Проверьте поля: границы, сезоны и диапазоны не должны конфликтовать.",
+              notApplied: true,
+            });
           const code = reason instanceof Error ? reason.message : "";
           if (messages[code])
-            return reply
-              .code(code === "ECONOMY_FORBIDDEN" ? 403 : 409)
-              .send({
-                error: code,
-                message: messages[code],
-                notApplied: ![
-                  "ECONOMY_FORBIDDEN",
-                  "ECONOMY_ACTION_CONFLICT",
-                ].includes(code),
-              });
+            return reply.code(code === "ECONOMY_FORBIDDEN" ? 403 : 409).send({
+              error: code,
+              message: messages[code],
+              notApplied: ![
+                "ECONOMY_FORBIDDEN",
+                "ECONOMY_ACTION_CONFLICT",
+              ].includes(code),
+            });
           if (
             ["40001", "40P01", "23505"].includes(
               postgresErrorCode(reason) ?? "",
             )
           )
-            return reply
-              .code(409)
-              .send({
-                error: "ECONOMY_RETRY_SAME_ACTION",
-                message:
-                  "Параллельное изменение. Повторите тот же запрос, не создавая новую покупку.",
-              });
+            return reply.code(409).send({
+              error: "ECONOMY_RETRY_SAME_ACTION",
+              message:
+                "Параллельное изменение. Повторите тот же запрос, не создавая новую покупку.",
+            });
           request.log.error({
             event: "economy.request_failed",
             route: operation.url,
           });
-          return reply
-            .code(500)
-            .send({
-              error: "ECONOMY_RESULT_UNKNOWN",
-              message:
-                "Ответ не подтверждён. Проверьте историю и повторите тот же запрос.",
-            });
+          return reply.code(500).send({
+            error: "ECONOMY_RESULT_UNKNOWN",
+            message:
+              "Ответ не подтверждён. Проверьте историю и повторите тот же запрос.",
+          });
         }
         if (operation.mutate)
           try {

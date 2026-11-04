@@ -20,14 +20,12 @@ describe("area cancellation authorization", () => {
         { id: owner, campaignId, role: "PLAYER", displayName: "Owner" },
         { id: other, campaignId, role: "PLAYER", displayName: "Other" },
       ]);
-      await db
-        .insert(schema.characters)
-        .values({
-          id: characterId,
-          campaignId,
-          ownerMembershipId: owner,
-          name: "Caster",
-        });
+      await db.insert(schema.characters).values({
+        id: characterId,
+        campaignId,
+        ownerMembershipId: owner,
+        name: "Caster",
+      });
       const command = {
         actionId: id(),
         characterId,

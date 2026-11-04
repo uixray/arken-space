@@ -307,26 +307,24 @@ export async function applyAbilityArea(
         })
         .returning({ id: chatMessages.id });
       if (!message) throw new Error("ROLL_SAVE_FAILED");
-      await tx
-        .insert(gameEvents)
-        .values({
-          campaignId: auth.campaignId,
-          actionId: command.actionId,
-          membershipId: actor.id,
-          type: "ability.area.applied",
-          entityType: "chat",
-          entityId: message.id,
-          entityRevision: entry.revision + 1,
-          payload: {
-            requestHash,
-            messageId: message.id,
-            entryId: entry.id,
-            sceneId: scene.id,
-            sharedRoll: roll.total,
-            effects: plan.effects,
-            spent: plan.spent,
-          },
-        });
+      await tx.insert(gameEvents).values({
+        campaignId: auth.campaignId,
+        actionId: command.actionId,
+        membershipId: actor.id,
+        type: "ability.area.applied",
+        entityType: "chat",
+        entityId: message.id,
+        entityRevision: entry.revision + 1,
+        payload: {
+          requestHash,
+          messageId: message.id,
+          entryId: entry.id,
+          sceneId: scene.id,
+          sharedRoll: roll.total,
+          effects: plan.effects,
+          spent: plan.spent,
+        },
+      });
       return {
         actionId: command.actionId,
         duplicate: false,

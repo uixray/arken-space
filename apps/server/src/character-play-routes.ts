@@ -145,12 +145,10 @@ export function registerCharacterPlayRoutes(
       return reply.code(409).send({ error: "ENTRY_CONTEXT_CHANGED" });
     const parsed = abilityAreaApplySchema.safeParse(request.body);
     if (!parsed.success)
-      return reply
-        .code(400)
-        .send({
-          error: "INVALID_AREA_COMMAND",
-          message: "Проверьте параметры применения области.",
-        });
+      return reply.code(400).send({
+        error: "INVALID_AREA_COMMAND",
+        message: "Проверьте параметры применения области.",
+      });
     let result: Awaited<ReturnType<typeof applyAbilityArea>>;
     try {
       result = await applyAbilityArea(db, auth, parsed.data);
@@ -224,14 +222,12 @@ export function registerCharacterPlayRoutes(
           notApplied: !["AREA_FORBIDDEN", "ACTION_CONFLICT"].includes(code),
         });
       if (reason instanceof z.ZodError)
-        return reply
-          .code(400)
-          .send({
-            error: "AREA_CONFIGURATION_INVALID",
-            notApplied: true,
-            message:
-              "Проверьте настройки способности и ресурс маны у участников. Изменения не применены.",
-          });
+        return reply.code(400).send({
+          error: "AREA_CONFIGURATION_INVALID",
+          notApplied: true,
+          message:
+            "Проверьте настройки способности и ресурс маны у участников. Изменения не применены.",
+        });
       // Drizzle may wrap PostgreSQL errors. A failed transaction is not a new
       // roll: offer an explicit retry of the exact same action, never auto-retry.
       let cause: unknown = reason;
@@ -244,26 +240,22 @@ export function registerCharacterPlayRoutes(
           "code" in cause &&
           ["40001", "40P01", "23505"].includes(String(cause.code))
         )
-          return reply
-            .code(409)
-            .send({
-              error: "AREA_RETRY",
-              message:
-                "Состояние изменилось одновременно. Повторите тот же запрос.",
-            });
+          return reply.code(409).send({
+            error: "AREA_RETRY",
+            message:
+              "Состояние изменилось одновременно. Повторите тот же запрос.",
+          });
         cause = "cause" in cause ? cause.cause : null;
       }
       request.log.error({
         event: "ability.area.failed",
         actionId: parsed.data.actionId,
       });
-      return reply
-        .code(500)
-        .send({
-          error: "AREA_RESULT_UNKNOWN",
-          message:
-            "Результат не подтверждён. Повторите тот же запрос, не создавая новое применение.",
-        });
+      return reply.code(500).send({
+        error: "AREA_RESULT_UNKNOWN",
+        message:
+          "Результат не подтверждён. Повторите тот же запрос, не создавая новое применение.",
+      });
     }
     // Commit has already succeeded. Projection failure must not turn it into an
     // apparently failed mutation. Full snapshots retain role/owner filtering.

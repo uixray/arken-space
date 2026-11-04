@@ -265,12 +265,10 @@ export async function readEconomyHistory(
     )
     .orderBy(desc(economyPurchases.createdAt), desc(economyPurchases.id))
     .limit(26);
-  const items = rows
-    .slice(0, 25)
-    .map((r) => ({
-      id: r.id,
-      receipt: r.receipt as EconomyReceiptDto,
-      ...(auth.role === "GM" && "inputs" in r ? { inputs: r.inputs } : {}),
-    }));
+  const items = rows.slice(0, 25).map((r) => ({
+    id: r.id,
+    receipt: r.receipt as EconomyReceiptDto,
+    ...(auth.role === "GM" && "inputs" in r ? { inputs: r.inputs } : {}),
+  }));
   return { items, nextCursor: rows.length > 25 ? items.at(-1)!.id : null };
 }

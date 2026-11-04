@@ -127,17 +127,15 @@ export async function recoverBugAlbumUploadReceipt(
       externalBytesVerified: true,
       workerTerminationVerified: true,
     };
-    await tx
-      .insert(bugIntakeActions)
-      .values({
-        actionId: command.actionId,
-        messageId,
-        operatorMembershipId: operatorId,
-        action: "RECOVER_ALBUM_UPLOAD_RECEIPT",
-        requestHash,
-        resultingRevision: message.revision,
-        receipt,
-      });
+    await tx.insert(bugIntakeActions).values({
+      actionId: command.actionId,
+      messageId,
+      operatorMembershipId: operatorId,
+      action: "RECOVER_ALBUM_UPLOAD_RECEIPT",
+      requestHash,
+      resultingRevision: message.revision,
+      receipt,
+    });
     return { ok: true as const, duplicate: false, receipt };
   });
 }

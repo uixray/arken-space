@@ -79,17 +79,15 @@ export async function reopenBugAlbum(
       .set({ state: "REVIEW", approval: null, revision, updatedAt: now })
       .where(eq(bugIntakeAlbums.id, album.id));
     const receipt = { albumId: album.id, revision, state: "REVIEW" };
-    await tx
-      .insert(bugIntakeActions)
-      .values({
-        actionId: command.actionId,
-        messageId,
-        operatorMembershipId: operatorId,
-        action: "REOPEN_ALBUM",
-        requestHash,
-        resultingRevision: revision,
-        receipt,
-      });
+    await tx.insert(bugIntakeActions).values({
+      actionId: command.actionId,
+      messageId,
+      operatorMembershipId: operatorId,
+      action: "REOPEN_ALBUM",
+      requestHash,
+      resultingRevision: revision,
+      receipt,
+    });
     return { ok: true as const, receipt, duplicate: false };
   });
 }
@@ -210,17 +208,15 @@ export async function enqueueBugAlbum(
         state: delivery.state,
       };
     }
-    await tx
-      .insert(bugIntakeActions)
-      .values({
-        actionId: command.actionId,
-        messageId,
-        operatorMembershipId: operatorId,
-        action: "ENQUEUE_ALBUM",
-        requestHash,
-        resultingRevision: command.revision,
-        receipt,
-      });
+    await tx.insert(bugIntakeActions).values({
+      actionId: command.actionId,
+      messageId,
+      operatorMembershipId: operatorId,
+      action: "ENQUEUE_ALBUM",
+      requestHash,
+      resultingRevision: command.revision,
+      receipt,
+    });
     return { ok: true as const, receipt, duplicate: Boolean(existing) };
   });
 }

@@ -174,17 +174,15 @@ export async function reconcileBugAlbumDelivery(
         ? { externalAbsenceVerified: true }
         : {}),
     };
-    await tx
-      .insert(bugIntakeActions)
-      .values({
-        actionId: command.actionId,
-        messageId,
-        operatorMembershipId: operatorId,
-        action: `ALBUM_${command.action}`,
-        requestHash,
-        resultingRevision: revision,
-        receipt,
-      });
+    await tx.insert(bugIntakeActions).values({
+      actionId: command.actionId,
+      messageId,
+      operatorMembershipId: operatorId,
+      action: `ALBUM_${command.action}`,
+      requestHash,
+      resultingRevision: revision,
+      receipt,
+    });
     return { ok: true as const, receipt, duplicate: false };
   });
 }

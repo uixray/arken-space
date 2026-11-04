@@ -58,22 +58,20 @@ it("applies one shared area roll to player targets once without revealing a hidd
       { broadcast: async () => {}, publishCharacter: async () => {} },
     );
     await app.ready();
-    await db
-      .insert(schema.scenes)
-      .values({
-        id: sceneId,
-        campaignId,
-        name: "QA",
-        grid: {
-          enabled: true,
-          size: 20,
-          offsetX: 0,
-          offsetY: 0,
-          color: "#ffffff",
-          opacity: 0.2,
-          metersPerCell: 1,
-        },
-      });
+    await db.insert(schema.scenes).values({
+      id: sceneId,
+      campaignId,
+      name: "QA",
+      grid: {
+        enabled: true,
+        size: 20,
+        offsetX: 0,
+        offsetY: 0,
+        color: "#ffffff",
+        opacity: 0.2,
+        metersPerCell: 1,
+      },
+    });
     const resources = { magicPower: { current: 0, maximum: 20 } };
     await db.insert(schema.characters).values([
       {
@@ -92,25 +90,23 @@ it("applies one shared area roll to player targets once without revealing a hidd
       },
       { id: npc, campaignId, ownerMembershipId: gm, name: "NPC", resources },
     ]);
-    await db
-      .insert(schema.characterCatalogEntries)
-      .values({
-        id: entry,
-        characterId: caster,
-        kind: "ABILITY",
-        name: "QA area",
-        data: {
-          areaEffect: {
-            kind: "RESTORE_MANA",
-            radiusMeters: 15,
-            origin: "CASTER",
-            targets: "PLAYER_CHARACTERS",
-            dice: "1d6",
-            includeCaster: true,
-          },
-          uses: { current: 1, max: 1, recharge: "DAY" },
+    await db.insert(schema.characterCatalogEntries).values({
+      id: entry,
+      characterId: caster,
+      kind: "ABILITY",
+      name: "QA area",
+      data: {
+        areaEffect: {
+          kind: "RESTORE_MANA",
+          radiusMeters: 15,
+          origin: "CASTER",
+          targets: "PLAYER_CHARACTERS",
+          dice: "1d6",
+          includeCaster: true,
         },
-      });
+        uses: { current: 1, max: 1, recharge: "DAY" },
+      },
+    });
     await db.insert(schema.tokenDefinitions).values([
       { id: casterDef, campaignId, characterId: caster },
       { id: allyDef, campaignId, characterId: ally },

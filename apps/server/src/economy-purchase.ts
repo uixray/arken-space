@@ -45,19 +45,17 @@ export async function quoteEconomy(
       affordable: state.affordable,
       rounding: "CEIL_ONCE_TO_COPPER",
     };
-    await tx
-      .insert(economyQuotes)
-      .values({
-        id,
-        campaignId: auth.campaignId,
-        actorMembershipId: auth.membershipId,
-        characterId: command.characterId,
-        offerId: command.offerId,
-        inputHash: state.inputHash,
-        inputs: state.inputs,
-        view,
-        expiresAt,
-      });
+    await tx.insert(economyQuotes).values({
+      id,
+      campaignId: auth.campaignId,
+      actorMembershipId: auth.membershipId,
+      characterId: command.characterId,
+      offerId: command.offerId,
+      inputHash: state.inputHash,
+      inputs: state.inputs,
+      view,
+      expiresAt,
+    });
     return view;
   });
 }
@@ -175,32 +173,28 @@ export async function purchaseEconomy(
       purchasedAt: new Date().toISOString(),
       date: state.date,
     };
-    await tx
-      .insert(economyPurchases)
-      .values({
-        campaignId: auth.campaignId,
-        actionId: command.actionId,
-        actorMembershipId: auth.membershipId,
-        quoteId: quote.id,
-        receipt,
-      });
-    await tx
-      .insert(worldContentInstanceActions)
-      .values({
-        campaignId: auth.campaignId,
-        actionId: command.actionId,
-        type: "economy.purchase",
-        entityType: "world_content_instance",
-        entityId: inventory.id,
-        entityRevision: inventory.revision,
-        actorMembershipId: auth.membershipId,
-        payload: {
-          requestHash: action.hash,
-          sourceInstanceId: state.instance.id,
-          sourceRevision: state.instance.revision + 1,
-          quantity: request.quantity,
-        },
-      });
+    await tx.insert(economyPurchases).values({
+      campaignId: auth.campaignId,
+      actionId: command.actionId,
+      actorMembershipId: auth.membershipId,
+      quoteId: quote.id,
+      receipt,
+    });
+    await tx.insert(worldContentInstanceActions).values({
+      campaignId: auth.campaignId,
+      actionId: command.actionId,
+      type: "economy.purchase",
+      entityType: "world_content_instance",
+      entityId: inventory.id,
+      entityRevision: inventory.revision,
+      actorMembershipId: auth.membershipId,
+      payload: {
+        requestHash: action.hash,
+        sourceInstanceId: state.instance.id,
+        sourceRevision: state.instance.revision + 1,
+        quantity: request.quantity,
+      },
+    });
     await tx
       .insert(chatThreads)
       .values({ campaignId: auth.campaignId, stream: "TABLE", type: "STREAM" })
@@ -218,17 +212,15 @@ export async function purchaseEconomy(
       )
       .limit(1);
     if (!thread) throw new Error("ECONOMY_RECEIPT_UNAVAILABLE");
-    await tx
-      .insert(chatMessages)
-      .values({
-        campaignId: auth.campaignId,
-        membershipId: auth.membershipId,
-        characterId: state.character.id,
-        threadId: thread.id,
-        kind: "SYSTEM",
-        visibility: "GM_ONLY",
-        body: `${state.character.name}: ${view.itemName} × ${request.quantity}, ${state.totalCopper} медных. Магазин: ${view.merchantName}.`,
-      });
+    await tx.insert(chatMessages).values({
+      campaignId: auth.campaignId,
+      membershipId: auth.membershipId,
+      characterId: state.character.id,
+      threadId: thread.id,
+      kind: "SYSTEM",
+      visibility: "GM_ONLY",
+      body: `${state.character.name}: ${view.itemName} × ${request.quantity}, ${state.totalCopper} медных. Магазин: ${view.merchantName}.`,
+    });
     await recordEconomyAction(
       tx,
       auth,

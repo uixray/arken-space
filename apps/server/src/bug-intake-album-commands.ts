@@ -116,17 +116,15 @@ export async function approveBugAlbum(
       state: "APPROVED",
       deliveryQueued: false,
     };
-    await tx
-      .insert(bugIntakeActions)
-      .values({
-        actionId: command.actionId,
-        messageId,
-        operatorMembershipId: operatorId,
-        action: "APPROVE_ALBUM",
-        requestHash,
-        resultingRevision: revision,
-        receipt,
-      });
+    await tx.insert(bugIntakeActions).values({
+      actionId: command.actionId,
+      messageId,
+      operatorMembershipId: operatorId,
+      action: "APPROVE_ALBUM",
+      requestHash,
+      resultingRevision: revision,
+      receipt,
+    });
     return { ok: true as const, receipt, duplicate: false };
   });
 }
