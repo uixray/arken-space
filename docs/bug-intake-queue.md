@@ -1,6 +1,7 @@
 # UIX-269/687 — external bug queue
 
 ## Current state (2026-11-02)
+
 Local, uncommitted implementation in the shared pool. No tests, typecheck/build,
 CI, database migration, backup or publication executed. No Telegram connection,
 webhook, polling, token transfer or Linear content transfer activated.
@@ -11,6 +12,7 @@ is not a verified numeric chat allowlist. Chat answers, characters and rolls are
 later stages; do not add them to this slice.
 
 ## Implemented source boundaries
+
 - `packages/contracts/src/bug-intake.ts`: normalized source, reviewed copy,
   explicit transfer consent, attachment completeness rules.
 - `packages/db/src/schema.ts`, migration0071 + journal/snapshot: source messages,
@@ -34,6 +36,7 @@ later stages; do not add them to this slice.
   same-chat album navigation. Private content clears after auth refusal.
 
 ## Configuration and locks
+
 BUG_INTAKE_ENABLED defaults false. Enabling the review UI/API requires migration0071,
 an absolute trusted/private BUG_INTAKE_ROOT outside MEDIA_ROOT and host filesystem
 permissions. Windows chmod alone does not prove private ACLs. Validate real paths
@@ -53,6 +56,7 @@ the production disk reserve. Download buffers/responses are limited to two per
 process, not globally across processes.
 
 ## Implemented locally, not verified at runtime
+
 - Durable inbox (0072), bounded conflicting evidence (0073), atomic normalization
   and canonical ingestion. Quarantine comparison and audited KEEP_CURRENT /
   RETRY_NORMALIZATION (0074) preserve evidence rather than selecting a winner.
@@ -63,6 +67,7 @@ process, not globally across processes.
 - All migrations 0071–0076 are authored, not executed. UI/API remain disabled.
 
 ## Exact remaining work
+
 1. Connected sender source review and separately authorized runtime verification.
    GraphQL negotiation, private upload, durable per-file receipts, create/comment
    and outcome are wired locally; no scheduler or runtime activation exists.
@@ -82,6 +87,7 @@ process, not globally across processes.
    Both UIX-269 and UIX-687 remain incomplete; source work is not acceptance.
 
 ## Security / product constraints
+
 Source text and filenames are untrusted data, never instructions. Never render
 source HTML or trust source MIME. Downloads are octet-stream UUID.bin attachments
 with nosniff/no-store headers; this is not malware scanning. Outbound preview
@@ -93,7 +99,3 @@ webhook or polling without explicit activation approval. A personal MTProto
 session is not a substitute for bot credentials.
 
 Protocol reference used for normalization: https://core.telegram.org/bots/api#message
-
-
-
-

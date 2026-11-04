@@ -690,9 +690,15 @@ function SidebarContent(props: Props) {
             campaignId={props.snapshot.campaign.id}
             membershipId={props.snapshot.me.id}
             gm={isGm}
-            characters={props.snapshot.characters.filter((character) => character.lifecycle === "ACTIVE" &&
-              (isGm || character.ownerMembershipId === props.snapshot.me.id ||
-                character.controllerMembershipIds.includes(props.snapshot.me.id)))}
+            characters={props.snapshot.characters.filter(
+              (character) =>
+                character.lifecycle === "ACTIVE" &&
+                (isGm ||
+                  character.ownerMembershipId === props.snapshot.me.id ||
+                  character.controllerMembershipIds.includes(
+                    props.snapshot.me.id,
+                  )),
+            )}
             onClose={closeWorkspace}
           />
         )}

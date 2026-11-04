@@ -35,10 +35,24 @@
   z-index: -1;
   pointer-events: none;
 }
-.cartographic-label__tail--start { left: -12px; }
-.cartographic-label__tail--end { right: -12px; transform: scaleX(-1); }
+.cartographic-label__tail--start {
+  left: -12px;
+}
+.cartographic-label__tail--end {
+  right: -12px;
+  transform: scaleX(-1);
+}
 @media (forced-colors: active) {
-  .cartographic-label { color: CanvasText; }
-  .cartographic-label__text { background: Canvas; border-color: CanvasText; box-shadow: none; }
-  .cartographic-label__tail { fill: Canvas; stroke: CanvasText; }
+  .cartographic-label {
+    color: CanvasText;
+  }
+  .cartographic-label__text {
+    background: Canvas;
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+  .cartographic-label__tail {
+    fill: Canvas;
+    stroke: CanvasText;
+  }
 }

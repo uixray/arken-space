@@ -116,7 +116,12 @@ function WorldMapStageCanvas({
     return () => observer.disconnect();
   }, []);
   return (
-    <div ref={ref} data-cartographic-boundary className="world-map-stage__canvas" style={{ aspectRatio }}>
+    <div
+      ref={ref}
+      data-cartographic-boundary
+      className="world-map-stage__canvas"
+      style={{ aspectRatio }}
+    >
       {children}
     </div>
   );
@@ -547,9 +552,18 @@ export function WorldMapsWorkspace({
                           </span>
                         </span>
                       )}
-                      <span className={`world-map-marker__label${location.label ? " world-map-marker__label--configured" : ""}`}>
-                        {location.label ? <PositionedCartographicLabel text={location.name} config={location.label}
-                          layoutKey={`${location.mapId}:${location.x}:${location.y}`} /> : location.name}
+                      <span
+                        className={`world-map-marker__label${location.label ? " world-map-marker__label--configured" : ""}`}
+                      >
+                        {location.label ? (
+                          <PositionedCartographicLabel
+                            text={location.name}
+                            config={location.label}
+                            layoutKey={`${location.mapId}:${location.x}:${location.y}`}
+                          />
+                        ) : (
+                          location.name
+                        )}
                       </span>
                     </button>
                   ))}
@@ -810,8 +824,15 @@ export function WorldMapsWorkspace({
           className="world-map-location-form"
           onSubmit={(event) => void submit(event)}
         >
-          {isGm && <CartographicLabelFields value={draft.label} name={draft.name}
-            onChange={label => setDraft(current => ({ ...current, label }))} />}
+          {isGm && (
+            <CartographicLabelFields
+              value={draft.label}
+              name={draft.name}
+              onChange={(label) =>
+                setDraft((current) => ({ ...current, label }))
+              }
+            />
+          )}
           <label>
             Название
             <input

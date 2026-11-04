@@ -6,7 +6,11 @@ import {
   bugIntakeFiles,
 } from "@arken/db";
 import { readBugAttachment } from "./bug-intake-storage.js";
-import { lockBugMessageAlbum, invalidateBugAlbum, bugAlbumDeliveryInFlight } from "./bug-intake-album-lock.js";
+import {
+  lockBugMessageAlbum,
+  invalidateBugAlbum,
+  bugAlbumDeliveryInFlight,
+} from "./bug-intake-album-lock.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 const targetSchema = z
@@ -110,7 +114,7 @@ async function transitionFile(db: Database, target: Target, result: Result) {
       return { ok: true as const, duplicate: true, revision: message.revision };
     if (message.revision !== target.revision)
       return { ok: false as const, error: "REVISION_CONFLICT" };
-    if (album && await bugAlbumDeliveryInFlight(tx, album.id))
+    if (album && (await bugAlbumDeliveryInFlight(tx, album.id)))
       return { ok: false as const, error: "ALBUM_DELIVERY_IN_FLIGHT" };
     // Do not revive an operator-excluded file or overwrite already accepted bytes.
     if (file.state !== "MISSING" && file.state !== "FAILED")

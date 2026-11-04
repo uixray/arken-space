@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import { bugDeliveryInFlight } from "./bug-intake-delivery-lock.js";
 import { enqueueApprovedBugInTransaction } from "./bug-intake-outbox.js";
 import { bugUploadsComplete } from "./bug-intake-upload-receipt.js";
-import { lockBugMessageAlbum, invalidateBugAlbum, bugAlbumDeliveryInFlight } from "./bug-intake-album-lock.js";
+import {
+  lockBugMessageAlbum,
+  invalidateBugAlbum,
+  bugAlbumDeliveryInFlight,
+} from "./bug-intake-album-lock.js";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -33,8 +37,10 @@ const commandSchema = z.discriminatedUnion("action", [
   bugQueueCommandSchema.extend({ action: z.literal("ENQUEUE") }),
   bugQueueCommandSchema.extend({
     action: z.literal("CONFIRM_DELIVERY_NOT_SENT"),
-    deliveryId: z.string().uuid(), expectedUpdatedAt: z.string().datetime(),
-    workerTerminationVerified: z.literal(true), externalAbsenceVerified: z.literal(true),
+    deliveryId: z.string().uuid(),
+    expectedUpdatedAt: z.string().datetime(),
+    workerTerminationVerified: z.literal(true),
+    externalAbsenceVerified: z.literal(true),
     evidence: z.string().trim().min(1).max(2000),
   }),
   bugQueueCommandSchema.extend({
@@ -98,7 +104,7 @@ export async function applyBugReviewCommand(
       return { ok: true as const, receipt: previous.receipt, duplicate: true };
     }
     const album = await lockBugMessageAlbum(tx, messageId);
-    if (album && await bugAlbumDeliveryInFlight(tx, album.id))
+    if (album && (await bugAlbumDeliveryInFlight(tx, album.id)))
       return { ok: false as const, error: "ALBUM_DELIVERY_IN_FLIGHT" };
     const [message] = await tx
       .select()
@@ -109,23 +115,52 @@ export async function applyBugReviewCommand(
     if (command.action === "MARK_INTERRUPTED_DELIVERY_UNKNOWN") {
       if (message.revision !== command.revision)
         return { ok: false as const, error: "REVISION_CONFLICT" };
-      const [delivery] = await tx.select().from(bugIntakeDeliveries)
-        .where(and(eq(bugIntakeDeliveries.id, command.deliveryId),
-          eq(bugIntakeDeliveries.messageId, messageId))).for("update");
-      if (!delivery || delivery.state !== "CLAIMED" ||
-          delivery.updatedAt.toISOString() !== command.expectedUpdatedAt)
+      const [delivery] = await tx
+        .select()
+        .from(bugIntakeDeliveries)
+        .where(
+          and(
+            eq(bugIntakeDeliveries.id, command.deliveryId),
+            eq(bugIntakeDeliveries.messageId, messageId),
+          ),
+        )
+        .for("update");
+      if (
+        !delivery ||
+        delivery.state !== "CLAIMED" ||
+        delivery.updatedAt.toISOString() !== command.expectedUpdatedAt
+      )
         return { ok: false as const, error: "DELIVERY_CHANGED" };
       // Operator must inspect authoritative worker/process state, not elapsed
       // time. This only acknowledges ambiguity; it does NOT authorize resend.
-      await tx.update(bugIntakeDeliveries).set({ state: "UNKNOWN",
-        failureCode: "RECEIPT_LOST", updatedAt: new Date(),
-      }).where(eq(bugIntakeDeliveries.id, delivery.id));
-      const receipt = { messageId, revision: message.revision, state: message.state,
-        deliveryId: delivery.id, deliveryState: "UNKNOWN",
-        workerTerminationVerified: true, evidence: command.evidence };
-      await tx.insert(bugIntakeActions).values({ actionId: command.actionId,
-        messageId, operatorMembershipId: operatorId, action: command.action,
-        requestHash, resultingRevision: message.revision, receipt });
+      await tx
+        .update(bugIntakeDeliveries)
+        .set({
+          state: "UNKNOWN",
+          failureCode: "RECEIPT_LOST",
+          updatedAt: new Date(),
+        })
+        .where(eq(bugIntakeDeliveries.id, delivery.id));
+      const receipt = {
+        messageId,
+        revision: message.revision,
+        state: message.state,
+        deliveryId: delivery.id,
+        deliveryState: "UNKNOWN",
+        workerTerminationVerified: true,
+        evidence: command.evidence,
+      };
+      await tx
+        .insert(bugIntakeActions)
+        .values({
+          actionId: command.actionId,
+          messageId,
+          operatorMembershipId: operatorId,
+          action: command.action,
+          requestHash,
+          resultingRevision: message.revision,
+          receipt,
+        });
       return { ok: true as const, receipt, duplicate: false };
     }
     if (await bugDeliveryInFlight(tx, messageId))
@@ -133,76 +168,178 @@ export async function applyBugReviewCommand(
     if (message.revision !== command.revision)
       return { ok: false as const, error: "REVISION_CONFLICT" };
     if (command.action === "CONFIRM_DELIVERY_SENT") {
-      const [delivery] = await tx.select().from(bugIntakeDeliveries)
-        .where(and(eq(bugIntakeDeliveries.id, command.deliveryId),
-          eq(bugIntakeDeliveries.messageId, messageId))).for("update");
-      if (!delivery || delivery.state !== "UNKNOWN" ||
-          delivery.updatedAt.toISOString() !== command.expectedUpdatedAt)
+      const [delivery] = await tx
+        .select()
+        .from(bugIntakeDeliveries)
+        .where(
+          and(
+            eq(bugIntakeDeliveries.id, command.deliveryId),
+            eq(bugIntakeDeliveries.messageId, messageId),
+          ),
+        )
+        .for("update");
+      if (
+        !delivery ||
+        delivery.state !== "UNKNOWN" ||
+        delivery.updatedAt.toISOString() !== command.expectedUpdatedAt
+      )
         return { ok: false as const, error: "DELIVERY_CHANGED" };
-      if ((message.linearIssueId && message.linearIssueId !== command.linearIssueId) ||
-          (delivery.linearIssueId && delivery.linearIssueId !== command.linearIssueId))
+      if (
+        (message.linearIssueId &&
+          message.linearIssueId !== command.linearIssueId) ||
+        (delivery.linearIssueId &&
+          delivery.linearIssueId !== command.linearIssueId)
+      )
         return { ok: false as const, error: "ISSUE_MAPPING_CONFLICT" };
       if (!bugUploadsComplete(delivery.payload, delivery.uploadReceipts))
         return { ok: false as const, error: "UPLOAD_RECEIPTS_INCOMPLETE" };
-      const sameRevision = message.revision === delivery.approvedRevision &&
+      const sameRevision =
+        message.revision === delivery.approvedRevision &&
         message.state === "APPROVED";
-      const state = sameRevision ? "LINKED" :
-        message.state === "APPROVED" ? "REVIEW" : message.state;
+      const state = sameRevision
+        ? "LINKED"
+        : message.state === "APPROVED"
+          ? "REVIEW"
+          : message.state;
       // Confirm only the historical snapshot. A newer source/edit must not be
       // declared delivered, and stale consent must not create a second issue.
-      await tx.update(bugIntakeDeliveries).set({ state: "SENT",
-        linearIssueId: command.linearIssueId, failureCode: null, updatedAt: new Date(),
-      }).where(eq(bugIntakeDeliveries.id, delivery.id));
-      await tx.update(bugIntakeMessages).set({ state,
-        linearIssueId: command.linearIssueId, approval: null,
-        revision: message.revision + 1, updatedAt: new Date(),
-      }).where(eq(bugIntakeMessages.id, messageId));
-      const receipt = { messageId, revision: message.revision + 1, state,
-        deliveryId: delivery.id, deliveryState: "SENT", linearIssueId: command.linearIssueId,
-        workerTerminationVerified: true, externalContentVerified: true,
-        evidence: command.evidence };
-      await tx.insert(bugIntakeActions).values({ actionId: command.actionId,
-        messageId, operatorMembershipId: operatorId, action: command.action,
-        requestHash, resultingRevision: message.revision + 1, receipt });
+      await tx
+        .update(bugIntakeDeliveries)
+        .set({
+          state: "SENT",
+          linearIssueId: command.linearIssueId,
+          failureCode: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(bugIntakeDeliveries.id, delivery.id));
+      await tx
+        .update(bugIntakeMessages)
+        .set({
+          state,
+          linearIssueId: command.linearIssueId,
+          approval: null,
+          revision: message.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(eq(bugIntakeMessages.id, messageId));
+      const receipt = {
+        messageId,
+        revision: message.revision + 1,
+        state,
+        deliveryId: delivery.id,
+        deliveryState: "SENT",
+        linearIssueId: command.linearIssueId,
+        workerTerminationVerified: true,
+        externalContentVerified: true,
+        evidence: command.evidence,
+      };
+      await tx
+        .insert(bugIntakeActions)
+        .values({
+          actionId: command.actionId,
+          messageId,
+          operatorMembershipId: operatorId,
+          action: command.action,
+          requestHash,
+          resultingRevision: message.revision + 1,
+          receipt,
+        });
       return { ok: true as const, receipt, duplicate: false };
     }
     if (command.action === "CONFIRM_DELIVERY_NOT_SENT") {
-      const [delivery] = await tx.select().from(bugIntakeDeliveries)
-        .where(and(eq(bugIntakeDeliveries.id, command.deliveryId),
-          eq(bugIntakeDeliveries.messageId, messageId))).for("update");
-      if (!delivery || delivery.state !== "UNKNOWN" ||
-          delivery.updatedAt.toISOString() !== command.expectedUpdatedAt)
+      const [delivery] = await tx
+        .select()
+        .from(bugIntakeDeliveries)
+        .where(
+          and(
+            eq(bugIntakeDeliveries.id, command.deliveryId),
+            eq(bugIntakeDeliveries.messageId, messageId),
+          ),
+        )
+        .for("update");
+      if (
+        !delivery ||
+        delivery.state !== "UNKNOWN" ||
+        delivery.updatedAt.toISOString() !== command.expectedUpdatedAt
+      )
         return { ok: false as const, error: "DELIVERY_CHANGED" };
-      const snapshot = z.object({ existingLinearIssueId: z.string().uuid().nullable() })
+      const snapshot = z
+        .object({ existingLinearIssueId: z.string().uuid().nullable() })
         .safeParse(delivery.payload);
-      if (!snapshot.success) return { ok: false as const, error: "INVALID_SNAPSHOT" };
+      if (!snapshot.success)
+        return { ok: false as const, error: "INVALID_SNAPSHOT" };
       // A known newly created issue contradicts 'not sent'. For mapped edits,
       // operator verifies absence of this comment, not absence of the whole issue.
-      if (delivery.linearIssueId && delivery.linearIssueId !== snapshot.data.existingLinearIssueId)
+      if (
+        delivery.linearIssueId &&
+        delivery.linearIssueId !== snapshot.data.existingLinearIssueId
+      )
         return { ok: false as const, error: "KNOWN_EXTERNAL_RESULT" };
-      await tx.update(bugIntakeDeliveries).set({ state: "CANCELLED",
-        failureCode: "OPERATOR_VERIFIED_NOT_SENT", updatedAt: new Date(),
-      }).where(eq(bugIntakeDeliveries.id, delivery.id));
-      await tx.update(bugIntakeMessages).set({ state: "REVIEW", approval: null,
-        revision: message.revision + 1, updatedAt: new Date(),
-      }).where(eq(bugIntakeMessages.id, messageId));
-      const receipt = { messageId, revision: message.revision + 1, state: "REVIEW",
-        deliveryId: delivery.id, deliveryState: "CANCELLED",
-        workerTerminationVerified: true, externalAbsenceVerified: true,
-        evidence: command.evidence };
-      await tx.insert(bugIntakeActions).values({ actionId: command.actionId,
-        messageId, operatorMembershipId: operatorId, action: command.action,
-        requestHash, resultingRevision: message.revision + 1, receipt });
+      await tx
+        .update(bugIntakeDeliveries)
+        .set({
+          state: "CANCELLED",
+          failureCode: "OPERATOR_VERIFIED_NOT_SENT",
+          updatedAt: new Date(),
+        })
+        .where(eq(bugIntakeDeliveries.id, delivery.id));
+      await tx
+        .update(bugIntakeMessages)
+        .set({
+          state: "REVIEW",
+          approval: null,
+          revision: message.revision + 1,
+          updatedAt: new Date(),
+        })
+        .where(eq(bugIntakeMessages.id, messageId));
+      const receipt = {
+        messageId,
+        revision: message.revision + 1,
+        state: "REVIEW",
+        deliveryId: delivery.id,
+        deliveryState: "CANCELLED",
+        workerTerminationVerified: true,
+        externalAbsenceVerified: true,
+        evidence: command.evidence,
+      };
+      await tx
+        .insert(bugIntakeActions)
+        .values({
+          actionId: command.actionId,
+          messageId,
+          operatorMembershipId: operatorId,
+          action: command.action,
+          requestHash,
+          resultingRevision: message.revision + 1,
+          receipt,
+        });
       return { ok: true as const, receipt, duplicate: false };
     }
     if (command.action === "ENQUEUE") {
-      const queued = await enqueueApprovedBugInTransaction(tx, messageId, command.revision);
+      const queued = await enqueueApprovedBugInTransaction(
+        tx,
+        messageId,
+        command.revision,
+      );
       if (!queued.ok) return queued;
-      const receipt = { messageId, revision: message.revision, state: message.state,
-        deliveryId: queued.id, deliveryState: queued.state };
-      await tx.insert(bugIntakeActions).values({ actionId: command.actionId,
-        messageId, operatorMembershipId: operatorId, action: command.action,
-        requestHash, resultingRevision: message.revision, receipt });
+      const receipt = {
+        messageId,
+        revision: message.revision,
+        state: message.state,
+        deliveryId: queued.id,
+        deliveryState: queued.state,
+      };
+      await tx
+        .insert(bugIntakeActions)
+        .values({
+          actionId: command.actionId,
+          messageId,
+          operatorMembershipId: operatorId,
+          action: command.action,
+          requestHash,
+          resultingRevision: message.revision,
+          receipt,
+        });
       return { ok: true as const, receipt, duplicate: false };
     }
     const [version] = await tx

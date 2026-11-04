@@ -198,11 +198,26 @@ function Queue() {
           onError={handleFailure}
         />
       )}
-      {detail?.albumId && <BugIntakeAlbumReview key={`album:${detail.id}:${detail.revision}`}
-        messageId={detail.id} onError={handleFailure} />}
-      {detail && <BugIntakeDeliveries key={`deliveries:${detail.id}:${detail.revision}`}
-        id={detail.id} revision={detail.revision} onError={handleFailure}
-        onChanged={() => { setDetail(null); setSelected(null); setEpoch((value) => value + 1); }} />}
+      {detail?.albumId && (
+        <BugIntakeAlbumReview
+          key={`album:${detail.id}:${detail.revision}`}
+          messageId={detail.id}
+          onError={handleFailure}
+        />
+      )}
+      {detail && (
+        <BugIntakeDeliveries
+          key={`deliveries:${detail.id}:${detail.revision}`}
+          id={detail.id}
+          revision={detail.revision}
+          onError={handleFailure}
+          onChanged={() => {
+            setDetail(null);
+            setSelected(null);
+            setEpoch((value) => value + 1);
+          }}
+        />
+      )}
       {detail && (
         <BugIntakeReviewForm
           key={`${detail.id}:${detail.revision}`}

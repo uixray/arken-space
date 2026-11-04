@@ -50,7 +50,11 @@ function installIntersectionAdmission() {
         admissions.push(() =>
           this.callback(
             [
-              { target, isIntersecting: true, intersectionRatio: 1 } as IntersectionObserverEntry,
+              {
+                target,
+                isIntersecting: true,
+                intersectionRatio: 1,
+              } as IntersectionObserverEntry,
             ],
             this as unknown as IntersectionObserver,
           ),

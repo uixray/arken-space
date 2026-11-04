@@ -53,22 +53,18 @@ suite("hosted account provisioning on dedicated PostgreSQL", () => {
     await resources.db
       .insert(schema.campaigns)
       .values({ id: campaignId, name: "Synthetic" });
-    await resources.db
-      .insert(schema.memberships)
-      .values({
-        id: memberId,
-        campaignId,
-        role: "PLAYER",
-        displayName: "Synthetic",
-      });
-    await resources.db
-      .insert(schema.characters)
-      .values({
-        id: characterId,
-        campaignId,
-        ownerMembershipId: memberId,
-        name: "Synthetic",
-      });
+    await resources.db.insert(schema.memberships).values({
+      id: memberId,
+      campaignId,
+      role: "PLAYER",
+      displayName: "Synthetic",
+    });
+    await resources.db.insert(schema.characters).values({
+      id: characterId,
+      campaignId,
+      ownerMembershipId: memberId,
+      name: "Synthetic",
+    });
     const spec = {
       membershipId: memberId,
       campaignId,
@@ -134,14 +130,12 @@ suite("hosted account provisioning on dedicated PostgreSQL", () => {
     await resources.db
       .insert(schema.campaigns)
       .values({ id: campaignId, name: "Synthetic CLI" });
-    await resources.db
-      .insert(schema.memberships)
-      .values({
-        id: memberId,
-        campaignId,
-        role: "PLAYER",
-        displayName: "Synthetic CLI",
-      });
+    await resources.db.insert(schema.memberships).values({
+      id: memberId,
+      campaignId,
+      role: "PLAYER",
+      displayName: "Synthetic CLI",
+    });
     const input = [
       {
         login: "qa-cli",

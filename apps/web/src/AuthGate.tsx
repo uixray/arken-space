@@ -286,11 +286,7 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
     <main className="landing-shell">
       <header className="landing-header">
         <div className="landing-branding">
-          <a
-            className="wordmark"
-            href="/"
-            aria-label="Аркспейс — на главную"
-          >
+          <a className="wordmark" href="/" aria-label="Аркспейс — на главную">
             <Brand />
           </a>
           <span className="landing-badge">Ранний доступ</span>

@@ -594,11 +594,19 @@ export function QuickRollPanel({
                   {entry.data.areaEffect ? (
                     <Button
                       title={`Показать область: радиус ${entry.data.areaEffect.radiusMeters} м, общий 1к6 маны`}
-                      disabled={!canControlCharacter || entryPending !== null || !onEntryAction}
+                      disabled={
+                        !canControlCharacter ||
+                        entryPending !== null ||
+                        !onEntryAction
+                      }
                       onClick={() => void submitEntry(entry, "EXECUTE")}
                     >
-                      <CatalogActionIcon kind="CUSTOM" semanticText={entry.name} />
-                      {entry.name} · {entry.data.areaEffect.radiusMeters} м · область
+                      <CatalogActionIcon
+                        kind="CUSTOM"
+                        semanticText={entry.name}
+                      />
+                      {entry.name} · {entry.data.areaEffect.radiusMeters} м ·
+                      область
                     </Button>
                   ) : (entry.data.rollActions?.length ?? 0) > 0 ? (
                     <>

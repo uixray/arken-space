@@ -87,16 +87,14 @@ export async function resolveBugQuarantine(
       reason: command.reason,
       evidenceHashes: hashes,
     };
-    await tx
-      .insert(bugIntakeUpdateActions)
-      .values({
-        actionId: command.actionId,
-        updateRowId: id,
-        operatorMembershipId: operatorId,
-        action: command.action,
-        requestHash,
-        receipt,
-      });
+    await tx.insert(bugIntakeUpdateActions).values({
+      actionId: command.actionId,
+      updateRowId: id,
+      operatorMembershipId: operatorId,
+      action: command.action,
+      requestHash,
+      receipt,
+    });
     return { ok: true as const, duplicate: false, receipt };
   });
 }

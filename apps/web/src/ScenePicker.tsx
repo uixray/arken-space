@@ -36,9 +36,12 @@ export const ScenePicker = memo(function ScenePicker({
         className="scene-picker scene-picker--readonly"
         aria-label="Активная сцена"
       >
-        <span>{activeScene?.name ?? (isGm
-          ? "Сцена не выбрана"
-          : "Мастер ещё не выбрал сцену. Можно подготовить персонажа.")}</span>
+        <span>
+          {activeScene?.name ??
+            (isGm
+              ? "Сцена не выбрана"
+              : "Мастер ещё не выбрал сцену. Можно подготовить персонажа.")}
+        </span>
       </div>
     );
   }

@@ -40,22 +40,51 @@ type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type CanvasDatabase = ReturnType<
   typeof import("./campaign-pause-guard.js").campaignCanvasDatabase
 >;
-type CanvasTransaction = import("./campaign-pause-guard.js").CampaignCanvasTransaction;
+type CanvasTransaction =
+  import("./campaign-pause-guard.js").CampaignCanvasTransaction;
 
-async function currentTokenController(tx: CanvasTransaction, campaignId: string, definitionId: string, membershipId: string) {
-  const [definition] = await tx.select({ id: tokenDefinitions.id }).from(tokenDefinitions)
-    .where(and(eq(tokenDefinitions.id, definitionId), eq(tokenDefinitions.campaignId, campaignId)))
-    .limit(1).for("share");
+async function currentTokenController(
+  tx: CanvasTransaction,
+  campaignId: string,
+  definitionId: string,
+  membershipId: string,
+) {
+  const [definition] = await tx
+    .select({ id: tokenDefinitions.id })
+    .from(tokenDefinitions)
+    .where(
+      and(
+        eq(tokenDefinitions.id, definitionId),
+        eq(tokenDefinitions.campaignId, campaignId),
+      ),
+    )
+    .limit(1)
+    .for("share");
   if (!definition) return false;
-  const [controller] = await tx.select({ id: tokenControllers.membershipId }).from(tokenControllers)
-    .where(and(eq(tokenControllers.tokenDefinitionId, definitionId), eq(tokenControllers.membershipId, membershipId))).limit(1);
+  const [controller] = await tx
+    .select({ id: tokenControllers.membershipId })
+    .from(tokenControllers)
+    .where(
+      and(
+        eq(tokenControllers.tokenDefinitionId, definitionId),
+        eq(tokenControllers.membershipId, membershipId),
+      ),
+    )
+    .limit(1);
   return Boolean(controller);
 }
 
-async function isCurrentPlayerScene(tx: CanvasTransaction, campaignId: string, sceneId: string) {
+async function isCurrentPlayerScene(
+  tx: CanvasTransaction,
+  campaignId: string,
+  sceneId: string,
+) {
   // The surrounding canvas transaction already holds the campaign row lock.
-  const [campaign] = await tx.select({ activeSceneId: campaigns.activeSceneId }).from(campaigns)
-    .where(eq(campaigns.id, campaignId)).limit(1);
+  const [campaign] = await tx
+    .select({ activeSceneId: campaigns.activeSceneId })
+    .from(campaigns)
+    .where(eq(campaigns.id, campaignId))
+    .limit(1);
   return campaign?.activeSceneId === sceneId;
 }
 
@@ -81,7 +110,11 @@ export function registerTokenRoutes(
       tokenId: string,
       envelope: { sequence: number; actionId: string; emittedAt: string },
     ) => Promise<void>;
-    testHooks?: { beforeControlledMutation?: (kind: "place" | "conditions" | "delete") => Promise<void> };
+    testHooks?: {
+      beforeControlledMutation?: (
+        kind: "place" | "conditions" | "delete",
+      ) => Promise<void>;
+    };
   },
 ) {
   app.post("/api/tokens", async (request, reply) => {
@@ -527,7 +560,10 @@ export function registerTokenRoutes(
     await testHooks?.beforeControlledMutation?.("place");
     const guardedDb = canvasTx(auth.campaignId);
     const placement = await guardedDb.transaction(async (tx) => {
-      if (auth.role !== "GM" && !(await isCurrentPlayerScene(tx, auth.campaignId, scene.id)))
+      if (
+        auth.role !== "GM" &&
+        !(await isCurrentPlayerScene(tx, auth.campaignId, scene.id))
+      )
         return "inactive" as const;
       await tx.execute(
         sql`select id from scenes where id = ${scene.id} and campaign_id = ${auth.campaignId} for update`,
@@ -554,7 +590,15 @@ export function registerTokenRoutes(
         )
         .limit(1);
       if (!lockedDefinition) return null;
-      if (auth.role !== "GM" && !(await currentTokenController(tx, auth.campaignId, definition.id, auth.membershipId)))
+      if (
+        auth.role !== "GM" &&
+        !(await currentTokenController(
+          tx,
+          auth.campaignId,
+          definition.id,
+          auth.membershipId,
+        ))
+      )
         return "forbidden" as const;
       const snapX = (value: number) =>
         lockedScene.grid.enabled
@@ -640,8 +684,10 @@ export function registerTokenRoutes(
       });
       return { token: created, created: true };
     });
-    if (placement === "inactive") return reply.code(403).send({ error: "INACTIVE_SCENE_FORBIDDEN" });
-    if (placement === "forbidden") return reply.code(403).send({ error: "TOKEN_DEFINITION_FORBIDDEN" });
+    if (placement === "inactive")
+      return reply.code(403).send({ error: "INACTIVE_SCENE_FORBIDDEN" });
+    if (placement === "forbidden")
+      return reply.code(403).send({ error: "TOKEN_DEFINITION_FORBIDDEN" });
     if (!placement)
       return reply.code(409).send({ error: "TOKEN_DEFINITION_DELETED" });
     if (placement.created) await broadcast(auth.campaignId);
@@ -848,7 +894,15 @@ export function registerTokenRoutes(
       return reply.code(409).send({ error: "STALE_REVISION" });
     await testHooks?.beforeControlledMutation?.("conditions");
     const updated = await canvasTx(auth.campaignId).transaction(async (tx) => {
-      if (auth.role !== "GM" && !(await currentTokenController(tx, auth.campaignId, row.definitionId, auth.membershipId)))
+      if (
+        auth.role !== "GM" &&
+        !(await currentTokenController(
+          tx,
+          auth.campaignId,
+          row.definitionId,
+          auth.membershipId,
+        ))
+      )
         return "forbidden" as const;
       await invalidateRedoBranch(tx, auth, row.token.sceneId);
       const [saved] = await tx
@@ -892,7 +946,8 @@ export function registerTokenRoutes(
       });
       return { saved, event };
     });
-    if (updated === "forbidden") return reply.code(403).send({ error: "TOKEN_FORBIDDEN" });
+    if (updated === "forbidden")
+      return reply.code(403).send({ error: "TOKEN_FORBIDDEN" });
     if (!updated) return reply.code(409).send({ error: "TOKEN_CONFLICT" });
     await publishToken(auth.campaignId, id, {
       sequence: Number(updated.event.sequence),
@@ -948,9 +1003,20 @@ export function registerTokenRoutes(
     }
     await testHooks?.beforeControlledMutation?.("delete");
     const deleted = await canvasTx(auth.campaignId).transaction(async (tx) => {
-      if (auth.role !== "GM" && !(await isCurrentPlayerScene(tx, auth.campaignId, row.token.sceneId)))
+      if (
+        auth.role !== "GM" &&
+        !(await isCurrentPlayerScene(tx, auth.campaignId, row.token.sceneId))
+      )
         return "forbidden" as const;
-      if (auth.role !== "GM" && !(await currentTokenController(tx, auth.campaignId, row.definition.id, auth.membershipId)))
+      if (
+        auth.role !== "GM" &&
+        !(await currentTokenController(
+          tx,
+          auth.campaignId,
+          row.definition.id,
+          auth.membershipId,
+        ))
+      )
         return "forbidden" as const;
       await invalidateRedoBranch(tx, auth, row.token.sceneId);
       const [placement] = await tx
@@ -987,7 +1053,8 @@ export function registerTokenRoutes(
       });
       return placement;
     });
-    if (deleted === "forbidden") return reply.code(403).send({ error: "TOKEN_FORBIDDEN" });
+    if (deleted === "forbidden")
+      return reply.code(403).send({ error: "TOKEN_FORBIDDEN" });
     if (!deleted) return reply.code(409).send({ error: "TOKEN_CONFLICT" });
     await broadcast(auth.campaignId);
     return { ok: true };
@@ -1041,8 +1108,12 @@ export function registerTokenRoutes(
       // Keep the same campaign -> definition lock order as canvas writes.
       // This route remains available during a pause; only its lock order is
       // shared with the pause-guarded bulk move/delete transaction.
-      const [campaign] = await tx.select({ id: campaigns.id }).from(campaigns)
-        .where(eq(campaigns.id, auth.campaignId)).limit(1).for("update");
+      const [campaign] = await tx
+        .select({ id: campaigns.id })
+        .from(campaigns)
+        .where(eq(campaigns.id, auth.campaignId))
+        .limit(1)
+        .for("update");
       if (!campaign) return null;
       const [updated] = await tx
         .update(tokenDefinitions)

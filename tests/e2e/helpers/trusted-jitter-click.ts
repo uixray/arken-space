@@ -28,7 +28,9 @@ type InternalPage = {
 };
 type InternalPageDispatcher = {
   _object: InternalPage;
-  createProgressController(metadata: Record<string, unknown>): ProgressController;
+  createProgressController(
+    metadata: Record<string, unknown>,
+  ): ProgressController;
 };
 type DispatcherConnection = {
   _dispatcherByGuid: Map<string, InternalPageDispatcher>;
@@ -36,7 +38,10 @@ type DispatcherConnection = {
 type ClientConnection = {
   toImpl(value: unknown): unknown;
 };
-type PrivateClientPage = Page & { _guid?: string; _connection?: ClientConnection };
+type PrivateClientPage = Page & {
+  _guid?: string;
+  _connection?: ClientConnection;
+};
 
 /**
  * A narrowly version-gated Firefox test helper. Playwright's public click APIs
@@ -75,9 +80,8 @@ export async function trustedJitterDoubleClick(
   if (!clientConnection?.toImpl || !pageGuid)
     throw new Error("Playwright page is not using the in-process bridge");
   const pageImpl = clientConnection.toImpl(page) as InternalPage | undefined;
-  const dispatcherConnection = clientConnection.toImpl(
-    clientConnection,
-  ) as DispatcherConnection | undefined;
+  const dispatcherConnection = clientConnection.toImpl(clientConnection) as
+    DispatcherConnection | undefined;
   const dispatcher = dispatcherConnection?._dispatcherByGuid.get(pageGuid);
   if (
     !pageImpl?.mouse?.move ||
@@ -91,9 +95,11 @@ export async function trustedJitterDoubleClick(
   const monotonicTime = core.iso?.monotonicTime;
   if (!monotonicTime)
     throw new Error("Pinned Playwright monotonic clock is unavailable");
-  const deadline = (testInfo as TestInfo & {
-    _deadline?: () => { deadline: number };
-  })._deadline?.().deadline;
+  const deadline = (
+    testInfo as TestInfo & {
+      _deadline?: () => { deadline: number };
+    }
+  )._deadline?.().deadline;
   if (!Number.isFinite(deadline))
     throw new Error("Trusted jitter helper requires a finite test deadline");
 
@@ -109,7 +115,9 @@ export async function trustedJitterDoubleClick(
     internal: true,
   });
   const abortOnClose = () => {
-    void controller.abort(new Error("Page closed during trusted polygon input")).catch(() => {});
+    void controller
+      .abort(new Error("Page closed during trusted polygon input"))
+      .catch(() => {});
   };
   page.once("close", abortOnClose);
   try {

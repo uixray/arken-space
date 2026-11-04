@@ -6,7 +6,11 @@ import {
 } from "@arken/db";
 import { bugSourceMessageSchema } from "@arken/contracts";
 import { bugDeliveryInFlight } from "./bug-intake-delivery-lock.js";
-import { lockBugAlbum, invalidateBugAlbum, bugAlbumDeliveryInFlight } from "./bug-intake-album-lock.js";
+import {
+  lockBugAlbum,
+  invalidateBugAlbum,
+  bugAlbumDeliveryInFlight,
+} from "./bug-intake-album-lock.js";
 import {
   bugSourceHash,
   bugSourceRevisionDecision,
@@ -50,13 +54,22 @@ export async function ingestBugSourceInTransaction(
     )
     .for("update");
   if (current && current.albumId !== source.albumId)
-    return { decision: "REVISION_COLLISION" as const,
-      messageId: current.id, revision: current.revision };
+    return {
+      decision: "REVISION_COLLISION" as const,
+      messageId: current.id,
+      revision: current.revision,
+    };
   const decision = bugSourceRevisionDecision(current ?? null, source);
-  if (album && (decision === "CREATE" || decision === "EDIT") &&
-      await bugAlbumDeliveryInFlight(tx, album.id))
-    return { decision: "DEFERRED_SENDING" as const,
-      messageId: current?.id ?? null, revision: current?.revision ?? null };
+  if (
+    album &&
+    (decision === "CREATE" || decision === "EDIT") &&
+    (await bugAlbumDeliveryInFlight(tx, album.id))
+  )
+    return {
+      decision: "DEFERRED_SENDING" as const,
+      messageId: current?.id ?? null,
+      revision: current?.revision ?? null,
+    };
   if (
     current &&
     decision === "EDIT" &&

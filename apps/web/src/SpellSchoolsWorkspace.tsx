@@ -1356,22 +1356,23 @@ export function SpellSchoolsWorkspace({
                         ? "Проверить и сохранить черновик"
                         : "Проверить и сохранить новую версию"}
                 </button>
-                {!isNew && ["ACTIVE", "REFERENCE"].includes(graph.lifecycle) && (
-                  <button
-                    type="button"
-                    onClick={() => void save()}
-                    disabled={
-                      busy ||
-                      (editorLocked && !retryPending) ||
-                      hasRecoveryCopy ||
-                      versionConflict
-                    }
-                  >
-                    {retryPending
-                      ? "Повторить создание того же черновика"
-                      : "Создать новый черновик из этой версии"}
-                  </button>
-                )}
+                {!isNew &&
+                  ["ACTIVE", "REFERENCE"].includes(graph.lifecycle) && (
+                    <button
+                      type="button"
+                      onClick={() => void save()}
+                      disabled={
+                        busy ||
+                        (editorLocked && !retryPending) ||
+                        hasRecoveryCopy ||
+                        versionConflict
+                      }
+                    >
+                      {retryPending
+                        ? "Повторить создание того же черновика"
+                        : "Создать новый черновик из этой версии"}
+                    </button>
+                  )}
                 {!isNew && graph.lifecycle !== "DRAFT" && (
                   <span>
                     Эта версия неизменяема. Новый черновик не активируется и не

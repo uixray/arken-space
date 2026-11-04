@@ -25,14 +25,12 @@ test("hosted first login survives reload and requires password change before cam
     await db
       .insert(schema.campaigns)
       .values({ id: campaignId, name: "Synthetic campaign" });
-    await db
-      .insert(schema.memberships)
-      .values({
-        id: memberId,
-        campaignId,
-        role: "PLAYER",
-        displayName: "Synthetic player",
-      });
+    await db.insert(schema.memberships).values({
+      id: memberId,
+      campaignId,
+      role: "PLAYER",
+      displayName: "Synthetic player",
+    });
     await provisionHostedAccounts(db as never, [
       {
         login: "synthetic-user",

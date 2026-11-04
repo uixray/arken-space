@@ -162,13 +162,15 @@ for (const shifted of [true, false]) {
       }, info) => {
         await page.setViewportSize({ width: 1280, height: 850 });
         await installCanvasReviewRoutes(page);
-        const writes: Array<{ path: string; body: Record<string, unknown> }> = [];
+        const writes: Array<{ path: string; body: Record<string, unknown> }> =
+          [];
         const errors: string[] = [];
         page.on("pageerror", (error) => errors.push(error.message));
         await page.route("**/api/**", async (route) => {
           const request = route.request();
           const path = new URL(request.url()).pathname;
-          if (["GET", "HEAD"].includes(request.method())) return route.fallback();
+          if (["GET", "HEAD"].includes(request.method()))
+            return route.fallback();
           if (path === "/api/chat/read") return route.fulfill({ json: {} });
           writes.push({ path, body: request.postDataJSON() });
           return route.fulfill({ json: {} });
@@ -189,7 +191,9 @@ for (const shifted of [true, false]) {
           ];
           for (const p of result)
             if (
-              !(document.elementFromPoint(p.x, p.y) instanceof HTMLCanvasElement)
+              !(
+                document.elementFromPoint(p.x, p.y) instanceof HTMLCanvasElement
+              )
             )
               throw Error("Polygon input is obstructed");
           return result;
@@ -234,18 +238,18 @@ for (const shifted of [true, false]) {
                         JSON.stringify(recorded);
                     };
                     trackedWindow.__polygonJitterClickHandler = handler;
-                    window.addEventListener("click", handler, { capture: true });
+                    window.addEventListener("click", handler, {
+                      capture: true,
+                    });
                   });
-                  await trustedJitterDoubleClick(
-                    page,
-                    info,
-                    point,
-                    { x: point.x + 2, y: point.y + 1 },
-                  );
+                  await trustedJitterDoubleClick(page, info, point, {
+                    x: point.x + 2,
+                    y: point.y + 1,
+                  });
                   const deliveredClicks = JSON.parse(
-                    (await page.locator("html").getAttribute(
-                      "data-polygon-jitter-clicks",
-                    )) ?? "[]",
+                    (await page
+                      .locator("html")
+                      .getAttribute("data-polygon-jitter-clicks")) ?? "[]",
                   ) as Array<{
                     time: number;
                     x: number;
@@ -259,13 +263,13 @@ for (const shifted of [true, false]) {
                   });
                   expect(deliveredClicks).toHaveLength(2);
                   expect(deliveredClicks.map(({ detail }) => detail)).toEqual([
-                    1,
-                    2,
+                    1, 2,
                   ]);
-                  expect(deliveredClicks.every(({ isTrusted }) => isTrusted)).toBe(
-                    true,
-                  );
-                  const interval = deliveredClicks[1]!.time - deliveredClicks[0]!.time;
+                  expect(
+                    deliveredClicks.every(({ isTrusted }) => isTrusted),
+                  ).toBe(true);
+                  const interval =
+                    deliveredClicks[1]!.time - deliveredClicks[0]!.time;
                   expect(interval).toBeGreaterThanOrEqual(0);
                   expect(interval).toBeLessThanOrEqual(400);
                   expect(deliveredClicks.map(({ x, y }) => [x, y])).toEqual([
@@ -315,10 +319,9 @@ for (const shifted of [true, false]) {
             "Distinct rapid vertex clicks must not complete a polygon",
           ).toEqual([]);
           await map.press("Escape");
-          await expect(page.locator('.map-tool[data-tool="PAN"]')).toHaveAttribute(
-            "aria-pressed",
-            "true",
-          );
+          await expect(
+            page.locator('.map-tool[data-tool="PAN"]'),
+          ).toHaveAttribute("aria-pressed", "true");
           await control.click();
           await map.press("Enter");
           await settle();
@@ -336,33 +339,33 @@ for (const shifted of [true, false]) {
           });
           return;
         }
-      if (scenario === "delayed-close") {
-        // A close vertex outside Konva's double-click window remains a vertex
-        // until the user explicitly confirms the completed polygon with Enter.
-        await vertices();
-        await page.waitForTimeout(450);
-        await page.mouse.click(points[2].x + 2, points[2].y + 1);
-        expect(writes).toHaveLength(0);
-        await map.press("Enter");
-        await expect.poll(() => writes.length).toBe(1);
-        expect(writes[0]).toMatchObject({
-          path: "/api/fog-reveals",
-          body: {
-            sceneId,
-            operation: tool === "COVER_POLYGON" ? "COVER" : "REVEAL",
-            geometry: { type: "POLYGON" },
-          },
-        });
-        expect(
-          (writes[0].body.geometry as { points: unknown[] }).points,
-        ).toHaveLength(4);
-        expect(errors).toEqual([]);
-        await info.attach("delayed-close-polygon-contract", {
-          body: JSON.stringify({ tool, writes, errors }),
-          contentType: "application/json",
-        });
-        return;
-      }
+        if (scenario === "delayed-close") {
+          // A close vertex outside Konva's double-click window remains a vertex
+          // until the user explicitly confirms the completed polygon with Enter.
+          await vertices();
+          await page.waitForTimeout(450);
+          await page.mouse.click(points[2].x + 2, points[2].y + 1);
+          expect(writes).toHaveLength(0);
+          await map.press("Enter");
+          await expect.poll(() => writes.length).toBe(1);
+          expect(writes[0]).toMatchObject({
+            path: "/api/fog-reveals",
+            body: {
+              sceneId,
+              operation: tool === "COVER_POLYGON" ? "COVER" : "REVEAL",
+              geometry: { type: "POLYGON" },
+            },
+          });
+          expect(
+            (writes[0].body.geometry as { points: unknown[] }).points,
+          ).toHaveLength(4);
+          expect(errors).toEqual([]);
+          await info.attach("delayed-close-polygon-contract", {
+            body: JSON.stringify({ tool, writes, errors }),
+            contentType: "application/json",
+          });
+          return;
+        }
         for (const [index, mode] of ["enter", "double", "jitter"].entries()) {
           const double = mode !== "enter";
           await vertices(double, mode === "jitter");
@@ -382,9 +385,9 @@ for (const shifted of [true, false]) {
             points: Array<{ x: number; y: number }>;
           };
           expect(geometry.points).toHaveLength(3);
-          expect(new Set(geometry.points.map((p) => `${p.x},${p.y}`)).size).toBe(
-            3,
-          );
+          expect(
+            new Set(geometry.points.map((p) => `${p.x},${p.y}`)).size,
+          ).toBe(3);
           expect(geometry.points[1].x).toBeGreaterThan(geometry.points[0].x);
           expect(geometry.points[2].y).toBeGreaterThan(geometry.points[1].y);
           await expect(

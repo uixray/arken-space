@@ -76,7 +76,11 @@ export function useCatalogActions(dependencies: {
   /** Stable — `useCallback` with an empty dependency list in App. */
   load: () => Promise<void>;
   setError: (message: string) => void;
-  prepareArea?: (characterId: string, entryId: string, revision: number) => boolean;
+  prepareArea?: (
+    characterId: string,
+    entryId: string,
+    revision: number,
+  ) => boolean;
 }): CatalogActions {
   const { run, load, setError, prepareArea } = dependencies;
 
@@ -167,7 +171,11 @@ export function useCatalogActions(dependencies: {
         const { mode, ...request } = input;
         // EXECUTE on a structured area first opens a local, cancellable map
         // preview. SHARE and all non-area abilities keep their existing path.
-        if (mode === "EXECUTE" && prepareArea?.(characterId, entryId, input.entryRevision)) return;
+        if (
+          mode === "EXECUTE" &&
+          prepareArea?.(characterId, entryId, input.entryRevision)
+        )
+          return;
         return run(
           () =>
             api(`/api/characters/${characterId}/catalog/${entryId}/roll`, {

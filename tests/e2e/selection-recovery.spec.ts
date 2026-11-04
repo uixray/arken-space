@@ -71,10 +71,7 @@ function fixture(): GameSnapshot {
   ];
   return snapshot;
 }
-async function boundary(
-  page: Page,
-  initialSnapshot: GameSnapshot = fixture(),
-) {
+async function boundary(page: Page, initialSnapshot: GameSnapshot = fixture()) {
   let snapshot = structuredClone(initialSnapshot);
   const sockets = new Set<WebSocketRoute>();
   const writes: Record<string, unknown>[] = [];
@@ -488,9 +485,9 @@ test("UIX-777 area mode selects without Shift, keeps its list open on canvas, an
     );
     await areaButton.click();
     await expect(areaButton).toHaveAttribute("aria-pressed", "true");
-    await expect(
-      list.getByRole("status"),
-    ).toHaveText("Перетащите рамку по свободному месту карты. Escape — выйти.");
+    await expect(list.getByRole("status")).toHaveText(
+      "Перетащите рамку по свободному месту карты. Escape — выйти.",
+    );
 
     const box = (await map.boundingBox())!;
     const right = Number(await map.getAttribute("data-resize-handle-x"));
@@ -645,7 +642,10 @@ test("UIX-777 PLAYER group checkboxes do not extend selection beyond current con
         exact: true,
       })
       .click();
-    const list = page.getByRole("region", { name: "Объекты карты", exact: true });
+    const list = page.getByRole("region", {
+      name: "Объекты карты",
+      exact: true,
+    });
     const available = list.getByRole("checkbox", {
       name: "Выбрать для группового действия: Выбранный токен",
     });
@@ -684,7 +684,10 @@ test("UIX-777 bulk delete blocks duplicate submission and preserves selection on
       exact: true,
     });
     await trigger.click();
-    const list = page.getByRole("region", { name: "Объекты карты", exact: true });
+    const list = page.getByRole("region", {
+      name: "Объекты карты",
+      exact: true,
+    });
     await list
       .getByRole("checkbox", {
         name: "Выбрать для группового действия: Выбранный токен",
@@ -772,7 +775,10 @@ test("UIX-777 late bulk-delete acknowledgement from a prior scene does not clear
       exact: true,
     });
     await trigger.click();
-    const list = page.getByRole("region", { name: "Объекты карты", exact: true });
+    const list = page.getByRole("region", {
+      name: "Объекты карты",
+      exact: true,
+    });
     await list
       .getByRole("checkbox", {
         name: "Выбрать для группового действия: Выбранный токен",

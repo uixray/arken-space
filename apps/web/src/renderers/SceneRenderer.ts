@@ -23,7 +23,9 @@ import type {
 export interface SceneRendererProps {
   /** Local-only preview: origin must exist in this viewer's filtered tokens. */
   abilityAreaPreview?: {
-    sceneId: string; tokenId: string; radiusMeters: number;
+    sceneId: string;
+    tokenId: string;
+    radiusMeters: number;
     /** Canonical snapshot geometry, not an optimistic drag or unsaved grid. */
     circle: { x: number; y: number; radius: number };
   } | null;

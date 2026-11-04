@@ -287,8 +287,12 @@ function SceneEditor({
 
   const errors: Partial<Record<keyof SceneDraft, string>> = {};
   const scale = form.state.draft.metersPerCell;
-  if (scale != null && (!Number.isFinite(scale) || scale <= 0 || scale > 1000000))
-    errors.metersPerCell = "Укажите положительный масштаб не более 1 000 000 метров или оставьте поле пустым.";
+  if (
+    scale != null &&
+    (!Number.isFinite(scale) || scale <= 0 || scale > 1000000)
+  )
+    errors.metersPerCell =
+      "Укажите положительный масштаб не более 1 000 000 метров или оставьте поле пустым.";
   if (
     !form.state.draft.name.trim() ||
     form.state.draft.name.trim().length > 100
@@ -413,8 +417,12 @@ function SceneEditor({
       onClose={onCancel}
     >
       <form className="scene-editor" onSubmit={submit} noValidate>
-        <CartographicLabelFields optionalTitle value={form.state.draft.titleLabel} name={form.state.draft.name}
-          onChange={titleLabel => form.update({ titleLabel })} />
+        <CartographicLabelFields
+          optionalTitle
+          value={form.state.draft.titleLabel}
+          name={form.state.draft.name}
+          onChange={(titleLabel) => form.update({ titleLabel })}
+        />
         <label className="field">
           Название
           <FormInput
@@ -482,13 +490,29 @@ function SceneEditor({
             {numericField("gridSize")}
             <label className="scene-form-field">
               <span>Метров в клетке</span>
-              <FormInput type="number" min={0} max={1000000} step="any"
+              <FormInput
+                type="number"
+                min={0}
+                max={1000000}
+                step="any"
                 value={form.state.draft.metersPerCell ?? ""}
                 aria-invalid={Boolean(errors.metersPerCell)}
-                onChange={(event) => form.update({ metersPerCell:
-                  event.target.value.trim() === "" ? null : Number(event.target.value) })} />
-              <small>Задаётся мастером. Без масштаба область в метрах применять нельзя; линейка по-прежнему показывает клетки.</small>
-              {errors.metersPerCell && <span role="alert">{errors.metersPerCell}</span>}
+                onChange={(event) =>
+                  form.update({
+                    metersPerCell:
+                      event.target.value.trim() === ""
+                        ? null
+                        : Number(event.target.value),
+                  })
+                }
+              />
+              <small>
+                Задаётся мастером. Без масштаба область в метрах применять
+                нельзя; линейка по-прежнему показывает клетки.
+              </small>
+              {errors.metersPerCell && (
+                <span role="alert">{errors.metersPerCell}</span>
+              )}
             </label>
             {numericField("gridOffsetX")}
             {numericField("gridOffsetY")}

@@ -39,9 +39,13 @@ export function BugIntakeApprovedPreview({
     )
       .then((result) => {
         if (controller.signal.aborted) return;
-        if ((album
-          ? result.albumId !== album.id || result.fingerprint !== album.fingerprint
-          : result.messageId !== id) || result.revision !== revision) {
+        if (
+          (album
+            ? result.albumId !== album.id ||
+              result.fingerprint !== album.fingerprint
+            : result.messageId !== id) ||
+          result.revision !== revision
+        ) {
           setFailed(true);
           return;
         }
@@ -80,8 +84,8 @@ export function BugIntakeApprovedPreview({
       </ul>
       <p>
         Это снимок подтверждённой версии, а не подтверждение отправки или её
-        отсутствия. Результат смотрите в истории отправок. Перед началом отправки
-        согласие проверяется повторно.
+        отсутствия. Результат смотрите в истории отправок. Перед началом
+        отправки согласие проверяется повторно.
       </p>
     </section>
   );

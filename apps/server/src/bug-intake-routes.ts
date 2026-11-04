@@ -6,7 +6,10 @@ import { resolveBugQuarantine } from "./bug-intake-resolution.js";
 import { recoverBugUploadReceipt } from "./bug-intake-upload-recovery.js";
 import { readBugAlbumReview } from "./bug-intake-album-review.js";
 import { previewApprovedBugAlbum } from "./bug-intake-album-preview.js";
-import { approveBugAlbum, bugAlbumApprovalSchema } from "./bug-intake-album-commands.js";
+import {
+  approveBugAlbum,
+  bugAlbumApprovalSchema,
+} from "./bug-intake-album-commands.js";
 import type { FastifyInstance } from "fastify";
 import { and, asc, eq, gt } from "drizzle-orm";
 import { z } from "zod";
@@ -37,12 +40,18 @@ const listSchema = z
 export function registerBugIntakeRoutes(
   app: FastifyInstance,
   db: Database,
-  storage: { root: string; maxBytes: number; assetOrigins?: ReadonlySet<string> },
+  storage: {
+    root: string;
+    maxBytes: number;
+    assetOrigins?: ReadonlySet<string>;
+  },
 ) {
   // Bound concurrent verified buffers per process, separately from request rate.
   let activeDownloads = 0;
   registerBugAlbumRoutes(app, db, storage.assetOrigins ?? new Set<string>());
-  app.get("/api/operator/bug-intake/:id/album-approved-preview", operatorFeedbackRateLimit(),
+  app.get(
+    "/api/operator/bug-intake/:id/album-approved-preview",
+    operatorFeedbackRateLimit(),
     async (request, reply) => {
       reply.header("Cache-Control", "private, no-store");
       const auth = await requireOperator(request, reply, db);
@@ -51,9 +60,12 @@ export function registerBugIntakeRoutes(
       if (!params.success) return reply.code(400).send({ error: "INVALID_ID" });
       const result = await previewApprovedBugAlbum(db, params.data.id);
       return result.ok ? result : reply.code(409).send(result);
-    });
-  app.post("/api/operator/bug-intake/:id/album-approval",
-    { ...operatorFeedbackRateLimit(), bodyLimit: 256 * 1024 }, async (request, reply) => {
+    },
+  );
+  app.post(
+    "/api/operator/bug-intake/:id/album-approval",
+    { ...operatorFeedbackRateLimit(), bodyLimit: 256 * 1024 },
+    async (request, reply) => {
       reply.header("Cache-Control", "private, no-store");
       const auth = await requireOperator(request, reply, db);
       if (!auth) return;
@@ -62,13 +74,21 @@ export function registerBugIntakeRoutes(
       if (!params.success || !body.success)
         return reply.code(400).send({ error: "INVALID_ALBUM_APPROVAL" });
       try {
-        const result = await approveBugAlbum(db, params.data.id, auth.membershipId, body.data);
+        const result = await approveBugAlbum(
+          db,
+          params.data.id,
+          auth.membershipId,
+          body.data,
+        );
         return result.ok ? result : reply.code(409).send(result);
       } catch {
         return reply.code(500).send({ error: "ALBUM_APPROVAL_UNAVAILABLE" });
       }
-    });
-  app.get("/api/operator/bug-intake/:id/album-review", operatorFeedbackRateLimit(),
+    },
+  );
+  app.get(
+    "/api/operator/bug-intake/:id/album-review",
+    operatorFeedbackRateLimit(),
     async (request, reply) => {
       reply.header("Cache-Control", "private, no-store");
       const auth = await requireOperator(request, reply, db);
@@ -77,9 +97,12 @@ export function registerBugIntakeRoutes(
       if (!params.success) return reply.code(400).send({ error: "INVALID_ID" });
       const result = await readBugAlbumReview(db, params.data.id);
       return result.ok ? result : reply.code(409).send(result);
-    });
-  app.post("/api/operator/bug-intake/:id/recover-upload",
-    { ...operatorFeedbackRateLimit(), bodyLimit: 8192 }, async (request, reply) => {
+    },
+  );
+  app.post(
+    "/api/operator/bug-intake/:id/recover-upload",
+    { ...operatorFeedbackRateLimit(), bodyLimit: 8192 },
+    async (request, reply) => {
       reply.header("Cache-Control", "private, no-store");
       const auth = await requireOperator(request, reply, db);
       if (!auth) return;
@@ -88,15 +111,21 @@ export function registerBugIntakeRoutes(
       if (!storage.assetOrigins?.size)
         return reply.code(409).send({ error: "ASSET_RECOVERY_NOT_CONFIGURED" });
       try {
-        const result = await recoverBugUploadReceipt(db, storage.assetOrigins,
-          params.data.id, auth.membershipId, request.body);
+        const result = await recoverBugUploadReceipt(
+          db,
+          storage.assetOrigins,
+          params.data.id,
+          auth.membershipId,
+          request.body,
+        );
         return result.ok ? result : reply.code(409).send(result);
       } catch (error) {
         if (error instanceof z.ZodError)
           return reply.code(400).send({ error: "INVALID_RECOVERY_COMMAND" });
         return reply.code(500).send({ error: "RECOVERY_RESULT_UNKNOWN" });
       }
-    });
+    },
+  );
   app.get(
     "/api/operator/bug-intake/:id/deliveries/:deliveryId",
     operatorFeedbackRateLimit(),
@@ -104,32 +133,55 @@ export function registerBugIntakeRoutes(
       reply.header("Cache-Control", "private, no-store");
       const auth = await requireOperator(request, reply, db);
       if (!auth) return;
-      const params = z.object({ id: z.string().uuid(), deliveryId: z.string().uuid() })
-        .strict().safeParse(request.params);
+      const params = z
+        .object({ id: z.string().uuid(), deliveryId: z.string().uuid() })
+        .strict()
+        .safeParse(request.params);
       if (!params.success) return reply.code(400).send({ error: "INVALID_ID" });
-      const [delivery] = await db.select().from(bugIntakeDeliveries).where(and(
-        eq(bugIntakeDeliveries.id, params.data.deliveryId),
-        eq(bugIntakeDeliveries.messageId, params.data.id),
-      ));
+      const [delivery] = await db
+        .select()
+        .from(bugIntakeDeliveries)
+        .where(
+          and(
+            eq(bugIntakeDeliveries.id, params.data.deliveryId),
+            eq(bugIntakeDeliveries.messageId, params.data.id),
+          ),
+        );
       if (!delivery) return reply.code(404).send({ error: "NOT_FOUND" });
-      const snapshot = z.object({ title: z.string().max(200),
-        description: z.string().max(50000),
-        attachments: z.array(z.object({ id: z.string().uuid(),
-          sha256: z.string().regex(/^[0-9a-f]{64}$/),
-          sizeBytes: z.number().int().positive(),
-        })).max(20),
-      }).safeParse(delivery.payload);
-      if (!snapshot.success) return reply.code(409).send({ error: "INVALID_SNAPSHOT" });
+      const snapshot = z
+        .object({
+          title: z.string().max(200),
+          description: z.string().max(50000),
+          attachments: z
+            .array(
+              z.object({
+                id: z.string().uuid(),
+                sha256: z.string().regex(/^[0-9a-f]{64}$/),
+                sizeBytes: z.number().int().positive(),
+              }),
+            )
+            .max(20),
+        })
+        .safeParse(delivery.payload);
+      if (!snapshot.success)
+        return reply.code(409).send({ error: "INVALID_SNAPSHOT" });
       // Historical reviewed content, not the current source/review form. Never
       // spread payload/receipts: they may include private URLs or internal fields.
-      return { id: delivery.id, revision: delivery.approvedRevision,
+      return {
+        id: delivery.id,
+        revision: delivery.approvedRevision,
         uploadRecoveryAvailable: Boolean(storage.assetOrigins?.size),
-        state: delivery.state, updatedAt: delivery.updatedAt,
-        title: snapshot.data.title, description: snapshot.data.description,
+        state: delivery.state,
+        updatedAt: delivery.updatedAt,
+        title: snapshot.data.title,
+        description: snapshot.data.description,
         attachments: snapshot.data.attachments.map((file) => ({
-          id: file.id, name: `bug-attachment-${file.id}.bin`,
-          sha256: file.sha256, sizeBytes: file.sizeBytes,
-          uploadRecorded: delivery.uploadReceipts[file.id]?.sha256 === file.sha256 &&
+          id: file.id,
+          name: `bug-attachment-${file.id}.bin`,
+          sha256: file.sha256,
+          sizeBytes: file.sizeBytes,
+          uploadRecorded:
+            delivery.uploadReceipts[file.id]?.sha256 === file.sha256 &&
             delivery.uploadReceipts[file.id]?.sizeBytes === file.sizeBytes,
         })),
       };
@@ -143,26 +195,41 @@ export function registerBugIntakeRoutes(
       const auth = await requireOperator(request, reply, db);
       if (!auth) return;
       const params = paramsSchema.safeParse(request.params);
-      const query = z.object({ after: z.string().uuid().optional(),
-        limit: z.coerce.number().int().min(1).max(50).default(25),
-      }).strict().safeParse(request.query);
+      const query = z
+        .object({
+          after: z.string().uuid().optional(),
+          limit: z.coerce.number().int().min(1).max(50).default(25),
+        })
+        .strict()
+        .safeParse(request.query);
       if (!params.success || !query.success)
         return reply.code(400).send({ error: "INVALID_DELIVERY_QUERY" });
-      const [message] = await db.select({ id: bugIntakeMessages.id })
-        .from(bugIntakeMessages).where(eq(bugIntakeMessages.id, params.data.id));
+      const [message] = await db
+        .select({ id: bugIntakeMessages.id })
+        .from(bugIntakeMessages)
+        .where(eq(bugIntakeMessages.id, params.data.id));
       if (!message) return reply.code(404).send({ error: "NOT_FOUND" });
-      const rows = await db.select({
-        id: bugIntakeDeliveries.id,
-        approvedRevision: bugIntakeDeliveries.approvedRevision,
-        state: bugIntakeDeliveries.state,
-        linearIssueId: bugIntakeDeliveries.linearIssueId,
-        failureCode: bugIntakeDeliveries.failureCode,
-        createdAt: bugIntakeDeliveries.createdAt,
-        updatedAt: bugIntakeDeliveries.updatedAt,
-      }).from(bugIntakeDeliveries).where(and(
-        eq(bugIntakeDeliveries.messageId, params.data.id),
-        query.data.after ? gt(bugIntakeDeliveries.id, query.data.after) : undefined,
-      )).orderBy(asc(bugIntakeDeliveries.id)).limit(query.data.limit + 1);
+      const rows = await db
+        .select({
+          id: bugIntakeDeliveries.id,
+          approvedRevision: bugIntakeDeliveries.approvedRevision,
+          state: bugIntakeDeliveries.state,
+          linearIssueId: bugIntakeDeliveries.linearIssueId,
+          failureCode: bugIntakeDeliveries.failureCode,
+          createdAt: bugIntakeDeliveries.createdAt,
+          updatedAt: bugIntakeDeliveries.updatedAt,
+        })
+        .from(bugIntakeDeliveries)
+        .where(
+          and(
+            eq(bugIntakeDeliveries.messageId, params.data.id),
+            query.data.after
+              ? gt(bugIntakeDeliveries.id, query.data.after)
+              : undefined,
+          ),
+        )
+        .orderBy(asc(bugIntakeDeliveries.id))
+        .limit(query.data.limit + 1);
       const more = rows.length > query.data.limit;
       const items = rows.slice(0, query.data.limit);
       // Identity-order pagination, not chronological order. No reviewed/raw text,
