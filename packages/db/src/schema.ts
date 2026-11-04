@@ -625,6 +625,8 @@ export const memberships = pgTable(
   "memberships",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    /** Retain identity/history while denying campaign access, not account login. */
+    accessRevokedAt: timestamp("access_revoked_at", { withTimezone: true }),
     userId: uuid("user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -1460,6 +1462,7 @@ export const characterSpellAssignmentVersions = pgTable(
 export const scenes = pgTable(
   "scenes",
   {
+    titleLabel: jsonb("title_label").$type<{ presentation: "plain" | "ribbon"; offsetX: number; offsetY: number }>(),
     id: uuid("id").defaultRandom().primaryKey(),
     campaignId: uuid("campaign_id")
       .notNull()
@@ -1510,6 +1513,7 @@ export const scenes = pgTable(
 export const worldMapLocations = pgTable(
   "world_map_locations",
   {
+    label: jsonb("label").$type<{ presentation: "plain" | "ribbon"; offsetX: number; offsetY: number }>(),
     id: uuid("id").defaultRandom().primaryKey(),
     campaignId: uuid("campaign_id").notNull(),
     mapId: uuid("map_id").notNull(),
@@ -4125,4 +4129,314 @@ export const economyPurchases = pgTable("economy_purchases", {
   uniqueIndex("economy_purchases_action_unique").on(t.campaignId, t.actionId),
   uniqueIndex("economy_purchases_quote_unique").on(t.quoteId),
   index("economy_purchases_history_idx").on(t.campaignId, t.createdAt, t.id),
+]);
+
+/** UIX-461: server-owned authorship/review is separate from editable entryData. */
+export const creationRulePacks = pgTable("creation_rule_packs", {
+  id: uuid("id").primaryKey(),
+  campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  kind: text("kind").$type<"SKILL" | "ARTIFACT">().notNull(),
+  name: text("name").notNull(),
+  enabled: boolean("enabled").notNull().default(false),
+  revision: integer("revision").notNull().default(0),
+  createdByMembershipId: uuid("created_by_membership_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("creation_rule_packs_campaign_id_unique").on(t.campaignId, t.id),
+  foreignKey({ name: "creation_rule_pack_creator_fk", columns: [t.campaignId, t.createdByMembershipId],
+    foreignColumns: [memberships.campaignId, memberships.id] }),
+  check("creation_rule_pack_shape", sql`${t.kind} in ('SKILL','ARTIFACT') and ${t.revision} >= 0 and length(trim(${t.name})) between 1 and 100`),
+]);
+export const creationRuleVersions = pgTable("creation_rule_versions", {
+  id: uuid("id").primaryKey(), campaignId: uuid("campaign_id").notNull(), packId: uuid("pack_id").notNull(),
+  number: integer("number").notNull(), published: boolean("published").notNull(),
+  source: jsonb("source").$type<unknown>().notNull(), sourceHash: text("source_hash").notNull(),
+  createdByMembershipId: uuid("created_by_membership_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("creation_rule_versions_campaign_id_unique").on(t.campaignId, t.id),
+  uniqueIndex("creation_rule_versions_number_unique").on(t.campaignId, t.packId, t.number),
+  foreignKey({ name: "creation_rule_version_pack_fk", columns: [t.campaignId, t.packId],
+    foreignColumns: [creationRulePacks.campaignId, creationRulePacks.id] }).onDelete("cascade"),
+  foreignKey({ name: "creation_rule_version_creator_fk", columns: [t.campaignId, t.createdByMembershipId],
+    foreignColumns: [memberships.campaignId, memberships.id] }),
+  check("creation_rule_version_shape", sql`${t.number} > 0 and ${t.sourceHash} ~ '^[a-f0-9]{64}$'`),
+]);
+export const creationTemplates = pgTable("creation_templates", {
+  id: uuid("id").primaryKey(),
+  campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  authorMembershipId: uuid("author_membership_id").notNull(),
+  kind: text("kind").$type<"SKILL" | "ARTIFACT">().notNull(),
+  revision: integer("revision").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("creation_templates_campaign_id_unique").on(t.campaignId, t.id),
+  index("creation_templates_author_idx").on(t.campaignId, t.authorMembershipId, t.id),
+  foreignKey({ name: "creation_template_author_fk", columns: [t.campaignId, t.authorMembershipId],
+    foreignColumns: [memberships.campaignId, memberships.id] }),
+  check("creation_template_shape", sql`${t.kind} in ('SKILL','ARTIFACT') and ${t.revision} >= 0`),
+]);
+export const creationTemplateVersions = pgTable("creation_template_versions", {
+  id: uuid("id").primaryKey(), campaignId: uuid("campaign_id").notNull(),
+  templateId: uuid("template_id").notNull(), number: integer("number").notNull(),
+  previousVersionId: uuid("previous_version_id").references((): AnyPgColumn => creationTemplateVersions.id),
+  ruleVersionId: uuid("rule_version_id").notNull(),
+  design: jsonb("design").$type<unknown>().notNull(), evaluation: jsonb("evaluation").$type<unknown>().notNull(),
+  versionHash: text("version_hash").notNull(), createdByMembershipId: uuid("created_by_membership_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("creation_template_versions_campaign_id_unique").on(t.campaignId, t.id),
+  uniqueIndex("creation_template_versions_number_unique").on(t.campaignId, t.templateId, t.number),
+  uniqueIndex("creation_template_versions_lineage_unique").on(t.campaignId, t.templateId, t.id),
+  foreignKey({ name: "creation_template_parent_scope_fk", columns: [t.campaignId, t.templateId, t.previousVersionId],
+    foreignColumns: [t.campaignId, t.templateId, t.id] }),
+  foreignKey({ name: "creation_template_version_template_fk", columns: [t.campaignId, t.templateId],
+    foreignColumns: [creationTemplates.campaignId, creationTemplates.id] }).onDelete("cascade"),
+  foreignKey({ name: "creation_template_version_rules_fk", columns: [t.campaignId, t.ruleVersionId],
+    foreignColumns: [creationRuleVersions.campaignId, creationRuleVersions.id] }),
+  foreignKey({ name: "creation_template_version_creator_fk", columns: [t.campaignId, t.createdByMembershipId],
+    foreignColumns: [memberships.campaignId, memberships.id] }),
+  check("creation_template_version_shape", sql`${t.number} > 0 and ${t.versionHash} ~ '^[a-f0-9]{64}$'`),
+]);
+export const creationReviews = pgTable("creation_reviews", {
+  id: uuid("id").primaryKey(), campaignId: uuid("campaign_id").notNull(), versionId: uuid("version_id").notNull(),
+  revision: integer("revision").notNull(), decision: text("decision").$type<"APPROVED" | "REJECTED" | "REVOKED">().notNull(),
+  reason: text("reason").notNull(), decidedByMembershipId: uuid("decided_by_membership_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("creation_reviews_revision_unique").on(t.campaignId, t.versionId, t.revision),
+  foreignKey({ name: "creation_review_version_fk", columns: [t.campaignId, t.versionId],
+    foreignColumns: [creationTemplateVersions.campaignId, creationTemplateVersions.id] }).onDelete("cascade"),
+  foreignKey({ name: "creation_review_actor_fk", columns: [t.campaignId, t.decidedByMembershipId],
+    foreignColumns: [memberships.campaignId, memberships.id] }),
+  check("creation_review_shape", sql`${t.revision} >= 0 and ${t.decision} in ('APPROVED','REJECTED','REVOKED') and length(trim(${t.reason})) between 1 and 1000`),
+]);
+export const creationActions = pgTable("creation_actions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  actionId: uuid("action_id").notNull(), actorMembershipId: uuid("actor_membership_id").notNull(),
+  type: text("type").notNull(), requestHash: text("request_hash").notNull(),
+  receipt: jsonb("receipt").$type<unknown>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("creation_actions_action_unique").on(t.campaignId, t.actionId),
+  foreignKey({ name: "creation_action_actor_fk", columns: [t.campaignId, t.actorMembershipId],
+    foreignColumns: [memberships.campaignId, memberships.id] }),
+  check("creation_action_hash_shape", sql`${t.requestHash} ~ '^[a-f0-9]{64}$'`),
+]);
+
+/** GM-authored lifecycle recipes. Enabling never silently activates a draft. */
+export const creationRecipes = pgTable("creation_recipes", {
+  id: uuid("id").primaryKey(), campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  name: text("name").notNull(), enabled: boolean("enabled").notNull().default(false),
+  revision: integer("revision").notNull().default(0), createdByMembershipId: uuid("created_by_membership_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex("creation_recipes_campaign_id_unique").on(t.campaignId, t.id),
+  foreignKey({ name: "creation_recipe_actor_fk", columns: [t.campaignId, t.createdByMembershipId],
+    foreignColumns: [memberships.campaignId, memberships.id] }),
+  check("creation_recipe_shape", sql`${t.revision} >= 0 and length(trim(${t.name})) between 1 and 100`),
+]);
+export const creationRecipeVersions = pgTable("creation_recipe_versions", {
+  id: uuid("id").primaryKey(), campaignId: uuid("campaign_id").notNull(), recipeId: uuid("recipe_id").notNull(),
+  number: integer("number").notNull(), published: boolean("published").notNull(),
+  source: jsonb("source").$type<unknown>().notNull(), sourceHash: text("source_hash").notNull(),
+  createdByMembershipId: uuid("created_by_membership_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex("creation_recipe_versions_campaign_id_unique").on(t.campaignId, t.id),
+  uniqueIndex("creation_recipe_versions_number_unique").on(t.campaignId, t.recipeId, t.number),
+  foreignKey({ name: "creation_recipe_version_recipe_fk", columns: [t.campaignId, t.recipeId],
+    foreignColumns: [creationRecipes.campaignId, creationRecipes.id] }).onDelete("cascade"),
+  foreignKey({ name: "creation_recipe_version_actor_fk", columns: [t.campaignId, t.createdByMembershipId],
+    foreignColumns: [memberships.campaignId, memberships.id] }),
+  check("creation_recipe_version_shape", sql`${t.number} > 0 and ${t.sourceHash} ~ '^[a-f0-9]{64}$'`),
+]);
+/** Immutable definition/basis + one mutable live placement. Quantity remains in
+ * the ITEM instance, never here. Consuming retains provenance and removes the
+ * live character entry, so ordinary modifiers cannot keep using a spent entry. */
+export const creationObjects = pgTable("creation_objects", {
+  id: uuid("id").primaryKey(), campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  versionId: uuid("version_id").notNull(), kind: text("kind").$type<"SKILL" | "ARTIFACT">().notNull(),
+  characterId: uuid("character_id").notNull(), entryId: uuid("entry_id").references(() => characterCatalogEntries.id),
+  instanceId: uuid("instance_id"), status: text("status").$type<"ACTIVE" | "CONSUMED">().notNull(),
+  level: integer("level").notNull(), stage: text("stage").$type<"CRAFTED" | "EVOLVING" | "MASTERWORK" | "FORGED">().notNull(),
+  snapshot: jsonb("snapshot").$type<unknown>().notNull(), snapshotHash: text("snapshot_hash").notNull(),
+  paidBasis: jsonb("paid_basis").$type<unknown>().notNull(), revision: integer("revision").notNull().default(0),
+  createdActionId: uuid("created_action_id").notNull(), createdByMembershipId: uuid("created_by_membership_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex("creation_objects_campaign_id_unique").on(t.campaignId, t.id),
+  uniqueIndex("creation_objects_entry_unique").on(t.entryId),
+  uniqueIndex("creation_objects_instance_unique").on(t.instanceId),
+  index("creation_objects_character_idx").on(t.campaignId, t.characterId, t.id),
+  foreignKey({ name: "creation_object_version_fk", columns: [t.campaignId, t.versionId],
+    foreignColumns: [creationTemplateVersions.campaignId, creationTemplateVersions.id] }),
+  foreignKey({ name: "creation_object_character_fk", columns: [t.campaignId, t.characterId],
+    foreignColumns: [characters.campaignId, characters.id] }),
+  foreignKey({ name: "creation_object_instance_fk", columns: [t.campaignId, t.instanceId],
+    foreignColumns: [worldContentInstances.campaignId, worldContentInstances.id] }),
+  foreignKey({ name: "creation_object_actor_fk", columns: [t.campaignId, t.createdByMembershipId],
+    foreignColumns: [memberships.campaignId, memberships.id] }),
+  check("creation_object_shape", sql`${t.level} between 1 and 1000 and ${t.revision} >= 0
+    and ${t.snapshotHash} ~ '^[a-f0-9]{64}$' and ${t.stage} in ('CRAFTED','EVOLVING','MASTERWORK','FORGED')
+    and ((${t.status} = 'ACTIVE' and ${t.entryId} is not null) or (${t.status} = 'CONSUMED' and ${t.entryId} is null))
+    and ((${t.kind} = 'SKILL' and ${t.instanceId} is null) or (${t.kind} = 'ARTIFACT' and ${t.instanceId} is not null))`),
+]);
+export const creationOperationQuotes = pgTable("creation_operation_quotes", {
+  id: uuid("id").primaryKey(), campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  actorMembershipId: uuid("actor_membership_id").notNull(), characterId: uuid("character_id").notNull(),
+  recipeVersionId: uuid("recipe_version_id").notNull(), request: jsonb("request").$type<unknown>().notNull(),
+  inputHash: text("input_hash").notNull(), inputs: jsonb("inputs").$type<unknown>().notNull(),
+  view: jsonb("view").$type<unknown>().notNull(), expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex("creation_quotes_campaign_id_unique").on(t.campaignId, t.id),
+  foreignKey({ name: "creation_quote_actor_fk", columns: [t.campaignId, t.actorMembershipId],
+    foreignColumns: [memberships.campaignId, memberships.id] }),
+  foreignKey({ name: "creation_quote_character_fk", columns: [t.campaignId, t.characterId],
+    foreignColumns: [characters.campaignId, characters.id] }),
+  foreignKey({ name: "creation_quote_recipe_fk", columns: [t.campaignId, t.recipeVersionId],
+    foreignColumns: [creationRecipeVersions.campaignId, creationRecipeVersions.id] }),
+  check("creation_quote_hash_shape", sql`${t.inputHash} ~ '^[a-f0-9]{64}$'`),
+]);
+export const creationOperations = pgTable("creation_operations", {
+  id: uuid("id").primaryKey(), campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  actionId: uuid("action_id").notNull(), quoteId: uuid("quote_id").notNull(),
+  actorMembershipId: uuid("actor_membership_id").notNull(), characterId: uuid("character_id").notNull(),
+  receipt: jsonb("receipt").$type<unknown>().notNull(), provenance: jsonb("provenance").$type<unknown>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex("creation_operations_campaign_id_unique").on(t.campaignId, t.id),
+  uniqueIndex("creation_operations_action_unique").on(t.campaignId, t.actionId),
+  uniqueIndex("creation_operations_quote_unique").on(t.quoteId),
+  index("creation_operations_character_idx").on(t.campaignId, t.characterId, t.id),
+  foreignKey({ name: "creation_operation_quote_fk", columns: [t.campaignId, t.quoteId],
+    foreignColumns: [creationOperationQuotes.campaignId, creationOperationQuotes.id] }),
+  foreignKey({ name: "creation_operation_actor_fk", columns: [t.campaignId, t.actorMembershipId],
+    foreignColumns: [memberships.campaignId, memberships.id] }),
+  foreignKey({ name: "creation_operation_character_fk", columns: [t.campaignId, t.characterId],
+    foreignColumns: [characters.campaignId, characters.id] }),
+]);
+export const creationObjectEdges = pgTable("creation_object_edges", {
+  campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  inputObjectId: uuid("input_object_id").primaryKey(), outputObjectId: uuid("output_object_id").notNull(),
+  operationId: uuid("operation_id").notNull(),
+}, t => [
+  index("creation_edges_output_idx").on(t.campaignId, t.outputObjectId),
+  foreignKey({ name: "creation_edge_input_fk", columns: [t.campaignId, t.inputObjectId],
+    foreignColumns: [creationObjects.campaignId, creationObjects.id] }),
+  foreignKey({ name: "creation_edge_output_fk", columns: [t.campaignId, t.outputObjectId],
+    foreignColumns: [creationObjects.campaignId, creationObjects.id] }),
+  foreignKey({ name: "creation_edge_operation_fk", columns: [t.campaignId, t.operationId],
+    foreignColumns: [creationOperations.campaignId, creationOperations.id] }),
+  check("creation_edge_no_self", sql`${t.inputObjectId} <> ${t.outputObjectId}`),
+]);
+
+/** Campaign-only UGC storefront. Wallets and quantities remain in existing tables. */
+export const creationStorePolicies = pgTable("creation_store_policies", {
+  campaignId: uuid("campaign_id").primaryKey().references(() => campaigns.id, { onDelete: "cascade" }),
+  revision: integer("revision").notNull(), policy: jsonb("policy").$type<unknown>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [check("creation_store_policy_revision", sql`${t.revision} >= 0`)]);
+export const creationListings = pgTable("creation_listings", {
+  id: uuid("id").primaryKey(), campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  authorMembershipId: uuid("author_membership_id").notNull(), enabled: boolean("enabled").notNull(),
+  blockedByGm: boolean("blocked_by_gm").notNull().default(false),
+  revision: integer("revision").notNull().default(0), soldCount: integer("sold_count").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex("creation_listings_campaign_id_unique").on(t.campaignId, t.id),
+  index("creation_listings_author_idx").on(t.campaignId, t.authorMembershipId, t.id),
+  foreignKey({ name: "creation_listing_author_fk", columns: [t.campaignId, t.authorMembershipId],
+    foreignColumns: [memberships.campaignId, memberships.id] }),
+  check("creation_listing_shape", sql`${t.revision} >= 0 and ${t.soldCount} between 0 and 1000000 and not (${t.enabled} and ${t.blockedByGm})`),
+]);
+export const creationListingVersions = pgTable("creation_listing_versions", {
+  id: uuid("id").primaryKey(), campaignId: uuid("campaign_id").notNull(), listingId: uuid("listing_id").notNull(),
+  templateVersionId: uuid("template_version_id").notNull(), number: integer("number").notNull(),
+  source: jsonb("source").$type<unknown>().notNull(), sourceHash: text("source_hash").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex("creation_listing_versions_campaign_id_unique").on(t.campaignId, t.id),
+  uniqueIndex("creation_listing_versions_number_unique").on(t.campaignId, t.listingId, t.number),
+  foreignKey({ name: "creation_listing_version_listing_fk", columns: [t.campaignId, t.listingId],
+    foreignColumns: [creationListings.campaignId, creationListings.id] }).onDelete("cascade"),
+  foreignKey({ name: "creation_listing_version_template_fk", columns: [t.campaignId, t.templateVersionId],
+    foreignColumns: [creationTemplateVersions.campaignId, creationTemplateVersions.id] }),
+  check("creation_listing_version_shape", sql`${t.number} > 0 and ${t.sourceHash} ~ '^[a-f0-9]{64}$'`),
+]);
+export const creationStoreQuotes = pgTable("creation_store_quotes", {
+  id: uuid("id").primaryKey(), campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  actorMembershipId: uuid("actor_membership_id").notNull(), characterId: uuid("character_id").notNull(),
+  listingVersionId: uuid("listing_version_id").notNull(), request: jsonb("request").$type<unknown>().notNull(),
+  inputHash: text("input_hash").notNull(), inputs: jsonb("inputs").$type<unknown>().notNull(),
+  view: jsonb("view").$type<unknown>().notNull(), expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex("creation_store_quotes_campaign_id_unique").on(t.campaignId, t.id),
+  foreignKey({ name: "creation_store_quote_actor_fk", columns: [t.campaignId, t.actorMembershipId],
+    foreignColumns: [memberships.campaignId, memberships.id] }),
+  foreignKey({ name: "creation_store_quote_character_fk", columns: [t.campaignId, t.characterId],
+    foreignColumns: [characters.campaignId, characters.id] }),
+  foreignKey({ name: "creation_store_quote_listing_fk", columns: [t.campaignId, t.listingVersionId],
+    foreignColumns: [creationListingVersions.campaignId, creationListingVersions.id] }),
+  check("creation_store_quote_hash_shape", sql`${t.inputHash} ~ '^[a-f0-9]{64}$'`),
+]);
+export const creationPurchases = pgTable("creation_purchases", {
+  id: uuid("id").primaryKey(), campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  actionId: uuid("action_id").notNull(), quoteId: uuid("quote_id").notNull(),
+  actorMembershipId: uuid("actor_membership_id").notNull(), characterId: uuid("character_id").notNull(),
+  authorMembershipId: uuid("author_membership_id").notNull(), payoutCharacterId: uuid("payout_character_id"),
+  beneficiaryMembershipId: uuid("beneficiary_membership_id"), listingVersionId: uuid("listing_version_id").notNull(),
+  templateVersionId: uuid("template_version_id").notNull(), mode: text("mode").$type<"COPY" | "TEMPLATE">().notNull(),
+  outputObjectId: uuid("output_object_id"), priceCopper: bigint("price_copper", { mode: "number" }).notNull(),
+  authorIncomeCopper: bigint("author_income_copper", { mode: "number" }).notNull(), sinkCopper: bigint("sink_copper", { mode: "number" }).notNull(),
+  receipt: jsonb("receipt").$type<unknown>().notNull(), provenance: jsonb("provenance").$type<unknown>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex("creation_purchases_campaign_id_unique").on(t.campaignId, t.id),
+  uniqueIndex("creation_purchases_grant_unique").on(t.campaignId, t.id, t.beneficiaryMembershipId, t.templateVersionId),
+  uniqueIndex("creation_purchases_action_unique").on(t.campaignId, t.actionId),
+  uniqueIndex("creation_purchases_quote_unique").on(t.quoteId),
+  uniqueIndex("creation_purchases_output_unique").on(t.outputObjectId),
+  index("creation_purchases_actor_idx").on(t.campaignId, t.actorMembershipId, t.id),
+  index("creation_purchases_author_idx").on(t.campaignId, t.authorMembershipId, t.id),
+  foreignKey({ name: "creation_purchase_quote_fk", columns: [t.campaignId, t.quoteId], foreignColumns: [creationStoreQuotes.campaignId, creationStoreQuotes.id] }),
+  foreignKey({ name: "creation_purchase_actor_fk", columns: [t.campaignId, t.actorMembershipId], foreignColumns: [memberships.campaignId, memberships.id] }),
+  foreignKey({ name: "creation_purchase_character_fk", columns: [t.campaignId, t.characterId], foreignColumns: [characters.campaignId, characters.id] }),
+  foreignKey({ name: "creation_purchase_author_fk", columns: [t.campaignId, t.authorMembershipId], foreignColumns: [memberships.campaignId, memberships.id] }),
+  foreignKey({ name: "creation_purchase_payee_fk", columns: [t.campaignId, t.payoutCharacterId], foreignColumns: [characters.campaignId, characters.id] }),
+  foreignKey({ name: "creation_purchase_beneficiary_fk", columns: [t.campaignId, t.beneficiaryMembershipId], foreignColumns: [memberships.campaignId, memberships.id] }),
+  foreignKey({ name: "creation_purchase_listing_fk", columns: [t.campaignId, t.listingVersionId], foreignColumns: [creationListingVersions.campaignId, creationListingVersions.id] }),
+  foreignKey({ name: "creation_purchase_template_fk", columns: [t.campaignId, t.templateVersionId], foreignColumns: [creationTemplateVersions.campaignId, creationTemplateVersions.id] }),
+  foreignKey({ name: "creation_purchase_object_fk", columns: [t.campaignId, t.outputObjectId], foreignColumns: [creationObjects.campaignId, creationObjects.id] }),
+  check("creation_purchase_shape", sql`${t.priceCopper} between 0 and 1000000000000 and ${t.authorIncomeCopper} >= 0 and ${t.sinkCopper} >= 0
+    and ${t.priceCopper} = ${t.authorIncomeCopper} + ${t.sinkCopper} and (${t.payoutCharacterId} is not null or ${t.authorIncomeCopper} = 0)
+    and ((${t.mode} = 'COPY' and ${t.outputObjectId} is not null and ${t.beneficiaryMembershipId} is null)
+      or (${t.mode} = 'TEMPLATE' and ${t.outputObjectId} is null and ${t.beneficiaryMembershipId} is not null))`),
+]);
+/** Exact-version entitlement, not authorship, an ITEM quantity or future versions. */
+export const creationLicences = pgTable("creation_licences", {
+  id: uuid("id").primaryKey(), campaignId: uuid("campaign_id").notNull(), ownerMembershipId: uuid("owner_membership_id").notNull(),
+  versionId: uuid("version_id").notNull(), purchaseId: uuid("purchase_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex("creation_licences_owner_version_unique").on(t.campaignId, t.ownerMembershipId, t.versionId),
+  uniqueIndex("creation_licences_purchase_unique").on(t.purchaseId),
+  index("creation_licences_owner_idx").on(t.campaignId, t.ownerMembershipId, t.id),
+  foreignKey({ name: "creation_licence_purchase_fk", columns: [t.campaignId, t.purchaseId, t.ownerMembershipId, t.versionId],
+    foreignColumns: [creationPurchases.campaignId, creationPurchases.id, creationPurchases.beneficiaryMembershipId, creationPurchases.templateVersionId] }).onDelete("cascade"),
+]);
+
+/** A derivative is a new author's template, never a rewrite of the acquired one. */
+export const creationTemplateOrigins = pgTable("creation_template_origins", {
+  templateId: uuid("template_id").primaryKey(), campaignId: uuid("campaign_id").notNull(),
+  sourceVersionId: uuid("source_version_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  foreignKey({ name: "creation_origin_template_fk", columns: [t.campaignId, t.templateId],
+    foreignColumns: [creationTemplates.campaignId, creationTemplates.id] }).onDelete("cascade"),
+  foreignKey({ name: "creation_origin_source_fk", columns: [t.campaignId, t.sourceVersionId],
+    foreignColumns: [creationTemplateVersions.campaignId, creationTemplateVersions.id] }),
 ]);

@@ -50,7 +50,7 @@ export async function putBugLinearFile(
   const timer = setTimeout(() => controller.abort(), 60000);
   try {
     const response = await fetch(upload, {
-      method: "PUT", body: bytes, headers, redirect: "error", signal: controller.signal,
+      method: "PUT", body: new Uint8Array(bytes), headers, redirect: "error", signal: controller.signal,
     });
     await response.body?.cancel();
     if (!response.ok) return { ok: false as const, error: "UPLOAD_RESULT_UNKNOWN" };

@@ -169,7 +169,7 @@ export function BugIntakeReviewForm({
                     void send({
                       action: "EXCLUDE_FILE",
                       fileId: file.id,
-                      reason: reasons[file.id].trim(),
+                      reason: (reasons[file.id] ?? "").trim(),
                     })
                   }
                 >

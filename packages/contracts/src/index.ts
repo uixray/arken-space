@@ -2,6 +2,8 @@ export * from "./awards-bindings.js";
 export * from "./token-sprites.js";
 export * from "./bug-intake.js";
 import { z } from "zod";
+import { cartographicLabelSchema, type CartographicLabelConfig } from "./cartographic-label.js";
+export * from "./cartographic-label.js";
 export * from "./economy.js";
 import {
   soundpadTriggerSchema,
@@ -671,10 +673,10 @@ export const abilityAreaApplySchema = z.object({
   casterTokenRevision: z.number().int().nonnegative(),
 }).strict();
 export type AbilityAreaApply = z.infer<typeof abilityAreaApplySchema>;
-export const abilityAreaResultSchema = z.object({
-  duplicate: z.boolean(),
-  messageId: z.string().uuid(),
-}).strict();
+export const abilityAreaResultSchema = z.union([
+  z.object({ actionId: z.string().uuid().optional(), duplicate: z.boolean(), messageId: z.string().uuid() }).strict(),
+  z.object({ actionId: z.string().uuid(), cancelled: z.literal(true), notApplied: z.literal(true) }).strict(),
+]);
 
 export const entryDataSchema = z
   .object({
@@ -1190,6 +1192,7 @@ export const gridSchema = z.object({
 export const createSceneSchema = z
   .object({
     actionId: actionIdSchema,
+    titleLabel: cartographicLabelSchema.nullable().optional(),
     name: z.string().trim().min(1).max(100),
     mapAssetId: z.string().uuid().nullable().optional(),
     width: z.number().int().min(320).max(16384).default(1920),
@@ -1539,6 +1542,7 @@ export const drawingCommandSchema = z.object({
 });
 export const sceneCanvasConfigSchema = z.object({
   actionId: actionIdSchema,
+  titleLabel: cartographicLabelSchema.nullable().optional(),
   revision: z.number().int().nonnegative(),
   name: z.string().trim().min(1).max(100).optional(),
   mapAssetId: z.string().uuid().nullable().optional(),
@@ -2137,6 +2141,7 @@ export type ArchiveWorldMap = z.infer<typeof archiveWorldMapSchema>;
 export const createWorldMapLocationSchema = z
   .object({
     actionId: actionIdSchema,
+    label: cartographicLabelSchema.nullable().optional(),
     mapId: z.string().uuid(),
     canonicalLocationId: z.string().uuid().nullable().optional(),
     name: z.string().trim().min(1).max(120),
@@ -2157,6 +2162,7 @@ export type CreateWorldMapLocation = z.infer<
 export const updateWorldMapLocationSchema = z
   .object({
     actionId: actionIdSchema,
+    label: cartographicLabelSchema.nullable().optional(),
     locationId: z.string().uuid(),
     revision: z.number().int().nonnegative(),
     name: z.string().trim().min(1).max(120).optional(),
@@ -2178,7 +2184,8 @@ export const updateWorldMapLocationSchema = z
       command.visibility !== undefined ||
       command.x !== undefined ||
       command.y !== undefined ||
-      command.canonicalLocationId !== undefined,
+      command.canonicalLocationId !== undefined ||
+      command.label !== undefined,
     "At least one location field is required",
   );
 export type UpdateWorldMapLocation = z.infer<
@@ -2679,6 +2686,7 @@ export interface CharacterCatalogEntryDto extends CatalogEntryDto {
 
 export interface SceneDto {
   id: string;
+  titleLabel?: CartographicLabelConfig | null;
   name: string;
   projection: Projection;
   mapAssetId: string | null;
@@ -2776,6 +2784,7 @@ export interface WorldMapDto {
 /** Location cards contain no inferred routes, distances, or travel state. */
 export interface WorldMapLocationDto {
   id: string;
+  label?: CartographicLabelConfig | null;
   mapId: string;
   /** Omitted when the associated canonical location is not visible to this viewer. */
   canonicalLocationId?: string | null;

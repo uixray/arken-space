@@ -1,6 +1,7 @@
+import { areaPendingKey, readAreaPending, writeAreaPending, clearAreaPending, type StoredAreaCommand } from "./ability-area-pending";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { abilityAreaCircle, abilityAreaResultSchema, type AbilityAreaApply, type GameSnapshot, type SceneDto } from "@arken/contracts";
-import { api, ApiError } from "./api";
+import { api, formatApiError } from "./api";
 import { useLatestRef } from "./use-latest-ref";
 
 type Draft = {
@@ -10,6 +11,8 @@ type Draft = {
   characterId: string;
   entryId: string;
   entryRevision: number;
+  consumesItem?: boolean;
+  cancellationRequested?: true;
   sceneId: string;
   name: string;
   radiusMeters: number;
@@ -68,10 +71,33 @@ export function useAbilityArea(context: Context) {
   const [pending, setPending] = useState(false);
   const pendingRef = useRef(false);
   const [error, setError] = useState("");
+  const [storageError, setStorageError] = useState("");
+  const [notice, setNotice] = useState<{ campaignId: string; membershipId: string; text: string } | null>(null);
   const replaceDraft = useCallback((value: Draft | null) => {
     draftRef.current = value;
     setDraft(value);
   }, []);
+
+  useEffect(() => {
+    const campaignId = context.snapshot?.campaign.id, membershipId = context.snapshot?.me.id;
+    if (!campaignId || !membershipId) { replaceDraft(null); setStorageError(""); return; }
+    const key = areaPendingKey(campaignId, membershipId);
+    const sync = () => {
+      try {
+        const stored = readAreaPending(campaignId, membershipId);
+        setStorageError("");
+        if (stored) { replaceDraft({ ...stored, failed: false }); setError(""); }
+        else {
+          const old = draftRef.current;
+          if (old?.request || old?.campaignId !== campaignId || old?.membershipId !== membershipId) replaceDraft(null);
+        }
+      } catch (e) { setStorageError(formatApiError(e)); }
+    };
+    sync();
+    const changed = (e: StorageEvent) => { if (e.key === key || e.key === null) sync(); };
+    window.addEventListener("storage", changed);
+    return () => window.removeEventListener("storage", changed);
+  }, [context.snapshot?.campaign.id, context.snapshot?.me.id, replaceDraft]);
 
   useEffect(() => {
     const value = draftRef.current;
@@ -95,6 +121,8 @@ export function useAbilityArea(context: Context) {
     if (!current.snapshot || !current.scene || current.previewing || current.snapshot.campaign.paused)
       throw new Error("Откройте игровую сцену без режима предпросмотра и перерыва.");
     if (entry.revision !== entryRevision) throw new Error("Способность изменилась. Откройте её заново.");
+    const saved = readAreaPending(current.snapshot.campaign.id, current.snapshot.me.id);
+    if (saved) { replaceDraft({ ...saved, failed: false }); throw new Error("Сначала восстановите сохранённое применение области."); }
     const next: Draft = { id: crypto.randomUUID(), campaignId: current.snapshot.campaign.id,
       membershipId: current.snapshot.me.id, characterId, entryId, entryRevision,
       sceneId: current.scene.id, name: entry.name, radiusMeters: entry.data.areaEffect.radiusMeters,
@@ -114,67 +142,83 @@ export function useAbilityArea(context: Context) {
     replaceDraft({ ...value, tokenId });
     setError("");
   }, [latest, replaceDraft]);
-  const cancel = useCallback(() => {
-    const value = draftRef.current;
-    if (pendingRef.current || (value?.request && !value.failed)) return;
-    replaceDraft(null);
-    setError("");
-  }, [replaceDraft]);
-
-  const confirm = useCallback(async () => {
-    const value = draftRef.current;
-    const current = latest.current;
+  const send = useCallback(async (cancelRequest: boolean) => {
+    const value = draftRef.current, current = latest.current;
     const view = viewOf(value, current);
-    if (!value || pendingRef.current || value.failed || !view.sameActor || current.previewing) return;
-    if (!value.request && (view.blocked || !view.origin || !current.scene)) return;
+    if (!value || pendingRef.current || !view.sameActor) return;
+    if (!value.request && (cancelRequest || current.previewing || view.blocked || !view.origin || !current.scene)) return;
     const request: AbilityAreaApply = value.request ?? {
       actionId: value.id, characterId: value.characterId, entryId: value.entryId,
-      entryRevision: value.entryRevision, sceneId: value.sceneId,
-      sceneRevision: current.scene!.revision ?? 0, casterTokenId: view.origin!.id,
-      casterTokenRevision: view.origin!.revision,
+      entryRevision: value.entryRevision, sceneId: value.sceneId, sceneRevision: current.scene!.revision ?? 0,
+      casterTokenId: view.origin!.id, casterTokenRevision: view.origin!.revision,
     };
-    pendingRef.current = true;
-    setPending(true);
-    replaceDraft({ ...value, request });
-    setError("");
-    const stillCurrent = () => draftRef.current?.id === value.id &&
-      latest.current.snapshot?.campaign.id === value.campaignId && latest.current.snapshot?.me.id === value.membershipId;
-    // Ending the wait is not cancelling the server mutation. A timeout remains
-    // ambiguous and may only be followed by replay of this immutable command.
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 30_000);
+    const { failed: _failed, ...metadata } = value;
+    let command: StoredAreaCommand = { ...metadata, tokenId: request.casterTokenId, request };
+    const key = areaPendingKey(value.campaignId, value.membershipId);
+    const sameActor = () => latest.current.snapshot?.campaign.id === value.campaignId && latest.current.snapshot?.me.id === value.membershipId;
+    pendingRef.current = true; setPending(true); setError(""); setNotice(null);
     try {
-      abilityAreaResultSchema.parse(await api("/api/abilities/area/apply", { method: "POST",
-        signal: controller.signal, headers: { "x-action-id": request.actionId }, body: JSON.stringify(request) }));
-      if (!stillCurrent()) return;
-      replaceDraft(null);
-      try { await current.load(); }
-      catch { latest.current.setError("Способность применена, но данные не обновились. Обновите страницу; повторно применять не нужно."); }
+      if (!navigator.locks) throw new Error("Для безопасного восстановления нужен браузер с Web Locks и HTTPS или localhost.");
+      await navigator.locks.request(`arken-area:${key}`, { mode: "exclusive", ifAvailable: true }, async lock => {
+        if (!lock) throw new Error("Применение области выполняется в другой вкладке.");
+        if (!sameActor()) throw new Error("Участник или кампания изменились.");
+        const saved = readAreaPending(value.campaignId, value.membershipId);
+        if (value.request && !saved) {
+          // Another tab may already have reconciled this command. Do not
+          // resurrect it from stale in-memory state; refresh the projection.
+          replaceDraft(null); await current.load(); return;
+        }
+        // Persist cancellation before sending it, and honor an intent saved by
+        // another tab even when this tab still displays the older apply state.
+        if (cancelRequest || saved?.cancellationRequested)
+          command = { ...command, cancellationRequested: true };
+        writeAreaPending(command);
+        replaceDraft({ ...command, failed: false }); setStorageError("");
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 30_000);
+        try {
+          const receipt = abilityAreaResultSchema.parse(await api(`/api/abilities/area/${command.cancellationRequested ? "cancel" : "apply"}`, {
+            method: "POST", signal: controller.signal, body: JSON.stringify(command.request),
+            headers: { "x-action-id": command.id, "x-entry-campaign": command.campaignId, "x-entry-member": command.membershipId },
+          }));
+          if (receipt.actionId !== command.id) throw new Error("Ответ не подтверждает сохранённую команду области.");
+          clearAreaPending(command);
+          if (!sameActor()) return;
+          if (draftRef.current?.id === command.id) replaceDraft(null);
+          setNotice({ campaignId: command.campaignId, membershipId: command.membershipId,
+            text: "cancelled" in receipt ? "Команда области отменена сервером без применения." : "Применение области подтверждено сервером." });
+          try { await current.load(); }
+          catch { latest.current.setError("Результат области подтверждён, но данные не обновились. Обновите страницу без нового применения."); }
+        } finally { window.clearTimeout(timeout); }
+      });
     } catch (reason) {
-      if (!stillCurrent()) return;
-      const rejected = reason instanceof ApiError && reason.code !== "AREA_RETRY" &&
-        (reason.details?.notApplied === true || (!value.request && [400, 401, 403, 404, 409].includes(reason.status)));
-      replaceDraft({ ...value, request, failed: rejected });
-      setError(reason instanceof ApiError ? reason.message : "Ответ не получен. Подтвердите результат повтором того же запроса.");
-      if (rejected) {
-        try { await current.load(); } catch { /* Keep the explicit rejection visible. */ }
-      }
-    } finally {
-      window.clearTimeout(timeout);
-      pendingRef.current = false;
-      setPending(false);
-    }
+      if (!sameActor()) return;
+      try {
+        const saved = readAreaPending(value.campaignId, value.membershipId);
+        if (saved) replaceDraft({ ...saved, failed: false });
+      } catch (e) { setStorageError(formatApiError(e)); }
+      setError(formatApiError(reason));
+    } finally { pendingRef.current = false; setPending(false); }
   }, [latest, replaceDraft]);
+  const confirm = useCallback(() => send(false), [send]);
+  const cancel = useCallback(() => {
+    if (pendingRef.current) return;
+    if (draftRef.current?.request) {
+      if (window.confirm("Отменить только невыполненную команду области? Уже применённый эффект не будет отменён.")) void send(true);
+    } else { replaceDraft(null); setError(""); }
+  }, [send, replaceDraft]);
 
   const view = viewOf(draft, context);
   return {
-    prepare, selectOrigin, cancel, confirm, pending, error,
+    prepare, selectOrigin, cancel, confirm, pending, error, storageError,
+    notice: notice?.campaignId === context.snapshot?.campaign.id && notice?.membershipId === context.snapshot?.me.id ? notice?.text ?? "" : "",
+    dismissNotice: () => setNotice(null),
     draft: view.sameActor ? draft : null,
     tokens: view.tokens,
     blocked: view.blocked,
-    canConfirm: Boolean(draft && !pending && !draft.failed && !context.previewing && view.sameActor &&
-      (draft.request || !view.blocked)),
-    canCancel: !pending && (!draft?.request || draft.failed),
+    canConfirm: Boolean(draft && !pending && !storageError && view.sameActor &&
+      (draft.request || (!context.previewing && !view.blocked))),
+    canCancel: !pending && !storageError,
     preview: draft && !draft.request && view.circle && !context.snapshot?.campaign.paused ? {
       sceneId: draft.sceneId, tokenId: draft.tokenId, radiusMeters: draft.radiusMeters, circle: view.circle,
     } : null,

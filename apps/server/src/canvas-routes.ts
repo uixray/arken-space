@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import {
   actionJournal,
+  campaigns,
   drawings,
   tokens,
   assets,
@@ -8,9 +9,10 @@ import {
   gameEvents,
   scenes,
   tokenControllers,
+  tokenDefinitions,
 } from "@arken/db";
 import { LAYERED_DRAWING_KINDS, isStampDrawing } from "./drawing-kinds.js";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   canvasBulkCommandSchema,
@@ -25,6 +27,57 @@ type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type CanvasDatabase = ReturnType<
   typeof import("./campaign-pause-guard.js").campaignCanvasDatabase
 >;
+type CanvasTransaction = import("./campaign-pause-guard.js").CampaignCanvasTransaction;
+
+/** History ownership is not a permanent grant of control over a token. */
+async function playerCanReplayTokens(
+  tx: CanvasTransaction,
+  command: typeof actionJournal.$inferSelect,
+  campaignId: string,
+  membershipId: string,
+) {
+  if (command.targetType !== "TOKEN" && command.targetType !== "CANVAS_BULK") return true;
+  const record = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  const historical = new Map<string, Record<string, unknown>>();
+  if (command.targetType === "TOKEN") {
+    for (const value of [command.before, command.after]) {
+      const row = record(value);
+      if (row && typeof row.definitionId === "string") historical.set(command.targetId, row);
+    }
+  } else {
+    for (const value of [command.before, command.after]) {
+      const snapshot = record(value);
+      if (!snapshot || !Array.isArray(snapshot.tokens)) return false;
+      for (const value of snapshot.tokens) {
+        const row = record(value);
+        if (!row || typeof row.id !== "string" || typeof row.definitionId !== "string") return false;
+        historical.set(row.id, row);
+      }
+    }
+  }
+  const ids = command.targetType === "TOKEN" ? [command.targetId] : [...historical.keys()];
+  if (!ids.length) return true;
+  const current = await tx.select().from(tokens).where(inArray(tokens.id, ids));
+  const currentById = new Map(current.map(row => [row.id, row]));
+  const definitionIds = new Set<string>();
+  for (const id of ids) {
+    const row = currentById.get(id) ?? historical.get(id);
+    if (!row || typeof row.definitionId !== "string" || row.sceneId !== command.sceneId ||
+        row.visible !== true || row.layer !== "PLAYER" ||
+        (row.locked !== false && command.type !== "TOKEN_CONDITIONS")) return false;
+    definitionIds.add(row.definitionId);
+  }
+  const ordered = [...definitionIds].sort();
+  const definitions = await tx.select({ id: tokenDefinitions.id }).from(tokenDefinitions)
+    .where(and(eq(tokenDefinitions.campaignId, campaignId), inArray(tokenDefinitions.id, ordered)))
+    .orderBy(asc(tokenDefinitions.id)).for("share");
+  if (definitions.length !== ordered.length) return false;
+  const controllers = await tx.select({ id: tokenControllers.tokenDefinitionId }).from(tokenControllers)
+    .where(and(inArray(tokenControllers.tokenDefinitionId, ordered), eq(tokenControllers.membershipId, membershipId)));
+  const controlled = new Set(controllers.map(row => row.id));
+  return ordered.every(id => controlled.has(id));
+}
 
 function historyContainsStamp(command: typeof actionJournal.$inferSelect) {
   const snapshots = [command.before, command.after];
@@ -102,9 +155,12 @@ export function registerCanvasRoutes(
   {
     canvasTx,
     broadcast,
+    testHooks,
   }: {
     canvasTx: (campaignId: string) => CanvasDatabase;
     broadcast: (campaignId: string) => Promise<void>;
+    testHooks?: { beforeBulkTransaction?: () => Promise<void>; afterBulkAuthorityLock?: () => Promise<void>;
+      beforeHistoryTransaction?: () => Promise<void>; afterHistoryAuthorityLock?: () => Promise<void> };
   },
 ) {
   app.post("/api/canvas/bulk", async (request, reply) => {
@@ -130,6 +186,11 @@ export function registerCanvasRoutes(
       )
       .limit(1);
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    if (auth.role !== "GM") {
+      const [campaign] = await db.select({ activeSceneId: campaigns.activeSceneId }).from(campaigns)
+        .where(eq(campaigns.id, auth.campaignId)).limit(1);
+      if (campaign?.activeSceneId !== scene.id) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    }
     const tokenIds = body.targets
       .filter((target) => target.targetType === "TOKEN")
       .map((target) => target.targetId);
@@ -209,9 +270,30 @@ export function registerCanvasRoutes(
       )
         return reply.code(403).send({ error: "CANVAS_TARGET_FORBIDDEN" });
     }
+    await testHooks?.beforeBulkTransaction?.();
     const guardedDb = canvasTx(auth.campaignId);
     const result = await guardedDb
       .transaction(async (tx) => {
+        if (auth.role !== "GM") {
+          const [campaign] = await tx.select({ activeSceneId: campaigns.activeSceneId }).from(campaigns)
+            .where(eq(campaigns.id, auth.campaignId)).limit(1);
+          if (campaign?.activeSceneId !== scene.id) return "inactive" as const;
+        }
+        if (auth.role !== "GM" && tokenRows.length) {
+          // Controller edits update the definition row before replacing its
+          // controller rows. Hold a shared lock and re-read permissions after
+          // acquiring it, so a committed revocation cannot race this write.
+          const definitionIds = [...new Set(tokenRows.map(row => row.definitionId))].sort();
+          const definitions = await tx.select({ id: tokenDefinitions.id }).from(tokenDefinitions)
+            .where(and(eq(tokenDefinitions.campaignId, auth.campaignId), inArray(tokenDefinitions.id, definitionIds)))
+            .orderBy(asc(tokenDefinitions.id)).for("share");
+          if (definitions.length !== definitionIds.length) throw new Error("BULK_FORBIDDEN");
+          const currentControllers = await tx.select({ id: tokenControllers.tokenDefinitionId }).from(tokenControllers)
+            .where(and(inArray(tokenControllers.tokenDefinitionId, definitionIds), eq(tokenControllers.membershipId, auth.membershipId)));
+          const controlledIds = new Set(currentControllers.map(row => row.id));
+          if (definitionIds.some(id => !controlledIds.has(id))) throw new Error("BULK_FORBIDDEN");
+          await testHooks?.afterBulkAuthorityLock?.();
+        }
         await invalidateRedoBranch(tx, auth, scene.id);
         const afterTokens: (typeof tokens.$inferSelect)[] = [];
         const afterDrawings: (typeof drawings.$inferSelect)[] = [];
@@ -333,11 +415,13 @@ export function registerCanvasRoutes(
         });
         return after;
       })
-      .catch((error: unknown) =>
-        error instanceof Error && error.message === "BULK_CONFLICT"
-          ? null
-          : Promise.reject(error),
-      );
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.message === "BULK_CONFLICT") return null;
+        if (error instanceof Error && error.message === "BULK_FORBIDDEN") return "forbidden" as const;
+        return Promise.reject(error);
+      });
+    if (result === "inactive") return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    if (result === "forbidden") return reply.code(403).send({ error: "CANVAS_TARGET_FORBIDDEN" });
     if (!result) return reply.code(409).send({ error: "CANVAS_BULK_CONFLICT" });
     await broadcast(auth.campaignId);
     return { ok: true, ...result };
@@ -358,6 +442,11 @@ export function registerCanvasRoutes(
       )
       .limit(1);
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    if (auth.role !== "GM") {
+      const [campaign] = await db.select({ activeSceneId: campaigns.activeSceneId }).from(campaigns)
+        .where(eq(campaigns.id, auth.campaignId)).limit(1);
+      if (campaign?.activeSceneId !== scene.id) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    }
     const historyColumns = {
       sequence: actionJournal.sequence,
       actorMembershipId: actionJournal.actorMembershipId,
@@ -370,6 +459,7 @@ export function registerCanvasRoutes(
     const visibleHistory = and(
       eq(actionJournal.campaignId, auth.campaignId),
       eq(actionJournal.sceneId, scene.id),
+      auth.role === "GM" ? undefined : sql`exists (select 1 from campaigns where campaigns.id = ${auth.campaignId} and campaigns.active_scene_id = ${scene.id})`,
       auth.role === "GM"
         ? undefined
         : and(
@@ -428,6 +518,11 @@ export function registerCanvasRoutes(
       const body = historyCommandSchema.parse(request.body);
       if (await findAction(db, auth.campaignId, body.actionId))
         return reply.code(200).send({ duplicate: true });
+      if (auth.role !== "GM") {
+        const [campaign] = await db.select({ activeSceneId: campaigns.activeSceneId }).from(campaigns)
+          .where(eq(campaigns.id, auth.campaignId)).limit(1);
+        if (campaign?.activeSceneId !== body.sceneId) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+      }
       const desiredStatus = direction === "undo" ? "APPLIED" : "UNDONE";
       const [candidateCommand] = await db
         .select()
@@ -453,9 +548,15 @@ export function registerCanvasRoutes(
       // instances are never player-editable—even while their layer is public.
       if (auth.role !== "GM" && historyContainsStamp(candidateCommand))
         return reply.code(403).send({ error: "STAMP_FORBIDDEN" });
+      await testHooks?.beforeHistoryTransaction?.();
       const guardedDb = canvasTx(auth.campaignId);
       const saved = await guardedDb
         .transaction(async (tx) => {
+          if (auth.role !== "GM") {
+            const [campaign] = await tx.select({ activeSceneId: campaigns.activeSceneId }).from(campaigns)
+              .where(eq(campaigns.id, auth.campaignId)).limit(1);
+            if (campaign?.activeSceneId !== body.sceneId) return "inactive" as const;
+          }
           // Every canvas mutation that can create or restore tokens takes the
           // scene lock first. Grid rescale uses the same lock, making token
           // placement and history replay linearizable with the rescale.
@@ -471,6 +572,10 @@ export function registerCanvasRoutes(
             .where(eq(actionJournal.sequence, candidateCommand.sequence))
             .limit(1);
           if (!command || command.status !== desiredStatus) return null;
+          if (auth.role !== "GM" && !(await playerCanReplayTokens(tx, command, auth.campaignId, auth.membershipId)))
+            return "forbidden" as const;
+          if (auth.role !== "GM" && ["TOKEN", "CANVAS_BULK"].includes(command.targetType))
+            await testHooks?.afterHistoryAuthorityLock?.();
           const snapshot =
             direction === "undo" ? command.before : command.after;
           let targetRevision = command.currentRevision;
@@ -900,6 +1005,7 @@ export function registerCanvasRoutes(
                 height?: number;
                 baseColor?: string;
                 frameColor?: string | null;
+                conditions?: typeof tokens.$inferSelect.conditions;
               } | null;
               if (!values || targetRevision === null) return null;
               const [updated] = await tx
@@ -924,6 +1030,7 @@ export function registerCanvasRoutes(
                   ...(values.frameColor !== undefined
                     ? { frameColor: values.frameColor }
                     : {}),
+                  ...(values.conditions !== undefined ? { conditions: values.conditions } : {}),
                   revision: targetRevision + 1,
                   updatedAt: new Date(),
                 })
@@ -970,6 +1077,7 @@ export function registerCanvasRoutes(
             if (snapshot === null) return null;
             const values = snapshot as {
               name?: string;
+              titleLabel?: typeof scenes.$inferSelect.titleLabel;
               mapAssetId?: string | null;
               grid: typeof scenes.$inferSelect.grid;
               mapScale: number;
@@ -1075,6 +1183,7 @@ export function registerCanvasRoutes(
               .update(scenes)
               .set({
                 ...(values.name !== undefined ? { name: values.name } : {}),
+                ...(values.titleLabel !== undefined ? { titleLabel: values.titleLabel } : {}),
                 ...(values.mapAssetId !== undefined
                   ? { mapAssetId: values.mapAssetId }
                   : {}),
@@ -1151,6 +1260,8 @@ export function registerCanvasRoutes(
             ? null
             : Promise.reject(error),
         );
+      if (saved === "inactive") return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+      if (saved === "forbidden") return reply.code(403).send({ error: "CANVAS_TARGET_FORBIDDEN" });
       if (!saved)
         return reply.code(409).send({ error: "HISTORY_CONFLICT_RESYNC" });
       await broadcast(auth.campaignId);
@@ -1263,6 +1374,7 @@ export function registerCanvasRoutes(
           .update(scenes)
           .set({
             ...(body.name !== undefined ? { name: body.name } : {}),
+            ...(body.titleLabel !== undefined ? { titleLabel: body.titleLabel } : {}),
             ...(body.mapAssetId !== undefined
               ? { mapAssetId: body.mapAssetId }
               : {}),
@@ -1360,6 +1472,7 @@ export function registerCanvasRoutes(
           entityRevision: next.revision,
           payload: {
             name: next.name,
+            titleLabel: next.titleLabel,
             mapAssetId: next.mapAssetId,
             grid: next.grid,
             mapScale: next.mapScale,
@@ -1385,6 +1498,7 @@ export function registerCanvasRoutes(
           targetId: id,
           before: {
             name: current.name,
+            titleLabel: current.titleLabel,
             mapAssetId: current.mapAssetId,
             grid: current.grid,
             mapScale: current.mapScale,
@@ -1401,6 +1515,7 @@ export function registerCanvasRoutes(
           },
           after: {
             name: next.name,
+            titleLabel: next.titleLabel,
             mapAssetId: next.mapAssetId,
             grid: next.grid,
             mapScale: next.mapScale,

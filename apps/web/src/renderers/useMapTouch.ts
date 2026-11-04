@@ -205,13 +205,17 @@ export function useMapTouch(config: Config) {
         });
       }
       const c = latest.current.camera;
+      const tool = event.isPrimary ? latest.current.startTool?.(point) ?? null : null;
       gesture.current = {
         scope: latest.current.scope,
         start: point,
         position: c.position,
         scale: c.scale,
-        token: event.isPrimary ? latest.current.hit(point) : null,
-        tool: event.isPrimary ? latest.current.startTool?.(point) ?? null : null,
+        // A drawing/ruler/fog tool owns the whole gesture, even over a token.
+        // Otherwise its pointer-up could both finish the tool and move/select
+        // the underlying token.
+        token: event.isPrimary && !tool ? latest.current.hit(point) : null,
+        tool,
         moved: false,
         // Another contact may be on a toolbar or outside this renderer. Such
         // a partial sequence can navigate with two map fingers, never commit.
@@ -254,6 +258,7 @@ export function useMapTouch(config: Config) {
     if (g.multi) {
       if (points.current.size < 2) return;
       const [a, b] = [...points.current.values()];
+      if (!a || !b) return;
       const center = midpoint(a, b);
       const scale = Math.min(
         3,

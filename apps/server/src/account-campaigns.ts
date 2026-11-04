@@ -134,6 +134,7 @@ async function ownedMembership(
     .where(
       and(
         eq(memberships.userId, userId),
+        isNull(memberships.accessRevokedAt),
         eq(memberships.campaignId, campaignId),
         ...(role ? [eq(memberships.role, role)] : []),
       ),
@@ -177,8 +178,10 @@ async function replaceSelectedGameSession(
         and(
           eq(memberships.id, membershipId),
           eq(memberships.userId, parent.userId),
+          isNull(memberships.accessRevokedAt),
         ),
       )
+      .for("update")
       .limit(1);
     if (!membership) return null;
     const previous = await tx
@@ -264,7 +267,7 @@ export function registerAccountCampaignRoutes(
           gt(sessions.expiresAt, new Date()),
         ),
       )
-      .where(eq(memberships.userId, account.userId));
+      .where(and(eq(memberships.userId, account.userId), isNull(memberships.accessRevokedAt)));
     return reply.header("cache-control", "no-store").send(
       accountCampaignListSchema.parse({
         campaigns: rows.map((row) => ({
@@ -358,6 +361,7 @@ export function registerAccountCampaignRoutes(
               and(
                 eq(memberships.campaignId, accountCampaignCreations.campaignId),
                 eq(memberships.userId, account.userId),
+                isNull(memberships.accessRevokedAt),
                 eq(memberships.role, "GM"),
               ),
             )
@@ -679,6 +683,7 @@ export function registerAccountCampaignRoutes(
               .where(and(
                 eq(memberships.campaignId, previous.campaignId),
                 eq(memberships.userId, account.userId),
+                isNull(memberships.accessRevokedAt),
               ))
               .limit(1);
             return membership

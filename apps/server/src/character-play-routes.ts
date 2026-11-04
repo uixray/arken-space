@@ -1,5 +1,6 @@
 import { sameInspiration } from "./character-extras-routes.js";
 import { applyAbilityArea } from "./ability-area-apply.js";
+import { cancelAbilityArea } from "./ability-area-state.js";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
 import type {
@@ -110,9 +111,27 @@ export function registerCharacterPlayRoutes(
     ) => Promise<void>;
   },
 ) {
+  app.post("/api/abilities/area/cancel", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (request.headers["x-entry-campaign"] !== auth.campaignId || request.headers["x-entry-member"] !== auth.membershipId)
+      return reply.code(409).send({ error: "ENTRY_CONTEXT_CHANGED" });
+    const parsed = abilityAreaApplySchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_AREA_COMMAND" });
+    try { return await cancelAbilityArea(db, auth, parsed.data); }
+    catch (error) {
+      if (error instanceof Error && error.message === "ACTION_CONFLICT") return reply.code(409).send({ error: "ACTION_CONFLICT" });
+      if (error instanceof Error && error.message === "AREA_FORBIDDEN") return reply.code(403).send({ error: "AREA_FORBIDDEN" });
+      throw error;
+    }
+  });
+
   app.post("/api/abilities/area/apply", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
+    if ((request.headers["x-entry-campaign"] !== undefined && request.headers["x-entry-campaign"] !== auth.campaignId) ||
+        (request.headers["x-entry-member"] !== undefined && request.headers["x-entry-member"] !== auth.membershipId))
+      return reply.code(409).send({ error: "ENTRY_CONTEXT_CHANGED" });
     const parsed = abilityAreaApplySchema.safeParse(request.body);
     if (!parsed.success)
       return reply.code(400).send({ error: "INVALID_AREA_COMMAND", message: "Проверьте параметры применения области." });

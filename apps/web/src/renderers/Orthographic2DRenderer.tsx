@@ -1,4 +1,5 @@
 import { useMapTouch } from "./useMapTouch";
+import { PositionedCartographicLabel } from "../PositionedCartographicLabel";
 import { mapDeleteScope, type MapDeleteRequest } from "./map-delete";
 import {
   memo,
@@ -3473,7 +3474,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           if (ended) return;
           const point = worldPoint(screen);
           const previous = points[points.length - 1];
-          if (point.x === previous.x && point.y === previous.y) return;
+          if (previous && point.x === previous.x && point.y === previous.y) return;
           points = [...points, point];
           if (tool === "DRAW")
             setDrawingPoints(points.flatMap((item) => [item.x, item.y]));
@@ -3640,6 +3641,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   return (
     <div
       className="map-viewport"
+      data-cartographic-boundary
       data-terrain-stamp-count={
         props.drawings.filter((drawing) => drawing.kind === "STAMP").length
       }
@@ -3735,6 +3737,10 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       }}
       onContextMenu={(event) => event.preventDefault()}
     >
+      {props.scene.titleLabel && <h2 className="scene-cartographic-title">
+        <PositionedCartographicLabel text={props.scene.name} config={props.scene.titleLabel}
+          layoutKey={props.scene.id} />
+      </h2>}
       {props.externalObjectListOpen === undefined && (
         <button
           ref={objectListTriggerRef}

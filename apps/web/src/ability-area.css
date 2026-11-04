@@ -23,3 +23,14 @@
 @media (max-width: 767px) {
   .ability-area-panel { max-height: 42%; }
 }
+
+/* Sent-command recovery stays outside hidden map/compact surfaces. */
+.ability-area-panel--recovery {
+  position: fixed;
+  z-index: 90;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  width: min(360px, calc(100vw - 24px));
+  max-height: 50dvh;
+}
+.ability-area-panel--recovery .muted { overflow-wrap: anywhere; }

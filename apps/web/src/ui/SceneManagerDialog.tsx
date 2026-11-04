@@ -16,9 +16,12 @@ import { FormInput, FormSelect } from "./GravityFormControls";
 import { useEntityForm } from "./useEntityForm";
 import { EntityConflictError } from "./useEntityForm";
 import { ApiError } from "../api";
+import { CartographicLabelFields } from "../CartographicLabelFields";
+import type { CartographicLabelConfig } from "@arken/contracts";
 
 export type SceneDraft = {
   name: string;
+  titleLabel?: CartographicLabelConfig | null;
   mapAssetId: string | null;
   width: number;
   height: number;
@@ -76,6 +79,7 @@ function draftFromScene(scene?: SceneDto): SceneDraft {
   const backgroundFrame = scene?.backgroundFrame;
   return {
     name: scene?.name ?? "Новая сцена",
+    titleLabel: scene?.titleLabel ?? null,
     mapAssetId: scene?.mapAssetId ?? null,
     width: scene?.width ?? 1920,
     height: scene?.height ?? 1080,
@@ -409,6 +413,8 @@ function SceneEditor({
       onClose={onCancel}
     >
       <form className="scene-editor" onSubmit={submit} noValidate>
+        <CartographicLabelFields optionalTitle value={form.state.draft.titleLabel} name={form.state.draft.name}
+          onChange={titleLabel => form.update({ titleLabel })} />
         <label className="field">
           Название
           <FormInput

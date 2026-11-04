@@ -1751,6 +1751,7 @@ export function App() {
           className={`app-shell${compact ? " app-shell--compact" : ""}`}
           data-compact-surface={compact ? compactSurface : undefined}
         >
+          <AbilityAreaPanel area={abilityArea} isGm={snapshot.me.role === "GM"} recoveryOnly />
           {/* UIX-532: без этой ссылки путь с клавиатуры к карте проходит через
             всю верхнюю панель. Прячется, пока рабочая область открыта поверх
             карты: там карта помечена `aria-hidden`, и уводить фокус в

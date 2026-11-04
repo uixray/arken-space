@@ -79,6 +79,7 @@ export function useSceneActions(dependencies: {
                 body: JSON.stringify({
                   actionId: crypto.randomUUID(),
                   name: draft.name,
+                  titleLabel: draft.titleLabel,
                   mapAssetId: draft.mapAssetId,
                   width: draft.width,
                   height: draft.height,
@@ -101,6 +102,7 @@ export function useSceneActions(dependencies: {
                 actionId: crypto.randomUUID(),
                 revision: scene.revision ?? 0,
                 name: draft.name,
+                titleLabel: draft.titleLabel,
                 mapAssetId: draft.mapAssetId,
                 world: { width: draft.width, height: draft.height },
                 grid: sceneGrid(draft),

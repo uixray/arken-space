@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
+import { areaApplicationHash, areaApplicationReplay } from "./ability-area-state.js";
+import { lockEntryApplication } from "./entry-application-state.js";
 import { and, asc, eq } from "drizzle-orm";
-import { z } from "zod";
 import { abilityAreaApplySchema, entryDataSchema, fogHiddenTokenIds, gridSchema } from "@arken/contracts";
 import { campaigns, characters, characterControllers, characterCatalogEntries,
   memberships, scenes, tokens, tokenDefinitions, tokenControllers, fogReveals,
@@ -20,19 +20,16 @@ type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 export async function applyAbilityArea(db: Database,
   auth: { campaignId: string; membershipId: string }, input: unknown) {
   const command = abilityAreaApplySchema.parse(input);
-  const requestHash = createHash("sha256").update(JSON.stringify(command)).digest("hex");
+  const requestHash = areaApplicationHash(command);
   return db.transaction(async (tx) => {
+    await lockEntryApplication(tx, auth.campaignId, command.actionId);
     const [actor] = await tx.select().from(memberships).where(and(
-      eq(memberships.id, auth.membershipId), eq(memberships.campaignId, auth.campaignId))).limit(1);
-    if (!actor) throw new Error("AREA_FORBIDDEN");
+      eq(memberships.id, auth.membershipId), eq(memberships.campaignId, auth.campaignId))).limit(1).for("share");
+    if (!actor || actor.accessRevokedAt) throw new Error("AREA_FORBIDDEN");
     const [prior] = await tx.select().from(gameEvents).where(and(
       eq(gameEvents.campaignId, auth.campaignId), eq(gameEvents.actionId, command.actionId))).limit(1);
     if (prior) {
-      const receipt = z.object({ requestHash: z.string(), messageId: z.string().uuid() }).safeParse(prior.payload);
-      if (prior.type !== "ability.area.applied" || prior.membershipId !== actor.id ||
-          !receipt.success || receipt.data.requestHash !== requestHash || receipt.data.messageId !== prior.entityId)
-        throw new Error("ACTION_CONFLICT");
-      return { duplicate: true, messageId: receipt.data.messageId };
+      return areaApplicationReplay(prior, actor.id, requestHash);
     }
     // Same campaign-first lock order as canvas/pause commands. Geometry cannot
     // move underneath this application; serializable reads cover ownership too.
@@ -126,6 +123,6 @@ export async function applyAbilityArea(db: Database,
       membershipId: actor.id, type: "ability.area.applied", entityType: "chat", entityId: message.id,
       entityRevision: entry.revision + 1, payload: { requestHash, messageId: message.id,
         entryId: entry.id, sceneId: scene.id, sharedRoll: roll.total, effects: plan.effects, spent: plan.spent } });
-    return { duplicate: false, messageId: message.id };
+    return { actionId: command.actionId, duplicate: false, messageId: message.id };
   }, { isolationLevel: "serializable" });
 }
