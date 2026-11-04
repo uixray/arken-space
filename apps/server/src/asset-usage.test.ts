@@ -36,6 +36,7 @@ const usage = (kind: AssetUsageDto["kind"]): AssetUsageDto => ({
 describe("asset dependency registry", () => {
   it("covers every schema-confirmed asset relation and audit provenance", () => {
     expect(ASSET_DEPENDENCY_REGISTRY).toEqual([
+      "ACHIEVEMENT_ICON",
       "SCENE_BACKGROUND",
       "TOKEN_DEFINITION",
       "TOKEN_INSTANCE",

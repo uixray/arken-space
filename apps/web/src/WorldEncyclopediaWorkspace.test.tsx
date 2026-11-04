@@ -35,6 +35,8 @@ const related = article(relatedId, "Visible Friend");
 beforeEach(() => {
   apiMock.mockReset();
   apiMock.mockImplementation((path: string) => {
+    if (path.startsWith("/api/world-content-regions?"))
+      return Promise.resolve({ items: [], hasMore: false });
     if (path === "/api/world-content" || path.startsWith("/api/world-content?"))
       return Promise.resolve(
         path.includes(`relatedTo=${subjectId}`)
@@ -108,6 +110,8 @@ describe("WorldEncyclopediaWorkspace known-relation filter", () => {
   it("does not let an obsolete list response replace the newest query", async () => {
     let releaseObsolete!: (items: unknown[]) => void;
     apiMock.mockImplementation((path: string) => {
+      if (path.startsWith("/api/world-content-regions?"))
+        return Promise.resolve({ items: [], hasMore: false });
       if (path === "/api/world-content")
         return Promise.resolve([subject, related]);
       if (path === "/api/world-content?q=older")

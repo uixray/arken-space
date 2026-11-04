@@ -14,7 +14,7 @@ const UIX289_CASES = [
   "UIX-289 real message-list clipping detaches and then restores the eligible frame",
   "UIX-289 live reduced-motion change removes and resumes the current image without hiding critical text",
   "UIX-289 one bundled-frame 404 latches a readable fallback without retry loops",
-  "UIX-289 styleFrame remains the independent active/history/reduced poster control",
+  "UIX-289 styleFrame uses the shared bounded lifecycle and static history/reduced fallback",
 ];
 
 export const UIX694_IMPACT_MAP = {

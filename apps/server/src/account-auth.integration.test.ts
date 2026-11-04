@@ -718,15 +718,8 @@ describe("additive account migration", () => {
       const files = (await readdir(migrations))
         .filter((name) => name.endsWith(".sql"))
         .sort();
-      const laterMigrations = [
-        "0049_account_auth.sql",
-        "0050_cuddly_nightshade.sql",
-        "0051_thick_saracen.sql",
-        "0053_pretty_giant_girl.sql",
-      ];
-      for (const file of files.filter(
-        (name) => !laterMigrations.includes(name),
-      ))
+      const laterMigrations = files.filter((name) => name >= "0049_");
+      for (const file of files.filter((name) => name < "0049_"))
         await legacyDatabase.exec(
           (await readFile(new URL(file, migrations), "utf8")).replaceAll(
             "--> statement-breakpoint",

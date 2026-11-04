@@ -45,12 +45,16 @@ describe("Telegram file error sanitization", () => {
         ),
       ),
     );
-    await expect(
-      createTelegramBugFileSource(syntheticToken, 1024)("synthetic-file"),
-    ).rejects.toMatchObject({
-      message: "BUG_FILE_TOO_LARGE",
-      cause: undefined,
-    });
+    try {
+      await createTelegramBugFileSource(syntheticToken, 1024)("synthetic-file");
+      expect.fail("Expected the size limit to reject the file");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      const failure = error as Error;
+      expect(failure.message).toBe("BUG_FILE_TOO_LARGE");
+      expect(failure.cause).toBeUndefined();
+      expect(failure.stack).not.toContain(syntheticToken);
+    }
   });
 
   it("sanitizes errors that occur while streaming the attachment", async () => {

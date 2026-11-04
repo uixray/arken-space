@@ -231,7 +231,7 @@ export function CharacterInventory({
               <option value="">Выберите предмет</option>
               {available.items.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.name} × {item.quantity}
+                  {item.name}, количество: {item.quantity}
                 </option>
               ))}
             </select>

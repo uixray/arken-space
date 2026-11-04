@@ -57,6 +57,7 @@ export const OPERATOR_FEEDBACK_ROUTE_KEYS = [
   "GET /api/operator/feedback/:id",
   "GET /api/operator/feedback/:id/attachments/:attachmentId",
   "GET /api/operator/feedback/:id/export",
+  "POST /api/operator/feedback/:id/export",
   "PATCH /api/operator/feedback/:id",
 ] as const satisfies readonly HttpRouteKey[];
 
@@ -66,6 +67,18 @@ export const PUBLIC_ROADMAP_ROUTE_KEYS = [
 ] as const satisfies readonly HttpRouteKey[];
 
 export const CAMPAIGN_ROUTE_KEYS = [
+  "GET /api/characters/:characterId/private-notebook",
+  "GET /api/characters/:characterId/progression",
+  "PUT /api/characters/:characterId/private-notebook",
+  "GET /api/characters/:id/inventory",
+  "GET /api/world-content-instances/:id/bindings",
+  "POST /api/characters/:characterId/inspiration/adjust",
+  "POST /api/characters/:characterId/inspiration/reroll",
+  "POST /api/characters/:characterId/progression/create",
+  "POST /api/characters/:characterId/progression/grant",
+  "POST /api/characters/:characterId/progression/action",
+  "PUT /api/world-content-instances/:id/bindings",
+  "PUT /api/token-definitions/:id/sprite-set",
   // Paired foreign/own controls in account-campaigns and character-stat-layout suites.
   "GET /api/account/campaigns/:campaignId/invites",
   "PATCH /api/characters/:characterId/stat-layout",

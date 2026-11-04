@@ -1282,3 +1282,8 @@ historical snapshots and must not be silently carried forward to these sites.
 
 - With the owner's approval (15.10) the never-wired preview chain was deleted: `ui/GravityFoundationPreview.tsx`, `ui/FuturePoolDialogs.tsx` and `ui/FoundationPreviewRoute.tsx`. No production entry or router referenced them; their buckets were preview-only / NOT_APPLICABLE_CURRENT_PRODUCT.
 - Removed buckets: `FuturePoolDialogs.tsx::tag:Select` (1), `GravityFoundationPreview.tsx::tag:Popup` (1), `GravityFoundationPreview.tsx::tag:Select` (2). The full scan denominator is now **61 buckets / 118 JSX occurrences**. `gravity-foundation.css` stays: the live app imports it.
+
+## 2026-11-04 — Current release static delta
+
+- Reviewed source controls in AbilityAreaPanel, Achievements, CartographicLabelFields, CharacterProgression, EconomyManager, EconomyWorkspace, InstanceBindings, WorldRegionPicker and CharacterInventory. Added 14 newly discovered static buckets; SpellSchoolsWorkspace gains one select (7 → 8).
+- The current source index contains **77 buckets / 151 occurrences**. All added buckets and the changed school-select bucket remain **BLOCKED: current runtime evidence pending**. Historical evidence is retained without extending it to these controls or this revision; static bookkeeping is not keyboard, clipping, dismissal or browser acceptance.

@@ -262,7 +262,7 @@ describe("MediaPanel upload sections by role", () => {
         {...defaultActions()}
       />,
     );
-    expect(screen.getByText("Файлов пока нет.")).toBeInTheDocument();
+    expect(screen.getByText(/Файлов пока нет\./)).toBeInTheDocument();
     rerender(
       <MediaPanel
         snapshot={gmSnapshot({ assets: [asset] })}
@@ -274,7 +274,7 @@ describe("MediaPanel upload sections by role", () => {
       "AUDIO",
     );
     expect(
-      screen.getByText("Нет файлов типа «Музыка и звуки»."),
+      screen.getByText(/Нет файлов типа «Музыка и звуки»\./),
     ).toBeInTheDocument();
   });
 

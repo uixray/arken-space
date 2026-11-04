@@ -3,8 +3,33 @@
   "scope": "apps/web/src/**/*.tsx; исключены файлы test/spec/story и директории tests/stories/test-support; только статические теги и роли с литеральными значениями",
   "sites": [
     {
+      "file": "apps/web/src/AbilityAreaPanel.tsx",
+      "kind": "tag:select",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/Achievements.tsx",
+      "kind": "tag:AssetPicker",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/Achievements.tsx",
+      "kind": "tag:details",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/Achievements.tsx",
+      "kind": "tag:select",
+      "count": 1
+    },
+    {
       "file": "apps/web/src/AppHeader.tsx",
       "kind": "tag:details",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/CartographicLabelFields.tsx",
+      "kind": "tag:select",
       "count": 1
     },
     {
@@ -18,9 +43,39 @@
       "count": 1
     },
     {
+      "file": "apps/web/src/CharacterProgression.tsx",
+      "kind": "tag:details",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/CharacterProgression.tsx",
+      "kind": "tag:select",
+      "count": 1
+    },
+    {
       "file": "apps/web/src/CharacterSpellBranches.tsx",
       "kind": "tag:select",
       "count": 1
+    },
+    {
+      "file": "apps/web/src/EconomyManager.tsx",
+      "kind": "tag:details",
+      "count": 4
+    },
+    {
+      "file": "apps/web/src/EconomyManager.tsx",
+      "kind": "tag:select",
+      "count": 6
+    },
+    {
+      "file": "apps/web/src/EconomyWorkspace.tsx",
+      "kind": "tag:details",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/EconomyWorkspace.tsx",
+      "kind": "tag:select",
+      "count": 2
     },
     {
       "file": "apps/web/src/FeedbackReporter.tsx",
@@ -36,6 +91,11 @@
       "file": "apps/web/src/GlobalStickerPackManager.tsx",
       "kind": "tag:select",
       "count": 1
+    },
+    {
+      "file": "apps/web/src/InstanceBindings.tsx",
+      "kind": "tag:FormSelect",
+      "count": 2
     },
     {
       "file": "apps/web/src/LandingGuide.tsx",
@@ -100,7 +160,7 @@
     {
       "file": "apps/web/src/SpellSchoolsWorkspace.tsx",
       "kind": "tag:select",
-      "count": 7
+      "count": 8
     },
     {
       "file": "apps/web/src/StickerPackManager.tsx",
@@ -168,6 +228,11 @@
       "count": 7
     },
     {
+      "file": "apps/web/src/WorldRegionPicker.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1
+    },
+    {
       "file": "apps/web/src/design-system/Dialog.tsx",
       "kind": "tag:Popup",
       "count": 1
@@ -209,6 +274,11 @@
     },
     {
       "file": "apps/web/src/renderers/TerrainStampControls.tsx",
+      "kind": "tag:select",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/sidebar/CharacterInventory.tsx",
       "kind": "tag:select",
       "count": 1
     },

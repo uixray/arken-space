@@ -284,7 +284,7 @@ export function EconomyWorkspace({
         )}
         {receipt && (
           <p role="status">
-            Куплено: {receipt.itemName} × {receipt.quantity},{" "}
+            Куплено: {receipt.itemName}, количество: {receipt.quantity},{" "}
             {copperLabel(receipt.totalCopper)}. Предмет в инвентаре.
           </p>
         )}
@@ -369,7 +369,7 @@ export function EconomyWorkspace({
             {quote && (
               <section aria-label="Подтверждение цены">
                 <h3>
-                  {quote.itemName} × {quote.quantity}
+                  {quote.itemName}, количество: {quote.quantity}
                 </h3>
                 <p>
                   {quote.merchantName}:{" "}
@@ -407,7 +407,7 @@ export function EconomyWorkspace({
           <ol>
             {history.items.map((row) => (
               <li key={row.id}>
-                {row.receipt.itemName} × {row.receipt.quantity} —{" "}
+                {row.receipt.itemName}, количество: {row.receipt.quantity} —{" "}
                 {copperLabel(row.receipt.totalCopper)} ·{" "}
                 {row.receipt.merchantName}
                 <small>

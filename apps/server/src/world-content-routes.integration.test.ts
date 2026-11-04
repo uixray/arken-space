@@ -172,7 +172,7 @@ describe("world content HTTP: create", () => {
       payload: body,
     });
     expect(retry.statusCode).toBe(200);
-    expect(retry.json()).toEqual({ duplicate: true });
+    expect(retry.json()).toEqual(first.json());
   });
 
   it("returns 409 on a duplicate slug", async () => {
@@ -557,7 +557,7 @@ describe("world content HTTP: update", () => {
       payload,
     });
     expect(retry.statusCode).toBe(200);
-    expect(retry.json()).toEqual({ duplicate: true });
+    expect(retry.json()).toEqual(first.json());
 
     const authoritative = await app.inject({
       method: "GET",

@@ -158,9 +158,18 @@ describe("отдых по регену", () => {
   });
 
   it("восстанавливает пользовательский ресурс на указанную величину", async () => {
+    await setUp(
+      { customResource: { current: 1, maximum: 9, restAmount: 5 } },
+      {},
+    );
+    expect((await restTo("SHORT")).resources.customResource!.current).toBe(3);
+    expect((await restTo("LONG")).resources.customResource!.current).toBe(8);
+  });
+
+  it("не восстанавливает специальное вдохновение автоматически", async () => {
     await setUp({ inspiration: { current: 1, maximum: 9, restAmount: 5 } }, {});
-    expect((await restTo("SHORT")).resources.inspiration!.current).toBe(3);
-    expect((await restTo("LONG")).resources.inspiration!.current).toBe(8);
+    expect((await restTo("SHORT")).resources.inspiration!.current).toBe(1);
+    expect((await restTo("LONG")).resources.inspiration!.current).toBe(1);
   });
 
   it("короткий отдых восстанавливает оба ресурса", async () => {
