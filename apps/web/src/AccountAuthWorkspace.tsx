@@ -43,7 +43,9 @@ function friendlyError(reason: unknown, localAccounts = false) {
     return "Не удалось выполнить запрос. Повторите попытку.";
   switch (reason.code) {
     case "INVALID_CREDENTIALS":
-      return localAccounts ? "Проверьте локальный логин и пароль." : "Проверьте email и пароль. Возможно, адрес ещё не подтверждён.";
+      return localAccounts
+        ? "Проверьте локальный логин и пароль."
+        : "Проверьте логин или email и пароль. Если входите по email, убедитесь, что адрес подтверждён.";
     case "PASSWORD_POLICY_REJECTED":
       return "Пароль должен содержать от 12 до 128 символов.";
     case "ACCOUNT_DELIVERY_UNAVAILABLE":
@@ -56,6 +58,8 @@ function friendlyError(reason: unknown, localAccounts = false) {
       return "Ссылка истекла или уже использована. Запросите новую.";
     case "CURRENT_PASSWORD_INVALID":
       return "Текущий пароль не подходит.";
+    case "PASSWORD_CHANGE_REQUIRED_NEW":
+      return "Новый пароль должен отличаться от временного.";
     case "CAMPAIGN_CREATION_DISABLED":
       return "Создание кампаний сейчас выключено.";
     case "CAMPAIGN_CREATION_LIMIT_REACHED":
@@ -82,7 +86,8 @@ export function AccountAuthWorkspace({
   // StrictMode replays effects in development. Keep the route's action-token
   // intent and one-time consumption across that setup/cleanup/setup cycle.
   const actionFlow = useRef(
-    (!capabilities.localAccounts && (path === "/account/verify" || path === "/account/reset-password")) ||
+    (!capabilities.localAccounts &&
+      (path === "/account/verify" || path === "/account/reset-password")) ||
       path === "/account/join",
   );
   const actionTokenConsumed = useRef(false);
@@ -97,13 +102,21 @@ export function AccountAuthWorkspace({
   );
   const [token, setToken] = useState("");
   useEffect(() => {
-    if (capabilities.localAccounts && (path === "/account/verify" || path === "/account/reset-password")) {
+    if (
+      capabilities.localAccounts &&
+      (path === "/account/verify" || path === "/account/reset-password")
+    ) {
       // Discard public email action tokens without submitting them locally.
-      consumeActionToken(window.location, (url) => window.history.replaceState({}, "", url));
+      consumeActionToken(window.location, (url) =>
+        window.history.replaceState({}, "", url),
+      );
       actionFlow.current = false;
       setToken("");
     }
-    if (capabilities.localAccounts && ["register", "verify", "reset-request", "reset-confirm"].includes(view))
+    if (
+      capabilities.localAccounts &&
+      ["register", "verify", "reset-request", "reset-confirm"].includes(view)
+    )
       setView("login");
   }, [capabilities.localAccounts, view, path]);
   const [email, setEmail] = useState("");
@@ -115,7 +128,9 @@ export function AccountAuthWorkspace({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [campaigns, setCampaigns] = useState<AccountCampaign[]>([]);
-  const [campaignsState, setCampaignsState] = useState<"loading" | "ready" | "error">("loading");
+  const [campaignsState, setCampaignsState] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
   const campaignsRequest = useRef(0);
   const [campaignName, setCampaignName] = useState("");
   const [firstRun, setFirstRun] = useState<{
@@ -181,12 +196,17 @@ export function AccountAuthWorkspace({
         throw new LocalValidationError(
           "Вставьте действительную ссылку-приглашение или откройте её из сообщения.",
         );
-      const joined = await claimAccountCampaignInvite(claimToken, active.csrfToken);
+      const joined = await claimAccountCampaignInvite(
+        claimToken,
+        active.csrfToken,
+      );
       // Returning members may have been promoted since the original claim;
       // do not present new-campaign/new-player onboarding on that replay.
-      setFirstRun(joined.role === "PLAYER"
-        ? { campaignId: joined.campaignId, role: "PLAYER" }
-        : null);
+      setFirstRun(
+        joined.role === "PLAYER"
+          ? { campaignId: joined.campaignId, role: "PLAYER" }
+          : null,
+      );
       setToken("");
       setInviteTokenInput("");
       await refreshCampaigns();
@@ -211,10 +231,15 @@ export function AccountAuthWorkspace({
     setBusy(true);
     setError("");
     try {
-      const next = await loginAccount(email, password, capabilities.localAccounts);
+      const next = await loginAccount(
+        email,
+        password,
+        capabilities.localAccounts,
+      );
       setSession(next);
       setPassword("");
-      await claimInvite(next);
+      if (next.account.passwordChangeRequired) setView("account");
+      else await claimInvite(next);
     } catch (reason) {
       setError(friendlyError(reason, capabilities.localAccounts));
     } finally {
@@ -234,9 +259,11 @@ export function AccountAuthWorkspace({
       window.history.replaceState({}, "", url),
     );
     if (!consumed)
-      setError(path === "/account/join"
-        ? "Вставьте ссылку-приглашение из сообщения мастера."
-        : "В ссылке нет кода подтверждения. Запросите письмо ещё раз.");
+      setError(
+        path === "/account/join"
+          ? "Вставьте ссылку-приглашение из сообщения мастера."
+          : "В ссылке нет кода подтверждения. Запросите письмо ещё раз.",
+      );
     setToken(consumed ?? "");
   }, [view, capabilities.localAccounts, path]);
   useEffect(() => {
@@ -258,13 +285,15 @@ export function AccountAuthWorkspace({
     };
   }, []);
   useEffect(() => {
-    if (!session) return;
+    if (!session || session.account.passwordChangeRequired) return;
     setCampaigns([]);
     void refreshCampaigns().catch((reason: unknown) =>
       setError(friendlyError(reason, capabilities.localAccounts)),
     );
-    return () => { campaignsRequest.current += 1; };
-  }, [session?.account.id]);
+    return () => {
+      campaignsRequest.current += 1;
+    };
+  }, [session?.account.id, session?.account.passwordChangeRequired]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -290,10 +319,19 @@ export function AccountAuthWorkspace({
             : "Если адрес можно зарегистрировать, запрос на подтверждение принят. Проверьте почту позже.",
         );
       } else if (view === "login") {
-        const next = await loginAccount(email, password, capabilities.localAccounts);
+        const next = await loginAccount(
+          email,
+          password,
+          capabilities.localAccounts,
+        );
         setSession(next);
         setPassword("");
-        if (path === "/account/join" && readInviteToken()) await claimInvite(next);
+        if (
+          !next.account.passwordChangeRequired &&
+          path === "/account/join" &&
+          readInviteToken()
+        )
+          await claimInvite(next);
         else setView("account");
       } else if (view === "join") {
         if (!session)
@@ -327,7 +365,10 @@ export function AccountAuthWorkspace({
         setPasswordAgain("");
         setView("login");
         setNotice("Пароль изменён. Войдите с новым паролем.");
-      } else if (view === "account" && session) {
+      } else if (
+        session &&
+        (view === "account" || session.account.passwordChangeRequired)
+      ) {
         if (password !== passwordAgain)
           throw new LocalValidationError("Пароли не совпадают.");
         if ([...password].length < MIN_PASSWORD || [...password].length > 128)
@@ -494,15 +535,93 @@ export function AccountAuthWorkspace({
     }
   };
 
+  if (session?.account.passwordChangeRequired)
+    return (
+      <main className="account-auth-shell">
+        <section
+          className="account-auth-card"
+          aria-labelledby="initial-password-title"
+        >
+          <h1 id="initial-password-title">Задайте свой пароль</h1>
+          <p>
+            Временный пароль нельзя использовать для входа в кампанию. Задайте
+            новый, затем войдите снова.
+          </p>
+          <form onSubmit={submit} aria-busy={busy}>
+            <label>
+              Временный пароль
+              <FormInput
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Новый пароль
+              <FormInput
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                minLength={MIN_PASSWORD}
+                maxLength={128}
+              />
+            </label>
+            <label>
+              Повторите новый пароль
+              <FormInput
+                type="password"
+                autoComplete="new-password"
+                value={passwordAgain}
+                onChange={(event) => setPasswordAgain(event.target.value)}
+                required
+                minLength={MIN_PASSWORD}
+                maxLength={128}
+              />
+            </label>
+            {error && (
+              <p role="alert" className="account-auth-error">
+                {error}
+              </p>
+            )}
+            <Button type="submit" disabled={busy}>
+              Сохранить новый пароль
+            </Button>
+          </form>
+          <Button type="button" disabled={busy} onClick={() => void logout()}>
+            Выйти
+          </Button>
+        </section>
+      </main>
+    );
+
   if (view === "account" && session)
     return (
       <main className="account-auth-shell">
         <section className="account-auth-card" aria-labelledby="account-title">
           <p className="account-auth-kicker">Аккаунт Arken</p>
-          <h1 id="account-title">Почта подтверждена</h1>
-          <p className="account-auth-email">{session.account.email ?? session.account.login}
-            {session.account.identityKind === "LOCAL" ? " · локальный аккаунт этого компьютера" : ""}</p>
-          {capabilities.localAccounts && <p className="muted">Сервер доступен только на этом компьютере. Подключение из локальной сети пока не включено.</p>}
+          <h1 id="account-title">
+            {session.account.identityKind === "HOSTED"
+              ? "Аккаунт по логину"
+              : session.account.identityKind === "LOCAL"
+                ? "Локальный аккаунт"
+                : "Почта подтверждена"}
+          </h1>
+          <p className="account-auth-email">
+            {session.account.email ?? session.account.login}
+            {session.account.identityKind === "LOCAL"
+              ? " · локальный аккаунт этого компьютера"
+              : ""}
+          </p>
+          {capabilities.localAccounts && (
+            <p className="muted">
+              Сервер доступен только на этом компьютере. Подключение из
+              локальной сети пока не включено.
+            </p>
+          )}
           <p className="account-auth-note">
             Вход в аккаунт не назначает роль и не открывает чужую кампанию.
             Доступ появляется только после явного выбора или принятия
@@ -511,28 +630,52 @@ export function AccountAuthWorkspace({
           {firstRun && (
             <section aria-labelledby="first-run-title">
               <h2 id="first-run-title">
-                {firstRun.role === "GM" ? "Ваша первая сцена готова" : "Вы в кампании"}
+                {firstRun.role === "GM"
+                  ? "Ваша первая сцена готова"
+                  : "Вы в кампании"}
               </h2>
               <p>Игровая система — Аркен-Хар.</p>
               <ol>
                 {firstRun.role === "GM" ? (
                   <>
-                    <li>Создайте ссылку-приглашение в карточке этой кампании ниже и отправьте её игроку лично.</li>
-                    <li>Откройте игровой стол: первая пустая сцена уже создана.</li>
-                    <li>Откройте «Персонажи», чтобы подготовить участников игры. Игрок может создать свой лист самостоятельно.</li>
+                    <li>
+                      Создайте ссылку-приглашение в карточке этой кампании ниже
+                      и отправьте её игроку лично.
+                    </li>
+                    <li>
+                      Откройте игровой стол: первая пустая сцена уже создана.
+                    </li>
+                    <li>
+                      Откройте «Персонажи», чтобы подготовить участников игры.
+                      Игрок может создать свой лист самостоятельно.
+                    </li>
                   </>
                 ) : (
                   <>
                     <li>Откройте игровой стол этой кампании.</li>
-                    <li>Откройте «Персонажи» и выберите «Создать персонажа», если мастер ещё не выдал вам лист.</li>
-                    <li>Заполните лист по договорённости с мастером и переходите к игре.</li>
+                    <li>
+                      Откройте «Персонажи» и выберите «Создать персонажа», если
+                      мастер ещё не выдал вам лист.
+                    </li>
+                    <li>
+                      Заполните лист по договорённости с мастером и переходите к
+                      игре.
+                    </li>
                   </>
                 )}
               </ol>
-              <Button type="button" disabled={busy} onClick={() => void selectCampaign(firstRun.campaignId)}>
+              <Button
+                type="button"
+                disabled={busy}
+                onClick={() => void selectCampaign(firstRun.campaignId)}
+              >
                 Открыть игровой стол
               </Button>
-              <Button type="button" disabled={busy} onClick={() => setFirstRun(null)}>
+              <Button
+                type="button"
+                disabled={busy}
+                onClick={() => setFirstRun(null)}
+              >
                 Скрыть подсказки
               </Button>
             </section>
@@ -542,13 +685,28 @@ export function AccountAuthWorkspace({
             aria-labelledby="campaigns-title"
           >
             <h2 id="campaigns-title">Мои кампании</h2>
-            {campaignsState === "loading" && <p role="status">Загружаем кампании…</p>}
+            {campaignsState === "loading" && (
+              <p role="status">Загружаем кампании…</p>
+            )}
             {campaignsState === "error" && (
               <div role="alert">
-                <p>Не удалось загрузить кампании. Это не означает, что у вас нет доступа.</p>
-                <Button type="button" disabled={busy} onClick={() => {
-                  void refreshCampaigns().catch((reason: unknown) => setError(friendlyError(reason, capabilities.localAccounts)));
-                }}>Повторить загрузку</Button>
+                <p>
+                  Не удалось загрузить кампании. Это не означает, что у вас нет
+                  доступа.
+                </p>
+                <Button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    void refreshCampaigns().catch((reason: unknown) =>
+                      setError(
+                        friendlyError(reason, capabilities.localAccounts),
+                      ),
+                    );
+                  }}
+                >
+                  Повторить загрузку
+                </Button>
               </div>
             )}
             {campaignsState === "ready" && campaigns.length === 0 && (
@@ -620,8 +778,8 @@ export function AccountAuthWorkspace({
                   />
                 </label>
                 <p className="account-auth-note">
-                  Аркен-Хар. Вы станете мастером; первая пустая сцена появится автоматически.
-                  Игроков можно пригласить после создания.
+                  Аркен-Хар. Вы станете мастером; первая пустая сцена появится
+                  автоматически. Игроков можно пригласить после создания.
                 </p>
                 <Button
                   type="submit"
@@ -726,17 +884,24 @@ export function AccountAuthWorkspace({
           <p className="account-auth-kicker">Приглашение в кампанию</p>
           <h1>Присоединиться</h1>
           {session ? (
-            <p>{session.account.email ?? session.account.login} · {session.account.identityKind === "LOCAL" ? "локальный аккаунт" : "подтверждённый аккаунт"}</p>
+            <p>
+              {session.account.email ?? session.account.login} ·{" "}
+              {session.account.identityKind === "LOCAL"
+                ? "локальный аккаунт"
+                : "подтверждённый аккаунт"}
+            </p>
           ) : (
             <p>Войдите в подтверждённый аккаунт, чтобы принять приглашение.</p>
           )}
           {!session && (
             <>
               <label>
-                {capabilities.localAccounts ? "Локальный логин" : "Email"}
+                {capabilities.localAccounts
+                  ? "Локальный логин"
+                  : "Логин или email"}
                 <FormInput
-                  type={capabilities.localAccounts ? "text" : "email"}
-                  autoComplete={capabilities.localAccounts ? "username" : "email"}
+                  type="text"
+                  autoComplete="username"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   required
@@ -782,12 +947,20 @@ export function AccountAuthWorkspace({
             Принять приглашение
           </Button>
           {!session && capabilities.registrationEnabled && (
-            <Button type="button" disabled={busy} onClick={() => {
-              setError("");
-              setPassword("");
-              setView("register");
-              setNotice("После регистрации подтвердите почту. Затем вернитесь в эту вкладку или снова откройте исходное приглашение мастера. Ссылка не сохраняется в браузере.");
-            }}>Нет аккаунта? Зарегистрироваться</Button>
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setError("");
+                setPassword("");
+                setView("register");
+                setNotice(
+                  "После регистрации подтвердите почту. Затем вернитесь в эту вкладку или снова откройте исходное приглашение мастера. Ссылка не сохраняется в браузере.",
+                );
+              }}
+            >
+              Нет аккаунта? Зарегистрироваться
+            </Button>
           )}
           <a href="/">Вернуться ко входу</a>
         </section>
@@ -808,20 +981,40 @@ export function AccountAuthWorkspace({
   return (
     <main className="account-auth-shell">
       <section className="account-auth-card" aria-labelledby="account-title">
-        <a className="account-auth-brand" href="/" aria-label="Аркспейс — на главную">
+        <a
+          className="account-auth-brand"
+          href="/"
+          aria-label="Аркспейс — на главную"
+        >
           <Brand />
         </a>
         <p className="account-auth-kicker">Безопасный вход</p>
         <h1 id="account-title">{title}</h1>
-        {capabilities.localAccounts && <p className="muted">Локальный вход на этом компьютере, без email.
-          Первый аккаунт мастера создаётся в окне «Arken Space — локальный сервер».</p>}
+        {capabilities.localAccounts && (
+          <p className="muted">
+            Локальный вход на этом компьютере, без email. Первый аккаунт мастера
+            создаётся в окне «Arken Space — локальный сервер».
+          </p>
+        )}
         <form onSubmit={submit} aria-label={title} aria-busy={busy}>
           {view !== "verify" && (
             <label>
-              {capabilities.localAccounts ? "Локальный логин" : "Email"}
+              {capabilities.localAccounts
+                ? "Локальный логин"
+                : view === "login"
+                  ? "Логин или email"
+                  : "Email"}
               <FormInput
-                type={capabilities.localAccounts ? "text" : "email"}
-                autoComplete={capabilities.localAccounts ? "username" : "email"}
+                type={
+                  capabilities.localAccounts || view === "login"
+                    ? "text"
+                    : "email"
+                }
+                autoComplete={
+                  capabilities.localAccounts || view === "login"
+                    ? "username"
+                    : "email"
+                }
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -913,18 +1106,20 @@ export function AccountAuthWorkspace({
               Создать аккаунт
             </button>
           )}
-          {!capabilities.localAccounts && view !== "reset-request" && view !== "reset-confirm" && (
-            <button
-              type="button"
-              onClick={() => {
-                setError("");
-                setNotice("");
-                setView("reset-request");
-              }}
-            >
-              Забыли пароль?
-            </button>
-          )}
+          {!capabilities.localAccounts &&
+            view !== "reset-request" &&
+            view !== "reset-confirm" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setError("");
+                  setNotice("");
+                  setView("reset-request");
+                }}
+              >
+                Забыли пароль?
+              </button>
+            )}
           {view === "verify" && (
             <button type="button" disabled={busy} onClick={() => void resend()}>
               Отправить письмо повторно

@@ -1,13 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import {
-  and,
-  count,
-  eq,
-  gt,
-  isNull,
-  inArray,
-  sql,
-} from "drizzle-orm";
+import { and, count, eq, gt, isNull, inArray, sql } from "drizzle-orm";
 import {
   accountCampaignCreations,
   accountCampaignInvites,
@@ -62,6 +54,8 @@ async function accountForRequest(
     .select({
       id: accountSessions.id,
       userId: users.id,
+      identityKind: users.identityKind,
+      verifiedAt: users.verifiedAt,
       csrfHash: accountSessions.csrfHash,
     })
     .from(accountSessions)
@@ -72,6 +66,7 @@ async function accountForRequest(
         isNull(accountSessions.revokedAt),
         gt(accountSessions.expiresAt, new Date()),
         accountAssuranceWhere(options.localInstanceId),
+        eq(users.passwordChangeRequired, false),
         isNull(users.disabledAt),
       ),
     )
@@ -165,6 +160,7 @@ async function replaceSelectedGameSession(
           isNull(accountSessions.revokedAt),
           sql`${accountSessions.expiresAt} > clock_timestamp()`,
           accountAssuranceWhere(options.localInstanceId),
+          eq(users.passwordChangeRequired, false),
           isNull(users.disabledAt),
         ),
       )
@@ -267,7 +263,12 @@ export function registerAccountCampaignRoutes(
           gt(sessions.expiresAt, new Date()),
         ),
       )
-      .where(and(eq(memberships.userId, account.userId), isNull(memberships.accessRevokedAt)));
+      .where(
+        and(
+          eq(memberships.userId, account.userId),
+          isNull(memberships.accessRevokedAt),
+        ),
+      );
     return reply.header("cache-control", "no-store").send(
       accountCampaignListSchema.parse({
         campaigns: rows.map((row) => ({
@@ -289,6 +290,15 @@ export function registerAccountCampaignRoutes(
         return reply.code(400).send({ error: "INVALID_CAMPAIGN_INPUT" });
       if (!options.creationEnabled)
         return reply.code(403).send({ error: "CAMPAIGN_CREATION_DISABLED" });
+      // Owner-issued hosted passwords authenticate existing memberships; they
+      // do not assert verified email or grant the public creation policy.
+      if (
+        !options.localInstanceId &&
+        (account.identityKind !== "EMAIL" || !account.verifiedAt)
+      )
+        return reply
+          .code(403)
+          .send({ error: "CAMPAIGN_CREATION_VERIFICATION_REQUIRED" });
       const payloadHash = hashToken(body.data.name);
       const [prior] = await db
         .select()
@@ -671,7 +681,9 @@ export function registerAccountCampaignRoutes(
               revokedAt: accountCampaignInvites.revokedAt,
             })
             .from(accountCampaignInvites)
-            .where(eq(accountCampaignInvites.tokenHash, hashToken(body.data.token)))
+            .where(
+              eq(accountCampaignInvites.tokenHash, hashToken(body.data.token)),
+            )
             .for("update")
             .limit(1);
           if (!previous || previous.revokedAt) return null;
@@ -680,14 +692,20 @@ export function registerAccountCampaignRoutes(
             const [membership] = await tx
               .select({ id: memberships.id, role: memberships.role })
               .from(memberships)
-              .where(and(
-                eq(memberships.campaignId, previous.campaignId),
-                eq(memberships.userId, account.userId),
-                isNull(memberships.accessRevokedAt),
-              ))
+              .where(
+                and(
+                  eq(memberships.campaignId, previous.campaignId),
+                  eq(memberships.userId, account.userId),
+                  isNull(memberships.accessRevokedAt),
+                ),
+              )
               .limit(1);
             return membership
-              ? { campaignId: previous.campaignId, membershipId: membership.id, role: membership.role }
+              ? {
+                  campaignId: previous.campaignId,
+                  membershipId: membership.id,
+                  role: membership.role,
+                }
               : null;
           }
           const [invite] = await tx
@@ -719,7 +737,11 @@ export function registerAccountCampaignRoutes(
             })
             .returning({ id: memberships.id });
           if (!membership) throw new Error("INVITE_CLAIM_FAILED");
-          return { campaignId: invite.campaignId, membershipId: membership.id, role: "PLAYER" as const };
+          return {
+            campaignId: invite.campaignId,
+            membershipId: membership.id,
+            role: "PLAYER" as const,
+          };
         });
         if (!claimed)
           return reply.code(400).send({ error: "INVITE_INVALID_OR_EXPIRED" });

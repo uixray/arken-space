@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -45,16 +46,19 @@ const midpoint = (a: Point, b: Point) => ({
  * Only pointer-up commits; multi-touch and all interruption paths discard. */
 export function useMapTouch(config: Config) {
   const latest = useRef(config);
-  latest.current = config;
+  useLayoutEffect(() => {
+    latest.current = config;
+  });
   const points = useRef(new Map<number, Point>());
   const owner = useRef<HTMLElement | null>(null);
   const visibilityObserver = useRef<MutationObserver | null>(null);
   const ownerVisible = useCallback(
-    () => Boolean(
-      owner.current?.isConnected &&
-      !owner.current.closest("[hidden], [inert]") &&
-      !document.hidden,
-    ),
+    () =>
+      Boolean(
+        owner.current?.isConnected &&
+        !owner.current.closest("[hidden], [inert]") &&
+        !document.hidden,
+      ),
     [],
   );
   const gesture = useRef<Gesture | null>(null);
@@ -88,11 +92,13 @@ export function useMapTouch(config: Config) {
       if (event.key === "Escape") cancel();
     };
     const outsideDown = (event: PointerEvent) => {
-      if (gesture.current && (
-        event.pointerType !== "touch" ||
-        !(event.target instanceof HTMLCanvasElement) ||
-        !owner.current?.contains(event.target)
-      )) cancel();
+      if (
+        gesture.current &&
+        (event.pointerType !== "touch" ||
+          !(event.target instanceof HTMLCanvasElement) ||
+          !owner.current?.contains(event.target))
+      )
+        cancel();
     };
     const terminal = (event: PointerEvent) => {
       if (event.pointerType !== "touch" || !points.current.has(event.pointerId))
@@ -100,9 +106,13 @@ export function useMapTouch(config: Config) {
       // Captured, valid releases inside the map are committed by React's up
       // handler. Outside/cancelled releases only drain the quarantined contacts.
       if (
-        event.type === "pointercancel" || !gesture.current || !ownerVisible() ||
-        !latest.current.enabled || gesture.current.scope !== latest.current.scope ||
-        !(event.target instanceof Node) || !owner.current?.contains(event.target)
+        event.type === "pointercancel" ||
+        !gesture.current ||
+        !ownerVisible() ||
+        !latest.current.enabled ||
+        gesture.current.scope !== latest.current.scope ||
+        !(event.target instanceof Node) ||
+        !owner.current?.contains(event.target)
       ) {
         cancel();
         forgetPointer(event.pointerId);
@@ -130,7 +140,9 @@ export function useMapTouch(config: Config) {
         try {
           if (owner.current?.hasPointerCapture(id))
             owner.current.releasePointerCapture(id);
-        } catch { /* The browser may already have ended this pointer. */ }
+        } catch {
+          /* The browser may already have ended this pointer. */
+        }
       }
       points.current.clear();
       owner.current = null;
@@ -170,8 +182,8 @@ export function useMapTouch(config: Config) {
       event.currentTarget.closest("[hidden], [inert]")
     )
       return true;
-    const hasCapturedContact = [...points.current.keys()].some(
-      (id) => owner.current?.hasPointerCapture(id),
+    const hasCapturedContact = [...points.current.keys()].some((id) =>
+      owner.current?.hasPointerCapture(id),
     );
     if (!gesture.current && event.isPrimary && !hasCapturedContact) {
       // A fresh primary touch can recover contacts whose terminal event was
@@ -184,8 +196,9 @@ export function useMapTouch(config: Config) {
     const point = local(event);
     if (!points.current.size) owner.current = event.currentTarget;
     points.current.set(event.pointerId, point);
-    try { event.currentTarget.setPointerCapture(event.pointerId); }
-    catch {
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
       cancel();
       return true;
     }
@@ -205,7 +218,9 @@ export function useMapTouch(config: Config) {
         });
       }
       const c = latest.current.camera;
-      const tool = event.isPrimary ? latest.current.startTool?.(point) ?? null : null;
+      const tool = event.isPrimary
+        ? (latest.current.startTool?.(point) ?? null)
+        : null;
       gesture.current = {
         scope: latest.current.scope,
         start: point,
@@ -324,7 +339,8 @@ export function useMapTouch(config: Config) {
     }
     if (g && !g.multi && g.token) {
       latest.current.preview(g.token, null);
-      if (!g.moved && distance(point, g.start) < 8) latest.current.select(g.token);
+      if (!g.moved && distance(point, g.start) < 8)
+        latest.current.select(g.token);
       else if (latest.current.movable(g.token))
         latest.current.commit(g.token, {
           x: (point.x - g.start.x) / g.scale,

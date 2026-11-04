@@ -6,6 +6,11 @@ const KEY =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.blob$/;
 const MAX_LIMIT = 100 * 1024 * 1024;
 
+// Do not expose a private storage path in error causes or logs.
+function storageBusyError() {
+  return new Error("BUG_STORAGE_BUSY");
+}
+
 function filePath(root: string, key: string) {
   if (!isAbsolute(root) || !KEY.test(key))
     throw new Error("INVALID_BUG_STORAGE_PATH");
@@ -42,7 +47,7 @@ export async function writeBugAttachment(
     lock = await open(lockPath, "wx", 0o600);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST")
-      throw new Error("BUG_STORAGE_BUSY");
+      throw storageBusyError();
     throw error;
   }
   try {

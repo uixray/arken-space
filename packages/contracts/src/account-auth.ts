@@ -20,8 +20,20 @@ export type AccountRegistrationInput = z.infer<
 
 export const accountLoginSchema = accountRegistrationSchema;
 export type AccountLoginInput = AccountRegistrationInput;
-export const localLoginNameSchema = z.string().trim().toLowerCase().min(3).max(40).regex(/^[a-z0-9][a-z0-9_.-]*$/);
-export const localAccountLoginSchema = z.object({ login: localLoginNameSchema, password: passwordSchema }).strict();
+export const localLoginNameSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3)
+  .max(40)
+  .regex(/^[a-z0-9][a-z0-9_.-]*$/);
+export const localAccountLoginSchema = z
+  .object({ login: localLoginNameSchema, password: passwordSchema })
+  .strict();
+/** Hosted login is a separate identity, not an email verification or local-host grant. */
+export const hostedAccountLoginSchema = z
+  .object({ login: localLoginNameSchema, password: passwordSchema })
+  .strict();
 
 export const accountEmailInputSchema = z
   .object({ email: emailSchema })
@@ -50,13 +62,17 @@ export const accountSessionSchema = z
         id: z.string().uuid(),
         email: emailSchema.nullable(),
         verified: z.boolean(),
-        identityKind: z.literal("LOCAL").optional(),
+        identityKind: z.enum(["LOCAL", "HOSTED"]).optional(),
         login: localLoginNameSchema.optional(),
+        passwordChangeRequired: z.boolean().optional(),
       })
-      .strict().superRefine((account, ctx) => {
-        if (account.identityKind === "LOCAL"
-          ? account.email !== null || account.verified || !account.login
-          : account.email === null || account.login !== undefined)
+      .strict()
+      .superRefine((account, ctx) => {
+        if (
+          account.identityKind === "LOCAL" || account.identityKind === "HOSTED"
+            ? account.email !== null || account.verified || !account.login
+            : account.email === null || account.login !== undefined
+        )
           ctx.addIssue({ code: "custom", message: "Invalid account identity" });
       }),
     csrfToken: bearerSchema,

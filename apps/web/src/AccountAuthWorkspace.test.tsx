@@ -278,7 +278,7 @@ describe("AccountAuthWorkspace", () => {
         capabilities={{ ...capabilities, registrationEnabled: false }}
       />,
     );
-    fireEvent.change(await screen.findByLabelText("Email"), {
+    fireEvent.change(await screen.findByLabelText("Логин или email"), {
       target: { value: "person@example.test" },
     });
     fireEvent.change(screen.getByLabelText("Пароль"), {
@@ -286,7 +286,7 @@ describe("AccountAuthWorkspace", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Войти" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Проверьте email и пароль",
+      "Проверьте логин или email и пароль",
     );
     expect(
       screen.getByRole("button", {
@@ -306,7 +306,7 @@ describe("AccountAuthWorkspace", () => {
         capabilities={capabilities}
       />,
     );
-    fireEvent.change(await screen.findByLabelText("Email"), {
+    fireEvent.change(await screen.findByLabelText("Логин или email"), {
       target: { value: "person@example.test" },
     });
     fireEvent.click(

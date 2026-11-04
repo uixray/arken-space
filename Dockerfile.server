@@ -15,7 +15,7 @@ RUN pnpm install --frozen-lockfile
 
 COPY apps/server apps/server
 COPY packages packages
-RUN pnpm --filter @arken/contracts build && pnpm --filter @arken/system build && pnpm --filter @arken/db build && pnpm --filter @arken/server exec tsup src/index.ts src/env.ts --format esm --clean --sourcemap
+RUN pnpm --filter @arken/contracts build && pnpm --filter @arken/system build && pnpm --filter @arken/db build && pnpm --filter @arken/server exec tsup src/index.ts src/env.ts src/hosted-account-provision-cli.ts --format esm --clean --sourcemap
 
 FROM --platform=linux/amd64 node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS native-build
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential python3 pkg-config meson ninja-build cmake curl xz-utils ca-certificates libglib2.0-dev libexpat1-dev libjpeg62-turbo-dev libpng-dev libwebp-dev libtiff-dev libaom-dev libdav1d-dev librsvg2-dev libpango1.0-dev liblcms2-dev libexif-dev libarchive-dev zlib1g-dev libcgif-dev libimagequant-dev

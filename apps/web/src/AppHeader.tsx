@@ -105,7 +105,11 @@ export const AppHeader = memo(function AppHeader({
         </>
       )}
       <div className="brand">
-        <a className="brand__link" href="/?home=1" aria-label="Открыть главную страницу Аркспейс">
+        <a
+          className="brand__link"
+          href="/?home=1"
+          aria-label="Открыть главную страницу Аркспейс"
+        >
           <Brand compact />
         </a>
       </div>
@@ -183,6 +187,7 @@ export const AppHeader = memo(function AppHeader({
             <AppIcon icon={SessionMenuIcon} />
           </summary>
           <div className="account-menu__content">
+            <a href="/account">Мои кампании</a>
             <span
               className={connection === "ONLINE" ? "status online" : "status"}
             >

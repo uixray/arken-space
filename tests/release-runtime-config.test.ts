@@ -43,7 +43,7 @@ describe("release container configuration", () => {
 
   it("compiles and validates runtime env before migration with sanitized failure output", () => {
     expect(serverDockerfile).toContain(
-      "tsup src/index.ts src/env.ts --format esm --clean --sourcemap",
+      "tsup src/index.ts src/env.ts src/hosted-account-provision-cli.ts --format esm --clean --sourcemap",
     );
     const commandLine = serverDockerfile
       .split(/\r?\n/)

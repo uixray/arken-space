@@ -250,9 +250,9 @@ export function registerAwardsBindingsRoutes(
         if (await receipt(tx, auth, body.actionId, hash, "achievement.command"))
           return;
         await lock(tx, auth.campaignId + ":achievements");
-        let before: unknown = null,
-          after: unknown = null,
-          entityId: string | null = null;
+        let before: unknown = null;
+        let after: unknown;
+        let entityId: string;
         if ("fields" in body && body.fields.iconAssetId) {
           const [asset] = await tx
             .select()

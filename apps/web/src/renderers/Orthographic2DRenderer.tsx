@@ -656,7 +656,9 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   const bulkDeletePendingRef = useRef(false);
   const [bulkDeleteError, setBulkDeleteError] = useState<string | undefined>();
   const currentSceneIdRef = useRef(props.scene.id);
-  currentSceneIdRef.current = props.scene.id;
+  useLayoutEffect(() => {
+    currentSceneIdRef.current = props.scene.id;
+  }, [props.scene.id]);
   const selectionSceneIdRef = useRef(props.scene.id);
   const [bulkDeleteRequested, setBulkDeleteRequested] = useState<{
     scope: string;
@@ -3474,7 +3476,8 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           if (ended) return;
           const point = worldPoint(screen);
           const previous = points[points.length - 1];
-          if (previous && point.x === previous.x && point.y === previous.y) return;
+          if (previous && point.x === previous.x && point.y === previous.y)
+            return;
           points = [...points, point];
           if (tool === "DRAW")
             setDrawingPoints(points.flatMap((item) => [item.x, item.y]));
@@ -3737,10 +3740,15 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       }}
       onContextMenu={(event) => event.preventDefault()}
     >
-      {props.scene.titleLabel && <h2 className="scene-cartographic-title">
-        <PositionedCartographicLabel text={props.scene.name} config={props.scene.titleLabel}
-          layoutKey={props.scene.id} />
-      </h2>}
+      {props.scene.titleLabel && (
+        <h2 className="scene-cartographic-title">
+          <PositionedCartographicLabel
+            text={props.scene.name}
+            config={props.scene.titleLabel}
+            layoutKey={props.scene.id}
+          />
+        </h2>
+      )}
       {props.externalObjectListOpen === undefined && (
         <button
           ref={objectListTriggerRef}
@@ -4658,15 +4666,38 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           {(() => {
             const preview = props.abilityAreaPreview;
             if (!preview || preview.sceneId !== props.scene.id) return null;
-            const origin = props.tokens.find((token) => token.id === preview.tokenId && token.sceneId === props.scene.id);
-            if (!origin || (props.role !== "GM" && (!origin.visible || origin.layer !== "PLAYER"))) return null;
+            const origin = props.tokens.find(
+              (token) =>
+                token.id === preview.tokenId &&
+                token.sceneId === props.scene.id,
+            );
+            if (
+              !origin ||
+              (props.role !== "GM" &&
+                (!origin.visible || origin.layer !== "PLAYER"))
+            )
+              return null;
             const circle = preview.circle;
-            return <Group listening={false}>
-              <Circle {...circle} fill="rgba(90,180,240,0.12)" stroke="#65c8ff"
-                strokeWidth={2 / scale} dash={[8 / scale, 5 / scale]} />
-              <Text x={circle.x} y={circle.y - circle.radius} text={`${preview.radiusMeters} м`}
-                fontSize={14 / scale} fill="#ffffff" stroke="#15202b" strokeWidth={0.5 / scale} />
-            </Group>;
+            return (
+              <Group listening={false}>
+                <Circle
+                  {...circle}
+                  fill="rgba(90,180,240,0.12)"
+                  stroke="#65c8ff"
+                  strokeWidth={2 / scale}
+                  dash={[8 / scale, 5 / scale]}
+                />
+                <Text
+                  x={circle.x}
+                  y={circle.y - circle.radius}
+                  text={`${preview.radiusMeters} м`}
+                  fontSize={14 / scale}
+                  fill="#ffffff"
+                  stroke="#15202b"
+                  strokeWidth={0.5 / scale}
+                />
+              </Group>
+            );
           })()}
           {displayRulers.map((ruler) => {
             const style = rulerStyle(
