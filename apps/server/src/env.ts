@@ -112,6 +112,7 @@ export const env = z
     MAX_AUDIO_BYTES: bytes.default(100 * 1024 ** 2),
     OPERATOR_MEMBERSHIP_IDS: uuidList.default(""),
     GEOMETRIC_DICE_MEMBERSHIP_IDS: uuidList.default(""),
+    GEOMETRIC_DICE_USER_IDS: uuidList.default(""),
     OPERATOR_FEEDBACK_RATE_LIMIT_MAX: z.coerce
       .number()
       .int()

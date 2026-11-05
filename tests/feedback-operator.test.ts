@@ -261,7 +261,7 @@ describe("operator feedback boundary", () => {
     ).toBe(415);
   });
 
-  it("enforces transitions and strict Linear links, and exports only reviewed text", async () => {
+  it("UIX-318: enforces transitions and strict Linear links, and exports only reviewed text", async () => {
     const row = await report({
       title: "Bearer top-secret-token",
       description: [
@@ -354,6 +354,7 @@ describe("operator feedback boundary", () => {
       },
     });
     expect(exported.statusCode).toBe(200);
+    expect(exported.json().linearUrl).toBeNull();
     for (const forbidden of [
       "contact",
       "diagnostics",

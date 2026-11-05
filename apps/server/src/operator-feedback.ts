@@ -379,6 +379,10 @@ export function registerOperatorFeedbackRoutes(
         return reply.code(409).send({ error: "FEEDBACK_REVIEW_STALE" });
       return {
         ...result.copy,
+        // The operator reviews title and description, not the stored URL.
+        // Keep the validated issue key, but do not copy URL credentials,
+        // query parameters, fragments, or potentially sensitive slugs.
+        linearUrl: null,
         reviewPolicy:
           "operator-reviewed; automatic filtering is best-effort, not anonymity proof",
       };
