@@ -1,4 +1,4 @@
-name: Temporary Debian package probe
+name: Temporary Debian package closure probe
 on:
   workflow_dispatch:
     inputs:
@@ -10,16 +10,38 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 10
     steps:
-      - name: Probe actual Debian package bytes
+      - name: Resolve signed snapshot dependencies
         shell: bash
         run: |
-          for pkg in 'libu/libusb-1.0/libusb-1.0-0_1.0.26-1_amd64.deb' 'libm/libmfx/libmfx1_22.5.4-1_amd64.deb' 'f/ffmpeg/ffmpeg_5.1.9-0+deb12u1_amd64.deb'; do
-            echo "=== $pkg ==="
-            for base in 'https://snapshot.debian.org/archive/debian/20260518T000000Z/pool/main' 'https://snapshot-fastly.debian.org/archive/debian/20260518T000000Z/pool/main' 'https://snapshot-cloudflare.debian.org/archive/debian/20260518T000000Z/pool/main' 'https://deb.debian.org/debian/pool/main' 'https://deb.debian.org/debian-security/pool/updates/main'; do
-              printf '%s ' "$base"
-              curl -4 -L --silent --show-error --max-time 12 -o /tmp/probe.deb -w 'http=%{http_code} size=%{size_download} time=%{time_total}\n' "$base/$pkg" || true
-              if dpkg-deb --info /tmp/probe.deb >/dev/null 2>&1; then sha256sum /tmp/probe.deb; fi
-            done
-          done
+          mkdir -p /tmp/closure && chmod 777 /tmp/closure
+          timeout 180s docker run --rm -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro -v /tmp/closure:/out node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 sh -ec '
+            printf "%s\n" "deb https://snapshot-cloudflare.debian.org/archive/debian/20260518T000000Z/ bookworm main" "deb https://snapshot-cloudflare.debian.org/archive/debian/20260518T000000Z/ bookworm-proposed-updates main" > /tmp/snapshot.list
+            apt-get update -o Acquire::Check-Valid-Until=false -o Acquire::https::Timeout=20 -o Acquire::Retries=1 -o APT::Update::Error-Mode=any -o Dir::Etc::sourcelist=/tmp/snapshot.list -o Dir::Etc::sourceparts=-
+            apt-get --print-uris -y install --no-install-recommends -o Acquire::Check-Valid-Until=false -o Dir::Etc::sourcelist=/tmp/snapshot.list -o Dir::Etc::sourceparts=- libglib2.0-0 libexpat1 libjpeg62-turbo libpng16-16 libwebp7 libwebpmux3 libwebpdemux2 libtiff6 libaom3 libdav1d6 librsvg2-2 libpango-1.0-0 libpangocairo-1.0-0 liblcms2-2 libexif12 libarchive13 libcgif0 libimagequant0 fontconfig "ffmpeg=7:5.1.9-0+deb12u1" > /out/uris
+          '
+      - name: Check mirror availability for complete dependency set
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import concurrent.futures, subprocess
+          lines = open('/tmp/closure/uris').readlines()
+          uris = [line.split("'",2)[1] for line in lines if line.startswith("'")]
+          if len(uris) < 100: raise SystemExit(f'unexpected closure count: {len(uris)}')
+          def probe(uri):
+              path = uri.split('/pool/',1)[1]
+              urls = ['https://deb.debian.org/debian/pool/'+path, 'https://snapshot-cloudflare.debian.org/archive/debian/20260518T000000Z/pool/'+path]
+              statuses=[]
+              for url in urls:
+                  p=subprocess.run(['curl','-4','-L','-s','-o','/dev/null','-w','%{http_code}','--head','--max-time','8',url],capture_output=True,text=True)
+                  statuses.append(p.stdout)
+                  if p.stdout=='200': break
+              return uri,statuses
+          with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool: rows=list(pool.map(probe, uris))
+          cdn=sum(r[1][0]=='200' for r in rows)
+          fallback=sum(r[1][0]!='200' and r[1][-1]=='200' for r in rows)
+          missing=[r for r in rows if r[1][-1]!='200']
+          print(f'total={len(rows)} cdn={cdn} fallback={fallback} unavailable={len(missing)}')
+          for uri,statuses in missing: print('UNAVAILABLE',statuses,uri)
+          PY
