@@ -16,9 +16,13 @@ jobs:
         shell: bash
         run: |
           mkdir -p /tmp/closure && chmod 777 /tmp/closure
-          timeout 180s docker run --rm -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro -v /tmp/closure:/out node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 sh -ec '
-            printf "%s\n" "deb https://snapshot-cloudflare.debian.org/archive/debian/20260518T000000Z/ bookworm main" "deb https://snapshot-cloudflare.debian.org/archive/debian/20260518T000000Z/ bookworm-proposed-updates main" > /tmp/snapshot.list
-            apt-get update -o Acquire::Check-Valid-Until=false -o Acquire::https::Timeout=20 -o Acquire::Retries=1 -o APT::Update::Error-Mode=any -o Dir::Etc::sourcelist=/tmp/snapshot.list -o Dir::Etc::sourceparts=-
+          timeout 300s docker run --rm -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro -v /tmp/closure:/out node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 sh -ec '
+            ok=0
+            for host in snapshot-fastly.debian.org snapshot.debian.org snapshot-cloudflare.debian.org; do
+              printf "%s\n" "deb https://$host/archive/debian/20260518T000000Z/ bookworm main" "deb https://$host/archive/debian/20260518T000000Z/ bookworm-proposed-updates main" > /tmp/snapshot.list
+              if apt-get update -o Acquire::Check-Valid-Until=false -o Acquire::https::Timeout=12 -o Acquire::Retries=0 -o APT::Update::Error-Mode=any -o Dir::Etc::sourcelist=/tmp/snapshot.list -o Dir::Etc::sourceparts=-; then ok=1; break; fi
+            done
+            test "$ok" = 1
             apt-get --print-uris -y install --no-install-recommends -o Acquire::Check-Valid-Until=false -o Dir::Etc::sourcelist=/tmp/snapshot.list -o Dir::Etc::sourceparts=- libglib2.0-0 libexpat1 libjpeg62-turbo libpng16-16 libwebp7 libwebpmux3 libwebpdemux2 libtiff6 libaom3 libdav1d6 librsvg2-2 libpango-1.0-0 libpangocairo-1.0-0 liblcms2-2 libexif12 libarchive13 libcgif0 libimagequant0 fontconfig "ffmpeg=7:5.1.9-0+deb12u1" > /out/uris
           '
       - name: Check mirror availability for complete dependency set
