@@ -1,7 +1,10 @@
 // Build-only adapter: retain signed immutable snapshot indexes while fetching
 // identical pool objects from Debian mirrors, with bounded fallback.
-const http = require('node:http');
-const https = require('node:https');
+import http from 'node:http';
+import https from 'node:https';
+import { URL } from 'node:url';
+import { Buffer } from 'node:buffer';
+import console from 'node:console';
 const prefix = '/archive/debian/20260518T000000Z/';
 const snapshots = ['snapshot-fastly.debian.org', 'snapshot.debian.org', 'snapshot-cloudflare.debian.org'];
 const maxBytes = 100 * 1024 * 1024;
