@@ -1,4 +1,4 @@
-name: Temporary Debian package closure probe
+name: Temporary signed snapshot package installation probe
 on:
   workflow_dispatch:
     inputs:
@@ -10,42 +10,18 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
-      - name: Resolve signed snapshot dependencies
+      - uses: actions/checkout@v4
+      - name: Install pinned package closure with native apt verification
         shell: bash
         run: |
-          mkdir -p /tmp/closure && chmod 777 /tmp/closure
-          timeout 300s docker run --rm -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro -v /tmp/closure:/out node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 sh -ec '
-            ok=0
-            for host in snapshot-fastly.debian.org snapshot.debian.org snapshot-cloudflare.debian.org; do
-              printf "%s\n" "deb https://$host/archive/debian/20260518T000000Z/ bookworm main" "deb https://$host/archive/debian/20260518T000000Z/ bookworm-proposed-updates main" > /tmp/snapshot.list
-              if apt-get update -o Acquire::Check-Valid-Until=false -o Acquire::https::Timeout=12 -o Acquire::Retries=0 -o APT::Update::Error-Mode=any -o Dir::Etc::sourcelist=/tmp/snapshot.list -o Dir::Etc::sourceparts=-; then ok=1; break; fi
-            done
-            test "$ok" = 1
-            apt-get --print-uris -y install --no-install-recommends -o Acquire::Check-Valid-Until=false -o Dir::Etc::sourcelist=/tmp/snapshot.list -o Dir::Etc::sourceparts=- libglib2.0-0 libexpat1 libjpeg62-turbo libpng16-16 libwebp7 libwebpmux3 libwebpdemux2 libtiff6 libaom3 libdav1d6 librsvg2-2 libpango-1.0-0 libpangocairo-1.0-0 liblcms2-2 libexif12 libarchive13 libcgif0 libimagequant0 fontconfig "ffmpeg=7:5.1.9-0+deb12u1" > /out/uris
+          timeout 600s docker run --rm -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro -v "$PWD/scripts/debian-snapshot-proxy.cjs:/tmp/proxy.cjs:ro" node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 sh -ec '
+            node /tmp/proxy.cjs & p=$!; trap "kill $p" EXIT
+            printf "%s\n" "deb http://127.0.0.1:18765/archive/debian/20260518T000000Z/ bookworm main" "deb http://127.0.0.1:18765/archive/debian/20260518T000000Z/ bookworm-proposed-updates main" > /tmp/snapshot.list
+            opts="-o Acquire::Check-Valid-Until=false -o APT::Update::Error-Mode=any -o Dir::Etc::sourcelist=/tmp/snapshot.list -o Dir::Etc::sourceparts=-"
+            apt-get update $opts
+            apt-get install -y --no-install-recommends $opts libglib2.0-0 libexpat1 libjpeg62-turbo libpng16-16 libwebp7 libwebpmux3 libwebpdemux2 libtiff6 libaom3 libdav1d6 librsvg2-2 libpango-1.0-0 libpangocairo-1.0-0 liblcms2-2 libexif12 libarchive13 libcgif0 libimagequant0 fontconfig "ffmpeg=7:5.1.9-0+deb12u1"
+            ffmpeg -version | head -1 | grep -F 5.1.9
+            ffprobe -version | head -1 | grep -F 5.1.9
           '
-      - name: Check mirror availability for complete dependency set
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import concurrent.futures, subprocess
-          lines = open('/tmp/closure/uris').readlines()
-          uris = [line.split("'",2)[1] for line in lines if line.startswith("'")]
-          if len(uris) < 100: raise SystemExit(f'unexpected closure count: {len(uris)}')
-          def probe(uri):
-              path = uri.split('/pool/',1)[1]
-              urls = ['https://deb.debian.org/debian/pool/'+path, 'https://snapshot-cloudflare.debian.org/archive/debian/20260518T000000Z/pool/'+path]
-              statuses=[]
-              for url in urls:
-                  p=subprocess.run(['curl','-4','-L','-s','-o','/dev/null','-w','%{http_code}','--head','--max-time','8',url],capture_output=True,text=True)
-                  statuses.append(p.stdout)
-                  if p.stdout=='200': break
-              return uri,statuses
-          with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool: rows=list(pool.map(probe, uris))
-          cdn=sum(r[1][0]=='200' for r in rows)
-          fallback=sum(r[1][0]!='200' and r[1][-1]=='200' for r in rows)
-          missing=[r for r in rows if r[1][-1]!='200']
-          print(f'total={len(rows)} cdn={cdn} fallback={fallback} unavailable={len(missing)}')
-          for uri,statuses in missing: print('UNAVAILABLE',statuses,uri)
-          PY
