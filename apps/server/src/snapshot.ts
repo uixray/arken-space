@@ -716,6 +716,17 @@ export async function buildSnapshot(
   );
   const me = memberRows.find((member) => member.id === auth.membershipId);
   if (!me) throw new Error("Membership not found");
+  // Membership grants preserve existing installations. A separate explicit
+  // account grant follows the person across campaigns without inheriting a
+  // different account's preference if a membership is ever reassigned.
+  const geometricDiceNames =
+    env.GEOMETRIC_DICE_MEMBERSHIP_IDS.split(",").some(
+      (id) => id.trim().toLowerCase() === me.id.toLowerCase(),
+    ) ||
+    (me.userId !== null &&
+      env.GEOMETRIC_DICE_USER_IDS.split(",").some(
+        (id) => id.trim().toLowerCase() === me.userId!.toLowerCase(),
+      ));
   const audio = normalizedAudioTracks[0];
   const snapshotVersion = Number(sequenceRows[0]?.value ?? 0);
   const visibleScenes =
@@ -1041,9 +1052,7 @@ export async function buildSnapshot(
       diceFrameAssetId: me.diceFrameAssetId,
     },
     personalTheme: personalThemeDto(me),
-    ...(env.GEOMETRIC_DICE_MEMBERSHIP_IDS.split(",").some(
-      (id) => id.trim().toLowerCase() === me.id.toLowerCase(),
-    )
+    ...(geometricDiceNames
       ? { personalDiceNames: "GEOMETRIC" as const }
       : {}),
     members: (auth.role === "GM"
