@@ -245,29 +245,48 @@ export function useGameSocketSubscriptions({
           : current,
       ),
     );
+    // A point event for an unrelated domain can advance snapshotVersion before
+    // fog arrives. Do not silently discard the resulting discrepancy: request
+    // the server's canonical projection instead of replaying potentially
+    // stale fog after a deletion or scene switch. Coalesce a burst of strokes.
+    let fogResyncScheduled = false;
+    const requestFogResync = (knownSequence: number) => {
+      if (fogResyncScheduled) return;
+      fogResyncScheduled = true;
+      queueMicrotask(() => {
+        fogResyncScheduled = false;
+        if (next.connected) next.emit("game:resync", knownSequence);
+      });
+    };
     next.on("fog:created", (event) =>
-      setSnapshot((current) =>
-        current && event.sequence > current.snapshotVersion
-          ? {
-              ...current,
-              snapshotVersion: event.sequence,
-              fogReveals: [...current.fogReveals, event.data],
-            }
-          : current,
-      ),
+      setSnapshot((current) => {
+        if (!current) return current;
+        const exists = current.fogReveals.some((fog) => fog.id === event.data.id);
+        if (event.sequence <= current.snapshotVersion) {
+          if (!exists) requestFogResync(current.snapshotVersion);
+          return current;
+        }
+        return {
+          ...current,
+          snapshotVersion: event.sequence,
+          fogReveals: exists ? current.fogReveals : [...current.fogReveals, event.data],
+        };
+      }),
     );
     next.on("fog:removed", (event) =>
-      setSnapshot((current) =>
-        current && event.sequence > current.snapshotVersion
-          ? {
-              ...current,
-              snapshotVersion: event.sequence,
-              fogReveals: current.fogReveals.filter(
-                (fog) => fog.id !== event.data.fogRevealId,
-              ),
-            }
-          : current,
-      ),
+      setSnapshot((current) => {
+        if (!current) return current;
+        const exists = current.fogReveals.some((fog) => fog.id === event.data.fogRevealId);
+        if (event.sequence <= current.snapshotVersion) {
+          if (exists) requestFogResync(current.snapshotVersion);
+          return current;
+        }
+        return {
+          ...current,
+          snapshotVersion: event.sequence,
+          fogReveals: current.fogReveals.filter((fog) => fog.id !== event.data.fogRevealId),
+        };
+      }),
     );
     // UIX-412: ordered by the server after any snapshot in flight, so there
     // is no snapshotVersion gate; an older revision never replaces a newer.
