@@ -179,6 +179,7 @@ export function useGameSocketSubscriptions({
     next.io.on("reconnect_attempt", () => setConnection("RECONNECTING"));
     next.io.on("reconnect_failed", () => setConnection("OFFLINE"));
     next.on("game:snapshot", (nextSnapshot) => {
+      next.previewSnapshotVersion = nextSnapshot.snapshotVersion;
       setSnapshot((current) => {
         // Unchanged slices keep their identity, so a chat-only broadcast
         // does not re-render the map (see structural-sharing.ts).

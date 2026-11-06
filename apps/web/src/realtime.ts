@@ -5,7 +5,9 @@ import type {
   ServerToClientEvents,
 } from "@arken/contracts";
 
-export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
+export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents> & {
+  previewSnapshotVersion?: number;
+};
 
 export function createGameSocket(): GameSocket {
   return io({

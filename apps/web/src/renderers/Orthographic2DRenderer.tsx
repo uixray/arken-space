@@ -3057,6 +3057,8 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           props.socket?.emit("token:moving", {
             actionId: crypto.randomUUID(),
             tokenId: token.id,
+            sceneId: token.sceneId,
+            snapshotVersion: props.socket?.previewSnapshotVersion,
             x: event.target.x(),
             y: event.target.y(),
             z: token.z,

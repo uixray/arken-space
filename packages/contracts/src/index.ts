@@ -1316,6 +1316,10 @@ export const moveTokenSchema = z.object({
   levelId: z.string().uuid().nullable().default(null),
   revision: z.number().int().nonnegative(),
 });
+export const tokenMovingSchema = moveTokenSchema.extend({
+  sceneId: z.string().uuid().optional(),
+  snapshotVersion: z.number().int().nonnegative().optional(),
+});
 export const deleteTokenSchema = z.object({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),
@@ -3357,7 +3361,7 @@ export interface ServerToClientEvents {
     members: Array<{ membershipId: string; online: boolean }>,
   ) => void;
   "scene:activated": (event: EventEnvelope<string>) => void;
-  "token:moving": (movement: z.infer<typeof moveTokenSchema>) => void;
+  "token:moving": (movement: z.infer<typeof tokenMovingSchema>) => void;
   "token:moved": (event: EventEnvelope<TokenDto>) => void;
   /** UIX-412: conditions or colours of a token the socket sees changed. */
   "token:updated": (event: EventEnvelope<TokenDto>) => void;
@@ -3419,7 +3423,7 @@ export interface ServerToClientEvents {
 }
 
 export interface ClientToServerEvents {
-  "token:moving": (movement: z.infer<typeof moveTokenSchema>) => void;
+  "token:moving": (movement: z.infer<typeof tokenMovingSchema>) => void;
   "token:moved": (
     movement: z.infer<typeof moveTokenSchema>,
     ack?: (result: CommandAck<TokenDto>) => void,

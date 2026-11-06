@@ -34,6 +34,7 @@ import {
   cursorMoveSchema,
   fogHiddenTokenIds,
   moveTokenSchema,
+  tokenMovingSchema,
   normalizeTokenSpriteSet,
   rulerPolylineDistance,
   rulerUpdateSchema,
@@ -638,7 +639,7 @@ export function registerRealtime(
     );
 
     socket.on("token:moving", async (input) => {
-      const parsed = moveTokenSchema.safeParse(input);
+      const parsed = tokenMovingSchema.safeParse(input);
       if (!parsed.success) return;
       await runCampaignCanvasRelay(db, auth.campaignId, async (tx) => {
         const projection = await projectedToken(
@@ -647,6 +648,8 @@ export function registerRealtime(
           parsed.data.tokenId,
         );
         if (!canEditProjectedToken(auth, projection) || !projection) return;
+        if (parsed.data.revision !== projection.token.revision ||
+            (parsed.data.sceneId && parsed.data.sceneId !== projection.token.sceneId)) return;
         const previewToken = {
           ...projection.token,
           x: parsed.data.x,

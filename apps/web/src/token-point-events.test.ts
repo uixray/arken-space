@@ -85,6 +85,9 @@ describe("token realtime events", () => {
         cursors,
       ),
     ).toBe(recreated);
+    expect(applyTokenPreview(recreated, { tokenId: "a", revision: 0, x: 99, y: 0, sceneId: "scene-a", snapshotVersion: 44 }, cursors)).toBe(recreated);
+    expect(applyTokenPreview(recreated, { tokenId: "a", revision: 0, x: 8, y: 9, sceneId: "scene-a", snapshotVersion: 50 }, cursors).tokens[0]).toMatchObject({ x: 8, y: 9 });
+    expect(applyTokenPreview(recreated, { tokenId: "a", revision: 0, x: 99, y: 0, sceneId: "scene-b", snapshotVersion: 50 }, cursors)).toBe(recreated);
     expect(
       applyTokenPointEvent(
         recreated,
