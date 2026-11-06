@@ -7,6 +7,7 @@ import type {
 
 export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents> & {
   previewSnapshotVersion?: number;
+  previewEpoch?: string;
 };
 
 export function createGameSocket(): GameSocket {

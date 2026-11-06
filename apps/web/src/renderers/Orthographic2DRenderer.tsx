@@ -3059,6 +3059,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
             tokenId: token.id,
             sceneId: token.sceneId,
             snapshotVersion: props.socket?.previewSnapshotVersion,
+            previewEpoch: props.socket?.previewEpoch,
             x: event.target.x(),
             y: event.target.y(),
             z: token.z,

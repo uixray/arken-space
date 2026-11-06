@@ -1,6 +1,8 @@
 import type { FastifyBaseLogger } from "fastify";
 import type { Server } from "socket.io";
 import { randomUUID } from "node:crypto";
+import { tokenPreviewEpochs } from "./token-preview-epochs.js";
+import { emitPreviewSnapshot } from "./preview-snapshot.js";
 import { and, asc, count, eq, inArray, max } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -525,7 +527,7 @@ export function registerRealtime(
         !socket.connected
       )
         return;
-      socket.emit("game:snapshot", snapshot);
+      emitPreviewSnapshot(io, socket, auth.campaignId, snapshot);
     };
     socket.on("scene:view", (view) => {
       void handleSceneView(view).catch((error) =>
@@ -566,7 +568,7 @@ export function registerRealtime(
         },
         "realtime.resync",
       );
-      socket.emit("game:snapshot", snapshot);
+      emitPreviewSnapshot(io, socket, auth.campaignId, snapshot);
     };
     socket.on("game:resync", (knownSequence) => {
       void handleGameResync(knownSequence).catch((error) =>
@@ -596,7 +598,7 @@ export function registerRealtime(
       const snapshot = await createSnapshot(db, auth, viewedCanvasSceneIds());
       if (!(await checkSessionActive(db, auth.sessionId)) || !socket.connected)
         throw new Error("AUTH_REQUIRED");
-      socket.emit("game:snapshot", snapshot);
+      emitPreviewSnapshot(io, socket, auth.campaignId, snapshot);
       // Only a fully initialized replacement socket may cancel the old
       // transport's offline transition. A failed reconnect must leave that
       // timer intact so the membership eventually becomes offline.
@@ -640,7 +642,7 @@ export function registerRealtime(
 
     socket.on("token:moving", async (input) => {
       const parsed = tokenMovingSchema.safeParse(input);
-      if (!parsed.success) return;
+      if (!parsed.success || parsed.data.previewEpoch !== tokenPreviewEpochs.current(auth.campaignId)) return;
       await runCampaignCanvasRelay(db, auth.campaignId, async (tx) => {
         const projection = await projectedToken(
           tx,
@@ -666,7 +668,7 @@ export function registerRealtime(
           projection.activeSceneId,
           projection.token.controllerMembershipIds,
         );
-        if (!socket.connected) return;
+        if (!socket.connected || parsed.data.previewEpoch !== tokenPreviewEpochs.current(auth.campaignId)) return;
         socket.to(delivery.rooms).emit("token:moving", parsed.data);
       });
     });
@@ -1948,6 +1950,7 @@ export function registerRealtime(
     });
 
     socket.on("disconnect", (reason) => {
+      tokenPreviewEpochs.forget(socket.id);
       pendingRulerClear = null;
       pendingRulerUpdate = null;
       log.info(
