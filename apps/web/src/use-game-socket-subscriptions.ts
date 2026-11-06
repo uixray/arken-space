@@ -261,6 +261,11 @@ export function useGameSocketSubscriptions({
     next.on("fog:created", (event) =>
       setSnapshot((current) => {
         if (!current) return current;
+        // A scene switch can overtake the server relay after it selected the
+        // audience. Do not attach fog from a scene no longer in this view.
+        const visibleScene = current.scenes.some((scene) => scene.active && scene.id === event.data.sceneId) ||
+          (current.me.role === "GM" && viewedSceneIdRef.current === event.data.sceneId);
+        if (!visibleScene) return current;
         const exists = current.fogReveals.some((fog) => fog.id === event.data.id);
         if (event.sequence <= current.snapshotVersion) {
           if (!exists) requestFogResync(current.snapshotVersion);
