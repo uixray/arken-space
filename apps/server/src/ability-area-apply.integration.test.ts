@@ -302,6 +302,53 @@ it("applies one shared area roll to player targets once without revealing a hidd
         .from(schema.gameEvents)
         .where(eq(schema.gameEvents.actionId, cancelled.actionId)),
     ).toHaveLength(1);
+    const [allyBeforeConflict] = await db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ally));
+    await db
+      .update(schema.characters)
+      .set({ revision: allyBeforeConflict!.revision + 1 })
+      .where(eq(schema.characters.id, ally));
+    const refused = await app.inject({
+      method: "POST",
+      url: "/api/chat/application-undo",
+      headers,
+      payload: { actionId: id(), messageId: first.messageId },
+    });
+    expect(refused.statusCode, refused.body).toBe(409);
+    expect(refused.json().error).toBe("UNDO_CONFLICT");
+    const [entryStillSpent] = await db
+      .select()
+      .from(schema.characterCatalogEntries)
+      .where(eq(schema.characterCatalogEntries.id, entry));
+    expect(entryStillSpent?.data).toMatchObject({ uses: { current: 0 } });
+    // Restore this synthetic fixture to test the successful branch separately.
+    await db
+      .update(schema.characters)
+      .set({ revision: allyBeforeConflict!.revision })
+      .where(eq(schema.characters.id, ally));
+    const undoId = id();
+    const undone = await app.inject({
+      method: "POST",
+      url: "/api/chat/application-undo",
+      headers,
+      payload: { actionId: undoId, messageId: first.messageId },
+    });
+    expect(undone.statusCode, undone.body).toBe(200);
+    for (const characterId of [caster, ally]) {
+      const [restored] = await db
+        .select()
+        .from(schema.characters)
+        .where(eq(schema.characters.id, characterId));
+      expect(restored?.resources).toEqual(resources);
+    }
+    const [restoredEntry] = await db
+      .select()
+      .from(schema.characterCatalogEntries)
+      .where(eq(schema.characterCatalogEntries.id, entry));
+    expect(restoredEntry?.data).toMatchObject({ uses: { current: 1 } });
+    expect(JSON.stringify(undone.json())).not.toContain(ally);
   } finally {
     await app.close();
     await pg.close();

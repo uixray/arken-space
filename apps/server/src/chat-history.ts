@@ -20,7 +20,11 @@ import {
 } from "@arken/db";
 import type { ChatMessageDto } from "@arken/contracts";
 import type { AuthContext } from "./auth.js";
-import { normalizeDiceResult, normalizeSkillCard } from "./dice-result.js";
+import {
+  applicationUndoFromDice,
+  normalizeDiceResult,
+  normalizeSkillCard,
+} from "./dice-result.js";
 import { revokedStickerTombstone } from "./sticker-access.js";
 import {
   canAccessStream,
@@ -178,6 +182,7 @@ export async function projectChatMessages(
       stream: thread.stream,
       dice: normalizeDiceResult(message.dice),
       skillCard: normalizeSkillCard(message.dice),
+      applicationUndo: applicationUndoFromDice(message.dice),
       // Отозванное согласие превращает стикер в надгробие, а не прячет
       // сообщение: собеседник должен видеть, что тут что-то было.
       stickerId:

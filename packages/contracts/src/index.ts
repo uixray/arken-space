@@ -2967,6 +2967,7 @@ export interface ChatMessageDto {
   dice: DiceResult | null;
   /** Immutable v1 skill/ability card stored with the message, when present. */
   skillCard?: SkillCardSnapshot | null;
+  applicationUndo?: { cancelled: boolean } | null;
   stickerId?: string | null;
   globalStickerId?: string | null;
   stickerPresentation?: StickerPresentation | null;

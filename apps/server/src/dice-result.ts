@@ -132,3 +132,14 @@ export function normalizeSkillCard(value: unknown): SkillCardSnapshot | null {
   );
   return parsed.success ? parsed.data : null;
 }
+
+export function applicationUndoFromDice(
+  value: unknown,
+): { cancelled: boolean } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const marker = (value as Record<string, unknown>).applicationUndo;
+  if (!marker || typeof marker !== "object" || Array.isArray(marker))
+    return null;
+  const cancelled = (marker as Record<string, unknown>).cancelled;
+  return typeof cancelled === "boolean" ? { cancelled } : null;
+}

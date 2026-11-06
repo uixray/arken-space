@@ -1,4 +1,5 @@
 import { InspirationRollAction, InspirationResource } from "../CharacterExtras";
+import { api } from "../api";
 import { useComposerSuggestions } from "../ui/use-composer-suggestions";
 import { RollVisibilityContext } from "../roll-visibility-context";
 import {
@@ -252,6 +253,62 @@ function useHistoryScrollHandler(input: {
       });
     },
     [hasMore, listRef, loadOlder, onFollowScroll, pending],
+  );
+}
+
+export function ApplicationUndoControl({
+  message,
+  snapshot,
+}: {
+  message: GameSnapshot["messages"][number];
+  snapshot: GameSnapshot;
+}) {
+  const [done, setDone] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const inFlight = useRef(false);
+  if (!message.applicationUndo) return null;
+  if (message.applicationUndo.cancelled || done)
+    return <p role="status">Применение отменено</p>;
+  if (snapshot.me.role !== "GM" && snapshot.me.id !== message.membershipId)
+    return null;
+  const undo = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setPending(true);
+    setError("");
+    try {
+      await api("/api/chat/application-undo", {
+        method: "POST",
+        body: JSON.stringify({
+          actionId: crypto.randomUUID(),
+          messageId: message.id,
+        }),
+      });
+      setDone(true);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Не удалось отменить применение.",
+      );
+    } finally {
+      inFlight.current = false;
+      setPending(false);
+    }
+  };
+  return (
+    <div>
+      <Button
+        type="button"
+        view="flat-secondary"
+        disabled={pending}
+        onClick={() => void undo()}
+      >
+        Отменить применение
+      </Button>
+      {error && <p role="alert">{error}</p>}
+    </div>
   );
 }
 
@@ -1116,6 +1173,7 @@ export function ActivityPanel({
                 playerRequests={snapshot.playerRequests}
                 onOpenPlayerRequests={onOpenPlayerRequestCreate}
               />
+              <ApplicationUndoControl message={message} snapshot={snapshot} />
               <InspirationRollAction
                 key={
                   snapshot.campaign.id + ":" + snapshot.me.id + ":" + message.id
@@ -1987,6 +2045,10 @@ export function ChatPanel({
                 }
                 playerRequests={snapshot.playerRequests}
                 onOpenPlayerRequests={onOpenPlayerRequests}
+              />
+              <ApplicationUndoControl
+                message={item.message}
+                snapshot={snapshot}
               />
               <InspirationRollAction
                 key={

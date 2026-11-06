@@ -1,6 +1,10 @@
 import { sameInspiration } from "./character-extras-routes.js";
 import { applyAbilityArea } from "./ability-area-apply.js";
 import { cancelAbilityArea } from "./ability-area-state.js";
+import {
+  undoApplication,
+  undoApplicationCommandSchema,
+} from "./undo-application.js";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
 import type {
@@ -111,6 +115,68 @@ export function registerCharacterPlayRoutes(
     ) => Promise<void>;
   },
 ) {
+  app.post("/api/chat/application-undo", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    const parsed = undoApplicationCommandSchema.safeParse(request.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: "INVALID_UNDO_COMMAND" });
+    try {
+      const result = await undoApplication(db, auth, parsed.data);
+      if (result.duplicate) return reply.send({ duplicate: true });
+      const dto = chatMessageDto(result.message!, auth.displayName, "ROLLS");
+      const envelope = {
+        sequence: Number(result.event!.sequence),
+        actionId: parsed.data.actionId,
+        emittedAt: result.event!.createdAt.toISOString(),
+        data: dto,
+      };
+      if (chatBroadcastAudience(result.message!.visibility) === "CAMPAIGN")
+        io.to(campaignRoom(auth.campaignId)).emit("chat:created", envelope);
+      else {
+        io.to(gmRoom(auth.campaignId)).emit("chat:created", envelope);
+        io.to(memberRoom(result.originalAuthorId!)).emit(
+          "chat:created",
+          envelope,
+        );
+      }
+      await broadcast(auth.campaignId);
+      return reply.send({ ok: true });
+    } catch (error) {
+      const dbCode =
+        error && typeof error === "object" && "code" in error
+          ? error.code
+          : undefined;
+      if (dbCode === "40001" || dbCode === "40P01")
+        return reply.code(409).send({
+          error: "UNDO_CONFLICT",
+          message:
+            "Данные одновременно изменились; обновите их перед повтором.",
+        });
+      if (dbCode === "23505")
+        return reply.code(409).send({ error: "ACTION_CONFLICT" });
+      const code = error instanceof Error ? error.message : "";
+      if (code === "UNDO_FORBIDDEN")
+        return reply
+          .code(403)
+          .send({ error: code, message: "Нет доступа к этому применению." });
+      if (code === "UNDO_NOT_AVAILABLE")
+        return reply.code(409).send({
+          error: code,
+          message:
+            "Для этого старого применения нет безопасных данных для отмены.",
+        });
+      if (code === "UNDO_CONFLICT")
+        return reply.code(409).send({
+          error: code,
+          message:
+            "Данные уже изменились после применения; автоматическая отмена невозможна.",
+        });
+      if (code === "ACTION_CONFLICT")
+        return reply.code(409).send({ error: code });
+      throw error;
+    }
+  });
   app.post("/api/abilities/area/cancel", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
@@ -1162,7 +1228,18 @@ export function registerCharacterPlayRoutes(
               ]
                 .filter(Boolean)
                 .join(" - "),
-              dice: result ? { ...result, skillCard } : { skillCard },
+              dice: result
+                ? {
+                    ...result,
+                    skillCard,
+                    applicationUndo:
+                      mode === "EXECUTE" ? { cancelled: false } : undefined,
+                  }
+                : {
+                    skillCard,
+                    applicationUndo:
+                      mode === "EXECUTE" ? { cancelled: false } : undefined,
+                  },
             })
             .returning();
           if (!message) throw new Error("ROLL_SAVE_FAILED");
@@ -1182,6 +1259,30 @@ export function registerCharacterPlayRoutes(
               payload: {
                 skillCard,
                 messageId: message.id,
+                undoReceipt:
+                  mode === "EXECUTE"
+                    ? {
+                        version: 1,
+                        entry:
+                          consumeUse || (cost && resourceKey)
+                            ? {
+                                id: row.entry.id,
+                                beforeData: row.entry.data,
+                                afterRevision: row.entry.revision + 1,
+                              }
+                            : null,
+                        characters:
+                          cost && resourceKey
+                            ? [
+                                {
+                                  id: row.character.id,
+                                  beforeResources: row.character.resources,
+                                  afterRevision: row.character.revision + 1,
+                                },
+                              ]
+                            : [],
+                      }
+                    : null,
                 resourceCost: cost
                   ? {
                       type: cost.type,
