@@ -17,6 +17,7 @@ export type ComposerKeydownAction =
 export function decideComposerKeydown(event: {
   key: string;
   ctrlKey: boolean;
+  metaKey?: boolean;
   shiftKey: boolean;
   isComposing: boolean;
 }): ComposerKeydownAction {
@@ -25,6 +26,6 @@ export function decideComposerKeydown(event: {
   // Enter to confirm the candidate, not to submit the form.
   if (event.isComposing) return "IGNORE";
   if (event.shiftKey) return "NEWLINE";
-  if (event.ctrlKey) return "SEND_GM_ONLY";
+  if (event.ctrlKey || event.metaKey) return "SEND_GM_ONLY";
   return "SEND_PUBLIC";
 }

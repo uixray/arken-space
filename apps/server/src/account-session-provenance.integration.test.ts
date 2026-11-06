@@ -15,7 +15,7 @@ import {
   sessions,
   users,
 } from "@arken/db";
-import { authFromSessionToken, createSession } from "./auth.js";
+import { authFromSessionToken, createSession, requireAuth } from "./auth.js";
 import { env } from "./env.js";
 import { hashToken } from "./security.js";
 import { claimInviteOwnership } from "./routes.js";
@@ -238,6 +238,33 @@ describe("game session provenance", () => {
       membershipId: gm.membershipId,
       campaignId: gm.campaignId,
     });
+    const response = {
+      status: 0,
+      body: null as unknown,
+      code(status: number) {
+        this.status = status;
+        return this;
+      },
+      async send(body: unknown) {
+        this.body = body;
+      },
+    };
+    const request: {
+      cookies: Record<string, string>;
+      headers: Record<string, string>;
+    } = {
+      cookies: { [env.SESSION_COOKIE_NAME]: session.token },
+      headers: { "x-arken-campaign-id": crypto.randomUUID() },
+    };
+    expect(
+      await requireAuth(request as never, response as never, db as never),
+    ).toBeNull();
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({ error: "CAMPAIGN_SESSION_CHANGED" });
+    request.headers["x-arken-campaign-id"] = gm.campaignId;
+    expect(
+      await requireAuth(request as never, response as never, db as never),
+    ).toMatchObject({ campaignId: gm.campaignId });
     await db
       .update(gmAccessCredentials)
       .set({ revision: 1 })

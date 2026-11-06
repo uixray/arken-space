@@ -9,7 +9,11 @@ export function isDirectTokenDrag(
   return target === currentTarget;
 }
 
-type PointerIntent = Readonly<{ button: number; ctrlKey: boolean }>;
+type PointerIntent = Readonly<{
+  button: number;
+  ctrlKey: boolean;
+  metaKey?: boolean;
+}>;
 
 /** Reserve the primary Ctrl gesture (and PING tool) for the stage ping handler. */
 export function runNonPingPointerAction(
@@ -17,7 +21,8 @@ export function runNonPingPointerAction(
   event: PointerIntent,
   action: () => void,
 ): void {
-  if (tool === "PING" || event.button !== 0 || event.ctrlKey) return;
+  if (tool === "PING" || event.button !== 0 || event.ctrlKey || event.metaKey)
+    return;
   action();
 }
 
@@ -47,7 +52,7 @@ export function createTokenDragGuard() {
   const recordPointerDown = (node: DragNode, event: PointerIntent) => {
     presses.set(node, {
       origin: { x: node.x(), y: node.y() },
-      blocked: event.ctrlKey || event.button !== 0,
+      blocked: event.ctrlKey || Boolean(event.metaKey) || event.button !== 0,
       cancelled: false,
       started: false,
     });
@@ -60,7 +65,7 @@ export function createTokenDragGuard() {
     const node = event.currentTarget;
     const press = presses.get(node);
     if (press?.cancelled) return false;
-    if (press?.blocked || event.evt?.ctrlKey) {
+    if (press?.blocked || event.evt?.ctrlKey || event.evt?.metaKey) {
       const origin = press?.origin ?? { x: node.x(), y: node.y() };
       // Mark first: stopDrag emits dragend before returning. Keep the veto until
       // a new gesture starts, even if Ctrl has been released by pointer-up.
@@ -92,6 +97,7 @@ export function createTokenDragGuard() {
         recordPointerDown(node, {
           button: event.evt?.button ?? 0,
           ctrlKey: event.evt?.ctrlKey ?? false,
+          metaKey: event.evt?.metaKey ?? false,
         });
       const current = presses.get(node)!;
       current.started = true;

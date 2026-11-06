@@ -56,4 +56,17 @@ describe("canonicalizeFogGeometry", () => {
     if (result.geometry.type === "BRUSH")
       expect(result.geometry.points.length).toBeLessThanOrEqual(256);
   });
+  it("accepts a brush on the scene edge but rejects points outside", () => {
+    const edge = canonicalizeFogGeometry(
+      { type: "BRUSH", points: [{ x: 0, y: 5 }], radius: 3 },
+      { width: 10, height: 10 },
+    );
+    expect(edge.bbox).toEqual({ x: -3, y: 2, width: 6, height: 6 });
+    expect(() =>
+      canonicalizeFogGeometry(
+        { type: "BRUSH", points: [{ x: -1, y: 5 }], radius: 3 },
+        { width: 10, height: 10 },
+      ),
+    ).toThrow(FogGeometryError);
+  });
 });

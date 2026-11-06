@@ -216,7 +216,8 @@ describe("AccountAuthWorkspace", () => {
         capabilities={capabilities}
       />,
     );
-    await screen.findByRole("heading", { name: "Почта подтверждена" });
+    await screen.findByRole("heading", { name: "Добро пожаловать" });
+    fireEvent.click(screen.getByText("Изменить пароль"));
     fireEvent.change(screen.getByLabelText("Текущий пароль"), {
       target: { value: "old secure phrase" },
     });
@@ -252,7 +253,7 @@ describe("AccountAuthWorkspace", () => {
         capabilities={capabilities}
       />,
     );
-    await screen.findByRole("heading", { name: "Почта подтверждена" });
+    await screen.findByRole("heading", { name: "Добро пожаловать" });
     fireEvent.click(screen.getByRole("button", { name: "Выйти из аккаунта" }));
     await waitFor(() =>
       expect(apiMock).toHaveBeenCalledWith(
@@ -425,11 +426,17 @@ describe("AccountAuthWorkspace", () => {
       />,
     );
     await screen.findByRole("heading", { name: "Мои кампании" });
+    fireEvent.click(
+      screen.getByText("Создать кампанию", { selector: "summary" }),
+    );
     fireEvent.change(screen.getByLabelText("Новая кампания"), {
       target: { value: "My table" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Создать кампанию" }));
     await screen.findByText("My table");
+    fireEvent.click(
+      screen.getByText("Пригласить игрока", { selector: "summary" }),
+    );
     fireEvent.change(screen.getByLabelText("Приглашение игроку"), {
       target: { value: "Player one" },
     });

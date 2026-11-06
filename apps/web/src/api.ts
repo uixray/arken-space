@@ -1,4 +1,5 @@
 import { rememberApiFailure } from "./feedback-diagnostics";
+import { campaignHeaders } from "./campaign-route";
 import {
   enqueueErrorReport,
   loadReports,
@@ -101,7 +102,7 @@ function mutationOperation(path: string, method: string): string | undefined {
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
+  const headers = campaignHeaders(init?.headers);
   const method = (init?.method ?? "GET").toUpperCase();
   if (init?.body && !(init.body instanceof FormData))
     headers.set("Content-Type", "application/json");

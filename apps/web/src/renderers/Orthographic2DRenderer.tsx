@@ -2141,14 +2141,17 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     if (
       shouldSuppressCtrlPing({
         tool: props.tool,
-        ctrlKey: event.evt.ctrlKey,
+        ctrlKey: event.evt.ctrlKey || event.evt.metaKey,
         waypointCommitted: suppressCtrlPingRef.current,
       })
     ) {
       suppressCtrlPingRef.current = false;
       return;
     }
-    if (event.evt.button !== 0 || (props.tool !== "PING" && !event.evt.ctrlKey))
+    if (
+      event.evt.button !== 0 ||
+      (props.tool !== "PING" && !event.evt.ctrlKey && !event.evt.metaKey)
+    )
       return;
     const point = pointerInWorld();
     if (point) props.onPing(point);
@@ -2182,7 +2185,8 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       cancelPolygonDraft();
       return;
     }
-    if (event.evt.button === 0 && event.evt.ctrlKey) return;
+    if (event.evt.button === 0 && (event.evt.ctrlKey || event.evt.metaKey))
+      return;
     if (event.evt.button === 0 && brushMode) {
       const point = pointerInWorld();
       if (point && props.stampTool?.texture && props.onStampCreate) {

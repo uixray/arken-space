@@ -307,6 +307,10 @@ export const CompactMenuSurface = memo(function CompactMenuSurface({
             <span>Сменить персонажа / игрока</span>
           </button>
 
+          <a className="compact-menu-action-btn" href="/account">
+            ← Мои кампании
+          </a>
+
           <button
             type="button"
             className="compact-menu-action-btn compact-menu-action-btn--danger"

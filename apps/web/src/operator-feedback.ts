@@ -1,4 +1,5 @@
 import { api, ApiError } from "./api";
+import { campaignHeaders } from "./campaign-route";
 export type FeedbackStatus =
   "NEW" | "ACKNOWLEDGED" | "LINKED" | "RESOLVED" | "DISMISSED";
 export const OPERATOR_FEEDBACK_TITLE = "Обратная связь";
@@ -133,7 +134,7 @@ export const updateFeedback = (
 export async function fetchAttachment(reportId: string, attachmentId: string) {
   const r = await fetch(
     `/api/operator/feedback/${encodeURIComponent(reportId)}/attachments/${encodeURIComponent(attachmentId)}`,
-    { credentials: "include" },
+    { credentials: "include", headers: campaignHeaders() },
   );
   if (!r.ok)
     throw new ApiError(

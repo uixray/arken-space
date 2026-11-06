@@ -1,0 +1,58 @@
+name: release-server-bundle
+
+# Manual release artifact, not CI or deployment. It is layered only over the
+# explicitly verified server image whose dependencies and migrations match.
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: "Exact 40-character revision already in origin/main"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  server-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      REVISION: ${{ inputs.revision }}
+    steps:
+      - name: Validate revision
+        run: printf '%s' "$REVISION" | grep -Eq '^[0-9a-f]{40}$'
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require main ancestry
+        run: |
+          test "$(git rev-parse HEAD)" = "$REVISION"
+          git merge-base --is-ancestor "$REVISION" origin/main
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build exact server bundle
+        run: |
+          pnpm --filter @arken/contracts build
+          pnpm --filter @arken/system build
+          pnpm --filter @arken/db build
+          pnpm --filter @arken/server exec tsup src/index.ts src/env.ts src/hosted-account-provision-cli.ts --format esm --clean --sourcemap
+      - name: Package bundle
+        run: |
+          mkdir -p release-server-bundle
+          tar -C apps/server -czf release-server-bundle/server-dist.tar.gz dist
+          sha256sum release-server-bundle/server-dist.tar.gz > release-server-bundle/sha256.txt
+          printf '%s\n' "$REVISION" > release-server-bundle/revision.txt
+          cat release-server-bundle/sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arken-server-bundle-${{ inputs.revision }}
+          path: release-server-bundle/
+          retention-days: 1
+          if-no-files-found: error

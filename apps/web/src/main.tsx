@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 // Before App: the Gravity button layer used to precede every app stylesheet.
 import "./ui/legacy-button.css";
 import "./random-uuid-polyfill";
-import { App } from "./App";
+import { CampaignRouter } from "./CampaignRouter";
 import { AppErrorBoundary } from "./AppErrorBoundary";
 import { AppToaster } from "./ui/AppToaster";
 import { installInputDiagnostics } from "./input-diagnostics";
@@ -32,7 +32,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <PlayerThemeRoot>
       <AppErrorBoundary>
-        <App />
+        <CampaignRouter />
       </AppErrorBoundary>
       <AppToaster />
     </PlayerThemeRoot>

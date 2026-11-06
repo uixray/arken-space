@@ -390,6 +390,9 @@ export function registerRealtime(
       );
       const auth = await authFromSessionToken(db, token);
       if (!auth) return next(new Error("AUTH_REQUIRED"));
+      const expectedCampaign: unknown = socket.handshake.auth?.campaignId;
+      if (expectedCampaign != null && expectedCampaign !== auth.campaignId)
+        return next(new Error("CAMPAIGN_SESSION_CHANGED"));
       socket.data.auth = auth;
       next();
     } catch (error) {

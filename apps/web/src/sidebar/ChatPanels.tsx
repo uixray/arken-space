@@ -112,7 +112,7 @@ import { useSubmissionDraft } from "../ui/useSubmissionDraft";
  * *before* pressing Enter, not just discover it via a mouse-hover tooltip.
  */
 const SEND_TOOLTIP =
-  "Enter — отправить всем. Ctrl+Enter — отправить только мастеру.";
+  "Enter — отправить всем. Ctrl/⌘+Enter — отправить только мастеру.";
 /**
  * UIX-419: подсказка больше не занимает места в композере.
  *
@@ -125,7 +125,7 @@ const SEND_TOOLTIP =
  * ссылается `aria-describedby` у поля ввода), а глазами он читается во
  * всплывающей подсказке кнопки отправки — `SEND_TOOLTIP` выше, слово в слово.
  */
-const SEND_HINT = "Enter — всем · Ctrl+Enter — только мастеру";
+const SEND_HINT = "Enter — всем · Ctrl/⌘+Enter — только мастеру";
 
 function compactDiceDetails(
   dice: NonNullable<ReturnType<typeof normalizeClientDiceResult>>,
@@ -697,6 +697,7 @@ export function ActivityPanel({
     const action = decideComposerKeydown({
       key: event.key,
       ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
       shiftKey: event.shiftKey,
       isComposing: event.nativeEvent.isComposing,
     });
@@ -1895,6 +1896,7 @@ export function ChatPanel({
     const action = decideComposerKeydown({
       key: event.key,
       ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
       shiftKey: event.shiftKey,
       isComposing: event.nativeEvent.isComposing,
     });

@@ -22,7 +22,11 @@ const plannedRoadmap = roadmapSections.find(
   (section) => section.status === "planned",
 );
 
-export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
+export function AuthGate({
+  onAuthenticated,
+}: {
+  onAuthenticated: (campaignId?: string) => void;
+}) {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);

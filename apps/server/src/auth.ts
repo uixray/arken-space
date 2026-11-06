@@ -222,6 +222,17 @@ export async function requireAuth(
       .send({ error: "AUTH_REQUIRED", message: "Войдите по приглашению" });
     return null;
   }
+  const expectedCampaign = request.headers["x-arken-campaign-id"];
+  if (expectedCampaign !== undefined && expectedCampaign !== auth.campaignId) {
+    await reply
+      .code(409)
+      .send({
+        error: "CAMPAIGN_SESSION_CHANGED",
+        message:
+          "Кампания в другой вкладке изменилась. Откройте эту кампанию снова.",
+      });
+    return null;
+  }
   return auth;
 }
 

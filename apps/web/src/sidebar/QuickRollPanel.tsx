@@ -30,11 +30,37 @@ import {
   ExpandSectionIcon,
   SecretRollIcon,
   PreparedActionIcon,
+  StrengthStatIcon,
+  AgilityStatIcon,
+  VitalityStatIcon,
+  IntelligenceStatIcon,
+  CharismaStatIcon,
+  WillpowerStatIcon,
+  LuckStatIcon,
+  InitiativeStatIcon,
+  ReactionStatIcon,
+  MeleeStatIcon,
+  RangedStatIcon,
+  type LucideIcon,
 } from "../ui/icons";
 import { useRepeatRoll } from "./use-repeat-roll";
 
 const signedBonus = (bonus: number) =>
   new Intl.NumberFormat("en-US", { signDisplay: "always" }).format(bonus);
+
+const statIcons: Record<string, LucideIcon> = {
+  strength: StrengthStatIcon,
+  agility: AgilityStatIcon,
+  vitality: VitalityStatIcon,
+  intelligence: IntelligenceStatIcon,
+  charisma: CharismaStatIcon,
+  willpower: WillpowerStatIcon,
+  luck: LuckStatIcon,
+  initiative: InitiativeStatIcon,
+  reaction: ReactionStatIcon,
+  melee: MeleeStatIcon,
+  ranged: RangedStatIcon,
+};
 
 type PreparedCatalogAction = {
   scope: string;
@@ -290,7 +316,7 @@ export function QuickRollPanel({
       return (
         <QuickRollTooltip
           key={stat.key}
-          content={`1d20${signedBonus(statValue ?? STAT_VALUE_RANGE.defaultValue)}\nCtrl — Преимущество\nAlt — Помеха`}
+          content={`1d20${signedBonus(statValue ?? STAT_VALUE_RANGE.defaultValue)}\nCtrl/⌘ — Преимущество\nAlt — Помеха`}
           trigger={
             <Button
               className={`quick-roll-button quick-roll-button--${variant}`}
@@ -309,7 +335,7 @@ export function QuickRollPanel({
               }}
             >
               <span className="quick-roll-button__name">
-                <AppIcon icon={DiceTrayIcon} />
+                <AppIcon icon={statIcons[stat.key] ?? DiceTrayIcon} />
                 {stat.label}
               </span>
               {hasVisibleValue && (
@@ -450,7 +476,7 @@ export function QuickRollPanel({
               {rollCharacter.skills.map((skill) => (
                 <QuickRollTooltip
                   key={skill.key}
-                  content={`${skill.formula}\nCtrl — Преимущество\nAlt — Помеха`}
+                  content={`${skill.formula}\nCtrl/⌘ — Преимущество\nAlt — Помеха`}
                   trigger={
                     <Button
                       className="quick-roll-button quick-roll-button--skill"

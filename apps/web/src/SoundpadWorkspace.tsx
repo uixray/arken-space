@@ -14,6 +14,7 @@ import type {
   SoundpadPackDto,
 } from "@arken/contracts";
 import { ApiError, formatApiError } from "./api";
+import { campaignHeaders } from "./campaign-route";
 import type { GameSocket } from "./realtime.js";
 import { SoundEffectsPlayback } from "./sound-effects-playback.js";
 import { SoundClipEditor } from "./SoundClipEditor.js";
@@ -87,8 +88,9 @@ async function request<T>(
   const response = await fetch(path, {
     method,
     credentials: "same-origin",
-    headers:
+    headers: campaignHeaders(
       body === undefined ? undefined : { "content-type": "application/json" },
+    ),
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const value = await response.json().catch(() => ({}));
