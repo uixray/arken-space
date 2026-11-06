@@ -144,7 +144,7 @@ describe("the landing guide describes shortcuts that exist", () => {
       expect(promised.get(key)).toBe(`Бросок ${effect}`);
     expect(ROLL_MODIFIER_HINT).toBe(
       ROLL_MODIFIER_SHORTCUTS.map(
-        ({ key, effect }) => `${key} — ${effect}`,
+        ({ key, effect }) => `${key === "Ctrl" ? "Ctrl/⌘" : key} — ${effect}`,
       ).join(", "),
     );
   });

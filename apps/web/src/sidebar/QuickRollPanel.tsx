@@ -41,6 +41,8 @@ import {
   ReactionStatIcon,
   MeleeStatIcon,
   RangedStatIcon,
+  EnduranceRegenStatIcon,
+  ManaRegenStatIcon,
   type LucideIcon,
 } from "../ui/icons";
 import { useRepeatRoll } from "./use-repeat-roll";
@@ -60,6 +62,8 @@ const statIcons: Record<string, LucideIcon> = {
   reaction: ReactionStatIcon,
   melee: MeleeStatIcon,
   ranged: RangedStatIcon,
+  enduranceRegen: EnduranceRegenStatIcon,
+  manaRegen: ManaRegenStatIcon,
 };
 
 type PreparedCatalogAction = {

@@ -65,7 +65,7 @@ export function rollModeFromEvent(
  * место на каждом экране ради того, что читают один раз.
  */
 export const ROLL_MODIFIER_HINT = ROLL_MODIFIER_SHORTCUTS.map(
-  ({ key, effect }) => `${key} — ${effect}`,
+  ({ key, effect }) => `${key === "Ctrl" ? "Ctrl/⌘" : key} — ${effect}`,
 ).join(", ");
 
 /** Как назвать режим в тексте физического броска. */

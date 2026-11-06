@@ -108,7 +108,7 @@ const MAP_VIEWPORT_KEYS_BEFORE_TOOLS = [
   "O",
 ] as const;
 
-const MAP_VIEWPORT_KEYS_AFTER_TOOLS = ["Enter", "Delete", "Escape"] as const;
+const MAP_VIEWPORT_KEYS_AFTER_TOOLS = ["Enter", "Delete", "Backspace", "Escape"] as const;
 
 /**
  * Accessible keyboard inventory for the focused map region.

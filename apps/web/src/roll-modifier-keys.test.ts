@@ -17,7 +17,7 @@ describe("клавиши преимущества и помехи", () => {
   it("строит подсказку из структурированного списка", () => {
     expect(ROLL_MODIFIER_HINT).toBe(
       ROLL_MODIFIER_SHORTCUTS.map(
-        ({ key, effect }) => `${key} — ${effect}`,
+        ({ key, effect }) => `${key === "Ctrl" ? "Ctrl/⌘" : key} — ${effect}`,
       ).join(", "),
     );
   });

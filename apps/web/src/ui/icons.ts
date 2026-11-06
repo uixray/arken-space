@@ -92,5 +92,7 @@ export {
   Gauge as ReactionStatIcon,
   Swords as MeleeStatIcon,
   Crosshair as RangedStatIcon,
+  BatteryCharging as EnduranceRegenStatIcon,
+  Waves as ManaRegenStatIcon,
 } from "lucide-react";
 export type { LucideIcon } from "lucide-react";
