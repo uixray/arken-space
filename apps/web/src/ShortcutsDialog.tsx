@@ -81,8 +81,8 @@ export function ShortcutsDialog({
       <div className="guide-shortcuts">
         <p className="guide-section__hint guide-shortcuts__preface">
           Клавиши на карте работают, когда карта в фокусе — щёлкните по ней один
-          раз. Сочетания с Ctrl и Alt не перехватываются, так что привычные
-          браузерные остаются на месте.
+          раз. Большинство сочетаний браузера остаётся доступным; команды отмены
+          и пинга указаны ниже.
         </p>
         {sections.map((section) => (
           <Section section={section} key={section.title} />

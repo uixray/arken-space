@@ -139,7 +139,7 @@ export const canvasSections: GuideSection[] = [
         action: "Выделить несколько токенов рамкой",
       },
       { keys: ["Enter"], action: "Открыть действия выделенного" },
-      { keys: ["Delete"], action: "Удалить выделенное" },
+      { keys: ["Delete / Backspace"], action: "Удалить выделенное" },
     ],
   },
   {

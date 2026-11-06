@@ -1036,14 +1036,15 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     // UIX-381: commit the current live point as a waypoint on Ctrl keydown
     // (not Ctrl+click -- the pointer button stays held down for the whole
     // multi-segment drag, so there is no separate click to hook, and
-    // keydown is what's actually usable mid-drag). Only the bare `Control`
+    // keydown is what's actually usable mid-drag). Only the bare `Control` or `Meta`
     // keydown is handled (never combined with other keys), key-repeat is
     // ignored so holding Ctrl doesn't spam waypoints, and editable targets
     // are excluded via the same guard as the Escape handler -- so this never
     // shadows a real Ctrl+<key> browser/OS shortcut, and preventDefault on
     // the lone modifier keydown stops it from opening a context menu.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Control" || event.repeat) return;
+      if ((event.key !== "Control" && event.key !== "Meta") || event.repeat)
+        return;
       if (containerRef.current?.closest("[hidden], [inert]")) return;
       if (shouldIgnoreGlobalShortcut(event)) return;
       const current = rulerDraftRef.current;
@@ -1060,7 +1061,8 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     };
     window.addEventListener("keydown", onKeyDown);
     const onKeyUp = (event: KeyboardEvent) => {
-      if (event.key === "Control") suppressCtrlPingRef.current = false;
+      if (event.key === "Control" || event.key === "Meta")
+        suppressCtrlPingRef.current = false;
     };
     window.addEventListener("keyup", onKeyUp);
     return () => {
@@ -1893,7 +1895,8 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       if (isPolygonTool && polygonPoints.length >= 3)
         void handlePolygonComplete();
       else openSelectedAction();
-    } else if (event.key === "Delete") requestSelectedDelete();
+    } else if (event.key === "Delete" || event.key === "Backspace")
+      requestSelectedDelete();
     else return;
     event.preventDefault();
     event.stopPropagation();
