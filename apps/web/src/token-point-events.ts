@@ -53,17 +53,20 @@ export function applyTokenPointEvent(
 
 export function applyTokenPreview(
   current: GameSnapshot,
-  movement: { tokenId: string; revision: number; x: number; y: number },
+  movement: { tokenId: string; revision: number; x: number; y: number; sceneId?: string; snapshotVersion?: number },
   watermarks: ReadonlyMap<string, number>,
 ): GameSnapshot {
   const existing = current.tokens.find(
     (token) => token.id === movement.tokenId,
   );
-  // Previews carry no sequence or scene. After an ID has disappeared, only a
-  // committed event can distinguish a new placement from a delayed preview.
+  // Legacy previews remain suppressed after disappearance; modern previews
+  // carry the sender scene and canonical snapshot cursor.
   if (
     !existing ||
-    watermarks.has(movement.tokenId) ||
+    (movement.sceneId !== undefined && movement.sceneId !== existing.sceneId) ||
+    (watermarks.has(movement.tokenId) &&
+      (movement.snapshotVersion === undefined ||
+       movement.snapshotVersion < watermarks.get(movement.tokenId)!)) ||
     existing.revision !== movement.revision
   )
     return current;

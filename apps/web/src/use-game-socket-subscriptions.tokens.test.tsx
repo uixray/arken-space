@@ -112,6 +112,12 @@ it("handles interleaved movement, deletion, ID reuse and scene changes through t
     fake.fire("token:updated", { sequence: 105, data: token("a", 3, "b", 90) }),
   );
   expect(observed.tokens[0]).toMatchObject({ revision: 0, sceneId: "b", x: 4 });
+  await act(async () => fake.fire("token:moving", { tokenId: "a", revision: 0, sceneId: "b", snapshotVersion: 104, x: 90, y: 0 }));
+  expect(observed.tokens[0]).toMatchObject({ x: 4 });
+  await act(async () => fake.fire("token:moving", { tokenId: "a", revision: 0, sceneId: "a", snapshotVersion: 108, x: 90, y: 0 }));
+  expect(observed.tokens[0]).toMatchObject({ x: 4 });
+  await act(async () => fake.fire("token:moving", { tokenId: "a", revision: 0, sceneId: "b", snapshotVersion: 108, x: 20, y: 0 }));
+  expect(observed.tokens[0]).toMatchObject({ x: 20 });
   await act(async () =>
     fake.fire("token:moved", { sequence: 109, data: token("a", 1, "b", 30) }),
   );
