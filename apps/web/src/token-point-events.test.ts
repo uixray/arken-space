@@ -86,7 +86,7 @@ describe("token realtime events", () => {
       ),
     ).toBe(recreated);
     expect(applyTokenPreview(recreated, { tokenId: "a", revision: 0, x: 99, y: 0, sceneId: "scene-a", snapshotVersion: 44 }, cursors)).toBe(recreated);
-    expect(applyTokenPreview(recreated, { tokenId: "a", revision: 0, x: 8, y: 9, sceneId: "scene-a", snapshotVersion: 50 }, cursors).tokens[0]).toMatchObject({ x: 8, y: 9 });
+    expect(applyTokenPreview(recreated, { tokenId: "a", revision: 0, x: 8, y: 9, sceneId: "scene-a", snapshotVersion: 50, previewEpoch: "new" }, cursors, "new").tokens[0]).toMatchObject({ x: 8, y: 9 });
     expect(applyTokenPreview(recreated, { tokenId: "a", revision: 0, x: 99, y: 0, sceneId: "scene-b", snapshotVersion: 50 }, cursors)).toBe(recreated);
     expect(
       applyTokenPointEvent(
@@ -125,4 +125,12 @@ describe("token realtime events", () => {
       ),
     ).toBe(current);
   });
+  it("rejects a delayed preview when disappearance and reappearance share a snapshot version", () => {
+    const cursors = new Map<string, number>();
+    recordTokenRemovals(snapshot([token("a", 0)], 45), snapshot([], 45), cursors);
+    const recreated = snapshot([token("a", 0)], 45);
+    expect(applyTokenPreview(recreated, { tokenId: "a", revision: 0, sceneId: "scene-a", snapshotVersion: 45, previewEpoch: "old", x: 90, y: 0 }, cursors, "new")).toBe(recreated);
+    expect(applyTokenPreview(recreated, { tokenId: "a", revision: 0, sceneId: "scene-a", snapshotVersion: 45, previewEpoch: "new", x: 8, y: 0 }, cursors, "new").tokens[0]).toMatchObject({x: 8});
+  });
+
 });

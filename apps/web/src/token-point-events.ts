@@ -53,8 +53,9 @@ export function applyTokenPointEvent(
 
 export function applyTokenPreview(
   current: GameSnapshot,
-  movement: { tokenId: string; revision: number; x: number; y: number; sceneId?: string; snapshotVersion?: number },
+  movement: { tokenId: string; revision: number; x: number; y: number; sceneId?: string; snapshotVersion?: number; previewEpoch?: string },
   watermarks: ReadonlyMap<string, number>,
+  currentEpoch?: string,
 ): GameSnapshot {
   const existing = current.tokens.find(
     (token) => token.id === movement.tokenId,
@@ -63,9 +64,11 @@ export function applyTokenPreview(
   // carry the sender scene and canonical snapshot cursor.
   if (
     !existing ||
+    (currentEpoch !== undefined && movement.previewEpoch !== currentEpoch) ||
     (movement.sceneId !== undefined && movement.sceneId !== existing.sceneId) ||
     (watermarks.has(movement.tokenId) &&
-      (movement.snapshotVersion === undefined ||
+      (currentEpoch === undefined || movement.previewEpoch !== currentEpoch ||
+       movement.snapshotVersion === undefined ||
        movement.snapshotVersion < watermarks.get(movement.tokenId)!)) ||
     existing.revision !== movement.revision
   )

@@ -178,6 +178,7 @@ export function useGameSocketSubscriptions({
     });
     next.io.on("reconnect_attempt", () => setConnection("RECONNECTING"));
     next.io.on("reconnect_failed", () => setConnection("OFFLINE"));
+    next.on("token:preview-epoch", (epoch) => { next.previewEpoch = epoch; });
     next.on("game:snapshot", (nextSnapshot) => {
       next.previewSnapshotVersion = nextSnapshot.snapshotVersion;
       setSnapshot((current) => {
@@ -233,7 +234,7 @@ export function useGameSocketSubscriptions({
     next.on("token:moving", (movement) =>
       setSnapshot((current) =>
         current
-          ? applyTokenPreview(current, movement, tokenRemovalWatermarks)
+          ? applyTokenPreview(current, movement, tokenRemovalWatermarks, next.previewEpoch)
           : current,
       ),
     );

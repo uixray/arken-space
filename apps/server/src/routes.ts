@@ -81,6 +81,7 @@ import { registerCanvasRoutes } from "./canvas-routes.js";
 export { claimInviteOwnership } from "./session-routes.js";
 export { fitFrameToWorld } from "./scene-routes.js";
 import { campaignRoom, gmRoom } from "./rooms.js";
+import { emitPreviewSnapshot } from "./preview-snapshot.js";
 import { emitCharacterUpdated } from "./character-events.js";
 import { emitDrawingChange, type DrawingChange } from "./drawing-events.js";
 import { registerEncounterRoutes } from "./encounters.js";
@@ -316,10 +317,7 @@ async function emitCampaignSnapshots(
         if (auth?.campaignId === campaignId) {
           // UIX-408: мастеру приходит канвас и той сцены, которую он
           // рассматривает, — иначе он рисовал бы туман поверх якобы пустой.
-          socket.emit(
-            "game:snapshot",
-            await buildSnapshot(db, auth, viewedScenes(socket.data), readSet),
-          );
+          emitPreviewSnapshot(io, socket, campaignId, await buildSnapshot(db, auth, viewedScenes(socket.data), readSet));
         }
       }),
     );
@@ -349,7 +347,7 @@ async function emitCampaignSnapshots(
       const { bytes, byField } = measureSnapshot(snapshot);
       perSocket.push({ role: auth.role, bytes, ms });
       fieldReports.push(byField);
-      socket.emit("game:snapshot", snapshot);
+      emitPreviewSnapshot(io, socket, campaignId, snapshot);
     }),
   );
   const measurement: BroadcastMeasurement = {
