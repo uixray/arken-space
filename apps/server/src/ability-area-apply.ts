@@ -303,7 +303,7 @@ export async function applyAbilityArea(
           // their journal private instead of leaking a caster through a public roll.
           visibility: actor.role === "GM" ? "GM_ONLY" : "PUBLIC",
           body: `${entry.name}: восстановление маны · радиус ${data.areaEffect.radiusMeters} м`,
-          dice: roll,
+          dice: { ...roll, applicationUndo: { cancelled: false } },
         })
         .returning({ id: chatMessages.id });
       if (!message) throw new Error("ROLL_SAVE_FAILED");
@@ -323,6 +323,24 @@ export async function applyAbilityArea(
           sharedRoll: roll.total,
           effects: plan.effects,
           spent: plan.spent,
+          undoReceipt: {
+            version: 1,
+            entry: {
+              id: entry.id,
+              beforeData: entry.data,
+              afterRevision: entry.revision + 1,
+            },
+            characters: plan.updates.map((update) => {
+              const original = people.find(
+                (person) => person.id === update.id,
+              )!;
+              return {
+                id: original.id,
+                beforeResources: original.resources,
+                afterRevision: original.revision + 1,
+              };
+            }),
+          },
         },
       });
       return {

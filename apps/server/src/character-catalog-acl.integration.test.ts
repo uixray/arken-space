@@ -194,6 +194,179 @@ describe("Character catalog ACL and player ability management", () => {
     expect(await db.select().from(schema.catalogEntries)).toHaveLength(1);
   });
 
+  it("undoes one application atomically and rejects unauthorized and repeated attempts", async () => {
+    const entryId = id();
+    await db
+      .update(schema.characters)
+      .set({ resources: { physicalPower: { current: 5, maximum: 5 } } })
+      .where(eq(schema.characters.id, ids.character));
+    await db.insert(schema.characterCatalogEntries).values({
+      id: entryId,
+      characterId: ids.character,
+      kind: "ABILITY",
+      name: "Ward",
+      data: {
+        activation: {
+          consumeUse: true,
+          cost: { type: "physical", amount: 2 },
+        },
+        uses: { current: 1, max: 1, recharge: "DAY" },
+      },
+    });
+    const applied = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entryId}/roll`,
+      headers: headers(secrets.owner),
+      payload: { actionId: id(), entryRevision: 0, visibility: "PUBLIC" },
+    });
+    expect(applied.statusCode, applied.body).toBe(201);
+    const messageId = applied.json().messageId as string;
+    const bootstrap = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.owner),
+    });
+    expect(bootstrap.statusCode, bootstrap.body).toBe(200);
+    expect(
+      bootstrap
+        .json()
+        .messages.find((message: { id: string }) => message.id === messageId)
+        ?.applicationUndo,
+    ).toEqual({ cancelled: false });
+    const actionId = id();
+    const undo = (secret: string, action = actionId) =>
+      app.inject({
+        method: "POST",
+        url: "/api/chat/application-undo",
+        headers: headers(secret),
+        payload: { messageId, actionId: action },
+      });
+    expect((await undo(secrets.unrelated)).statusCode).toBe(403);
+    const first = await undo(secrets.owner);
+    expect(first.statusCode, first.body).toBe(200);
+    expect((await undo(secrets.owner)).json()).toEqual({ duplicate: true });
+    expect((await undo(secrets.owner, id())).json()).toEqual({
+      duplicate: true,
+    });
+    const [character] = await db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    const [entry] = await db
+      .select()
+      .from(schema.characterCatalogEntries)
+      .where(eq(schema.characterCatalogEntries.id, entryId));
+    const [original] = await db
+      .select()
+      .from(schema.chatMessages)
+      .where(eq(schema.chatMessages.id, messageId));
+    expect(character?.resources).toMatchObject({
+      physicalPower: { current: 5 },
+    });
+    expect(entry?.data).toMatchObject({ uses: { current: 1 } });
+    expect(original?.dice).toMatchObject({
+      applicationUndo: { cancelled: true },
+    });
+    const refreshed = await app.inject({
+      method: "GET",
+      url: "/api/bootstrap",
+      headers: headers(secrets.owner),
+    });
+    expect(
+      refreshed
+        .json()
+        .messages.find((message: { id: string }) => message.id === messageId)
+        ?.applicationUndo,
+    ).toEqual({ cancelled: true });
+    expect(
+      await db
+        .select()
+        .from(schema.gameEvents)
+        .where(eq(schema.gameEvents.type, "entry.undo")),
+    ).toHaveLength(1);
+  });
+
+  it("refuses to undo if resources changed after the application", async () => {
+    const entryId = id();
+    await db
+      .update(schema.characters)
+      .set({ resources: { physicalPower: { current: 5, maximum: 5 } } })
+      .where(eq(schema.characters.id, ids.character));
+    await db.insert(schema.characterCatalogEntries).values({
+      id: entryId,
+      characterId: ids.character,
+      kind: "ABILITY",
+      name: "Ward",
+      data: { activation: { cost: { type: "physical", amount: 2 } } },
+    });
+    const applied = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entryId}/roll`,
+      headers: headers(secrets.owner),
+      payload: { actionId: id(), entryRevision: 0, visibility: "PUBLIC" },
+    });
+    expect(applied.statusCode, applied.body).toBe(201);
+    await db
+      .update(schema.characters)
+      .set({
+        resources: { physicalPower: { current: 1, maximum: 5 } },
+        revision: 2,
+      })
+      .where(eq(schema.characters.id, ids.character));
+    const undo = await app.inject({
+      method: "POST",
+      url: "/api/chat/application-undo",
+      headers: headers(secrets.owner),
+      payload: { messageId: applied.json().messageId, actionId: id() },
+    });
+    expect(undo.statusCode, undo.body).toBe(409);
+    expect(undo.json().error).toBe("UNDO_CONFLICT");
+    const [character] = await db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, ids.character));
+    expect(character?.resources).toMatchObject({
+      physicalPower: { current: 1 },
+    });
+  });
+
+  it("does not allow a former controller to undo after ownership changes", async () => {
+    const entryId = id();
+    await db.insert(schema.characterCatalogEntries).values({
+      id: entryId,
+      characterId: ids.character,
+      kind: "ABILITY",
+      name: "Free action",
+      data: { activation: { consumeUse: false } },
+    });
+    const applied = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entryId}/roll`,
+      headers: headers(secrets.owner),
+      payload: { actionId: id(), entryRevision: 0, visibility: "PUBLIC" },
+    });
+    expect(applied.statusCode, applied.body).toBe(201);
+    await db
+      .update(schema.characters)
+      .set({ ownerMembershipId: ids.unrelated })
+      .where(eq(schema.characters.id, ids.character));
+    const payload = { actionId: id(), messageId: applied.json().messageId };
+    const forbidden = await app.inject({
+      method: "POST",
+      url: "/api/chat/application-undo",
+      headers: headers(secrets.owner),
+      payload,
+    });
+    expect(forbidden.statusCode, forbidden.body).toBe(403);
+    const gm = await app.inject({
+      method: "POST",
+      url: "/api/chat/application-undo",
+      headers: headers(secrets.gm),
+      payload: { ...payload, actionId: id() },
+    });
+    expect(gm.statusCode, gm.body).toBe(200);
+  });
+
   it("executes a configured no-roll ability once and replays its receipt", async () => {
     const entryId = id();
     const actionId = id();

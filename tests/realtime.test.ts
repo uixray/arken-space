@@ -918,6 +918,30 @@ describe("GM presence", () => {
 });
 
 describe("durable realtime token commands", () => {
+  it("allows the GM to move a player-controlled token after the player moves it", async () => {
+    const playerMove = await move(client, {
+      actionId: crypto.randomUUID(),
+      revision: 0,
+      x: 64,
+      y: 128,
+    });
+    expect(playerMove).toMatchObject({
+      ok: true,
+      status: "ACCEPTED",
+      data: { revision: 1 },
+    });
+    const gmMove = await move(gmClient, {
+      actionId: crypto.randomUUID(),
+      revision: 1,
+      x: 96,
+      y: 160,
+    });
+    expect(gmMove).toMatchObject({
+      ok: true,
+      status: "ACCEPTED",
+      data: { x: 96, y: 160, revision: 2 },
+    });
+  });
   it("accepts once, acknowledges a retry and rejects a stale new command", async () => {
     const actionId = crypto.randomUUID();
     const accepted = await move(client, {
