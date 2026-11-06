@@ -19,6 +19,10 @@ describe("decideComposerKeydown (UIX-388)", () => {
   it("Ctrl+Enter sends GM-only", () => {
     expect(key({ ctrlKey: true })).toBe("SEND_GM_ONLY");
   });
+  it("Cmd+Enter on macOS sends only to the GM, not publicly", () => {
+    expect(key({ metaKey: true })).toBe("SEND_GM_ONLY");
+    expect(key({ metaKey: true, shiftKey: true })).toBe("NEWLINE");
+  });
 
   it("Shift+Enter inserts a newline instead of submitting", () => {
     expect(key({ shiftKey: true })).toBe("NEWLINE");

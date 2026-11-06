@@ -46,12 +46,13 @@ afterEach(async () => {
   await database.close();
 });
 
-async function connectGame(token: string) {
+async function connectGame(token: string, campaignId?: string) {
   const address = app.server.address();
   if (!address || typeof address === "string")
     throw new Error("HTTP_SERVER_NOT_LISTENING");
   const socket = socketClient(`http://127.0.0.1:${address.port}`, {
     transports: ["websocket"],
+    auth: campaignId ? { campaignId } : {},
     extraHeaders: { cookie: `arken_session=${token}` },
     reconnection: false,
     timeout: 2500,
@@ -145,6 +146,27 @@ async function assertConnectedSessionIsRejectedAfterInvalidation(
 }
 
 describe("link provenance at the realtime boundary", () => {
+  it("rejects a stale tab whose URL campaign differs from the shared session", async () => {
+    const { campaign, membership } = await seedMembership("GM");
+    const [credential] = await db
+      .insert(gmAccessCredentials)
+      .values({
+        campaignId: campaign.id,
+        tokenHash: hashToken(`gm-${crypto.randomUUID()}`),
+      })
+      .returning();
+    const token = await seedSession(membership.id, {
+      source: "GM_LINK",
+      campaignId: campaign.id,
+      revision: credential!.revision,
+    });
+    const wrong = await connectGame(token, crypto.randomUUID());
+    const error = await waitFor<Error>(wrong, "connect_error");
+    expect(error.message).toBe("CAMPAIGN_SESSION_CHANGED");
+    const correct = await connectGame(token, campaign.id);
+    await waitFor(correct, "connect");
+    expect(correct.connected).toBe(true);
+  });
   it("rejects an already-connected PLAYER after grant revocation and on reconnect", async () => {
     const { campaign, membership } = await seedMembership("PLAYER");
     const grantTokenHash = hashToken(`grant-${crypto.randomUUID()}`);

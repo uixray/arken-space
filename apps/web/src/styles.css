@@ -222,6 +222,17 @@ code {
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
+.campaigns-back-link {
+  flex: none;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+}
+.campaigns-back-link:hover { background: var(--surface-3); }
+.campaigns-back-link:focus-visible { outline: 2px solid var(--color-accent, #dc9b71); outline-offset: 2px; }
+.app-shell--compact .campaigns-back-link { display: none; }
 /* An explicitly opened shell menu is a transient popup above non-modal
  * workspaces, not a blocking dialog. Raising its topbar stacking context (not
  * merely the nested menu) uses the reserved popup tier below all modals. */

@@ -32,7 +32,7 @@ export const guideWorkflows: readonly GuideWorkflow[] = [
     prerequisite: "Откройте игровую карту.",
     steps: [
       "Наведите курсор на нужное место.",
-      "Зажмите Ctrl и щёлкните мышью.",
+      "Зажмите Ctrl (⌘ на Mac) и щёлкните мышью.",
     ],
     outcome: "Остальные участники увидят пинг в этой точке.",
     helpHref: "#guide-камера",
@@ -114,7 +114,7 @@ export const guideFaq: readonly GuideFaq[] = [
     id: "chat-audience",
     question: "Кому уйдёт сообщение из общего чата?",
     answer:
-      "Обычная отправка адресована общему чату. Отправка только мастеру доступна через Ctrl+Enter.",
+      "Обычная отправка адресована общему чату. Отправка только мастеру доступна через Ctrl/⌘+Enter.",
     helpHref: "#guide-чат-и-броски",
     sources: [
       "apps/web/src/landing-guide-content.ts — chat shortcuts",

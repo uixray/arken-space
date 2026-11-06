@@ -19,6 +19,15 @@ describe("isDirectTokenDrag", () => {
 });
 
 describe("non-ping pointer actions", () => {
+  it("reserves Cmd-click for ping rather than moving a token", () => {
+    const action = vi.fn();
+    runNonPingPointerAction(
+      "PAN",
+      { button: 0, ctrlKey: false, metaKey: true },
+      action,
+    );
+    expect(action).not.toHaveBeenCalled();
+  });
   it.each([
     ["DRAW", 0, true],
     ["DRAW", 1, false],

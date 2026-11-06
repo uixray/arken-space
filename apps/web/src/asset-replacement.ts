@@ -1,5 +1,6 @@
 import type { AssetDto } from "@arken/contracts";
 import { api, ApiError } from "./api";
+import { campaignHeaders } from "./campaign-route";
 
 export type AssetReplacementIntent = Readonly<{
   assetId: string;
@@ -27,6 +28,7 @@ export async function prepareAssetReplacement(
       `/api/assets/${encodeURIComponent(assetId)}/content`,
       {
         method: "HEAD",
+        headers: campaignHeaders(),
         credentials: "include",
         cache: "no-store",
         signal,

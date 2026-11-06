@@ -24,6 +24,21 @@ export function canonicalizeFogGeometry(
   if (geometry.type === "POLYGON" && !validateFogPolygon(geometry.points))
     throw new FogGeometryError("FOG_POLYGON_INVALID");
   let bbox = fogGeometryBounds(geometry);
+  // A brush follows points on the map but its radius naturally crosses the
+  // edge. Preserve the full geometric bounds (used by visibility checks).
+  if (geometry.type === "BRUSH") {
+    if (
+      geometry.points.some(
+        (point) =>
+          point.x < 0 ||
+          point.y < 0 ||
+          point.x > scene.width ||
+          point.y > scene.height,
+      )
+    )
+      throw new FogGeometryError("FOG_OUTSIDE_SCENE");
+    return { geometry, bbox };
+  }
   if (legacy && geometry.type === "RECT") {
     const l = Math.max(0, bbox.x),
       t = Math.max(0, bbox.y),

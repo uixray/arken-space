@@ -79,7 +79,7 @@ export function AccountAuthWorkspace({
   onAuthenticated,
   capabilities,
 }: {
-  onAuthenticated: () => void;
+  onAuthenticated: (campaignId?: string) => void;
   capabilities: AccountCapabilities;
 }) {
   const path = window.location.pathname;
@@ -453,7 +453,7 @@ export function AccountAuthWorkspace({
     setError("");
     try {
       await selectAccountCampaign(campaignId, session.csrfToken);
-      onAuthenticated();
+      onAuthenticated(campaignId);
     } catch (reason) {
       setError(friendlyError(reason, capabilities.localAccounts));
     } finally {
@@ -601,32 +601,57 @@ export function AccountAuthWorkspace({
   if (view === "account" && session)
     return (
       <main className="account-auth-shell">
-        <section className="account-auth-card" aria-labelledby="account-title">
-          <p className="account-auth-kicker">Аккаунт Arken</p>
-          <h1 id="account-title">
-            {session.account.identityKind === "HOSTED"
-              ? "Аккаунт по логину"
-              : session.account.identityKind === "LOCAL"
-                ? "Локальный аккаунт"
-                : "Почта подтверждена"}
-          </h1>
-          <p className="account-auth-email">
-            {session.account.email ?? session.account.login}
-            {session.account.identityKind === "LOCAL"
-              ? " · локальный аккаунт этого компьютера"
-              : ""}
-          </p>
+        <section
+          className="account-auth-card account-home"
+          aria-labelledby="account-title"
+        >
+          <header className="account-home-header">
+            <a
+              href="/"
+              className="account-home-brand"
+              aria-label="Аркспейс — на главную"
+            >
+              <Brand />
+            </a>
+            <div className="account-home-identity">
+              <span className="account-home-identity-label">Ваш аккаунт</span>
+              <span className="account-auth-email">
+                {session.account.email ?? session.account.login}
+              </span>
+            </div>
+          </header>
+          <div className="account-home-intro">
+            <p className="account-auth-kicker">ВАШЕ ПРОСТРАНСТВО ДЛЯ ИГРЫ</p>
+            <h1 id="account-title">Добро пожаловать</h1>
+            <p className="account-home-lead">
+              Выберите кампанию, чтобы вернуться к игре.
+            </p>
+          </div>
+          {/^\/campaign\/[0-9a-f-]{36}$/i.test(
+            new URLSearchParams(window.location.search).get("next") ?? "",
+          ) && (
+            <a
+              className="account-home-return"
+              href={
+                new URLSearchParams(window.location.search).get("next") ??
+                "/account"
+              }
+            >
+              Открыть запрошенную кампанию →
+            </a>
+          )}
           {capabilities.localAccounts && (
             <p className="muted">
               Сервер доступен только на этом компьютере. Подключение из
               локальной сети пока не включено.
             </p>
           )}
-          <p className="account-auth-note">
-            Вход в аккаунт не назначает роль и не открывает чужую кампанию.
-            Доступ появляется только после явного выбора или принятия
-            приглашения.
-          </p>
+          {error && (
+            <p role="alert" className="account-auth-error">
+              {error}
+            </p>
+          )}
+          {notice && <p role="status">{notice}</p>}
           {firstRun && (
             <section aria-labelledby="first-run-title">
               <h2 id="first-run-title">
@@ -719,79 +744,100 @@ export function AccountAuthWorkspace({
             <ul>
               {campaigns.map((campaign) => (
                 <li key={campaign.id}>
-                  <strong>{campaign.name}</strong>
-                  <span>{campaign.role === "GM" ? "Мастер" : "Игрок"}</span>
+                  <div className="account-campaign-heading">
+                    <span
+                      className="account-campaign-symbol"
+                      aria-hidden="true"
+                    >
+                      ✦
+                    </span>
+                    <div>
+                      <span className="account-campaign-role">
+                        {campaign.role === "GM" ? "Мастер" : "Игрок"}
+                      </span>
+                      <strong>{campaign.name}</strong>
+                    </div>
+                  </div>
                   <Button
                     type="button"
+                    view="action"
                     disabled={busy}
                     onClick={() => void selectCampaign(campaign.id)}
                   >
-                    {campaign.selected ? "Открыть кампанию" : "Выбрать"}
+                    {campaign.selected
+                      ? "Открыть кампанию"
+                      : "Войти в кампанию"}
                   </Button>
                   {campaign.role === "GM" && (
-                    <form
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void makeInvite(campaign.id);
-                      }}
-                    >
-                      <label>
-                        Приглашение игроку
-                        <FormInput
-                          value={inviteLabel}
-                          onChange={(event) =>
-                            setInviteLabel(event.target.value)
-                          }
-                          maxLength={80}
-                          placeholder="Имя или метка игрока"
-                        />
-                      </label>
-                      <Button
-                        type="submit"
-                        disabled={
-                          busy || inviteAttemptsSnapshot.has(campaign.id)
-                        }
+                    <details className="account-campaign-invite">
+                      <summary>Пригласить игрока</summary>
+                      <form
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void makeInvite(campaign.id);
+                        }}
                       >
-                        Создать ссылку-приглашение
-                      </Button>
-                    </form>
+                        <label>
+                          Приглашение игроку
+                          <FormInput
+                            value={inviteLabel}
+                            onChange={(event) =>
+                              setInviteLabel(event.target.value)
+                            }
+                            maxLength={80}
+                            placeholder="Имя или метка игрока"
+                          />
+                        </label>
+                        <Button
+                          type="submit"
+                          disabled={
+                            busy || inviteAttemptsSnapshot.has(campaign.id)
+                          }
+                        >
+                          Создать ссылку-приглашение
+                        </Button>
+                      </form>
+                    </details>
                   )}
                 </li>
               ))}
             </ul>
             {capabilities.campaignCreationEnabled && (
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void createCampaign();
-                }}
-                aria-label="Создать кампанию"
-              >
-                <label>
-                  Новая кампания
-                  <FormInput
-                    value={pendingCreateSnapshot?.name ?? campaignName}
-                    onChange={(event) => setCampaignName(event.target.value)}
-                    disabled={Boolean(pendingCreateSnapshot)}
-                    required
-                    maxLength={80}
-                  />
-                </label>
-                <p className="account-auth-note">
-                  Аркен-Хар. Вы станете мастером; первая пустая сцена появится
-                  автоматически. Игроков можно пригласить после создания.
-                </p>
-                <Button
-                  type="submit"
-                  disabled={
-                    busy || (!campaignName.trim() && !pendingCreateSnapshot)
-                  }
+              <details className="account-home-disclosure">
+                <summary>Создать кампанию</summary>
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void createCampaign();
+                  }}
+                  aria-label="Создать кампанию"
                 >
-                  {pendingCreateSnapshot
-                    ? "Повторить создание"
-                    : "Создать кампанию"}
-                </Button>
-              </form>
+                  <label>
+                    Новая кампания
+                    <FormInput
+                      value={pendingCreateSnapshot?.name ?? campaignName}
+                      onChange={(event) => setCampaignName(event.target.value)}
+                      disabled={Boolean(pendingCreateSnapshot)}
+                      required
+                      maxLength={80}
+                    />
+                  </label>
+                  <p className="account-auth-note">
+                    Аркен-Хар. Вы станете мастером; первая пустая сцена появится
+                    автоматически. Игроков можно пригласить после создания.
+                  </p>
+                  <Button
+                    type="submit"
+                    disabled={
+                      busy || (!campaignName.trim() && !pendingCreateSnapshot)
+                    }
+                  >
+                    {pendingCreateSnapshot
+                      ? "Повторить создание"
+                      : "Создать кампанию"}
+                  </Button>
+                </form>
+              </details>
             )}
             {!capabilities.campaignCreationEnabled && (
               <p className="account-auth-note">
@@ -804,75 +850,93 @@ export function AccountAuthWorkspace({
                 <a href={inviteUrl}>{inviteUrl}</a>
               </p>
             )}
+            <details className="account-home-disclosure">
+              <summary>Присоединиться по приглашению</summary>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void claimInvite(session);
+                }}
+                aria-label="Принять приглашение"
+              >
+                <label>
+                  Ссылка-приглашение
+                  <FormInput
+                    value={inviteTokenInput}
+                    onChange={(event) =>
+                      setInviteTokenInput(event.target.value)
+                    }
+                    placeholder="Вставьте код или ссылку приглашения"
+                  />
+                </label>
+                <Button
+                  type="submit"
+                  disabled={busy || !inviteTokenInput.trim()}
+                >
+                  Присоединиться к кампании
+                </Button>
+              </form>
+            </details>
+          </section>
+          <details className="account-home-disclosure">
+            <summary>Изменить пароль</summary>
             <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void claimInvite(session);
-              }}
-              aria-label="Принять приглашение"
+              onSubmit={submit}
+              aria-label="Изменить пароль"
+              aria-busy={busy}
             >
               <label>
-                Ссылка-приглашение
+                Текущий пароль
                 <FormInput
-                  value={inviteTokenInput}
-                  onChange={(event) => setInviteTokenInput(event.target.value)}
-                  placeholder="Вставьте код или ссылку приглашения"
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
                 />
               </label>
-              <Button type="submit" disabled={busy || !inviteTokenInput.trim()}>
-                Присоединиться к кампании
+              <label>
+                Новый пароль
+                <FormInput
+                  type="password"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={MIN_PASSWORD}
+                  maxLength={128}
+                />
+              </label>
+              <label>
+                Повторите новый пароль
+                <FormInput
+                  type="password"
+                  autoComplete="new-password"
+                  value={passwordAgain}
+                  onChange={(e) => setPasswordAgain(e.target.value)}
+                  required
+                  minLength={MIN_PASSWORD}
+                  maxLength={128}
+                />
+              </label>
+              <Button
+                type="submit"
+                view="action"
+                disabled={busy}
+                loading={busy}
+              >
+                Сохранить пароль
               </Button>
             </form>
-          </section>
-          <form onSubmit={submit} aria-label="Изменить пароль" aria-busy={busy}>
-            <h2>Изменить пароль</h2>
-            <label>
-              Текущий пароль
-              <FormInput
-                type="password"
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Новый пароль
-              <FormInput
-                type="password"
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={MIN_PASSWORD}
-                maxLength={128}
-              />
-            </label>
-            <label>
-              Повторите новый пароль
-              <FormInput
-                type="password"
-                autoComplete="new-password"
-                value={passwordAgain}
-                onChange={(e) => setPasswordAgain(e.target.value)}
-                required
-                minLength={MIN_PASSWORD}
-                maxLength={128}
-              />
-            </label>
-            {error && (
-              <p role="alert" className="account-auth-error">
-                {error}
-              </p>
-            )}
-            {notice && <p role="status">{notice}</p>}
-            <Button type="submit" view="action" disabled={busy} loading={busy}>
-              Сохранить пароль
-            </Button>
-            <Button type="button" disabled={busy} onClick={() => void logout()}>
-              Выйти из аккаунта
-            </Button>
-          </form>
+          </details>
+          <Button
+            type="button"
+            view="flat-secondary"
+            disabled={busy}
+            onClick={() => void logout()}
+          >
+            Выйти из аккаунта
+          </Button>
         </section>
       </main>
     );

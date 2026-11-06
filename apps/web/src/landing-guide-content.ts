@@ -151,7 +151,7 @@ export const canvasSections: GuideSection[] = [
 
 export const chatSection: GuideSection = {
   title: "Чат и броски",
-  hint: "Ctrl+Enter отправляет сообщение только мастеру — удобно для тайных действий.",
+  hint: "Ctrl/⌘+Enter отправляет сообщение только мастеру — удобно для тайных действий.",
   shortcuts: [
     { keys: ["Enter"], action: "Отправить всем" },
     { keys: ["Shift", "Enter"], action: "Перенос строки" },

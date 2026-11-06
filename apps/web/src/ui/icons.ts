@@ -81,5 +81,16 @@ export {
   WandSparkles as MagicActionIcon,
   Info as InfoNoticeIcon,
   TriangleAlert as WarningNoticeIcon,
+  Dumbbell as StrengthStatIcon,
+  Footprints as AgilityStatIcon,
+  HeartPulse as VitalityStatIcon,
+  Brain as IntelligenceStatIcon,
+  MessageCircle as CharismaStatIcon,
+  Shield as WillpowerStatIcon,
+  Clover as LuckStatIcon,
+  Zap as InitiativeStatIcon,
+  Gauge as ReactionStatIcon,
+  Swords as MeleeStatIcon,
+  Crosshair as RangedStatIcon,
 } from "lucide-react";
 export type { LucideIcon } from "lucide-react";

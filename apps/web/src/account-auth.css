@@ -1,13 +1,15 @@
 .account-auth-shell {
-  min-height: 100dvh;
-  display: grid;
-  place-items: center;
-  padding: 1.25rem;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: clamp(1rem, 5vh, 3rem) 1.25rem;
   color: var(--palette-ink-100, #eee9df);
   background: var(--palette-ink-950, #151513);
 }
 .account-auth-card {
   width: min(100%, 30rem);
+  margin-inline: auto;
   display: grid;
   gap: 1rem;
   padding: clamp(1.25rem, 5vw, 2rem);
@@ -116,6 +118,130 @@
 .account-invite-link {
   overflow-wrap: anywhere;
 }
+
+/* Account is a destination rather than a long stack of forms. */
+.account-auth-card.account-home {
+  width: min(100%, 68rem);
+  gap: 1.25rem;
+  padding: clamp(1.25rem, 4vw, 2.75rem);
+  background: linear-gradient(145deg, #211e1b 0%, #171715 58%);
+  border-color: #494039;
+  box-shadow: 0 24px 80px #0005;
+}
+.account-home-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid #51473d;
+}
+.account-home-brand {
+  color: inherit;
+  text-decoration: none;
+}
+.account-home-identity {
+  display: grid;
+  gap: 0.2rem;
+  text-align: right;
+}
+.account-home-identity-label,
+.account-campaign-role {
+  color: #d3b8a5;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.account-home-intro {
+  display: grid;
+  gap: 0.65rem;
+  padding-block: 1rem 0.5rem;
+}
+.account-home-intro h1 {
+  font-family: var(--font-family-brand, Georgia, serif);
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 400;
+}
+.account-home-lead {
+  color: #d0c8bd;
+  line-height: 1.5;
+}
+.account-home .account-campaigns {
+  gap: 1rem;
+  border: 0;
+  padding: 0;
+}
+.account-home .account-campaigns h2 {
+  font-size: 1.25rem;
+}
+.account-home .account-campaigns ul {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+}
+.account-home .account-campaigns li {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid #5b4c41;
+  border-radius: 0.85rem;
+  background: linear-gradient(145deg, #302922, #201e1b 75%);
+}
+.account-campaign-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+  flex: 1;
+}
+.account-campaign-heading > div {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.account-campaign-heading strong {
+  font-size: 1.15rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.account-campaign-symbol {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid #8b6951;
+  border-radius: 0.65rem;
+  color: #e2ad88;
+  font-size: 1.4rem;
+}
+.account-home-disclosure,
+.account-campaign-invite {
+  border-top: 1px solid #51473d;
+}
+.account-home-disclosure summary,
+.account-campaign-invite summary {
+  padding: 0.9rem 0;
+  color: #e7d2c2;
+  font-weight: 600;
+  cursor: pointer;
+}
+.account-home-disclosure summary:focus-visible,
+.account-campaign-invite summary:focus-visible {
+  outline: 2px solid #e6a87b;
+  outline-offset: 3px;
+}
+.account-home-disclosure form,
+.account-campaign-invite form {
+  padding: 0.5rem 0 1rem;
+}
+.account-home .account-campaigns li form {
+  border: 0;
+}
+.account-home > .arken-button {
+  justify-self: start;
+}
 @media (max-width: 480px) {
   .account-campaigns li {
     grid-template-columns: 1fr;
@@ -126,7 +252,6 @@
 }
 @media (max-width: 480px) {
   .account-auth-shell {
-    place-items: start center;
     padding: 0.75rem;
   }
   .account-auth-card {

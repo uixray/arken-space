@@ -27,6 +27,7 @@ describe("asset replacement intent", () => {
         method: "HEAD",
         credentials: "include",
         cache: "no-store",
+        headers: expect.any(Headers),
         signal: undefined,
       },
     );

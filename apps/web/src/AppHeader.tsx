@@ -113,6 +113,9 @@ export const AppHeader = memo(function AppHeader({
           <Brand compact />
         </a>
       </div>
+      <a className="campaigns-back-link" href="/account">
+        ← Мои кампании
+      </a>
       <div className="scene-switcher">
         <ScenePicker
           activeScene={activeScene}

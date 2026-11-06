@@ -24,7 +24,7 @@ function Keys({ keys }: { keys: readonly string[] }) {
       {keys.map((key, index) => (
         <span key={key}>
           {index > 0 && <span className="guide-keys__plus">+</span>}
-          <kbd className="guide-key">{key}</kbd>
+          <kbd className="guide-key">{key === "Ctrl" ? "Ctrl/⌘" : key}</kbd>
         </span>
       ))}
     </span>
