@@ -1,5 +1,11 @@
 import { shareStructure } from "./structural-sharing";
 import {
+  applyTokenPointEvent,
+  applyTokenPreview,
+  recordTokenRemovals,
+  type TokenRemovalWatermarks,
+} from "./token-point-events";
+import {
   applyDrawingRemoved,
   applyDrawingUpserted,
 } from "./drawing-point-events";
@@ -145,6 +151,7 @@ export function useGameSocketSubscriptions({
     // the global snapshot version is used only to seed canonical state and is
     // never a gate that can discard an interleaved track event.
     const audioTrackCursor: AudioTrackEventCursor = new Map();
+    const tokenRemovalWatermarks: TokenRemovalWatermarks = new Map();
     let canonicalAudioFloor = initialSnapshotVersionRef.current ?? 0;
     setSocket(next);
     next.on("connect", () => {
@@ -180,6 +187,7 @@ export function useGameSocketSubscriptions({
           reconcileGameSnapshot(current, nextSnapshot),
         );
         if (reconciled.campaign.id !== campaignId) return reconciled;
+        recordTokenRemovals(current, reconciled, tokenRemovalWatermarks);
         if (nextSnapshot.snapshotVersion >= canonicalAudioFloor)
           canonicalAudioFloor = nextSnapshot.snapshotVersion;
         for (const track of reconciled.audioTracks ?? []) {
@@ -224,27 +232,14 @@ export function useGameSocketSubscriptions({
     next.on("token:moving", (movement) =>
       setSnapshot((current) =>
         current
-          ? {
-              ...current,
-              tokens: current.tokens.map((token) =>
-                token.id === movement.tokenId
-                  ? { ...token, x: movement.x, y: movement.y }
-                  : token,
-              ),
-            }
+          ? applyTokenPreview(current, movement, tokenRemovalWatermarks)
           : current,
       ),
     );
     next.on("token:moved", (event) =>
       setSnapshot((current) =>
-        current && event.sequence > current.snapshotVersion
-          ? {
-              ...current,
-              snapshotVersion: event.sequence,
-              tokens: current.tokens.map((token) =>
-                token.id === event.data.id ? event.data : token,
-              ),
-            }
+        current
+          ? applyTokenPointEvent(current, event, tokenRemovalWatermarks)
           : current,
       ),
     );
@@ -277,19 +272,7 @@ export function useGameSocketSubscriptions({
     next.on("token:updated", (event) =>
       setSnapshot((current) =>
         current
-          ? {
-              ...current,
-              snapshotVersion: Math.max(
-                current.snapshotVersion,
-                event.sequence,
-              ),
-              tokens: current.tokens.map((token) =>
-                token.id === event.data.id &&
-                event.data.revision >= token.revision
-                  ? event.data
-                  : token,
-              ),
-            }
+          ? applyTokenPointEvent(current, event, tokenRemovalWatermarks, true)
           : current,
       ),
     );
