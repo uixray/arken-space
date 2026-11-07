@@ -29,6 +29,7 @@ import {
   campaigns,
   catalogEntries,
   characterCatalogEntries,
+  creationObjects,
   characterControllers,
   characterMedia,
   characters,
@@ -301,12 +302,14 @@ const loadAssignedEntries = (db: Database, campaignId: string) =>
     .select({
       entry: characterCatalogEntries,
       campaignId: characters.campaignId,
+      creationId: creationObjects.id,
     })
     .from(characterCatalogEntries)
     .innerJoin(
       characters,
       eq(characterCatalogEntries.characterId, characters.id),
     )
+    .leftJoin(creationObjects, eq(creationObjects.entryId, characterCatalogEntries.id))
     .where(eq(characters.campaignId, campaignId));
 
 const loadCharacterMedia = (db: Database, campaignId: string) =>
@@ -841,11 +844,11 @@ export async function buildSnapshot(
   });
   const entriesByCharacter = new Map<
     string,
-    (typeof assignedRows)[number]["entry"][]
+    ((typeof assignedRows)[number]["entry"] & { creationManaged: boolean })[]
   >();
-  for (const { entry } of assignedRows) {
+  for (const { entry, creationId } of assignedRows) {
     const list = entriesByCharacter.get(entry.characterId) ?? [];
-    list.push(entry);
+    list.push({ ...entry, creationManaged: creationId != null });
     entriesByCharacter.set(entry.characterId, list);
   }
   const visibleAssetIds = new Set<string>();

@@ -1,4 +1,5 @@
 import { sameInspiration } from "./character-extras-routes.js";
+import { postgresErrorCode } from "./database-errors.js";
 import { applyAbilityArea } from "./ability-area-apply.js";
 import { cancelAbilityArea } from "./ability-area-state.js";
 import {
@@ -14,7 +15,12 @@ import type {
   ServerToClientEvents,
 } from "@arken/contracts";
 import { randomInt } from "node:crypto";
-import { and, desc, eq, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { assertCreationEntryUsable, lockBoundCreationEntry } from "./creation-runtime-state.js";
+import { requireCreationMember } from "./creation-state.js";
+import { lockInventoryGraph } from "./inventory-assignment.js";
+import { consumeCreationApplication } from "./creation-consumption.js";
+import { lockEntryApplication } from "./entry-application-state.js";
 import { z } from "zod";
 import {
   diceRequestSchema,
@@ -39,6 +45,7 @@ import { selectDiceFrame } from "./dice-frame-selection.js";
 import { resolveStatLayout } from "./snapshot.js";
 import {
   characterDto,
+  loadCharacterEntries,
   characterRollStats,
   normalizeCharacterResources,
   normalizeCharacterWallet,
@@ -143,10 +150,7 @@ export function registerCharacterPlayRoutes(
       await broadcast(auth.campaignId);
       return reply.send({ ok: true });
     } catch (error) {
-      const dbCode =
-        error && typeof error === "object" && "code" in error
-          ? error.code
-          : undefined;
+      const dbCode = postgresErrorCode(error);
       if (dbCode === "40001" || dbCode === "40P01")
         return reply.code(409).send({
           error: "UNDO_CONFLICT",
@@ -244,6 +248,10 @@ export function registerCharacterPlayRoutes(
           "Фигурка переместилась. Просмотрите область заново.",
         ],
         ENTRY_CONFLICT: [409, "Способность изменилась. Выберите её заново."],
+        CREATION_CONSUMPTION_UNAVAILABLE: [409, "Одноразовый созданный предмет пока нельзя применить с отменой."],
+        CREATION_APPROVAL_REQUIRED: [409, "Допуск мастера к версии отозван."],
+        CREATION_OBJECT_UNAVAILABLE: [409, "Созданный объект больше недоступен."],
+        CREATION_DATA_UNAVAILABLE: [409, "Версия объекта не соответствует сохранённой записи."],
         AREA_SCALE_REQUIRED: [
           409,
           "Мастер должен задать метров в клетке для этой сцены.",
@@ -368,10 +376,7 @@ export function registerCharacterPlayRoutes(
       const canonical = await loadCharacter();
       if (!(await canEditCharacter(canonical)))
         return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
-      const assignedEntries = await db
-        .select()
-        .from(characterCatalogEntries)
-        .where(eq(characterCatalogEntries.characterId, id));
+      const assignedEntries = await loadCharacterEntries(db, id);
       return reply
         .code(200)
         .send(
@@ -595,10 +600,7 @@ export function registerCharacterPlayRoutes(
       if (racedAction) return sendReplay(racedAction);
       return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
     }
-    const assignedEntries = await db
-      .select()
-      .from(characterCatalogEntries)
-      .where(eq(characterCatalogEntries.characterId, id));
+    const assignedEntries = await loadCharacterEntries(db, id);
     const controllerIds = await characterControllerIds(db, id);
     const statLayout = await campaignDefaultStatLayout(db, auth.campaignId);
     // A changed resource image must enter snapshot.assets: full broadcast.
@@ -680,6 +682,8 @@ export function registerCharacterPlayRoutes(
         "TABLE",
       );
       const result = await db.transaction(async (tx) => {
+        const bound = await lockBoundCreationEntry(tx, auth, row.entry.id);
+        if (bound && auth.role !== "GM") return "CREATION_RECHARGE_REQUIRES_GM" as const;
         const [clock] = await tx
           .select({
             day: campaigns.day,
@@ -741,6 +745,8 @@ export function registerCharacterPlayRoutes(
         });
         return { updated, message };
       });
+      if (result === "CREATION_RECHARGE_REQUIRES_GM")
+        return reply.code(409).send({ error: "CREATION_RECHARGE_REQUIRES_GM" });
       if (!result) return reply.code(409).send({ error: "ENTRY_CONFLICT" });
       await broadcast(auth.campaignId);
       return result.updated;
@@ -828,6 +834,7 @@ export function registerCharacterPlayRoutes(
       };
       let formula: string | null = null;
       let result: ReturnType<typeof rollFormulaWithMode> | null = null;
+      const referencedEntries = new Map<string, typeof characterCatalogEntries.$inferSelect>();
       const rolledActions: Array<{
         action: NonNullable<typeof parsedData.data.rollActions>[number];
         formula: string;
@@ -937,6 +944,12 @@ export function registerCharacterPlayRoutes(
                     ),
                   )
                   .limit(1);
+                if (referenced) {
+                  const previous = referencedEntries.get(referenced.entry.id);
+                  if (previous && previous.revision !== referenced.entry.revision)
+                    return reply.code(409).send({ error: "ENTRY_CONFLICT" });
+                  referencedEntries.set(referenced.entry.id, referenced.entry);
+                }
                 value = numericSkillValue(referenced?.entry.data);
               } else {
                 const [assigned] = await db
@@ -962,6 +975,12 @@ export function registerCharacterPlayRoutes(
                     ),
                   )
                   .limit(1);
+                if (assigned) {
+                  const previous = referencedEntries.get(assigned.entry.id);
+                  if (previous && previous.revision !== assigned.entry.revision)
+                    return reply.code(409).send({ error: "ENTRY_CONFLICT" });
+                  referencedEntries.set(assigned.entry.id, assigned.entry);
+                }
                 value = numericSkillValue(assigned?.entry.data);
               }
             }
@@ -1144,6 +1163,13 @@ export function registerCharacterPlayRoutes(
       } | null;
       try {
         saved = await db.transaction(async (tx) => {
+          await lockEntryApplication(tx, auth.campaignId, body.actionId);
+          if (mode === "EXECUTE" && referencedEntries.size) {
+            await lockInventoryGraph(tx, auth.campaignId);
+            await requireCreationMember(tx, auth);
+          }
+          const bound = mode === "EXECUTE" && await lockBoundCreationEntry(tx, auth, row.entry.id);
+          let consumesCreation = false;
           {
             // Serialize all public dice with inspiration spending.
             // Keep the shared lock order consistent with existing rolls:
@@ -1154,6 +1180,23 @@ export function registerCharacterPlayRoutes(
               .where(eq(characters.id, row.character.id))
               .for("update")
               .limit(1);
+          }
+          if (mode === "EXECUTE" && (bound || referencedEntries.size)) {
+            const expected = new Map(referencedEntries);
+            expected.set(row.entry.id, row.entry);
+            const entries = await tx.select().from(characterCatalogEntries)
+              .where(inArray(characterCatalogEntries.id, [...expected.keys()]))
+              .orderBy(asc(characterCatalogEntries.id)).for("update");
+            if (entries.length !== expected.size || entries.some(entry =>
+              entry.characterId !== row.character.id || entry.revision !== expected.get(entry.id)!.revision))
+              throw new Error("ENTRY_CONFLICT_TX");
+            for (const entry of entries) {
+              const created = await assertCreationEntryUsable(tx, auth, entry, row.character);
+              if (created?.snapshot.entryData.creationConsumption === "BOUND_ITEM_ON_APPLICATION") {
+                if (entry.id !== row.entry.id) throw new Error("CREATION_CONSUMPTION_UNAVAILABLE");
+                consumesCreation = true;
+              }
+            }
           }
           if (executeAll) {
             const [currentEntry] = await tx
@@ -1212,6 +1255,9 @@ export function registerCharacterPlayRoutes(
               .returning({ id: characterCatalogEntries.id });
             if (!updated) throw new Error("ENTRY_CONFLICT_TX");
           }
+          const consumption = consumesCreation
+            ? await consumeCreationApplication(tx, auth, row.entry, row.character, new Date())
+            : undefined;
           const [message] = await tx
             .insert(chatMessages)
             .values({
@@ -1264,13 +1310,14 @@ export function registerCharacterPlayRoutes(
                     ? {
                         version: 1,
                         entry:
-                          consumeUse || (cost && resourceKey)
+                          !consumption && (consumeUse || (cost && resourceKey))
                             ? {
                                 id: row.entry.id,
                                 beforeData: row.entry.data,
                                 afterRevision: row.entry.revision + 1,
                               }
                             : null,
+                        consumption,
                         characters:
                           cost && resourceKey
                             ? [
@@ -1301,13 +1348,12 @@ export function registerCharacterPlayRoutes(
         // A concurrent retry may lose only at the unique action receipt. The
         // transaction rolls back its message/resource changes, then replay it.
         if (
-          error &&
-          typeof error === "object" &&
-          "code" in error &&
-          error.code === "23505" &&
+          postgresErrorCode(error) === "23505" &&
           (await findAction(db, auth.campaignId, body.actionId))
         )
           return reply.code(200).send({ duplicate: true });
+        if (error instanceof Error && error.message.startsWith("CREATION_"))
+          return reply.code(409).send({ error: error.message });
         if (error instanceof Error && error.message === "ENTRY_CONFLICT_TX") {
           if (await findAction(db, auth.campaignId, body.actionId))
             return reply.code(200).send({ duplicate: true });

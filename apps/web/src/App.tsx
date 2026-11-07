@@ -135,7 +135,8 @@ type WorkspaceDestination =
   | "world-encyclopedia"
   | "spell-schools"
   | "shops"
-  | "world-codex";
+  | "world-codex"
+  | "creations";
 
 function replacePersonalTheme(
   snapshot: GameSnapshot,

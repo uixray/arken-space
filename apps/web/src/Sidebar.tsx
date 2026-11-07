@@ -20,6 +20,7 @@ import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
 import { WorldContentWorkspace } from "./WorldContentWorkspace";
 import { EconomyWorkspace } from "./EconomyWorkspace";
+import { CreationWorkspace } from "./CreationWorkspace";
 import { SpellSchoolsWorkspace } from "./SpellSchoolsWorkspace";
 import { WorldEncyclopediaWorkspace } from "./WorldEncyclopediaWorkspace";
 import { PlayerRequestsWorkspace } from "./PlayerRequestsWorkspace";
@@ -117,6 +118,7 @@ export type Props = {
     | "spell-schools"
     | "shops"
     | "world-codex"
+    | "creations"
     | null;
   operatorFeedbackAllowed: boolean;
 };
@@ -681,6 +683,19 @@ function SidebarContent(props: Props) {
           <WorldEncyclopediaWorkspace
             open
             assets={props.snapshot.assets}
+            onClose={closeWorkspace}
+          />
+        )}
+        {props.workspace === "creations" && (
+          <CreationWorkspace
+            key={`${props.snapshot.campaign.id}:${props.snapshot.me.id}:${props.snapshot.me.role}`}
+            campaignId={props.snapshot.campaign.id}
+            membershipId={props.snapshot.me.id}
+            gm={isGm}
+            characters={props.snapshot.characters.filter((character) =>
+              character.lifecycle === "ACTIVE" &&
+              (isGm || character.ownerMembershipId === props.snapshot.me.id ||
+                character.controllerMembershipIds.includes(props.snapshot.me.id)))}
             onClose={closeWorkspace}
           />
         )}

@@ -24,8 +24,10 @@ import {
 } from "@arken/db";
 import { createStarterCharacter } from "@arken/system";
 import { requireAuth } from "./auth.js";
-import { characterDto } from "./character-dto.js";
+import { characterDto, loadCharacterEntries } from "./character-dto.js";
 import { findAction } from "./action-lookup.js";
+import { boundCreationEntry } from "./creation-runtime-state.js";
+import { lockInventoryGraph } from "./inventory-assignment.js";
 import { isCampaignDiceFrame } from "./member-dice-frame-routes.js";
 import {
   canAccessCharacter,
@@ -316,10 +318,7 @@ export function registerCharacterRoutes(
     )
       await broadcast(auth.campaignId);
     else {
-      const assignedEntries = await db
-        .select()
-        .from(characterCatalogEntries)
-        .where(eq(characterCatalogEntries.characterId, id));
+      const assignedEntries = await loadCharacterEntries(db, id);
       const statLayout = await campaignDefaultStatLayout(db, auth.campaignId);
       await publishCharacter(auth.campaignId, {
         character: updated.next,
@@ -705,6 +704,8 @@ export function registerCharacterRoutes(
         return reply.code(409).send({ error: "CHARACTER_ENTRY_CONFLICT" });
       const { actionId, revision: _revision, ...updates } = body;
       const updated = await db.transaction(async (tx) => {
+        await lockInventoryGraph(tx, auth.campaignId);
+        if (await boundCreationEntry(tx, current.entry.id)) return "CREATION_BOUND_ENTRY" as const;
         const [next] = await tx
           .update(characterCatalogEntries)
           .set({
@@ -731,6 +732,8 @@ export function registerCharacterRoutes(
         });
         return next;
       });
+      if (updated === "CREATION_BOUND_ENTRY")
+        return reply.code(409).send({ error: "CREATION_BOUND_ENTRY" });
       if (!updated)
         return reply.code(409).send({ error: "CHARACTER_ENTRY_CONFLICT" });
       await broadcast(auth.campaignId);
@@ -771,6 +774,8 @@ export function registerCharacterRoutes(
       if (current.entry.revision !== body.revision)
         return reply.code(409).send({ error: "CHARACTER_ENTRY_CONFLICT" });
       const deleted = await db.transaction(async (tx) => {
+        await lockInventoryGraph(tx, auth.campaignId);
+        if (await boundCreationEntry(tx, current.entry.id)) return "CREATION_BOUND_ENTRY" as const;
         const [entry] = await tx
           .delete(characterCatalogEntries)
           .where(
@@ -794,6 +799,8 @@ export function registerCharacterRoutes(
         });
         return entry;
       });
+      if (deleted === "CREATION_BOUND_ENTRY")
+        return reply.code(409).send({ error: "CREATION_BOUND_ENTRY" });
       if (!deleted)
         return reply.code(409).send({ error: "CHARACTER_ENTRY_CONFLICT" });
       await broadcast(auth.campaignId);

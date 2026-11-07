@@ -5,6 +5,7 @@ import {
   validateInventoryAssignment,
 } from "./inventory-assignment.js";
 import { canAccessCharacter } from "./character-access.js";
+import { boundCreationInstance } from "./creation-runtime-state.js";
 import { postgresErrorCode } from "./database-errors.js";
 import {
   and,
@@ -87,6 +88,8 @@ async function findAction(db: RequestDb, campaignId: string, actionId: string) {
     .limit(1);
   return row ?? null;
 }
+
+class CreationBoundInstance extends Error {}
 
 class InstanceReplay extends Error {
   constructor(readonly matches: boolean) {
@@ -592,6 +595,12 @@ export function registerWorldContentInstanceRoutes(
           auth.membershipId,
         );
         await lockInventoryGraph(tx, auth.campaignId);
+        if (await boundCreationInstance(tx, auth.campaignId, id)) {
+          if ((changes.quantity !== undefined && changes.quantity !== existing.quantity) ||
+              (changes.inventoryCharacterId !== undefined && changes.inventoryCharacterId !== existing.inventoryCharacterId) ||
+              (changes.ownerMembershipId !== undefined && changes.ownerMembershipId !== existing.ownerMembershipId))
+            throw new CreationBoundInstance();
+        }
         await validateInventoryAssignment(
           tx,
           auth.campaignId,
@@ -632,6 +641,8 @@ export function registerWorldContentInstanceRoutes(
         return reason.matches
           ? reply.code(200).send({ duplicate: true })
           : fail(reply, 409, "ACTION_ID_REUSED");
+      if (reason instanceof CreationBoundInstance)
+        return fail(reply, 409, "CREATION_BOUND_INSTANCE");
       if (reason instanceof InventoryAssignmentError)
         return fail(reply, 400, reason.message);
       if (isInstanceLocationForeignKeyFailure(reason))
@@ -694,6 +705,8 @@ export function registerWorldContentInstanceRoutes(
           auth.membershipId,
         );
         await lockInventoryGraph(tx, auth.campaignId);
+        if (await boundCreationInstance(tx, auth.campaignId, id))
+          throw new CreationBoundInstance();
         const rows = await tx
           .delete(worldContentInstances)
           .where(
@@ -718,11 +731,13 @@ export function registerWorldContentInstanceRoutes(
         return true;
       })
       .catch((error: unknown) => {
+        if (error instanceof CreationBoundInstance) return "CREATION_BOUND" as const;
         if (error instanceof InstanceReplay)
           return error.matches ? ("DUPLICATE" as const) : ("REUSED" as const);
         if (postgresErrorCode(error) === "23503") return "REFERENCED" as const;
         throw error;
       });
+    if (deleted === "CREATION_BOUND") return fail(reply, 409, "CREATION_OBJECT_HISTORY_REQUIRED");
     if (deleted === "DUPLICATE")
       return reply.code(200).send({ duplicate: true });
     if (deleted === "REUSED") return fail(reply, 409, "ACTION_ID_REUSED");

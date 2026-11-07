@@ -1960,7 +1960,7 @@ export function CharacterPanel({
                             })
                           }
                         />
-                        {entry.data.uses && (
+                        {entry.data.uses && (!entry.creationManaged || snapshot.me.role === "GM") && (
                           <Button
                             disabled={!editable}
                             onClick={() =>
@@ -1974,7 +1974,7 @@ export function CharacterPanel({
                             Перезарядить
                           </Button>
                         )}
-                        {editable && (
+                        {editable && !entry.creationManaged && (
                           <div className="inline-fields">
                             <Button onClick={() => setEntryEditor(entry)}>
                               Редактировать
@@ -2056,7 +2056,7 @@ export function CharacterPanel({
                             })
                           }
                         />
-                        {entry.data.uses && (
+                        {entry.data.uses && (!entry.creationManaged || snapshot.me.role === "GM") && (
                           <Button
                             disabled={!editable}
                             onClick={() =>
@@ -2070,7 +2070,7 @@ export function CharacterPanel({
                             Перезарядить
                           </Button>
                         )}
-                        {editable && (
+                        {editable && !entry.creationManaged && (
                           <div className="inline-fields">
                             <Button onClick={() => setEntryEditor(entry)}>
                               Редактировать

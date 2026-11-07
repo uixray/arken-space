@@ -24,7 +24,7 @@ describe("UIX-472 — состав разделов", () => {
   });
 
   it("оставляет игроку то, чем он пользуется", () => {
-    expect(ids(player)).toEqual(["characters", "tokens", "shops"]);
+    expect(ids(player)).toEqual(["characters", "tokens", "shops", "creations"]);
   });
 
   it("оставляет заявки в навигации мастера, но скрывает пункт у игрока", () => {

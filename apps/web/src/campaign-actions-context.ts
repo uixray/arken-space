@@ -107,6 +107,7 @@ export interface CampaignActions {
         | "spell-schools"
         | "shops"
         | "world-codex"
+        | "creations"
         | null,
     ) => void;
   };

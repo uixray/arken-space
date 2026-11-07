@@ -16,7 +16,8 @@ export type WorkspaceId =
   | "world-encyclopedia"
   | "spell-schools"
   | "shops"
-  | "world-codex";
+  | "world-codex"
+  | "creations";
 
 export interface WorkspaceNavItem {
   id: WorkspaceId;
@@ -41,6 +42,7 @@ export function workspaceNavItems(context: {
     { id: "characters", label: "Персонажи" },
     { id: "tokens", label: "Токены" },
     { id: "shops", label: "Магазины" },
+    { id: "creations", label: "Мастерская" },
   ];
   if (context.isGm)
     items.push(
