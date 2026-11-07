@@ -617,6 +617,13 @@
       "tag": "0087_hosted_password_accounts",
       "breakpoints": true,
       "idx": 87
+    },
+    {
+      "version": "7",
+      "when": 1793725200000,
+      "tag": "0088_creation_consumption_undo",
+      "breakpoints": true,
+      "idx": 88
     }
   ]
 }

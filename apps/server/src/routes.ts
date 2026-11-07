@@ -69,6 +69,7 @@ import { registerStickerRoutes } from "./sticker-routes.js";
 import { registerChatRoutes } from "./chat-routes.js";
 import { registerTokenRoutes } from "./token-routes.js";
 import { registerCharacterRoutes } from "./character-routes.js";
+import { registerCreationRoutes } from "./creation-routes.js";
 import { registerCampaignRoutes } from "./campaign-routes.js";
 import { registerCharacterPlayRoutes } from "./character-play-routes.js";
 import { registerAssetRoutes } from "./asset-routes.js";
@@ -510,6 +511,9 @@ export function registerRoutes(
     });
   }
   registerPlayerRequestRoutes(app, db, io);
+  registerCreationRoutes(app, db, (campaignId) =>
+    broadcastSnapshots(io, db, campaignId, "progression"),
+  );
   registerProgressionRoutes(app, db, (campaignId) =>
     broadcastSnapshots(io, db, campaignId, "progression"),
   );

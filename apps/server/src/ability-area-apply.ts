@@ -3,6 +3,8 @@ import {
   areaApplicationReplay,
 } from "./ability-area-state.js";
 import { lockEntryApplication } from "./entry-application-state.js";
+import { assertCreationEntryUsable, lockBoundCreationEntry } from "./creation-runtime-state.js";
+import { consumeCreationApplication } from "./creation-consumption.js";
 import { and, asc, eq } from "drizzle-orm";
 import {
   abilityAreaApplySchema,
@@ -72,6 +74,8 @@ export async function applyAbilityArea(
       if (prior) {
         return areaApplicationReplay(prior, actor.id, requestHash);
       }
+      const creationAuth = { campaignId: auth.campaignId, membershipId: actor.id, role: actor.role, displayName: actor.displayName };
+      await lockBoundCreationEntry(tx, creationAuth, command.entryId);
       // Same campaign-first lock order as canvas/pause commands. Geometry cannot
       // move underneath this application; serializable reads cover ownership too.
       const [campaign] = await tx
@@ -151,6 +155,7 @@ export async function applyAbilityArea(
         entry.revision !== command.entryRevision
       )
         throw new Error("ENTRY_CONFLICT");
+      const creation = await assertCreationEntryUsable(tx, creationAuth, entry, caster);
       const data = entryDataSchema.parse(normalizeLegacyEntryData(entry.data));
       if (!data.areaEffect) throw new Error("AREA_EFFECT_REQUIRED");
       // The definition owns character linkage; the legacy placement copy can
@@ -269,6 +274,9 @@ export async function applyAbilityArea(
           updatedAt: new Date(),
         })
         .where(eq(characterCatalogEntries.id, entry.id));
+      const consumption = creation?.snapshot.entryData.creationConsumption === "BOUND_ITEM_ON_APPLICATION"
+        ? await consumeCreationApplication(tx, creationAuth, entry, caster, new Date())
+        : undefined;
       await tx
         .insert(chatThreads)
         .values({
@@ -325,11 +333,12 @@ export async function applyAbilityArea(
           spent: plan.spent,
           undoReceipt: {
             version: 1,
-            entry: {
+            entry: consumption ? null : {
               id: entry.id,
               beforeData: entry.data,
               afterRevision: entry.revision + 1,
             },
+            consumption,
             characters: plan.updates.map((update) => {
               const original = people.find(
                 (person) => person.id === update.id,

@@ -8,11 +8,14 @@ import {
 } from "@arken/db";
 import type { AuthContext } from "./auth.js";
 import { canAccessCharacter } from "./character-access.js";
+import { consumptionReceiptSchema, restoreCreationConsumption } from "./creation-consumption.js";
+import { lockInventoryGraph } from "./inventory-assignment.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 const object = z.record(z.string(), z.unknown());
 const receiptSchema = z.object({
   version: z.literal(1),
+  consumption: consumptionReceiptSchema.optional(),
   entry: z
     .object({
       id: z.string().uuid(),
@@ -113,6 +116,8 @@ export async function undoApplication(
       const parsed = receiptSchema.safeParse(payload?.undoReceipt);
       if (!parsed.success) throw new Error("UNDO_NOT_AVAILABLE");
       const receipt = parsed.data;
+      if (receipt.consumption && receipt.entry) throw new Error("UNDO_NOT_AVAILABLE");
+      if (receipt.consumption) await lockInventoryGraph(tx, auth.campaignId);
       if (
         new Set(receipt.characters.map((item) => item.id)).size !==
         receipt.characters.length
@@ -160,6 +165,8 @@ export async function undoApplication(
         .for("share");
       if (!(await canAccessCharacter(tx as unknown as Database, auth, caster)))
         throw new Error("UNDO_FORBIDDEN");
+      if (receipt.consumption)
+        await restoreCreationConsumption(tx, auth.campaignId, command.messageId, caster!.id, receipt.consumption);
       if (receipt.entry) {
         const [current] = await tx
           .select({ revision: characterCatalogEntries.revision })

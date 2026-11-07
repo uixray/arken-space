@@ -10,9 +10,10 @@ import {
   characterCatalogEntries,
   characterControllers,
   characters,
+  creationObjects,
 } from "@arken/db";
 import { requireAuth } from "./auth.js";
-import { characterDto } from "./character-dto.js";
+import { characterDto, loadCharacterEntries } from "./character-dto.js";
 import { resolveStatLayout } from "./snapshot.js";
 import {
   archiveCharacter,
@@ -51,8 +52,9 @@ export function registerCharacterArchiveRoutes(
       .limit(1);
     const campaignLayout = resolveStatLayout(campaign?.statLayout);
     const entryRows = await db
-      .select()
+      .select({ entry: characterCatalogEntries, creationId: creationObjects.id })
       .from(characterCatalogEntries)
+      .leftJoin(creationObjects, eq(creationObjects.entryId, characterCatalogEntries.id))
       .where(
         inArray(
           characterCatalogEntries.characterId,
@@ -68,10 +70,10 @@ export function registerCharacterArchiveRoutes(
           rows.map((row) => row.id),
         ),
       );
-    const entriesByCharacter = new Map<string, typeof entryRows>();
-    for (const entry of entryRows) {
+    const entriesByCharacter = new Map<string, Array<typeof characterCatalogEntries.$inferSelect & {creationManaged: boolean}>>();
+    for (const {entry,creationId} of entryRows) {
       const list = entriesByCharacter.get(entry.characterId) ?? [];
-      list.push(entry);
+      list.push({...entry,creationManaged:creationId != null});
       entriesByCharacter.set(entry.characterId, list);
     }
     const controllersByCharacter = new Map<string, string[]>();
@@ -156,10 +158,7 @@ export function registerCharacterArchiveRoutes(
       return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
     await broadcastSnapshots(auth.campaignId);
     const [entries, controllers] = await Promise.all([
-      db
-        .select()
-        .from(characterCatalogEntries)
-        .where(eq(characterCatalogEntries.characterId, id)),
+      loadCharacterEntries(db, id),
       db
         .select({ membershipId: characterControllers.membershipId })
         .from(characterControllers)

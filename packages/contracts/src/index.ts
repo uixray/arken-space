@@ -1,4 +1,9 @@
 export * from "./awards-bindings.js";
+export * from "./creation.js";
+export * from "./creation-evaluator.js";
+export * from "./creation-lifecycle.js";
+export * from "./creation-store.js";
+export * from "./creation-commands.js";
 export * from "./token-sprites.js";
 export * from "./bug-intake.js";
 import { z } from "zod";
@@ -2712,6 +2717,9 @@ export interface CatalogEntryDto {
 }
 export interface CharacterCatalogEntryDto extends CatalogEntryDto {
   sourceCatalogEntryId: string | null;
+  /** Issued by the creation workshop: mechanics are version-bound and cannot
+   * be edited or deleted through the ordinary character entry editor. */
+  creationManaged?: boolean;
 }
 
 export interface SceneDto {
