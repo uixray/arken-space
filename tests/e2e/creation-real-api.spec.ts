@@ -14,6 +14,171 @@ import { openWorkspaceSection } from "./workspace-nav-helper";
 import { hashToken } from "../../apps/server/src/security.js";
 import { env } from "../../apps/server/src/env.js";
 const id=()=>crypto.randomUUID();
+test("GM configures and publishes a ruleset using the regular form", async ({ page }) => {
+ page.setDefaultTimeout(12000);
+ const pg=await createMigratedPglite(),db=drizzle(pg,{schema}),app=Fastify();
+ try {
+  const campaignId=id(),gm=id(),player=id(),characterId=id(),gmSecret="g".repeat(40),playerSecret="p".repeat(40);
+  await db.insert(schema.campaigns).values({id:campaignId,name:"Synthetic rules"});
+  await db.insert(schema.memberships).values([{id:gm,campaignId,role:"GM",displayName:"GM"},{id:player,campaignId,role:"PLAYER",displayName:"Player"}]);
+  await db.insert(schema.sessions).values([{membershipId:gm,tokenHash:hashToken(gmSecret),expiresAt:new Date(Date.now()+180000)},
+   {membershipId:player,tokenHash:hashToken(playerSecret),expiresAt:new Date(Date.now()+180000)}]);
+  await db.insert(schema.characters).values({id:characterId,campaignId,ownerMembershipId:player,name:"Synthetic player",wallet:{gold:0,silver:0,copper:0,sp:0}});
+  await app.register(cookie);registerCreationRoutes(app,db as never,async()=>{});await app.ready();
+  let who:"gm"|"player"="gm";
+  await page.route("**/api/creation/**",async route=>{const req=route.request(),url=new URL(req.url());
+   const payload=["POST","PUT"].includes(req.method())?req.postDataJSON():undefined;
+   const res=await app.inject({method:req.method() as "GET"|"POST"|"PUT",url:url.pathname+url.search,
+    headers:{cookie:`${env.SESSION_COOKIE_NAME}=${who==="gm"?gmSecret:playerSecret}`,"x-creation-campaign":campaignId,"x-creation-membership":who==="gm"?gm:player},payload});
+   await route.fulfill({status:res.statusCode,contentType:"application/json",body:res.body});});
+  await page.goto(`/src/test-support/creation-objects-browser-fixture.html?campaign=${campaignId}&member=${gm}&gm=1`);
+  await page.getByRole("button",{name:"Настройки мастера"}).click();
+  await page.getByLabel("Название набора правил",{exact:true}).fill("Синтетические правила");
+  const select=page.getByRole("combobox",{name:"Компонент",exact:true});
+  await expect(select.locator("option")).toHaveCount(6);
+  const values=await select.locator("option").evaluateAll(nodes=>nodes.map(node=>(node as HTMLOptionElement).value));
+  expect(values).toHaveLength(6);
+  for(const value of values){await select.selectOption(value);await page.getByRole("button",{name:"Задать числовой вклад"}).click();}
+  await select.selectOption(values[3]!);
+  await page.getByRole("button",{name:"Добавить эффект",exact:true}).click();
+  await page.getByLabel("Действие мастера вручную").fill("Синтетический ручной эффект");
+  await page.getByRole("button",{name:"Опубликовать эту версию правил"}).click();
+  await expect(page.getByRole("group",{name:"Навыки · ревизия 0"})).toBeVisible();
+  const response=await app.inject({method:"GET",url:"/api/creation/rules",headers:{cookie:`${env.SESSION_COOKIE_NAME}=${playerSecret}`,
+   "x-creation-campaign":campaignId,"x-creation-membership":player}});
+  expect(response.statusCode,response.body).toBe(200);
+  expect(response.json().items).toEqual([expect.objectContaining({name:"Синтетические правила",enabled:true})]);
+  who="player";
+  await page.goto(`/src/test-support/creation-objects-browser-fixture.html?campaign=${campaignId}&member=${player}&character=${characterId}`);
+  await page.getByLabel("Название",{exact:true}).fill("Проверочный чертёж");
+  await page.getByRole("combobox",{name:"Набор правил"}).selectOption({label:"Синтетические правила · версия 1"});
+  for(const slot of ["ACTION","TARGET","SCHOOL","EFFECT","MODIFIER","LIMITATION"])
+   await page.getByRole("checkbox",{name:slot,exact:true}).check();
+  await page.getByRole("button",{name:"Рассчитать и проверить состав"}).click();
+  await page.getByRole("button",{name:"Сохранить новую версию"}).click();
+  await expect.poll(async()=> (await db.select().from(schema.creationTemplates)).length).toBe(1);
+  who="gm";
+  await page.goto(`/src/test-support/creation-objects-browser-fixture.html?campaign=${campaignId}&member=${gm}&character=${characterId}&gm=1`);
+  await page.getByRole("button",{name:"Проверочный чертёж",exact:true}).click();
+  await page.getByLabel("Причина решения").fill("Синтетическая проверка");
+  await page.getByRole("button",{name:"Одобрить версию"}).click();
+  await expect.poll(async()=> (await db.select().from(schema.creationReviews))[0]?.decision).toBe("APPROVED");
+  await page.getByRole("button",{name:"Настройки мастера"}).click();
+  await page.getByRole("button",{name:"Рецепты мастерской"}).click();
+  const recipe=page.getByRole("group",{name:"Точная версия перехода"});
+  await recipe.getByLabel("Название",{exact:true}).fill("Проверочное изготовление");
+  await recipe.getByLabel("Публичное пояснение / причина").fill("Синтетический рецепт");
+  await recipe.getByRole("combobox",{name:"Одобренная версия"}).selectOption({label:"Проверочный чертёж · версия 1"});
+  await recipe.getByRole("button",{name:"Опубликовать рецепт"}).click();
+  await expect.poll(async()=> (await db.select().from(schema.creationRecipeVersions)).length).toBe(1);
+  who="player";
+  await page.goto(`/src/test-support/creation-objects-browser-fixture.html?campaign=${campaignId}&member=${player}&character=${characterId}`);
+  await page.getByRole("button",{name:"Объекты и развитие"}).click();
+  await page.getByRole("combobox",{name:"Рецепт мастера"}).selectOption({label:"Изготовление — Проверочное изготовление"});
+  await page.getByRole("button",{name:"Получить точный расчёт"}).click();
+  await page.getByRole("button",{name:"Подтвердить расход и результат"}).click();
+  await expect(page.getByRole("heading",{name:"Проверочный чертёж"})).toBeVisible();
+  expect(await db.select().from(schema.creationObjects)).toHaveLength(1);
+ } finally {await app.close();await pg.close();}
+});
+test("buyer purchases an approved licence through the real local store routes",async({page})=>{
+ test.setTimeout(60000);
+ const pg=await createMigratedPglite(),db=drizzle(pg,{schema}),app=Fastify();
+ try {
+  const campaignId=id(),gm=id(),author=id(),buyer=id(),authorCharacter=id(),buyerCharacter=id();
+  const secrets={gm:"g".repeat(40),author:"a".repeat(40),buyer:"b".repeat(40)};
+  await db.insert(schema.campaigns).values({id:campaignId,name:"Synthetic store"});
+  await db.insert(schema.memberships).values([{id:gm,campaignId,role:"GM",displayName:"GM"},{id:author,campaignId,role:"PLAYER",displayName:"Author"},{id:buyer,campaignId,role:"PLAYER",displayName:"Buyer"}]);
+  await db.insert(schema.sessions).values(([gm,author,buyer] as const).map((member,i)=>({membershipId:member,tokenHash:hashToken([secrets.gm,secrets.author,secrets.buyer][i]!),expiresAt:new Date(Date.now()+300000)})));
+  await db.insert(schema.characters).values([{id:authorCharacter,campaignId,ownerMembershipId:author,name:"Author",wallet:{gold:0,silver:0,copper:0,sp:0}},{id:buyerCharacter,campaignId,ownerMembershipId:buyer,name:"Buyer",wallet:{gold:1,silver:0,copper:0,sp:0}}]);
+  await app.register(cookie);registerCreationRoutes(app,db as never,async()=>{});await app.ready();
+  const members={gm,author,buyer};
+  const request=async(who:keyof typeof members,path:string,payload:Record<string,unknown>,method:"POST"|"PUT"="POST")=>{
+   const result=await app.inject({method,url:`/api/creation/${path}`,headers:{cookie:`${env.SESSION_COOKIE_NAME}=${secrets[who]}`,"x-creation-campaign":campaignId,"x-creation-membership":members[who]},payload});
+   expect(result.statusCode,result.body).toBe(200);return result.json();
+  };
+  const zero={power:0,priceCopper:0,craftSp:0,usageCost:0};
+  const range={power:{min:0,max:100},priceCopper:{min:0,max:100},craftSp:{min:0,max:100},usageCost:{min:0,max:100}};
+  const manual={power:{min:0,max:0},priceCopper:{min:0,max:0},craftSp:{min:0,max:0},usageCost:{min:0,max:0}};
+  const source={format:1,kind:"SKILL",name:"Synthetic rules",description:"",slots:["ACTION","TARGET","SCHOOL","EFFECT","MODIFIER","LIMITATION"].map(slot=>({slot,min:slot==="EFFECT"?1:0,max:1})),components:[{id:"effect",name:"Synthetic effect",description:"",slot:"EFFECT",tags:[],parameters:[],contribution:zero,factorsBasisPoints:{power:10000,priceCopper:10000,craftSp:10000,usageCost:10000},requirements:[],materials:[],artifact:null,effects:[{kind:"MANUAL",text:"Synthetic"}]}],compatibility:[],limits:range,manualAdjustment:manual,usageResource:null};
+  const rules=await request("gm","rules/versions",{actionId:id(),packId:id(),expectedRevision:null,source,publish:true});
+  const design={name:"Synthetic store skill",lore:"",appearance:"",selections:[{componentId:"effect",parameters:{}}],adjustments:zero,adjustmentReason:""};
+  const template=await request("author","templates/versions",{actionId:id(),templateId:id(),expectedRevision:null,previousVersionId:null,ruleVersionId:rules.versionId,design});
+  await request("gm","reviews",{actionId:id(),versionId:template.versionId,expectedRevision:null,decision:"APPROVED",reason:"Synthetic"});
+  let who:"gm"|"author"|"buyer"="gm";
+  await page.route("**/api/creation/**",async route=>{const req=route.request(),url=new URL(req.url());const payload=["POST","PUT"].includes(req.method())?req.postDataJSON():undefined;
+   const res=await app.inject({method:req.method() as "GET"|"POST"|"PUT",url:url.pathname+url.search,headers:{cookie:`${env.SESSION_COOKIE_NAME}=${secrets[who]}`,"x-creation-campaign":campaignId,"x-creation-membership":members[who]},payload});
+   await route.fulfill({status:res.statusCode,contentType:"application/json",body:res.body});});
+  await page.goto(`/src/test-support/creation-objects-browser-fixture.html?campaign=${campaignId}&member=${gm}&character=${authorCharacter}&gm=1`);
+  await page.getByRole("button",{name:"Настройки мастера"}).click();
+  await page.getByRole("button",{name:"Правила витрины"}).click();
+  await page.getByRole("button",{name:"Редактировать правила витрины"}).click();
+  await page.getByRole("checkbox",{name:"Включить витрину"}).check();
+  await page.getByRole("checkbox",{name:"Разрешить авторские лоты игроков"}).check();
+  await page.getByLabel("Минимальная цена, медные").fill("0");
+  await page.getByLabel("Максимальная цена, медные").fill("100");
+  await page.getByLabel("Комиссия, базисные пункты (100 = 1%)").fill("2500");
+  await page.getByLabel("Причина",{exact:true}).fill("Synthetic policy");
+  await page.getByRole("button",{name:"Сохранить условия"}).click();
+  await expect.poll(async()=> (await db.select().from(schema.creationStorePolicies)).length).toBe(1);
+  who="author";
+  await page.goto(`/src/test-support/creation-objects-browser-fixture.html?campaign=${campaignId}&member=${author}&character=${authorCharacter}`);
+  await page.getByRole("button",{name:"Витрина",exact:true}).click();
+  await page.getByRole("button",{name:"Мои лоты"}).click();
+  await page.getByRole("button",{name:"Выставить свою одобренную версию"}).click();
+  await page.getByRole("combobox",{name:"Одобренная версия"}).selectOption(template.versionId);
+  await page.getByLabel("Цена продажи, медные").fill("8");
+  await page.getByRole("combobox",{name:"Персонаж автора для дохода"}).selectOption(authorCharacter);
+  await page.getByRole("button",{name:"Сохранить и выставить"}).click();
+  await expect.poll(async()=> (await db.select().from(schema.creationListingVersions)).length).toBe(1);
+  const [listing]=await db.select().from(schema.creationListingVersions);
+  const point={versionId:template.versionId,level:1,stage:"CRAFTED"};
+  const craft=await request("gm","recipes/versions",{actionId:id(),recipeId:id(),expectedRevision:null,publish:true,source:{format:1,name:"Synthetic craft",reason:"Synthetic",kind:"SKILL",operation:"CRAFT",inputs:[],output:point,cost:{copper:0,sp:0,materials:[]},refund:null}});
+  const make=async()=>{const q=await request("author","operations/quote",{characterId:authorCharacter,recipeVersionId:craft.versionId,inputObjectIds:[],materialPicks:[]});return request("author","operations/commit",{actionId:id(),quoteId:q.id});};
+  const first=await make(),second=await make();
+  const merge=await request("gm","recipes/versions",{actionId:id(),recipeId:id(),expectedRevision:null,publish:true,source:{format:1,name:"Synthetic merge",reason:"Synthetic",kind:"SKILL",operation:"MERGE",inputs:[point,point],output:{...point,level:2,stage:"EVOLVING"},cost:{copper:0,sp:0,materials:[]},refund:null}});
+  await page.getByRole("button",{name:"Объекты и развитие"}).click();
+  await page.getByRole("combobox",{name:"Рецепт мастера"}).selectOption(merge.versionId);
+  const inputs=page.getByRole("checkbox",{name:"Расходовать в выбранном рецепте"});
+  await expect(inputs).toHaveCount(2);await inputs.nth(0).check();await inputs.nth(1).check();
+  await page.getByRole("button",{name:"Получить точный расчёт"}).click();
+  await expect(page.getByRole("region",{name:"Подтверждение операции"})).toContainText("будут расходованы");
+  await page.getByRole("button",{name:"Подтвердить расход и результат"}).click();
+  await expect.poll(async()=> (await db.select().from(schema.creationObjects).where(eq(schema.creationObjects.characterId,authorCharacter))).filter(o=>o.status==="CONSUMED").length).toBe(2);
+  const parents=await db.select().from(schema.creationObjectEdges);
+  expect(parents.map(edge=>edge.inputObjectId).sort()).toEqual([first.outputObjectId,second.outputObjectId].sort());
+  const mergedPoint={...point,level:2,stage:"EVOLVING"}, upgradedPoint={...point,level:3,stage:"MASTERWORK"};
+  const upgrade=await request("gm","recipes/versions",{actionId:id(),recipeId:id(),expectedRevision:null,publish:true,source:{format:1,name:"Synthetic upgrade",reason:"Synthetic",kind:"SKILL",operation:"UPGRADE",inputs:[mergedPoint],output:upgradedPoint,cost:{copper:0,sp:0,materials:[]},refund:null}});
+  await page.getByRole("button",{name:"Обновить данные"}).click();
+  await page.getByRole("combobox",{name:"Рецепт мастера"}).selectOption(upgrade.versionId);
+  await page.getByRole("checkbox",{name:"Расходовать в выбранном рецепте"}).check();
+  await page.getByRole("button",{name:"Получить точный расчёт"}).click();
+  await page.getByRole("button",{name:"Подтвердить расход и результат"}).click();
+  await expect.poll(async()=> (await db.select().from(schema.creationObjects).where(eq(schema.creationObjects.characterId,authorCharacter))).filter(o=>o.status==="ACTIVE"&&o.level===3).length).toBe(1);
+  const dismantle=await request("gm","recipes/versions",{actionId:id(),recipeId:id(),expectedRevision:null,publish:true,source:{format:1,name:"Synthetic dismantle",reason:"Synthetic",kind:"SKILL",operation:"DISASSEMBLE",inputs:[upgradedPoint],output:null,cost:{copper:0,sp:0,materials:[]},refund:{copperBasisPoints:5000,spBasisPoints:5000,materialsBasisPoints:5000}}});
+  await page.getByRole("button",{name:"Обновить данные"}).click();
+  await page.getByRole("combobox",{name:"Рецепт мастера"}).selectOption(dismantle.versionId);
+  await page.getByRole("checkbox",{name:"Расходовать в выбранном рецепте"}).check();
+  await page.getByRole("button",{name:"Получить точный расчёт"}).click();
+  await expect(page.getByRole("region",{name:"Подтверждение операции"})).toContainText("Разбор без нового объекта");
+  await page.getByRole("button",{name:"Подтвердить расход и результат"}).click();
+  await expect.poll(async()=> (await db.select().from(schema.creationObjects).where(eq(schema.creationObjects.characterId,authorCharacter))).filter(o=>o.status==="ACTIVE").length).toBe(0);
+  who="buyer";
+  await page.goto(`/src/test-support/creation-objects-browser-fixture.html?campaign=${campaignId}&member=${buyer}&character=${buyerCharacter}`);
+  await page.getByRole("button",{name:"Витрина",exact:true}).click();
+  await expect(page.getByRole("heading",{name:"Synthetic store skill"})).toBeVisible();
+  await page.getByRole("button",{name:"Выбрать предложение"}).click();
+  await page.getByRole("button",{name:"Рассчитать покупку на сервере"}).click();
+  await expect(page.getByRole("region",{name:"Подтверждение покупки"})).toContainText("8 медных");
+  await page.getByRole("button",{name:"Оплатить и получить"}).click();
+  await expect.poll(async()=> (await db.select().from(schema.creationPurchases).where(eq(schema.creationPurchases.listingVersionId,listing!.id))).length).toBe(1);
+  await page.getByRole("button",{name:"Чертежи и конструктор"}).click();
+  await expect(page.getByRole("heading",{name:"Приобретённые чертежи"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Новый черновик на основе"})).toBeVisible();
+  const [original]=await db.select().from(schema.creationTemplateVersions).where(eq(schema.creationTemplateVersions.id,template.versionId));
+  expect(original?.design).toMatchObject({name:"Synthetic store skill"});
+ } finally {await app.close();await pg.close();}
+});
 test("real creation API survives lost response and reload",async({page})=>{
  test.setTimeout(60000);
  const pg=await createMigratedPglite();const db=drizzle(pg,{schema});const app=Fastify();
@@ -56,7 +221,7 @@ test("real creation API survives lost response and reload",async({page})=>{
    });
    await page.setViewportSize({width:390,height:800});
    await page.goto(`/src/test-support/creation-objects-browser-fixture.html?campaign=${campaignId}&member=${player}&character=${characterId}`);
-   await page.getByRole("button",{name:"Объекты и изготовление"}).click();
+   await page.getByRole("button",{name:"Объекты и развитие"}).click();
    await page.getByRole("combobox",{name:"Рецепт мастера"}).selectOption(recipe.versionId);
    await page.getByRole("button",{name:"Получить точный расчёт"}).click();
    await expect(page.getByRole("region",{name:"Подтверждение операции"})).toContainText("QA skill");
@@ -64,7 +229,7 @@ test("real creation API survives lost response and reload",async({page})=>{
    await expect(page.getByRole("heading",{name:"Результат ещё не подтверждён"})).toBeVisible();
    await page.reload();
    await page.getByRole("button",{name:"Проверить / повторить то же действие"}).click();
-   await page.getByRole("button",{name:"Объекты и изготовление"}).click();
+   await page.getByRole("button",{name:"Объекты и развитие"}).click();
    await expect(page.getByRole("heading",{name:"QA skill"})).toBeVisible();
    expect(commits).toBe(2);expect(actionIds[0]).toBe(actionIds[1]);
    expect(await db.select().from(schema.creationObjects).where(eq(schema.creationObjects.characterId,characterId))).toHaveLength(1);
@@ -189,7 +354,7 @@ test("player and GM complete an approved creation and undo locally", async ({ pa
   const recipeSource={format:1,name:"QA craft",reason:"QA",kind:"SKILL",operation:"CRAFT",inputs:[],output:{versionId:version!.id,level:1,stage:"CRAFTED"},cost:{copper:0,sp:0,materials:[]},refund:null};
   const recipe=await request("recipes/versions",{actionId:id(),recipeId,expectedRevision:null,source:recipeSource,publish:true});
   who="player"; await page.goto(`/src/test-support/creation-objects-browser-fixture.html?campaign=${campaignId}&member=${player}&character=${characterId}`);
-  await page.getByRole("button",{name:"Объекты и изготовление"}).click();
+  await page.getByRole("button",{name:"Объекты и развитие"}).click();
   await page.getByRole("combobox",{name:"Рецепт мастера"}).selectOption(recipe.versionId);
   await page.getByRole("button",{name:"Получить точный расчёт"}).click();
   await page.getByRole("button",{name:"Подтвердить расход и результат"}).click();
@@ -231,6 +396,7 @@ test("player and GM complete an approved creation and undo locally", async ({ pa
    await expect.poll(async()=>io.engine.clientsCount).toBe(2);
    await expect(gmPage.locator(".workspace-nav:visible")).toBeVisible();
    await openWorkspaceSection(page,"Персонажи");
+   await expect(page.getByRole("heading",{name:"Уникальные заклинания"})).toHaveCount(0);
    const abilityRow=page.locator(".character-card__row:visible").filter({hasText:"Synthetic skill"});
    await expect(abilityRow).toBeVisible();
    await expect(abilityRow.getByRole("button",{name:"Редактировать"})).toHaveCount(0);
@@ -262,7 +428,7 @@ test("player and GM complete an approved creation and undo locally", async ({ pa
    await openWorkspaceSection(page,"Мастерская");
    const workshop=page.getByRole("dialog",{name:"Мастерская"});
    await expect(workshop).toBeVisible();
-   await workshop.getByRole("button",{name:"Объекты и изготовление"}).click();
+   await workshop.getByRole("button",{name:"Объекты и развитие"}).click();
    await workshop.getByRole("combobox",{name:"Рецепт мастера"}).selectOption(itemRecipe.versionId);
    const material=workshop.locator("label").filter({hasText:"Synthetic base"}).first();
    await material.locator("input").fill("1");
@@ -308,3 +474,4 @@ test("player and GM complete an approved creation and undo locally", async ({ pa
   } finally { await gmContext.close(); await io.close(); await game.close(); }
  } finally {await app.close();await pg.close();}
 });
+

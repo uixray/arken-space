@@ -66,7 +66,21 @@ export const PUBLIC_ROADMAP_ROUTE_KEYS = [
   "POST /api/public/roadmap-votes/:itemId",
 ] as const satisfies readonly HttpRouteKey[];
 
+export const CREATION_HISTORY_PROBE_KEYS = [
+  "GET /api/creation/actions/:id",
+  "GET /api/creation/objects/:id/lineage",
+  "GET /api/creation/recipes/:id/versions",
+  "GET /api/creation/rules/:id/versions",
+  "GET /api/creation/store/listings/:id/versions",
+  "GET /api/creation/templates/:id/versions",
+  "GET /api/creation/versions/:id/reviews",
+] as const satisfies readonly HttpRouteKey[];
+
+export const STORY_WITHDRAW_PROBE_KEY = "POST /api/story/posts/:postId/withdraw" satisfies HttpRouteKey;
+
 export const CAMPAIGN_ROUTE_KEYS = [
+  ...CREATION_HISTORY_PROBE_KEYS,
+  STORY_WITHDRAW_PROBE_KEY,
   "GET /api/characters/:characterId/private-notebook",
   "GET /api/characters/:characterId/progression",
   "PUT /api/characters/:characterId/private-notebook",

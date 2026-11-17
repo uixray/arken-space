@@ -1,0 +1,10 @@
+
+.activity-feed--journal > .activity-feed__controls { display: none; }
+.activity-feed--character > :not(.activity-feed__controls) { display: none; }
+.activity-feed.activity-feed--character { display: block; overflow-y: auto; min-height: 0; }
+.activity-feed--character > .activity-feed__controls { display: flex; flex-direction: column; flex: none; height: auto; max-height: none; overflow: visible; }
+.activity-feed--character .activity-roll-controls,
+.activity-feed--character .quick-roll-panel.is-stacked,
+.activity-feed--character .quick-roll-panel__body { height: auto; max-height: none; overflow: visible; flex: none; }
+.quick-roll-panel.is-stacked [hidden] { display: none !important; }
+.quick-roll-panel.is-stacked .quick-roll-panel__body > [role="tabpanel"] + [role="tabpanel"] { margin-top: 20px; border-top: 1px solid var(--g-color-line-generic); padding-top: 12px; }

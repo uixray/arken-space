@@ -390,6 +390,8 @@ export function CharacterActionCard({
 
   return (
     <article className="character-action-card">
+      {entry.description && <p className="character-action-card__description">{entry.description}</p>}
+      {uses && <p className="character-action-card__resource-info">Использования: {uses.current}/{uses.max}{uses.recharge ? ` · ${uses.recharge}` : ""}{uses.progressText ? ` · ${uses.progressText}` : ""}</p>}
       <div className="character-action-card__summary">
         <div>
           <span className="eyebrow">

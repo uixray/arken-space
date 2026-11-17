@@ -24,6 +24,7 @@ export interface AppModalsProps {
   compactSectionsOpen: boolean;
   onCloseCompactSections: () => void;
   isGm: boolean;
+  storyEnabled?: boolean;
   operatorFeedbackAllowed: boolean;
   onSelectWorkspace: (workspace: WorkspaceId) => void;
 
@@ -56,6 +57,7 @@ export const AppModals = memo(function AppModals({
   compactSectionsOpen,
   onCloseCompactSections,
   isGm,
+  storyEnabled,
   operatorFeedbackAllowed,
   onSelectWorkspace,
 
@@ -135,6 +137,7 @@ export const AppModals = memo(function AppModals({
       >
         <div className="compact-sections-list">
           {workspaceNavItems({
+            storyEnabled,
             isGm,
             operatorFeedbackAllowed,
           }).map((item) => (

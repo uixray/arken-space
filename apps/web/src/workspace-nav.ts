@@ -37,6 +37,7 @@ export interface WorkspaceNavItem {
 export function workspaceNavItems(context: {
   isGm: boolean;
   operatorFeedbackAllowed: boolean;
+  storyEnabled?: boolean;
 }): WorkspaceNavItem[] {
   const items: WorkspaceNavItem[] = [
     { id: "characters", label: "Персонажи" },
@@ -44,6 +45,7 @@ export function workspaceNavItems(context: {
     { id: "shops", label: "Магазины" },
     { id: "creations", label: "Мастерская" },
   ];
+  if (!context.isGm && context.storyEnabled) items.push({ id: "story", label: "Сюжет" });
   if (context.isGm)
     items.push(
       { id: "scenes", label: "Сцены" },
@@ -61,6 +63,11 @@ export function workspaceNavItems(context: {
   if (context.operatorFeedbackAllowed)
     items.push({ id: "operator-feedback", label: OPERATOR_FEEDBACK_TITLE });
   if (context.isGm) items.push({ id: "media", label: "Файлы" });
+  if (context.storyEnabled) {
+    const index = items.findIndex((item) => item.id === "story");
+    if (index >= 0) items.splice(index, 1);
+    items.splice(1, 0, { id: "story", label: "Сюжет" });
+  }
   return items;
 }
 

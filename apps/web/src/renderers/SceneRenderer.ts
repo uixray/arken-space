@@ -21,6 +21,7 @@ import type {
 } from "./TerrainStampControls";
 
 export interface SceneRendererProps {
+  autoFitOnSceneEntry?: boolean;
   /** Local-only preview: origin must exist in this viewer's filtered tokens. */
   abilityAreaPreview?: {
     sceneId: string;

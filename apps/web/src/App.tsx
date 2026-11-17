@@ -1,3 +1,4 @@
+import { StoryImagePresentation } from "./StoryImagePresentation";
 import { DiceTrayPanel } from "./sidebar/DiceTrayPanel";
 import { RollVisibilityContext } from "./roll-visibility-context";
 import {
@@ -1812,6 +1813,7 @@ export function App() {
             onLogout={handleLogout}
           />
           <AppModals
+            storyEnabled={snapshot?.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092"}
             personalTheme={personalTheme}
             themePreference={themePreference}
             publishedThemeIds={publishedThemeIds}
@@ -1979,6 +1981,7 @@ export function App() {
                   fallback={<div className="empty-map">Загружаем карту…</div>}
                 >
                   <Orthographic2DRenderer
+                    autoFitOnSceneEntry={snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092"}
                     key={`${activeScene.id}:${snapshot.campaign.paused}`}
                     abilityAreaPreview={abilityArea.preview}
                     paused={snapshot.campaign.paused}
@@ -2176,7 +2179,9 @@ export function App() {
               />
             )}
           </div>
+          <StoryImagePresentation socket={socket} campaignId={snapshot.campaign.id} enabled={!previewSnapshot} />
           <MusicBar
+            campaignId={snapshot.campaign.id}
             audio={snapshot.audio}
             audioTracks={snapshot.audioTracks}
             assets={snapshot.assets}

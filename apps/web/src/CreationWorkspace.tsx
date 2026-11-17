@@ -5,6 +5,7 @@ import { useCreationQuery, useCreationSession } from "./use-creation-session";
 import { CreationStudio } from "./CreationStudio";
 import { CreationObjects } from "./CreationObjects";
 import { CreationManager } from "./CreationManager";
+import { CreationStore } from "./CreationStore";
 import { CreationMaterialNames, QueryState } from "./CreationParts";
 import "./CreationWorkspace.css";
 
@@ -14,12 +15,14 @@ export function CreationWorkspace({ campaignId, membershipId, gm, characters, on
   campaignId: string; membershipId: string; gm: boolean; characters: CreationCharacter[]; onClose: () => void;
 }) {
   const context = useMemo(() => ({ campaignId, membershipId }), [campaignId, membershipId]), s = useCreationSession(context);
-  const [tab, setTab] = useState<"studio" | "objects" | "gm">("studio");
+  const [tab, setTab] = useState<"studio" | "objects" | "store" | "gm">("studio");
   const [characterId, setCharacterId] = useState(characters[0]?.id ?? ""), [closing, setClosing] = useState(false);
-  const [dirtyScopes, setDirtyScopes] = useState({ studio: false, objects: false, rules: false, recipes: false });
+  const [dirtyScopes, setDirtyScopes] = useState({ studio: false, objects: false, rules: false, recipes: false, policy: false, store: false });
   const studioDirty = useCallback((value: boolean) => setDirtyScopes(previous => previous.studio === value ? previous : { ...previous, studio: value }), []);
   const rulesDirty = useCallback((value: boolean) => setDirtyScopes(previous => previous.rules === value ? previous : { ...previous, rules: value }), []);
   const recipesDirty = useCallback((value: boolean) => setDirtyScopes(previous => previous.recipes === value ? previous : { ...previous, recipes: value }), []);
+  const policyDirty = useCallback((value: boolean) => setDirtyScopes(previous => previous.policy === value ? previous : { ...previous, policy: value }), []);
+  const storeDirty = useCallback((value: boolean) => setDirtyScopes(previous => previous.store === value ? previous : { ...previous, store: value }), []);
   const dirty = Object.values(dirtyScopes).some(Boolean);
   const character = characters.find(c => c.id === characterId) ?? null;
   const rules = useCreationQuery<{ items: RulePack[] }>(s, creationPath("rules"));
@@ -52,16 +55,16 @@ export function CreationWorkspace({ campaignId, membershipId, gm, characters, on
           if (window.confirm("Отменить действие, только если оно ещё не выполнено? Если оно уже сохранено, будет показан прежний результат: потраченные ресурсы не возвращаются этой кнопкой."))
             void s.cancelPending();
         }}>Отменить невыполненное действие</button></section>}
-      <div className="creation-context" data-creation-character-selector><label>Персонаж для предметов и материалов<select value={characterId} disabled={s.locked} onChange={e => {
-        if (e.target.value !== characterId && dirtyScopes.objects && !window.confirm("Смена персонажа закроет формы объектов. Несохранённые изменения в них будут потеряны. Продолжить?")) return;
+      <div className="creation-context" data-creation-character-selector><label>Персонаж для предметов, материалов и покупок<select value={characterId} disabled={s.locked} onChange={e => {
+        if (e.target.value !== characterId && (dirtyScopes.objects || dirtyScopes.store) && !window.confirm("Смена персонажа закроет формы объектов и витрины. Несохранённые изменения будут потеряны. Продолжить?")) return;
         setCharacterId(e.target.value);
-        setDirtyScopes(previous => ({ ...previous, objects: false }));
+        setDirtyScopes(previous => ({ ...previous, objects: false, store: false }));
       }}>
         <option value="">Без выбранного персонажа</option>{characterId && !character && <option value={characterId} disabled>Персонаж больше недоступен</option>}
         {characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
         <p>Авторство и личные чертежи принадлежат участнику кампании, а кошелёк и материалы — выбранному персонажу.</p></div>
       <nav className="creation-tabs" aria-label="Разделы мастерской">
-        {([["studio", "Чертежи и конструктор"], ["objects", "Объекты и изготовление"]] as const).map(([id, name]) =>
+        {([["studio", "Чертежи и конструктор"], ["objects", "Объекты и развитие"], ["store", "Витрина"]] as const).map(([id, name]) =>
           <button type="button" key={id} aria-pressed={tab === id} disabled={s.busy} onClick={() => setTab(id)}>{name}</button>)}
         {gm && <button type="button" aria-pressed={tab === "gm"} disabled={s.busy} onClick={() => setTab("gm")}>Настройки мастера</button>}
       </nav>
@@ -70,7 +73,8 @@ export function CreationWorkspace({ campaignId, membershipId, gm, characters, on
         <div hidden={tab !== "studio"}><CreationStudio session={s} packs={rules.data?.items ?? []} gm={gm} characterId={characterId} active={tab === "studio"} onDirtyChange={studioDirty} /></div>
         <div hidden={tab !== "objects"} data-creation-dirty-scope="objects"><CreationObjects key={characterId} session={s} character={character} characters={characters} gm={gm} active={tab === "objects"}
           onCraftSettled={() => setDirtyScopes(previous => ({ ...previous, objects: false }))} /></div>
-        {gm && <div hidden={tab !== "gm"}><CreationManager session={s} packs={rules.data?.items ?? []} active={tab === "gm"} onRulesDirtyChange={rulesDirty} onRecipesDirtyChange={recipesDirty} /></div>}
+        <div hidden={tab !== "store"}><CreationStore key={characterId} session={s} character={character} characters={characters} gm={gm} active={tab === "store"} onDirtyChange={storeDirty} /></div>
+        {gm && <div hidden={tab !== "gm"}><CreationManager session={s} packs={rules.data?.items ?? []} active={tab === "gm"} onRulesDirtyChange={rulesDirty} onRecipesDirtyChange={recipesDirty} onPolicyDirtyChange={policyDirty} /></div>}
       </CreationMaterialNames>
     </div>
   </ArkenDialog>;

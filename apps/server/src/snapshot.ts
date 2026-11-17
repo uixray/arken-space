@@ -1,3 +1,4 @@
+import { campaignAssetLabel } from "./campaign-asset-labels.js";
 import { visibleAchievementIconIds } from "./awards-bindings-routes.js";
 import { assetDto } from "./asset-lifecycle.js";
 import {
@@ -1225,7 +1226,7 @@ export async function buildSnapshot(
         unreadCount: Number(unreadGroups[index]?.[0]?.value ?? 0),
       };
     }),
-    assets: visibleAssets.map(assetDto),
+    assets: visibleAssets.map((asset) => campaignAssetLabel(auth.campaignId, assetDto(asset))),
     audio: audio
       ? {
           assetId: audio.assetId,

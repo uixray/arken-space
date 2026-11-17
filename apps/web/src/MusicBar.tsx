@@ -331,6 +331,7 @@ function MixerTrackControls({
 }
 
 export function MusicBar({
+  campaignId,
   audioTracks,
   assets,
   role,
@@ -338,6 +339,7 @@ export function MusicBar({
   onUpload,
   controlsTarget,
 }: {
+  campaignId?: string;
   audio: AudioStateDto;
   audioTracks: AudioTrackDto[];
   assets: AssetDto[];
@@ -392,8 +394,12 @@ export function MusicBar({
         (asset) =>
           asset.kind === "AUDIO" &&
           (asset.audioPurpose ?? "MUSIC") !== "SOUND_EFFECT",
-      ),
-    [assets],
+      ).sort((a, b) => {
+        if (campaignId !== "eb6a55c4-a821-4739-8d4a-a1028e9d9092") return 0;
+        const group = (name: string) => /^\d/.test(name) ? 0 : name.startsWith("Бой ") ? 1 : name.startsWith("Фон ") ? 2 : 3;
+        return group(a.name) - group(b.name) || a.name.localeCompare(b.name, "ru", {numeric: true});
+      }),
+    [assets, campaignId],
   );
   const mixerTracks = audioTracks
     .slice()

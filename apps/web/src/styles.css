@@ -5585,29 +5585,34 @@ body:has(.landing-shell) {
   grid-row: 1;
 }
 .character-card--stats .stat-field,
-.character-card--combat .stat-field {
+.character-card--combat .stat-field,
+.character-card--skills .stat-field {
   grid-template-columns: 44px minmax(0, 1fr) minmax(72px, auto) 24px;
   column-gap: 4px;
   min-width: 0;
 }
 .character-card--stats .stat-field > .stat-field__drag-handle,
-.character-card--combat .stat-field > .stat-field__drag-handle {
+.character-card--combat .stat-field > .stat-field__drag-handle,
+.character-card--skills .stat-field > .stat-field__drag-handle {
   grid-column: 1;
   grid-row: 1;
 }
 .character-card--stats .stat-field__roll-name,
-.character-card--combat .stat-field__roll-name {
+.character-card--combat .stat-field__roll-name,
+.character-card--skills .stat-field__roll-name {
   grid-column: 2;
   grid-row: 1;
   min-width: 0;
 }
 .character-card--stats .stat-field > .stat-field__value,
-.character-card--combat .stat-field > .stat-field__value {
+.character-card--combat .stat-field > .stat-field__value,
+.character-card--skills .stat-field > .stat-field__value {
   grid-column: 3;
   grid-row: 1;
 }
 .character-card--stats .stat-field__actions,
-.character-card--combat .stat-field__actions {
+.character-card--combat .stat-field__actions,
+.character-card--skills .stat-field__actions {
   grid-column: 4;
   grid-row: 1;
   min-width: 0;
@@ -7931,7 +7936,7 @@ html[data-player-theme="classic-v1"] .asset-picker__tile:focus-visible {
      overlay (45). Persistent dice must not intercept menu actions. */
   z-index: 24;
   width: max-content;
-  max-width: min(420px, calc(100% - 16px));
+  max-width: calc(100% - 16px);
 }
 .map-dice-tray .dice-tray-panel__body {
   overflow-x: auto;
@@ -8387,3 +8392,43 @@ button:not([role="tab"]),
 .map-viewport canvas {
   touch-action: none;
 }
+
+/* Native popover top layer keeps row actions above workspace/sidebar clipping. */
+.stat-field__menu-items[popover] {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  border: 1px solid var(--line);
+  max-width: calc(100vw - 16px);
+}
+.stat-field__menu-items[popover]:not(:popover-open) { display: none; }
+.stat-field__menu[data-menu-side="above"] > .stat-field__menu-items[popover] { bottom: auto; }
+
+/* Compact spell summaries; details and formulas precede action buttons. */
+.ability-accordion { min-width: 0; width: 100%; border-bottom: 1px solid var(--line); }
+.ability-accordion > summary { display: flex; align-items: center; gap: 8px; padding: 10px 4px; cursor: pointer; list-style: none; }
+.ability-accordion > summary::-webkit-details-marker { display: none; }
+.ability-accordion > summary::before { content: "›"; flex: none; }
+.ability-accordion[open] > summary::before { transform: rotate(90deg); }
+.ability-accordion__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; font-weight: 600; }
+.ability-accordion__cost { flex: none; color: var(--text-muted); font-size: .85em; }
+.ability-accordion__body { padding: 4px 8px 12px; min-width: 0; }
+.ability-accordion .character-action-card { display: flex; flex-direction: column; gap: 10px; border: 0; padding: 0; }
+.ability-accordion .character-action-card__summary { display: none; }
+.character-action-card__description { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+.ability-accordion .character-action-card__action { display: flex; flex-wrap: wrap; gap: 8px; order: 1; }
+.ability-accordion .character-action-card__action > span { flex-basis: 100%; min-width: 0; }
+.ability-accordion .character-action-card__action code { white-space: normal; overflow: visible; }
+.ability-accordion .character-action-card__action--primary { order: 2; }
+.ability-accordion .character-action-card__controls { order: 3; }
+.ability-accordion .field-error { order: 4; }
+.ability-management { margin-top: 8px; }
+.ability-management > summary { cursor: pointer; width: 32px; text-align: center; list-style: none; font-weight: bold; }
+.ability-management .inline-fields { display: flex; flex-wrap: wrap; }
+.quick-ability-group { min-width: 0; }
+.quick-ability-group h4 { margin: 12px 0 4px; font-size: .85em; color: var(--text-muted); }
+
+.gm-health-counter { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px; border:1px solid var(--line); border-radius:6px; }
+.gm-health-counter label { display:flex; align-items:center; gap:8px; font-weight:600; }
+.gm-health-counter input { width:68px; min-width:0; }
+.gm-health-counter [role="alert"] { flex-basis:100%; }
