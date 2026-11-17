@@ -16,6 +16,9 @@ import { readCreationRecipeHistory, readCreationRecipes, saveCreationRecipe, set
 import { commitCreationOperation, quoteCreationOperation } from "./creation-operations.js";
 import { readCreationObjects, readCreationOperations } from "./creation-object-read.js";
 import { readCreationMaterials, readCreationMaterialCatalog, readCreationLineage } from "./creation-library-read.js";
+import { saveCreationStorePolicy, saveCreationListing, setCreationListingEnabled } from "./creation-listings.js";
+import { quoteCreationPurchase, commitCreationPurchase } from "./creation-purchases.js";
+import { readCreationStorePolicy, readCreationListings, readCreationListingHistory, readCreationLicences, readCreationPurchases } from "./creation-store-read.js";
 
 const objectId = z.object({ id: z.string().uuid() }).strict();
 const historyQuery = z.object({ before: z.coerce.number().int().min(0).max(2_000_000_000).optional() }).strict();
@@ -82,7 +85,7 @@ export function registerCreationRoutes(app: FastifyInstance, db: CreationDatabas
   const operations: Array<{ method: "GET" | "POST" | "PUT"; url: string; mutate?: boolean; run: Run }> = [
     { method: "POST", url: "/api/creation/actions/cancel", run: (auth, body) => {
       const path = (body as { path?: unknown })?.path;
-      if (typeof path !== "string" || /^(?:store\/|objects\/transfer|templates\/fork)/.test(path)) throw new Error("CREATION_UNAVAILABLE");
+      if (typeof path !== "string" || /^objects\/transfer/.test(path)) throw new Error("CREATION_UNAVAILABLE");
       return cancelCreationAction(db, auth, body);
     } },
     { method: "GET", url: "/api/creation/rules", run: auth => readCreationRules(db, auth) },
@@ -92,6 +95,7 @@ export function registerCreationRoutes(app: FastifyInstance, db: CreationDatabas
     { method: "PUT", url: "/api/creation/rules/enabled", run: (auth, body) => setCreationRulesEnabled(db, auth, setCreationRulesEnabledSchema.parse(body)) },
     { method: "POST", url: "/api/creation/evaluate", run: (auth, body) => previewCreation(db, auth, evaluateCreationSchema.parse(body)) },
     { method: "POST", url: "/api/creation/templates/versions", run: (auth, body) => saveCreationTemplate(db, auth, saveCreationTemplateSchema.parse(body)) },
+    { method: "POST", url: "/api/creation/templates/fork", run: (auth, body) => forkCreationTemplate(db, auth, forkCreationTemplateSchema.parse(body)) },
     { method: "GET", url: "/api/creation/templates", run: (auth, _body, query) => readCreationLibrary(db, auth, creationReadQuerySchema.parse(query).after) },
     { method: "GET", url: "/api/creation/templates/:id/versions", run: (auth, _body, query, params) =>
       readCreationHistory(db, auth, objectId.parse(params).id, historyQuery.parse(query).before) },
@@ -102,9 +106,9 @@ export function registerCreationRoutes(app: FastifyInstance, db: CreationDatabas
     { method: "GET", url: "/api/creation/recipes", run: (auth, _body, query) => readCreationRecipes(db, auth, recipesQuery.parse(query).characterId) },
     { method: "GET", url: "/api/creation/recipes/:id/versions", run: (auth, _body, query, params) =>
       readCreationRecipeHistory(db, auth, objectId.parse(params).id, historyQuery.parse(query).before) },
-    { method: "POST", url: "/api/creation/recipes/versions", run: (auth, body) => { const input = saveCreationRecipeSchema.parse(body); if (input.source.operation !== "CRAFT") throw new Error("CREATION_SCOPE_LIMIT"); return saveCreationRecipe(db, auth, input); } },
+    { method: "POST", url: "/api/creation/recipes/versions", run: (auth, body) => saveCreationRecipe(db, auth, saveCreationRecipeSchema.parse(body)) },
     { method: "PUT", url: "/api/creation/recipes/enabled", run: (auth, body) => setCreationRecipeEnabled(db, auth, setCreationRecipeEnabledSchema.parse(body)) },
-    { method: "POST", url: "/api/creation/operations/quote", run: (auth, body) => { const input = creationOperationQuoteSchema.parse(body); if (input.inputObjectIds.length) throw new Error("CREATION_SCOPE_LIMIT"); return quoteCreationOperation(db, auth, input); } },
+    { method: "POST", url: "/api/creation/operations/quote", run: (auth, body) => quoteCreationOperation(db, auth, creationOperationQuoteSchema.parse(body)) },
     { method: "POST", url: "/api/creation/operations/commit", mutate: true,
       run: (auth, body) => commitCreationOperation(db, auth, commitCreationOperationSchema.parse(body)) },
     { method: "GET", url: "/api/creation/objects", run: (auth, _body, query) => {
@@ -113,6 +117,18 @@ export function registerCreationRoutes(app: FastifyInstance, db: CreationDatabas
     { method: "GET", url: "/api/creation/operations", run: (auth, _body, query) => {
       const input = operationsQuery.parse(query); return readCreationOperations(db, auth, input.characterId, input.after);
     } },
+    { method: "GET", url: "/api/creation/store/policy", run: auth => readCreationStorePolicy(db, auth) },
+    { method: "PUT", url: "/api/creation/store/policy", run: (auth, body) => saveCreationStorePolicy(db, auth, saveCreationStorePolicySchema.parse(body)) },
+    { method: "POST", url: "/api/creation/store/listings", run: (auth, body) => saveCreationListing(db, auth, saveCreationListingSchema.parse(body)) },
+    { method: "PUT", url: "/api/creation/store/listings/enabled", run: (auth, body) => setCreationListingEnabled(db, auth, setCreationListingEnabledSchema.parse(body)) },
+    { method: "GET", url: "/api/creation/store/listings", run: (auth, _body, query) => readCreationListings(db, auth, false, creationReadQuerySchema.parse(query).after) },
+    { method: "GET", url: "/api/creation/store/mine", run: (auth, _body, query) => readCreationListings(db, auth, true, creationReadQuerySchema.parse(query).after) },
+    { method: "GET", url: "/api/creation/store/listings/:id/versions", run: (auth, _body, query, params) => readCreationListingHistory(db, auth, objectId.parse(params).id, historyQuery.parse(query).before) },
+    { method: "POST", url: "/api/creation/store/quote", run: (auth, body) => quoteCreationPurchase(db, auth, creationStoreQuoteSchema.parse(body)) },
+    { method: "POST", url: "/api/creation/store/commit", mutate: true, run: (auth, body) => commitCreationPurchase(db, auth, commitCreationPurchaseSchema.parse(body)) },
+    { method: "GET", url: "/api/creation/licences", run: (auth, _body, query) => { const input = operationsQuery.parse(query); return readCreationLicences(db, auth, input.characterId, input.after); } },
+    { method: "GET", url: "/api/creation/store/purchases", run: (auth, _body, query) => readCreationPurchases(db, auth, false, creationReadQuerySchema.parse(query).after) },
+    { method: "GET", url: "/api/creation/store/income", run: (auth, _body, query) => readCreationPurchases(db, auth, true, creationReadQuerySchema.parse(query).after) },
     { method: "GET", url: "/api/creation/material-catalog", run: (auth, _body, query) => {
       const input = materialCatalogQuery.parse(query); return readCreationMaterialCatalog(db, auth, input.after, input.ids);
     } },

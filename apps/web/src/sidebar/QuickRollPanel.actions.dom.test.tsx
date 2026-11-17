@@ -455,3 +455,38 @@ it("предлагает число бросков характеристики 
     4,
   );
 });
+
+it("uses different standard stat icons and the same fallback for custom stats", () => {
+  const rows = [
+    { key: "strength", label: "Сила" }, { key: "agility", label: "Ловкость" },
+    { key: "customA", label: "Особый А" }, { key: "customB", label: "Особый Б" },
+  ];
+  renderComponent(<QuickRollPanel
+    rollCharacter={{ stats: { strength: 1, agility: 2, customA: 3, customB: 4 }, skills: [], entries: [] } as unknown as CharacterDto}
+    campaignId="control" membershipId="member" rows={rows}
+    quickRollPending={false} canControlCharacter gmOnly={false} onQuickRoll={() => {}}
+  />);
+  const icon = (name: RegExp) => {
+    const svg = screen.getByRole("button", {name}).querySelector("svg");
+    expect(svg).not.toBeNull();
+    return svg!.innerHTML;
+  };
+  expect(icon(/^Сила\s*1$/)).not.toBe(icon(/^Ловкость\s*2$/));
+  expect(icon(/^Сила\s*1$/)).not.toBe(icon(/^Особый А\s*3$/));
+  expect(icon(/^Особый А\s*3$/)).toBe(icon(/^Особый Б\s*4$/));
+});
+
+it("keeps Amberion player-owned abilities grouped in the quick panel", () => {
+  renderComponent(<QuickRollPanel
+    rollCharacter={{ stats: {}, skills: [], entries: [
+      { id: "unique", kind: "ABILITY", name: "Теневой шаг", data: {} },
+      { id: "common", kind: "ABILITY", name: "Фокус", data: {} },
+    ] } as unknown as CharacterDto}
+    campaignId="eb6a55c4-a821-4739-8d4a-a1028e9d9092" characterOwnerRole="PLAYER"
+    membershipId="member" rows={[]} quickRollPending={false} canControlCharacter gmOnly={false}
+    onQuickRoll={() => {}} onEntryAction={vi.fn()}
+  />);
+  fireEvent.click(screen.getByRole("tab", { name: "Скилы" }));
+  expect(screen.getByRole("heading", {name: "Уникальные заклинания"})).toBeVisible();
+  expect(screen.getByRole("heading", {name: "Общие способности"})).toBeVisible();
+});

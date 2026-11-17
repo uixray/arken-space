@@ -1,3 +1,6 @@
+import { AbilityAccordion } from "../AbilityAccordion";
+import { CharacterActionCard } from "../SkillCards";
+import { groupAbilities, usesAmberionAbilityGroups } from "../ability-presentation";
 import "./roll-controls.css";
 import "./bugpool-ui2.css";
 import {
@@ -114,7 +117,9 @@ function QuickRollTooltip({
  * `sidebar/DiceTrayPanel.tsx`). This is back to a normal sidebar section.
  */
 export function QuickRollPanel({
+  stacked = false,
   rollCharacter,
+  characterOwnerRole,
   campaignId,
   membershipId,
   rows,
@@ -126,7 +131,9 @@ export function QuickRollPanel({
   onQuickRoll,
   onEntryAction,
 }: {
+  stacked?: boolean;
   rollCharacter: CharacterDto;
+  characterOwnerRole?: "GM" | "PLAYER";
   campaignId: string;
   membershipId: string;
   /**
@@ -387,15 +394,16 @@ export function QuickRollPanel({
 
   return (
     <section
-      className={`quick-roll-panel${collapsed ? " is-collapsed" : ""}`}
+      className={`quick-roll-panel${!stacked && collapsed ? " is-collapsed" : ""}${stacked ? " is-stacked" : ""}`}
       aria-label="Панель быстрых бросков"
       // Свёрнутому блоку заданная высота не нужна: он занимает свою строку.
-      style={height != null && !collapsed ? { height } : undefined}
+      style={!stacked && height != null && !collapsed ? { height } : undefined}
     >
       {popover}
       <div className="quick-roll-panel__header">
         <button
           type="button"
+          hidden={stacked}
           className="quick-roll-panel__toggle"
           aria-expanded={!collapsed}
           title={collapsed ? "Развернуть броски" : "Свернуть броски"}
@@ -412,13 +420,14 @@ export function QuickRollPanel({
       </div>
       {/* Прокручивается содержимое, а не панель целиком: иначе ручка уезжает
        * из виду ровно тогда, когда до неё хотят дотянуться. */}
-      <div className="quick-roll-panel__body" hidden={collapsed}>
+      <div className="quick-roll-panel__body" hidden={!stacked && collapsed}>
         {gmOnly && (
           <p className="quick-roll-panel__gm-only" role="status">
             <AppIcon icon={SecretRollIcon} /> Броски уйдут только мастеру
           </p>
         )}
         <div
+          hidden={stacked}
           className="quick-roll-panel__tabs"
           role="tablist"
           aria-label="Тип быстрых бросков"
@@ -464,7 +473,7 @@ export function QuickRollPanel({
           role="tabpanel"
           id={`${tabsId}-stats-panel`}
           aria-labelledby={`${tabsId}-stats`}
-          hidden={activeTab !== "stats"}
+          hidden={!stacked && activeTab !== "stats"}
         >
           <div className="activity-quick-rolls" aria-busy={quickRollPending}>
             {statButtons(ordinaryRows, "ordinary")}
@@ -612,9 +621,20 @@ export function QuickRollPanel({
           role="tabpanel"
           id={`${tabsId}-abilities-panel`}
           aria-labelledby={`${tabsId}-abilities`}
-          hidden={activeTab !== "abilities"}
+          hidden={!stacked && activeTab !== "abilities"}
         >
-          {abilityEntries.length > 0 && (
+          {usesAmberionAbilityGroups(campaignId, characterOwnerRole) ? (
+            groupAbilities(abilityEntries).map(group => (
+            <section className="quick-ability-group" key={group.id}>
+              <h4>{group.label}</h4>
+              {group.entries.map(entry => <AbilityAccordion entry={entry} key={entry.id}>
+                <CharacterActionCard entry={entry} disabled={!canControlCharacter || !onEntryAction}
+                  draftScopeKey={draftScope} characterStats={rollCharacter.stats}
+                  onAction={async input => { await submitEntry(entry, input.mode, input.rollActionId, input.executeAll); }} />
+              </AbilityAccordion>)}
+            </section>
+          ))
+          ) : abilityEntries.length > 0 ? (
             <div
               className="activity-quick-rolls quick-roll-panel__ability-group"
               aria-busy={entryPending !== null}
@@ -724,7 +744,7 @@ export function QuickRollPanel({
                 </div>
               ))}
             </div>
-          )}
+          ) : null}
           {abilityEntries.length === 0 && (
             <p className="muted">Нет способностей.</p>
           )}
@@ -734,7 +754,7 @@ export function QuickRollPanel({
       {preparedActionTarget && preparedPanel
         ? createPortal(preparedPanel, preparedActionTarget)
         : null}
-      {!collapsed && (
+      {!stacked && !collapsed && (
         <button
           type="button"
           className="panel-resize-handle"

@@ -48,7 +48,6 @@ export function commitCreationOperation(db: CreationDatabase, auth: AuthContext,
     if (!parsed.success || parsed.data.characterId !== quote.characterId || parsed.data.recipeVersionId !== quote.recipeVersionId ||
         creationHash(quote.inputs) !== quote.inputHash) throw new Error("CREATION_DATA_UNAVAILABLE");
     const state = await loadCreationOperationState(tx, auth, parsed.data);
-    if (state.recipe.source.operation !== "CRAFT") throw new Error("CREATION_SCOPE_LIMIT");
     if (state.inputHash !== quote.inputHash) throw new Error("CREATION_QUOTE_STALE");
     if (quote.expiresAt.getTime() <= Date.now()) throw new Error("CREATION_QUOTE_EXPIRED");
     return { ...await applyCreationOperation(tx, auth, command, state) };

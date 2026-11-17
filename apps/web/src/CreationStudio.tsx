@@ -16,6 +16,7 @@ export function CreationStudio({ session: s, packs, gm, characterId, active, onD
   session: CreationSession; packs: RulePack[]; gm: boolean; characterId: string; active: boolean; onDirtyChange?: (dirty: boolean) => void;
 }) {
   const templates = useCreationPage<Template>(s, active ? creationPath("templates") : null);
+  const licences = useCreationPage<Licence>(s, active ? creationPath("licences", { characterId }) : null);
   const fresh = (kind: CreationKind): Editor => ({ id: crypto.randomUUID(), revision: null, previousId: null,
     kind, authorId: s.context.membershipId, ruleId: "", design: emptyDesign() });
   const [editor, setEditor] = useState<Editor>(() => fresh("SKILL"));
@@ -131,10 +132,30 @@ export function CreationStudio({ session: s, packs, gm, characterId, active, onD
         <button type="button" disabled={s.busy} onClick={() => setHistoryId(t.id)}>История и сравнение</button>
       </li>)}</ul><PageControls more={!!templates.data?.nextAfter} previous={templates.hasPrevious}
         disabled={s.busy || templates.loading} onNext={templates.next} onFirst={templates.first} />
+      <h3>Приобретённые чертежи</h3><QueryState loading={licences.loading} error={licences.error} />
+      {licences.data?.items.length === 0 && <p>Лицензии появятся после покупки на витрине. Купленные копии находятся у персонажа.</p>}
+      <ul className="creation-record-list">{licences.data?.items.map(l => <li key={l.id}>
+        <strong>{l.version.design.name}</strong><small>Автор: {l.author.displayName} · версия {l.version.number} · {reviewLabel(l.review?.decision)}</small>
+        {!l.rulesEnabled && <small>Правила выключены. Историческая версия сохранена.</small>}
+        <details><summary>Состав и расчёт купленной версии</summary><Evaluation value={l.version.evaluation} /></details>
+        <button type="button" disabled={s.locked || (!gm && l.ownerMembershipId !== s.context.membershipId)}
+          onClick={() => { if (fork && fork.id !== l.id && !window.confirm("Заменить текущую форму нового черновика? Несохранённые изменения в ней будут потеряны.")) return;
+            if (fork?.id === l.id) return;
+            setFork(l); setForkName(`${l.version.design.name} — вариант`.slice(0, 100)); setForkRule(""); }}>Новый черновик на основе</button>
+        {l.ownerMembershipId !== s.context.membershipId && <small>Лицензия владельца персонажа; контроль не делает её вашей.</small>}
+      </li>)}</ul><PageControls more={!!licences.data?.nextAfter} previous={licences.hasPrevious}
+        disabled={s.busy || licences.loading} onNext={licences.next} onFirst={licences.first} />
     </aside>
     <div className="creation-editor">
       <div className="creation-actions"><button type="button" disabled={s.locked} onClick={() => startFresh("SKILL")}>Новый навык</button>
         <button type="button" disabled={s.locked} onClick={() => startFresh("ARTIFACT")}>Новый артефакт</button></div>
+      {fork && <fieldset disabled={s.locked}><legend>Новый черновик из шаблона: {fork.version.design.name}</legend>
+        <p>Оригинал и купленная версия не изменятся. Автор основы сохранится; новому варианту нужен собственный допуск мастера.</p>
+        <label>Название<input value={forkName} maxLength={100} onChange={e => setForkName(e.target.value)} /></label>
+        <label>Текущие правила<select value={forkRule} onChange={e => setForkRule(e.target.value)}><option value="">Выберите набор</option>
+          {packs.filter(p => p.kind === fork.version.kind && p.enabled && p.activeVersion).map(p => <option key={p.id} value={p.activeVersion!.id}>{p.name}</option>)}</select></label>
+        <div className="creation-actions"><button type="button" disabled={!forkRule || !forkName.trim()} onClick={() => void forkTemplate()}>Создать черновик</button>
+          <button type="button" onClick={() => setFork(null)}>Отмена</button></div></fieldset>}
       <h3>{editor.kind === "SKILL" ? "Конструктор навыка" : "Конструктор артефакта"}</h3>
       {!own && <p>Это авторский оригинал другого участника. Здесь доступен просмотр и решение мастера, не редактирование от его имени.</p>}
       <fieldset disabled={s.locked || !own}><legend>Авторская версия</legend>

@@ -1,3 +1,4 @@
+import "./sidebar-character-tabs.css";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
@@ -189,6 +190,8 @@ function SidebarContent(props: Props) {
   // «Событиям», и панель не может отрисоваться без своей вкладки.
   const activeFeed = allowedSidebarFeed(selectedFeed, isGm);
   const [directMode, setDirectMode] = useState(false);
+  const characterTabs = props.snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092";
+  const [characterMode, setCharacterMode] = useState(false);
   const chatVisible = props.chatVisible ?? !props.collapsed;
   const [activeDirectThreadId, setActiveDirectThreadId] = useState<
     string | null
@@ -213,7 +216,7 @@ function SidebarContent(props: Props) {
     () => onWorkspaceChange(null),
     [onWorkspaceChange],
   );
-  const storyWorkspaceOpen = props.workspace === "story" && isGm;
+  const storyWorkspaceOpen = props.workspace === "story" && (isGm || props.snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092");
   const storyThreadId = threadForStream(props.snapshot, "STORY")?.id ?? null;
   const storyHistory = useThreadHistory(
     storyWorkspaceOpen ? props.snapshot : null,
@@ -365,6 +368,14 @@ function SidebarContent(props: Props) {
           aria-label="Потоки чата"
           role="tablist"
           onKeyDown={(event) => {
+            if (characterTabs) {
+              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+              event.preventDefault();
+              const next = event.key === "Home" ? false : event.key === "End" ? true : !characterMode;
+              setCharacterMode(next);
+              requestAnimationFrame(() => document.getElementById(next ? "chat-tab-character" : "chat-tab-activity")?.focus());
+              return;
+            }
             const nextFeed = nextChatFeed(
               directMode ? "DIRECT" : activeFeed,
               event.key,
@@ -386,16 +397,17 @@ function SidebarContent(props: Props) {
             role="tab"
             id="chat-tab-activity"
             aria-controls="chat-panel-activity"
-            aria-selected={!directMode && activeFeed === "ACTIVITY"}
-            tabIndex={!directMode && activeFeed === "ACTIVITY" ? 0 : -1}
+            aria-selected={!directMode && !characterMode && activeFeed === "ACTIVITY"}
+            tabIndex={!directMode && !characterMode && activeFeed === "ACTIVITY" ? 0 : -1}
             onClick={() => {
               setDirectMode(false);
               setActiveFeed("ACTIVITY");
+              setCharacterMode(false);
             }}
           >
-            {"События"}
+            {characterTabs ? "Журнал" : "События"}
           </Button>
-          {chatFeedOrder(isGm)
+          {!characterTabs && chatFeedOrder(isGm)
             .filter((feed): feed is ChatStream => feed !== "ACTIVITY")
             .map((stream) => {
               const unread = unreadCountForStream(props.snapshot, stream);
@@ -425,7 +437,11 @@ function SidebarContent(props: Props) {
                 </Button>
               );
             })}
-          <Button
+          {characterTabs ? <Button view="flat" role="tab" id="chat-tab-character"
+            aria-controls="chat-panel-character" aria-selected={characterMode} tabIndex={characterMode ? 0 : -1}
+            onClick={() => { setCharacterMode(true); setDirectMode(false); setActiveFeed("ACTIVITY"); }}>
+            Персонаж
+          </Button> : (          <Button
             view="flat"
             role="tab"
             id="chat-tab-direct"
@@ -451,14 +467,14 @@ function SidebarContent(props: Props) {
                 )}
               </span>
             )}
-          </Button>
+          </Button>)}
         </nav>
       }
       <div className="panel-scroll chat-scroll">
         <div
           className="chat-feed-slot"
-          hidden={!directMode}
-          inert={!directMode}
+          hidden={characterTabs || !directMode}
+          inert={characterTabs || !directMode}
         >
           <DirectChatPanel
             focusedMessageId={
@@ -479,6 +495,7 @@ function SidebarContent(props: Props) {
         <div className="chat-feed-slot" hidden={directMode} inert={directMode}>
           {activeFeed === "ACTIVITY" ? (
             <ActivityPanel
+              view={characterTabs ? (characterMode ? "character" : "journal") : "combined"}
               snapshot={props.snapshot}
               storyPosts={props.storyPosts}
               activityFilters={activityFilters}
@@ -529,11 +546,12 @@ function SidebarContent(props: Props) {
             onClose={() => onWorkspaceChange(null)}
           />
         )}
-        {props.workspace === "story" && isGm && (
+        {props.workspace === "story" && (isGm || props.snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092") && (
           <ArkenDialog
             open
             footer={false}
             title="Сюжет"
+            className="story-workspace"
             variant="workspace"
             onClose={closeWorkspace}
           >
@@ -549,10 +567,7 @@ function SidebarContent(props: Props) {
               </button>
             )}
             {storyHistory.error && <p role="alert">{storyHistory.error}</p>}
-            <StoryAttachmentLibrary
-              campaignId={props.snapshot.campaign.id}
-              isGm={isGm}
-            />
+
             <StoryChannel
               posts={props.storyPosts}
               nextCursor={props.storyNextCursor}
@@ -583,6 +598,9 @@ function SidebarContent(props: Props) {
                 isGm ? storyActions.onSearchStoryLinkTargets : undefined
               }
             />
+            {isGm && <details className="story-library-tools"><summary>Управление файлами вложений</summary>
+              <StoryAttachmentLibrary campaignId={props.snapshot.campaign.id} isGm={isGm} />
+            </details>}
           </ArkenDialog>
         )}
         {props.workspace === "tokens" && (

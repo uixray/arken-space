@@ -34,54 +34,31 @@ const REFERENCE_KIND_LABELS: Record<string, string> = {
   CHARACTER_ENTRY: "Способность персонажа",
 };
 
-/** Keep the inline native-details menu within every clipping viewport. */
+/** Place row actions in the browser top layer, clear of clipping panels. */
 function syncStatMenuPlacement(menu: HTMLDetailsElement) {
   const summary = menu.querySelector<HTMLElement>("summary");
   const popup = menu.querySelector<HTMLElement>(".stat-field__menu-items");
-  if (!menu.open || !summary || !popup) {
-    menu.removeAttribute("data-menu-side");
-    menu.style.removeProperty("--stat-field-menu-max-height");
+  if (!summary || !popup) return;
+  if (!menu.open) {
+    if (popup.matches(":popover-open")) popup.hidePopover();
     return;
   }
-
-  const visualViewport = window.visualViewport;
-  let top = visualViewport?.offsetTop ?? 0;
-  let bottom = top + (visualViewport?.height ?? window.innerHeight);
-  for (
-    let ancestor = menu.parentElement;
-    ancestor && ancestor !== document.body;
-    ancestor = ancestor.parentElement
-  ) {
-    const overflowY = window.getComputedStyle(ancestor).overflowY;
-    if (!/(auto|scroll|hidden|clip)/.test(overflowY)) continue;
-    const rect = ancestor.getBoundingClientRect();
-    top = Math.max(top, rect.top + ancestor.clientTop);
-    bottom = Math.min(
-      bottom,
-      rect.top + ancestor.clientTop + ancestor.clientHeight,
-    );
-  }
-
-  const summaryRect = summary.getBoundingClientRect();
-  // Measure the un-clamped content so a previous short viewport cannot bias
-  // the next resize/scroll placement decision.
-  menu.style.removeProperty("--stat-field-menu-max-height");
-  const popupHeight = Math.max(
-    popup.scrollHeight,
-    popup.getBoundingClientRect().height,
-  );
+  if (!popup.matches(":popover-open")) popup.showPopover();
+  const rect = summary.getBoundingClientRect();
+  const viewport = window.visualViewport;
+  const top = viewport?.offsetTop ?? 0;
+  const left = viewport?.offsetLeft ?? 0;
+  const width = viewport?.width ?? window.innerWidth;
+  const height = viewport?.height ?? window.innerHeight;
   const gap = 8;
-  const above = Math.max(0, summaryRect.top - top - gap);
-  const below = Math.max(0, bottom - summaryRect.bottom - gap);
-  let side: "above" | "below";
-  if (popupHeight <= below) side = "below";
-  else if (popupHeight <= above) side = "above";
-  else side = above > below ? "above" : "below";
-  const available = side === "above" ? above : below;
-
-  menu.dataset.menuSide = side;
-  if (popupHeight > available)
-    menu.style.setProperty("--stat-field-menu-max-height", `${available}px`);
+  const below = Math.max(0, top + height - rect.bottom - gap);
+  const above = Math.max(0, rect.top - top - gap);
+  const naturalHeight = popup.scrollHeight;
+  const useBelow = naturalHeight <= below || below >= above;
+  popup.style.maxHeight = `${useBelow ? below : above}px`;
+  const bounds = popup.getBoundingClientRect();
+  popup.style.left = `${Math.max(left + gap, Math.min(rect.right - bounds.width, left + width - bounds.width - gap))}px`;
+  popup.style.top = `${useBelow ? rect.bottom + gap : rect.top - bounds.height - gap}px`;
 }
 
 /**
@@ -452,7 +429,7 @@ export function StatLayoutCard({
                   <summary aria-label={`Действия строки «${row.label}»`}>
                     …
                   </summary>
-                  <div className="stat-field__menu-items">
+                  <div className="stat-field__menu-items" popover="manual">
                     <Button
                       view="flat"
                       className="stat-field__rename"

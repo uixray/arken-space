@@ -1,10 +1,12 @@
 import { memo, useRef } from "react";
+import { orderCampaignScenes } from "./scene-order";
 import type { GameSnapshot } from "@arken/contracts";
 import { AppIcon } from "./ui/AppIcon";
 import { RenameIcon, ScenePickerIcon } from "./ui/icons";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 
 export interface ScenePickerProps {
+  campaignId?: string;
   activeScene: GameSnapshot["scenes"][number] | null | undefined;
   scenes: GameSnapshot["scenes"];
   assets: GameSnapshot["assets"];
@@ -17,6 +19,7 @@ export interface ScenePickerProps {
 
 export const ScenePicker = memo(function ScenePicker({
   activeScene,
+  campaignId,
   scenes,
   assets,
   tokens,
@@ -142,7 +145,7 @@ export const ScenePicker = memo(function ScenePicker({
           moveChoiceFocus(event.key, false);
         }}
       >
-        {scenes.map((scene) => {
+        {orderCampaignScenes(scenes, campaignId).map((scene) => {
           const background = assets.find(
             (asset) => asset.id === scene.mapAssetId,
           );

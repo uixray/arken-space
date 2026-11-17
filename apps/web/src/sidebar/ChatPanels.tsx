@@ -1,3 +1,4 @@
+import { GmHealthCounter } from "../GmHealthCounter";
 import { InspirationRollAction, InspirationResource } from "../CharacterExtras";
 import { api } from "../api";
 import { useComposerSuggestions } from "../ui/use-composer-suggestions";
@@ -550,6 +551,7 @@ function ChatMessageBodyComponent({
 export const ChatMessageBody = memo(ChatMessageBodyComponent);
 
 export function ActivityPanel({
+  view = "combined",
   snapshot,
   storyPosts,
   activityFilters,
@@ -567,6 +569,7 @@ export function ActivityPanel({
   onRollInitiative,
   onRecruitFromBattleZone,
 }: {
+  view?: "combined" | "journal" | "character";
   snapshot: GameSnapshot;
   storyPosts: readonly ActivityStoryPost[];
   activityFilters: ReadonlySet<ActivityFilter>;
@@ -903,12 +906,12 @@ export function ActivityPanel({
   }, [focusedMessageId, onMessageFocused, timeline, listRef]);
   return (
     <section
-      className="chat-panel activity-feed"
+      className={`chat-panel activity-feed activity-feed--${view}`}
       role={snapshot.me.role === "GM" ? "region" : "tabpanel"}
-      id="chat-panel-activity"
+      id={view === "character" ? "chat-panel-character" : "chat-panel-activity"}
       aria-label={snapshot.me.role === "GM" ? "События" : undefined}
       aria-labelledby={
-        snapshot.me.role === "GM" ? undefined : "chat-tab-activity"
+        view === "character" ? "chat-tab-character" : snapshot.me.role === "GM" ? undefined : "chat-tab-activity"
       }
     >
       <ActivityInitiativePanel
@@ -977,6 +980,7 @@ export function ActivityPanel({
             compact
           />
         )}
+        {snapshot.me.role === "GM" && rollCharacter && <GmHealthCounter key={rollCharacter.id} characterId={rollCharacter.id} />}
         {resourceError && (
           <p className="composer-error" role="alert">
             {resourceError}
@@ -985,11 +989,13 @@ export function ActivityPanel({
         <section className="activity-roll-controls" aria-label="Быстрые броски">
           {rollCharacter ? (
             <QuickRollPanel
+              stacked={view === "character"}
               rollCharacter={rollCharacter}
+              characterOwnerRole={snapshot.members.find((member) => member.id === rollCharacter.ownerMembershipId)?.role}
               campaignId={snapshot.campaign.id}
               membershipId={snapshot.me.id}
               rows={rollableStatRows(
-                snapshot.campaign.statLayout.flatMap((group) =>
+                (rollCharacter.statLayout ?? snapshot.campaign.statLayout).flatMap((group) =>
                   group.rows
                     .filter((row) => row.source !== "RESOURCE")
                     .map(({ key, label }) => ({ key, label, group: group.id })),
@@ -998,7 +1004,7 @@ export function ActivityPanel({
               quickRollPending={pendingQuickRoll !== null}
               canControlCharacter={canSpendResources}
               gmOnly={rollVisibility === "GM_ONLY"}
-              preparedActionTarget={preparedActionTarget}
+              preparedActionTarget={view === "character" ? null : preparedActionTarget}
               physicalDiceControl={
                 <FormInput
                   className="compact-check quick-roll-panel__physical-dice"

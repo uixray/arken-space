@@ -4,6 +4,8 @@ import { describe, expect, test } from "vitest";
 import { registerRoutes } from "../apps/server/src/routes.js";
 import {
   CAMPAIGN_ROUTE_KEYS,
+  CREATION_HISTORY_PROBE_KEYS,
+  STORY_WITHDRAW_PROBE_KEY,
   diffRouteInventory,
   formatRouteInventoryDiff,
   GLOBAL_ROUTE_EXCEPTIONS,
@@ -116,6 +118,8 @@ describe("campaign route inventory", () => {
     const probeKeys = [
       ...CORE_CAMPAIGN_PROBE_KEYS,
       ...SUBROUTER_CAMPAIGN_PROBE_KEYS,
+      ...CREATION_HISTORY_PROBE_KEYS,
+      STORY_WITHDRAW_PROBE_KEY,
     ];
 
     expect(exactIdCampaignRoutes.length).toBeGreaterThan(0);

@@ -473,7 +473,17 @@ function TokenImage({
     [imageState.availability, onAvailabilityChange, tokenId],
   );
   useEffect(() => () => onUnmount?.(tokenId), [onUnmount, tokenId]);
-  return <Image image={imageState.displayedImage ?? undefined} {...props} />;
+  const displayed = imageState.displayedImage;
+  // Preserve portrait proportions inside the token mask: crop, never stretch.
+  const crop = displayed && displayed.width > 0 && displayed.height > 0
+    ? (() => {
+        const scale = Math.max(props.width / displayed.width, props.height / displayed.height);
+        const width = props.width / scale;
+        const height = props.height / scale;
+        return { x: (displayed.width - width) / 2, y: (displayed.height - height) / 2, width, height };
+      })()
+    : undefined;
+  return <Image image={displayed ?? undefined} {...props} crop={crop} />;
 }
 
 /** Static billboard, deliberately no circular clipping or retained previous pose. */
@@ -1448,6 +1458,24 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
     setScale(fitted.scale);
     setPosition(fitted.position);
   };
+
+  // Campaign opt-in: fit the newly entered map to the actual container once.
+  const initialSceneFitRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!props.autoFitOnSceneEntry || initialSceneFitRef.current === props.scene.id) return;
+    const bounds = containerRef.current?.getBoundingClientRect();
+    if (!bounds || bounds.width <= 1 || bounds.height <= 1) return;
+    const scale = Math.min(3, Math.min(
+      bounds.width / props.scene.width, bounds.height / props.scene.height,
+    ) * 0.92);
+    setScale(scale);
+    setPosition({
+      x: (bounds.width - props.scene.width * scale) / 2,
+      y: (bounds.height - props.scene.height * scale) / 2,
+    });
+    initialSceneFitRef.current = props.scene.id;
+  }, [props.autoFitOnSceneEntry, props.scene.id, props.scene.width, props.scene.height,
+      viewport.width, viewport.height]);
 
   // UIX-311: while a SCENE_REGION encounter is ACTIVE on this scene, every
   // client (GM and players) fits its own camera to the persisted

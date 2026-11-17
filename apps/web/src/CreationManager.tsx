@@ -4,14 +4,16 @@ import { creationRecipeSourceSchema, type CreationKind, type CreationPoint, type
 import { creationPath, type Recipe, type RecipePage, type RulePack, type Template } from "./creation-client";
 import { useCreationPage, useCreationQuery, type CreationSession } from "./use-creation-session";
 import { CreationRules } from "./CreationRules";
+import { CreationPolicy } from "./CreationPolicy";
 import { operationLabels, PageControls, QueryState, stageLabels } from "./CreationParts";
 
-export function CreationManager({ session, packs, active, onRulesDirtyChange, onRecipesDirtyChange }: { session: CreationSession; packs: RulePack[]; active: boolean; onRulesDirtyChange?: (dirty: boolean) => void; onRecipesDirtyChange?: (dirty: boolean) => void }) {
-  const [tab, setTab] = useState<"rules" | "recipes">("rules");
-  return <div><div className="creation-tabs" aria-label="Настройки мастера">{([["rules", "Правила конструкторов"], ["recipes", "Рецепты изготовления"]] as const).map(([key, label]) =>
+export function CreationManager({ session, packs, active, onRulesDirtyChange, onRecipesDirtyChange, onPolicyDirtyChange }: { session: CreationSession; packs: RulePack[]; active: boolean; onRulesDirtyChange?: (dirty: boolean) => void; onRecipesDirtyChange?: (dirty: boolean) => void; onPolicyDirtyChange?: (dirty: boolean) => void }) {
+  const [tab, setTab] = useState<"rules" | "recipes" | "policy">("rules");
+  return <div><div className="creation-tabs" aria-label="Настройки мастера">{([["rules", "Правила конструкторов"], ["recipes", "Рецепты мастерской"], ["policy", "Правила витрины"]] as const).map(([key, label]) =>
     <button type="button" key={key} disabled={session.busy} aria-pressed={tab === key} onClick={() => setTab(key)}>{label}</button>)}</div>
     <div hidden={tab !== "rules"}><CreationRules session={session} packs={packs} active={active && tab === "rules"} onDirtyChange={onRulesDirtyChange} /></div>
     <div hidden={tab !== "recipes"}><RecipeEditor session={session} active={active && tab === "recipes"} onDirtyChange={onRecipesDirtyChange} /></div>
+    <div hidden={tab !== "policy"}><CreationPolicy session={session} active={active && tab === "policy"} onDirtyChange={onPolicyDirtyChange} /></div>
   </div>;
 }
 const point = (): CreationPoint => ({ versionId: "", level: 1, stage: "CRAFTED" });
@@ -61,16 +63,16 @@ function RecipeEditor({ session: s, active, onDirtyChange }: { session: Creation
     if (result && typeof result.revision === "number") { setRevision(result.revision); setBaseline(JSON.stringify(source)); if (publish) setEnabled(true); } };
   const toggle = async () => { const result = await s.submit("recipes/enabled", { recipeId: id, expectedRevision: revision, enabled: !enabled, reason }, "Доступ рецепта", "PUT");
     if (result && typeof result.revision === "number") { setRevision(result.revision); setEnabled(!enabled); setReason(""); } };
-  return <section><h3>Рецепты изготовления</h3>
+  return <section><h3>Рецепты мастерской</h3>
     <QueryState loading={recipes.loading || templates.loading} error={recipes.error || templates.error} />
-    <div className="creation-actions">{[...(recipes.data?.recipes ?? []), ...(recipes.data?.drafts ?? [])].filter(r => r.source.operation === "CRAFT").map(r => <button type="button" disabled={s.locked}
+    <div className="creation-actions">{[...(recipes.data?.recipes ?? []), ...(recipes.data?.drafts ?? [])].map(r => <button type="button" disabled={s.locked}
       key={r.version.id} onClick={() => open(r)}>{r.source.name}{r.version.published ? "" : " · черновик"}</button>)}<button type="button" disabled={s.locked} onClick={fresh}>Новый рецепт</button></div>
     {revision !== null && <CreationVersionHistory key={id} session={s} id={id} kind="recipes" active={active} />}
     <fieldset disabled={s.locked}><legend>Точная версия перехода</legend><label>Название<input value={source.name} maxLength={100} onChange={e => setSource({ ...source, name: e.target.value })} /></label>
       <label>Публичное пояснение / причина<textarea value={source.reason} maxLength={2000} onChange={e => setSource({ ...source, reason: e.target.value })} /></label>
       <div className="creation-fields"><label>Конструктор<select value={source.kind} onChange={e => setSource({ ...newRecipe(), name: source.name, reason: source.reason, kind: e.target.value as CreationKind })}>
         <option value="SKILL">Навык</option><option value="ARTIFACT">Артефакт</option></select></label>
-        <label>Операция<select value={source.operation} onChange={e => operation(e.target.value as CreationRecipeSource["operation"])}>{Object.entries(operationLabels).filter(([key]) => key === "CRAFT").map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select></label></div>
+        <label>Операция<select value={source.operation} onChange={e => operation(e.target.value as CreationRecipeSource["operation"])}>{Object.entries(operationLabels).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select></label></div>
       {source.inputs.map((p, i) => <div key={i}>{pointFields(p, v => setSource({ ...source, inputs: source.inputs.map((a, n) => n === i ? v : a) }), `Расходуемый вход ${i + 1}`)}
         {source.operation === "MERGE" && source.inputs.length > 2 && <button type="button" onClick={() => setSource({ ...source, inputs: source.inputs.filter((_, n) => n !== i) })}>Убрать вход</button>}</div>)}
       {source.operation === "MERGE" && <button type="button" disabled={source.inputs.length >= 8} onClick={() => setSource({ ...source, inputs: [...source.inputs, point()] })}>Добавить отдельный вход</button>}

@@ -56,8 +56,9 @@ describe("UIX-461 creation lifecycle", () => {
    const template=await request("player","templates/versions",{actionId:id(),templateId,expectedRevision:null,previousVersionId:null,ruleVersionId:rules.versionId,design});
    const deniedReview=await app.inject({method:"POST",url:"/api/creation/reviews",headers:{cookie:`${env.SESSION_COOKIE_NAME}=${secrets.buyer}`,"x-creation-campaign":campaignId,"x-creation-membership":buyer},payload:{actionId:id(),versionId:template.versionId,expectedRevision:null,decision:"APPROVED",reason:"QA"}});
    expect(deniedReview.statusCode,deniedReview.body).toBe(403);
-   const unexposedStore=await app.inject({method:"GET",url:"/api/creation/store/listings",headers:{cookie:`${env.SESSION_COOKIE_NAME}=${secrets.player}`,"x-creation-campaign":campaignId,"x-creation-membership":player}});
-   expect(unexposedStore.statusCode).toBe(404);
+   const emptyStore=await app.inject({method:"GET",url:"/api/creation/store/listings",headers:{cookie:`${env.SESSION_COOKIE_NAME}=${secrets.player}`,"x-creation-campaign":campaignId,"x-creation-membership":player}});
+   expect(emptyStore.statusCode,emptyStore.body).toBe(200);
+   expect(emptyStore.json().items).toEqual([]);
    await request("gm","reviews",{actionId:id(),versionId:template.versionId,expectedRevision:null,decision:"APPROVED",reason:"QA"});
    const legacyId=id();
    await db.insert(schema.characterCatalogEntries).values({id:legacyId,characterId,kind:"SKILL",name:"Already issued",description:"unchanged",data:{}});

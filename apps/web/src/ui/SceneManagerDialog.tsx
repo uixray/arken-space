@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { AssetDto, GameSnapshot, SceneDto } from "@arken/contracts";
 import { Label } from "../design-system/Badge";
+import { orderCampaignScenes } from "../scene-order";
 import { Button } from "../design-system/Button";
 import { ArkenDialog } from "./ArkenDialog";
 import { ImageUploadField } from "./ImageUploadField";
@@ -173,7 +174,7 @@ export function SceneManagerDialog({
               Сцен пока нет. Создайте сцену для подготовки игры.
             </p>
           )}
-          {snapshot.scenes.map((scene) => {
+          {orderCampaignScenes(snapshot.scenes, snapshot.campaign.id).map((scene) => {
             const viewed =
               scene.id === viewedSceneId || (!viewedSceneId && scene.active);
             return (

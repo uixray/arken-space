@@ -78,12 +78,12 @@ export function CreationObjects({ session: s, character, characters, gm, active,
       {lineage && <Lineage key={lineage} session={s} id={lineage} onClose={() => setLineage(null)} />}
     </div>
     <div>
-      <fieldset disabled={s.locked || !characterId || recipes.loading}><legend>Изготовление</legend>
+      <fieldset disabled={s.locked || !characterId || recipes.loading}><legend>Операции мастерской</legend>
         <QueryState loading={recipes.loading} error={recipes.error} />
         <label>Рецепт мастера<select value={recipeId} onChange={e => { clearQuote(); setRecipeId(e.target.value); setInputs([]); setPicks([]); }}>
-          <option value="">Выберите действие</option>{recipes.data?.recipes.filter(r => r.source.operation === "CRAFT").map(r => <option key={r.version.id} value={r.version.id}>
+          <option value="">Выберите действие</option>{recipes.data?.recipes.map(r => <option key={r.version.id} value={r.version.id}>
             {operationLabels[r.source.operation]} — {r.source.name}</option>)}</select></label>
-        {recipes.data?.recipes.length === 0 && <p>Нет доступных опубликованных рецептов изготовления.</p>}
+        {recipes.data?.recipes.length === 0 && <p>Нет доступных опубликованных рецептов.</p>}
         {recipe && <><p>{recipe.source.reason}</p><Cost session={s} value={recipe.source.cost} />
           <p>Расходуется объектов: {recipe.source.inputs.length}. Выбрано: {inputs.length}.</p>
           {!!inputs.length && <ul>{inputs.map(o => <li key={o.id}>{o.snapshot.name} · уровень {o.level} <button type="button" onClick={() => {
@@ -96,6 +96,7 @@ export function CreationObjects({ session: s, character, characters, gm, active,
       </fieldset>
       {liveQuote && <section className="creation-confirm" aria-label="Подтверждение операции"><h3>{operationLabels[liveQuote.operation]} · {character?.name}</h3>
         <p>{liveQuote.recipeName} — результат: {liveQuote.output?.name ?? "Разбор без нового объекта"}</p>
+        {liveQuote.inputObjectIds.length > 0 && <p>Выбранные объекты будут расходованы после подтверждения. Их история сохранится; это действие нельзя отменить через чат.</p>}
         <Cost session={s} value={liveQuote.spend} title="Будет потрачено" /><Cost session={s} value={liveQuote.returns} title="Будет возвращено" />
         <p>{expired ? "Котировка истекла. Получите новую." : `Действует до ${new Date(liveQuote.expiresAt).toLocaleTimeString("ru-RU")}`}</p>
         {!liveQuote.affordable && <p>Не хватает монет или SP. Возврат не оплачивает операцию заранее.</p>}
