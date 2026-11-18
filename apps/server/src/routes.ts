@@ -142,7 +142,7 @@ const snapshotTriggers = SNAPSHOT_METRICS_ENABLED
  * rebuild (see broadcast-coalescer.ts); each caller still resolves only after
  * a snapshot that includes its own committed change.
  */
-function broadcastSnapshots(
+export function broadcastSnapshots(
   io: RealtimeServer,
   db: Database,
   campaignId: string,

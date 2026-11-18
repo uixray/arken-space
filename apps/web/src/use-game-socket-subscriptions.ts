@@ -1,5 +1,6 @@
 import { shareStructure } from "./structural-sharing";
 import {
+  applyHiddenTokenPreview,
   applyTokenPointEvent,
   applyTokenPreview,
   recordTokenRemovals,
@@ -17,7 +18,7 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from "react";
-import type { AudioTrackDto, GameSnapshot, MapPing } from "@arken/contracts";
+import type { AudioTrackDto, GameSnapshot, MapPing, ServerToClientEvents } from "@arken/contracts";
 import { reportClientEvent } from "./api";
 import { createGameSocket, type GameSocket } from "./realtime";
 import { appendChatMessage } from "./chat-state";
@@ -152,6 +153,20 @@ export function useGameSocketSubscriptions({
     // never a gate that can discard an interleaved track event.
     const audioTrackCursor: AudioTrackEventCursor = new Map();
     const tokenRemovalWatermarks: TokenRemovalWatermarks = new Map();
+    const redactedPreviews = new Map<
+      string,
+      Parameters<ServerToClientEvents["token:preview-hidden"]>[0]
+    >();
+    const redactedPreviewRecovery = new Map<string, ReturnType<typeof setTimeout>>();
+    const clearRedactedPreviewRecovery = (tokenId: string) => {
+      clearTimeout(redactedPreviewRecovery.get(tokenId));
+      redactedPreviewRecovery.delete(tokenId);
+    };
+    const discardRedactedPreviews = () => {
+      redactedPreviews.clear();
+      for (const timer of redactedPreviewRecovery.values()) clearTimeout(timer);
+      redactedPreviewRecovery.clear();
+    };
     let canonicalAudioFloor = initialSnapshotVersionRef.current ?? 0;
     setSocket(next);
     next.on("connect", () => {
@@ -167,6 +182,7 @@ export function useGameSocketSubscriptions({
       );
     });
     next.on("disconnect", (reason) => {
+      discardRedactedPreviews();
       if (lastSceneViewEmissionRef.current?.socket === next)
         lastSceneViewEmissionRef.current = null;
       setConnection("RECONNECTING");
@@ -180,7 +196,23 @@ export function useGameSocketSubscriptions({
     next.io.on("reconnect_failed", () => setConnection("OFFLINE"));
     next.on("token:preview-epoch", (epoch) => { next.previewEpoch = epoch; });
     next.on("game:snapshot", (nextSnapshot) => {
+      if (nextSnapshot.snapshotVersion >= (next.previewSnapshotVersion ?? 0)) {
+        const placements = new Map(nextSnapshot.tokens.map((token) => [token.id, token]));
+        for (const [id, redaction] of redactedPreviews) {
+          const token = placements.get(id);
+          if (token?.revision !== redaction.revision ||
+              token.sceneId !== redaction.sceneId || redaction.previewEpoch !== next.previewEpoch) {
+            redactedPreviews.delete(id);
+            clearRedactedPreviewRecovery(id);
+          }
+        }
+      }
       next.previewSnapshotVersion = nextSnapshot.snapshotVersion;
+      // A chat action can send a canonical snapshot with the original token
+      // position while a drag is still in flight. Preserve a redaction only
+      // for the same placement revision, and never revive a missing row.
+      const activeRedactions = [...redactedPreviews.values()];
+      const previewEpoch = next.previewEpoch;
       setSnapshot((current) => {
         // Unchanged slices keep their identity, so a chat-only broadcast
         // does not re-render the map (see structural-sharing.ts).
@@ -213,7 +245,12 @@ export function useGameSocketSubscriptions({
                 revision: Number.MAX_SAFE_INTEGER,
               });
         }
-        return reconciled;
+        if (reconciled === current) return reconciled;
+        return activeRedactions.reduce(
+          (state, redaction) =>
+            applyHiddenTokenPreview(state, redaction, tokenRemovalWatermarks, previewEpoch),
+          reconciled,
+        );
       });
       setConnection("ONLINE");
     });
@@ -231,13 +268,38 @@ export function useGameSocketSubscriptions({
           : current,
       ),
     );
-    next.on("token:moving", (movement) =>
+    next.on("token:moving", (movement) => {
+      const redaction = redactedPreviews.get(movement.tokenId);
+      if (redaction && movement.previewEpoch === redaction.previewEpoch &&
+          movement.sceneId === redaction.sceneId && movement.revision === redaction.revision &&
+          (movement.snapshotVersion ?? 0) >= (redaction.snapshotVersion ?? 0)) {
+        redactedPreviews.delete(movement.tokenId);
+        clearRedactedPreviewRecovery(movement.tokenId);
+      }
       setSnapshot((current) =>
         current
           ? applyTokenPreview(current, movement, tokenRemovalWatermarks, next.previewEpoch)
           : current,
-      ),
-    );
+      );
+    });
+    next.on("token:preview-hidden", (event) => {
+      if (event.previewEpoch !== next.previewEpoch) return;
+      redactedPreviews.set(event.tokenId, event);
+      setSnapshot((current) =>
+        current
+          ? applyHiddenTokenPreview(current, event, tokenRemovalWatermarks, next.previewEpoch)
+          : current,
+      );
+      // An abandoned drag might not commit. Fall back to the server's
+      // canonical view rather than leaving the token hidden indefinitely.
+      clearRedactedPreviewRecovery(event.tokenId);
+      redactedPreviewRecovery.set(event.tokenId, setTimeout(() => {
+        redactedPreviews.delete(event.tokenId);
+        redactedPreviewRecovery.delete(event.tokenId);
+        if (next.connected)
+          next.emit("game:resync", next.previewSnapshotVersion ?? 0);
+      }, 8000));
+    });
     next.on("token:moved", (event) =>
       setSnapshot((current) =>
         current
@@ -456,6 +518,7 @@ export function useGameSocketSubscriptions({
     next.on("presence:updated", setPresence);
     next.on("server:error", (problem) => setError(problem.message));
     return () => {
+      discardRedactedPreviews();
       next.disconnect();
       if (lastSceneViewEmissionRef.current?.socket === next)
         lastSceneViewEmissionRef.current = null;

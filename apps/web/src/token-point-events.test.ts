@@ -1,6 +1,7 @@
 import type { GameSnapshot, TokenDto } from "@arken/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  applyHiddenTokenPreview,
   applyTokenPointEvent,
   applyTokenPreview,
   recordTokenRemovals,
@@ -17,6 +18,17 @@ const snapshot = (tokens: TokenDto[], snapshotVersion = 0) =>
   }) as GameSnapshot;
 
 describe("token realtime events", () => {
+  it("temporarily hides a player preview without changing coordinates and restores it on a visible sample", () => {
+    const base = snapshot([{ ...token("a", 2, "scene-a", 30), visible: true }]);
+    const player: GameSnapshot = { ...base, me: { ...base.me, role: "PLAYER" } };
+    const identity = { tokenId: "a", revision: 2, sceneId: "scene-a", previewEpoch: "now" };
+    const hidden = applyHiddenTokenPreview(player, identity, new Map(), "now");
+    expect(hidden.tokens[0]).toMatchObject({ visible: false, x: 30, revision: 2 });
+    expect(applyHiddenTokenPreview(player, { ...identity, previewEpoch: "old" }, new Map(), "now")).toBe(player);
+    expect(applyHiddenTokenPreview(player, { ...identity, revision: 1 }, new Map(), "now")).toBe(player);
+    expect(applyHiddenTokenPreview({ ...base, me: { ...base.me, role: "GM" } }, identity, new Map(), "now").tokens[0]?.visible).toBe(true);
+    expect(applyTokenPreview(hidden, { ...identity, x: 65, y: 0 }, new Map(), "now").tokens[0]).toMatchObject({visible: true, x: 65});
+  });
   it("applies a newer token revision even if another event advanced the global sequence", () => {
     const old = snapshot([token("a", 3), token("b", 1)], 120);
     const next = applyTokenPointEvent(
