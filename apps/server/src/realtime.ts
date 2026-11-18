@@ -300,6 +300,20 @@ type TokenDelivery = {
   fogByScene: FogRowsByScene;
 };
 
+function wasPublicInTokenProjection(
+  token: EditableToken,
+  fogByScene: FogRowsByScene,
+  activeSceneId: string | null,
+) {
+  return (
+    tokenIsCampaignVisible(token, activeSceneId) &&
+    tokensAreFogVisibleTo([token], fogByScene, {
+      role: "PLAYER",
+      membershipId: "__campaign-fog-viewer__",
+    })
+  );
+}
+
 /**
  * Mirror the snapshot's UIX-449 visibility for realtime projections.
  *
@@ -375,6 +389,7 @@ export function registerRealtime(
   runtime: {
     sessionIsActive?: typeof sessionIsActive;
     buildSnapshot?: typeof buildSnapshot;
+    refreshTokenProjection?: (campaignId: string) => Promise<void>;
   } = {},
 ) {
   const checkSessionActive = runtime.sessionIsActive ?? sessionIsActive;
@@ -640,6 +655,7 @@ export function registerRealtime(
       "realtime.connected",
     );
 
+    let lastRedactedPreview: { key: string; sentAt: number } | undefined;
     socket.on("token:moving", async (input) => {
       const parsed = tokenMovingSchema.safeParse(input);
       if (!parsed.success || parsed.data.previewEpoch !== tokenPreviewEpochs.current(auth.campaignId)) return;
@@ -669,7 +685,36 @@ export function registerRealtime(
           projection.token.controllerMembershipIds,
         );
         if (!socket.connected || parsed.data.previewEpoch !== tokenPreviewEpochs.current(auth.campaignId)) return;
-        socket.to(delivery.rooms).emit("token:moving", parsed.data);
+        if (!parsed.data.hold)
+          socket.to(delivery.rooms).emit("token:moving", parsed.data);
+        const key = `${previewToken.id}:${previewToken.revision}:${parsed.data.previewEpoch}`;
+        // The fast path already established that both placements are
+        // public. Do not re-evaluate the fog geometry for each drag frame.
+        if (delivery.rooms.includes(campaignRoom(auth.campaignId))) {
+          if (!parsed.data.hold && lastRedactedPreview?.key === key)
+            lastRedactedPreview = undefined;
+          return;
+        }
+        // Restricted delivery with a public original necessarily means
+        // the candidate point is hidden, since tokenDelivery checks both.
+        if (!wasPublicInTokenProjection(
+          projection.token, delivery.fogByScene, projection.activeSceneId,
+        )) return;
+        const now = Date.now();
+        if (lastRedactedPreview?.key !== key ||
+            now - lastRedactedPreview.sentAt >= 2000) {
+          lastRedactedPreview = { key, sentAt: now };
+          socket.to(campaignRoom(auth.campaignId)).except(delivery.rooms).emit(
+            "token:preview-hidden",
+            {
+              tokenId: previewToken.id,
+              sceneId: previewToken.sceneId,
+              revision: previewToken.revision,
+              previewEpoch: parsed.data.previewEpoch,
+              snapshotVersion: parsed.data.snapshotVersion,
+            },
+          );
+        }
       });
     });
 
@@ -865,6 +910,25 @@ export function registerRealtime(
         "token:moved",
         envelope(result.event.sequence, command.actionId, dto),
       );
+      // A point update cannot add a previously hidden token. Conversely, a
+      // viewer who lost visibility must never receive the hidden destination
+      // just to clear the last visible preview. Reconcile their canonical
+      // projections only on a boundary crossing, not on ordinary moves.
+      const activeSceneId = committedProjection.activeSceneId;
+      const previousPublic = wasPublicInTokenProjection(
+        current, delivery.fogByScene, activeSceneId,
+      );
+      const latestPublic = wasPublicInTokenProjection(
+        latestToken, delivery.fogByScene, activeSceneId,
+      );
+      if (previousPublic !== latestPublic && runtime.refreshTokenProjection) {
+        try {
+          await runtime.refreshTokenProjection(auth.campaignId);
+        } catch (error) {
+          // The move has already committed and remains acknowledged.
+          log.warn({ err: error, actionId: command.actionId }, "token.projection_refresh_failed");
+        }
+      }
       log.info(
         {
           actionId: command.actionId,

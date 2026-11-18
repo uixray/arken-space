@@ -51,11 +51,20 @@ export function applyTokenPointEvent(
   };
 }
 
-export function applyTokenPreview(
+type TokenPreviewIdentity = {
+  tokenId: string;
+  revision: number;
+  sceneId?: string;
+  snapshotVersion?: number;
+  previewEpoch?: string;
+};
+
+function updateTokenPreview(
   current: GameSnapshot,
-  movement: { tokenId: string; revision: number; x: number; y: number; sceneId?: string; snapshotVersion?: number; previewEpoch?: string },
+  movement: TokenPreviewIdentity,
   watermarks: ReadonlyMap<string, number>,
-  currentEpoch?: string,
+  currentEpoch: string | undefined,
+  update: (token: TokenDto) => TokenDto,
 ): GameSnapshot {
   const existing = current.tokens.find(
     (token) => token.id === movement.tokenId,
@@ -75,10 +84,32 @@ export function applyTokenPreview(
     return current;
   return {
     ...current,
-    tokens: current.tokens.map((token) =>
-      token.id === movement.tokenId
-        ? { ...token, x: movement.x, y: movement.y }
-        : token,
-    ),
+    tokens: current.tokens.map((token) => token === existing ? update(token) : token),
   };
+}
+
+export function applyTokenPreview(
+  current: GameSnapshot,
+  movement: TokenPreviewIdentity & { x: number; y: number },
+  watermarks: ReadonlyMap<string, number>,
+  currentEpoch?: string,
+): GameSnapshot {
+  return updateTokenPreview(current, movement, watermarks, currentEpoch, (token) => ({
+    ...token, x: movement.x, y: movement.y,
+    // A player's canonical projection never includes an invisible token.
+    // Thus a valid public preview may restore a token hidden by a redacted one.
+    visible: current.me.role === "PLAYER" ? true : token.visible,
+  }));
+}
+
+export function applyHiddenTokenPreview(
+  current: GameSnapshot,
+  event: TokenPreviewIdentity,
+  watermarks: ReadonlyMap<string, number>,
+  currentEpoch?: string,
+): GameSnapshot {
+  if (current.me.role !== "PLAYER" || !currentEpoch) return current;
+  return updateTokenPreview(current, event, watermarks, currentEpoch, (token) => ({
+    ...token, visible: false,
+  }));
 }

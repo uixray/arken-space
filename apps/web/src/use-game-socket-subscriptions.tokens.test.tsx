@@ -19,9 +19,9 @@ const fake = vi.hoisted(() => {
     off() {
       return socket;
     },
-    emit() {
+    emit: vi.fn(() => {
       return socket;
-    },
+    }),
     disconnect() {
       return socket;
     },
@@ -34,6 +34,8 @@ const fake = vi.hoisted(() => {
     },
     reset() {
       listeners.clear();
+      socket.emit.mockClear();
+      socket.connected = false;
     },
   };
 });
@@ -47,8 +49,10 @@ const initial = () =>
   gmSnapshot({ snapshotVersion: 100, tokens: [token("a", 0), token("b", 0)] });
 const noop = () => {};
 let observed: GameSnapshot;
-function Harness() {
-  const [state, setSnapshot] = useState<GameSnapshot | null>(initial);
+function Harness({ player = false }: { player?: boolean }) {
+  const [state, setSnapshot] = useState<GameSnapshot | null>(() =>
+    player ? playerSnapshot(100) : initial(),
+  );
   observed = state!;
   const chatIds = useRef(new Set<string>()),
     threadId = useRef<string | null>(null),
@@ -127,4 +131,35 @@ it("handles interleaved movement, deletion, ID reuse and scene changes through t
     sceneId: "b",
     x: 30,
   });
+});
+
+function playerSnapshot(snapshotVersion: number) {
+  const base = gmSnapshot({
+    snapshotVersion, tokens: [{ ...token("a", 0), visible: true }],
+  });
+  return { ...base, me: { ...base.me, role: "PLAYER" as const } };
+}
+
+it("keeps a held redaction across unrelated snapshots, then resyncs an abandoned drag", async () => {
+  vi.useFakeTimers();
+  try {
+    fake.socket.connected = true;
+    renderComponent(<Harness player />);
+    await act(async () => fake.fire("token:preview-epoch", "current"));
+    const event = { tokenId: "a", sceneId: "a", revision: 0, previewEpoch: "current" };
+    await act(async () => fake.fire("token:preview-hidden", event));
+    expect(observed.tokens[0]).toMatchObject({ visible: false, x: 0 });
+    await act(async () => fake.fire("game:snapshot", playerSnapshot(101)));
+    expect(observed.tokens[0]).toMatchObject({ visible: false, x: 0 });
+    await act(async () => { await vi.advanceTimersByTimeAsync(7000); });
+    await act(async () => fake.fire("token:preview-hidden", event));
+    await act(async () => { await vi.advanceTimersByTimeAsync(7999); });
+    expect(fake.socket.emit).not.toHaveBeenCalledWith("game:resync", 101);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(fake.socket.emit).toHaveBeenCalledWith("game:resync", 101);
+    await act(async () => fake.fire("game:snapshot", playerSnapshot(101)));
+    expect(observed.tokens[0]).toMatchObject({ visible: true, x: 0 });
+  } finally {
+    vi.useRealTimers();
+  }
 });

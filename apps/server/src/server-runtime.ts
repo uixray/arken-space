@@ -12,7 +12,7 @@ import { createDatabase, createPgliteDatabase } from "@arken/db";
 import { env } from "./env.js";
 import { countQuery, SNAPSHOT_METRICS_ENABLED } from "./snapshot-metrics.js";
 import { registerRealtime } from "./realtime.js";
-import { registerRoutes } from "./routes.js";
+import { broadcastSnapshots, registerRoutes } from "./routes.js";
 import { ensureSeed } from "./seed.js";
 import { requestActionId } from "./telemetry.js";
 import { isCampaignCanvasGuardError } from "./campaign-pause-guard.js";
@@ -146,7 +146,10 @@ export async function startServer() {
   });
 
   try {
-    registerRealtime(io, db, app.log);
+    registerRealtime(io, db, app.log, {
+      refreshTokenProjection: (campaignId) =>
+        broadcastSnapshots(io, db, campaignId, "token"),
+    });
     registerRoutes(app, db, io, accountMailContext);
     if (env.DEPLOYMENT_MODE === "LOCAL_HOST")
       await registerLocalHostWeb(app, env.LOCAL_WEB_ROOT);

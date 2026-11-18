@@ -1325,6 +1325,7 @@ export const tokenMovingSchema = moveTokenSchema.extend({
   sceneId: z.string().uuid().optional(),
   snapshotVersion: z.number().int().nonnegative().optional(),
   previewEpoch: z.string().uuid().optional(),
+  hold: z.boolean().optional(),
 });
 export const deleteTokenSchema = z.object({
   actionId: actionIdSchema,
@@ -3373,6 +3374,13 @@ export interface ServerToClientEvents {
   "scene:activated": (event: EventEnvelope<string>) => void;
   "token:preview-epoch": (epoch: string) => void;
   "token:moving": (movement: z.infer<typeof tokenMovingSchema>) => void;
+  "token:preview-hidden": (event: {
+    tokenId: string;
+    sceneId: string;
+    revision: number;
+    previewEpoch: string;
+    snapshotVersion?: number;
+  }) => void;
   "token:moved": (event: EventEnvelope<TokenDto>) => void;
   /** UIX-412: conditions or colours of a token the socket sees changed. */
   "token:updated": (event: EventEnvelope<TokenDto>) => void;

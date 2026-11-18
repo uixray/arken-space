@@ -27,7 +27,7 @@ import useImage from "use-image";
 import Konva from "konva";
 import { TokenConditionMenu } from "./TokenConditionMenu";
 import type { SceneRendererProps } from "./SceneRenderer";
-import type { DrawingDto, TokenDto } from "@arken/contracts";
+import type { ClientToServerEvents, DrawingDto, TokenDto } from "@arken/contracts";
 import {
   rulerPolylineDistance,
   resolveTokenSpriteFrame,
@@ -555,6 +555,32 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   const objectListTriggerRef = useRef<HTMLButtonElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [tokenDragGuard] = useState(createTokenDragGuard);
+  const heldTokenPreviewRef = useRef<Parameters<ClientToServerEvents["token:moving"]>[0] | null>(null);
+  useEffect(() => {
+    heldTokenPreviewRef.current = null;
+    const socket = props.socket;
+    if (!socket || props.paused) return;
+    const clear = () => { heldTokenPreviewRef.current = null; };
+    // Refresh only a live pointer gesture. Reuse the last point to renew
+    // the visibility lease, never as a synthetic move on other clients.
+    const keepalive = window.setInterval(() => {
+      const point = heldTokenPreviewRef.current;
+      if (point && socket.connected && point.previewEpoch === socket.previewEpoch)
+        socket.volatile.emit("token:moving", { ...point, hold: true });
+    }, 2500);
+    window.addEventListener("pointerup", clear, true);
+    window.addEventListener("pointercancel", clear, true);
+    window.addEventListener("blur", clear);
+    socket.on("disconnect", clear);
+    return () => {
+      clear();
+      window.clearInterval(keepalive);
+      window.removeEventListener("pointerup", clear, true);
+      window.removeEventListener("pointercancel", clear, true);
+      window.removeEventListener("blur", clear);
+      socket.off("disconnect", clear);
+    };
+  }, [props.socket, props.scene.id, props.paused]);
   const [interaction, dispatchInteraction] = useReducer(
     mapInteractionReducer,
     undefined,
@@ -3085,7 +3111,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
             props.onBulkMove
           )
             return;
-          props.socket?.emit("token:moving", {
+          const point = {
             actionId: crypto.randomUUID(),
             tokenId: token.id,
             sceneId: token.sceneId,
@@ -3096,12 +3122,16 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
             z: token.z,
             levelId: token.levelId,
             revision: token.revision,
-          });
+          };
+          heldTokenPreviewRef.current = point;
+          props.socket?.emit("token:moving", point);
         },
         restoreDragPosition,
       );
     };
     const onDragEnd = (event: Konva.KonvaEventObject<DragEvent>) => {
+      if (heldTokenPreviewRef.current?.tokenId === token.id)
+        heldTokenPreviewRef.current = null;
       tokenDragGuard.run(
         event,
         () => {

@@ -22,6 +22,8 @@ import {
 import { sessionIsActive as realSessionIsActive } from "../apps/server/src/auth.js";
 import { buildSnapshot as realBuildSnapshot } from "../apps/server/src/snapshot.js";
 import { hashToken } from "../apps/server/src/security.js";
+import { broadcastSnapshots } from "../apps/server/src/routes.js";
+import { tokenPreviewEpochs } from "../apps/server/src/token-preview-epochs.js";
 import { createMigratedPglite } from "./helpers/pglite-template.js";
 
 const ids = {
@@ -85,6 +87,7 @@ let extraClients: Array<Socket<ServerToClientEvents, ClientToServerEvents>>;
 let sessionCheckOverride: typeof realSessionIsActive | undefined;
 let snapshotOverride: typeof realBuildSnapshot | undefined;
 let realtimeWarnings: Array<{ details: unknown; message?: string }>;
+let tokenProjectionRefreshes: number;
 
 function waitForConnection(socket: typeof client) {
   return new Promise<void>((resolve, reject) => {
@@ -390,6 +393,7 @@ beforeEach(async () => {
   const db = drizzle(database, { schema });
   httpServer = createServer();
   ioServer = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer);
+  tokenProjectionRefreshes = 0;
   registerRealtime(
     ioServer,
     db as never,
@@ -406,6 +410,10 @@ beforeEach(async () => {
         (sessionCheckOverride ?? realSessionIsActive)(...args),
       buildSnapshot: (...args) =>
         (snapshotOverride ?? realBuildSnapshot)(...args),
+      refreshTokenProjection: (campaignId) => {
+        tokenProjectionRefreshes++;
+        return broadcastSnapshots(ioServer, db as never, campaignId, "token");
+      },
     },
   );
   await new Promise<void>((resolve) =>
@@ -1060,6 +1068,79 @@ describe("durable realtime token commands", () => {
       leakedPreview: false,
       leakedCommit: false,
     });
+  });
+
+  it("reconciles fog boundary crossings without leaking hidden drag coordinates", async () => {
+    const bbox = { x: 384, y: -4096, width: 16384, height: 16384 };
+    await database.query(
+      `insert into fog_reveals
+        (scene_id, x, y, width, height, operation, shape, geometry, bbox)
+        values ($1,$2,$3,$4,$5,'COVER','RECT',$6,$7)`,
+      [ids.scene, bbox.x, bbox.y, bbox.width, bbox.height,
+        JSON.stringify({ type: "RECT", ...bbox }), JSON.stringify(bbox)],
+    );
+    const command = (revision: number, x: number) => ({
+      actionId: crypto.randomUUID(),
+      tokenId: ids.token,
+      revision,
+      x,
+      y: 64,
+    });
+    expect(await move(gmClient, command(0, 64))).toMatchObject({
+      ok: true,
+      data: { revision: 1 },
+    });
+    expect(tokenProjectionRefreshes).toBe(0);
+
+    const hiddenFrames: number[] = [];
+    otherClient.on("token:moving", (frame) => {
+      if (frame.tokenId === ids.token && frame.x >= bbox.x) hiddenFrames.push(frame.x);
+    });
+    otherClient.on("token:moved", ({ data }) => {
+      if (data.id === ids.token && data.x >= bbox.x) hiddenFrames.push(data.x);
+    });
+    const preview = new Promise<Parameters<ServerToClientEvents["token:moving"]>[0]>(
+      (resolve) => otherClient.once("token:moving", resolve),
+    );
+    const emitPreview = (x: number) => gmClient.emit("token:moving", {
+      ...command(1, x), sceneId: ids.scene,
+      previewEpoch: tokenPreviewEpochs.current(ids.campaign), z: 0, levelId: null,
+    });
+    emitPreview(128);
+    await expect(preview).resolves.toMatchObject({ tokenId: ids.token, x: 128 });
+    const controllerPreview = new Promise<Parameters<ServerToClientEvents["token:moving"]>[0]>(
+      (resolve) => client.once("token:moving", resolve),
+    );
+    const redacted = new Promise<Parameters<ServerToClientEvents["token:preview-hidden"]>[0]>(
+      (resolve) => otherClient.once("token:preview-hidden", resolve),
+    );
+    emitPreview(512);
+    await expect(controllerPreview).resolves.toMatchObject({ tokenId: ids.token, x: 512 });
+    expect(await redacted).toEqual({
+      tokenId: ids.token, sceneId: ids.scene, revision: 1,
+      previewEpoch: tokenPreviewEpochs.current(ids.campaign),
+    });
+    expect(tokenProjectionRefreshes).toBe(0);
+
+    function seesToken(snapshot: SnapshotPayload) {
+      return snapshot.tokens.find((token) => token.id === ids.token);
+    }
+    const [hiddenAck, , controller] = await Promise.all([
+      move(gmClient, command(1, 512)),
+      waitForSnapshot(otherClient, (snapshot) => !seesToken(snapshot)),
+      waitForSnapshot(client, (snapshot) => seesToken(snapshot)?.x === 512),
+    ]);
+    expect(hiddenAck).toMatchObject({ ok: true, data: { x: 512, revision: 2 } });
+    expect(seesToken(controller)).toMatchObject({ x: 512, revision: 2 });
+    expect(tokenProjectionRefreshes).toBe(1);
+    const [visibleAck, visible] = await Promise.all([
+      move(gmClient, command(2, 128)),
+      waitForSnapshot(otherClient, (snapshot) => seesToken(snapshot)?.x === 128),
+    ]);
+    expect(visibleAck).toMatchObject({ ok: true, data: { x: 128, revision: 3 } });
+    expect(seesToken(visible)).toMatchObject({ x: 128, revision: 3 });
+    expect(tokenProjectionRefreshes).toBe(2);
+    expect(hiddenFrames).toEqual([]);
   });
 
   it("keeps a covered token out of foreign player rooms and replay ACKs", async () => {
