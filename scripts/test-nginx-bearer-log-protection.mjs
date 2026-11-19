@@ -161,6 +161,45 @@ assert.match(
   "HTTP upgrade must preserve legacy direct-link URL",
 );
 
+// The Docker legacy overlay deliberately suppresses ALL retired-host request
+// logging, rather than borrowing a native install's URI-bearing `main` format.
+const edgeLegacy = readFileSync(
+  "infra/nginx/arken-legacy-edge.conf",
+  "utf8",
+).replaceAll("\r\n", "\n");
+assert.doesNotMatch(
+  edgeLegacy,
+  /default_server|proxy_pass|access_log\s+(?!off;)/,
+);
+assert.equal(
+  (edgeLegacy.match(/server_name arken\.uixray\.tech;/g) ?? []).length,
+  2,
+);
+for (const protocol of ["HTTP", "HTTPS"]) {
+  const block = edgeLegacy
+    .split(`# BEGIN LEGACY ${protocol}\n`)[1]
+    ?.split(`# END LEGACY ${protocol}`)[0];
+  assert.ok(
+    block,
+    `Docker legacy ${protocol} block must be separately stageable`,
+  );
+  assert.match(block, /access_log\s+off;/);
+  assert.match(block, /error_log\s+\/dev\/null\s+emerg;/);
+  assert.match(block, /add_header\s+Referrer-Policy\s+no-referrer\s+always;/);
+  assert.match(
+    block,
+    /return\s+301\s+https:\/\/arken-khar\.space\$request_uri\s*;/,
+  );
+}
+assert.match(edgeLegacy, /listen\s+443\s+ssl;/);
+assert.match(
+  edgeLegacy,
+  /ssl_certificate\s+\/etc\/letsencrypt\/live\/arken\.uixray\.tech\/fullchain\.pem;/,
+);
+assert.match(edgeLegacy, /ssl_protocols\s+TLSv1\.2\s+TLSv1\.3;/);
+assert.match(edgeLegacy, /location\s+\^~\s+\/\.well-known\/acme-challenge\//);
+assert.match(edgeLegacy, /try_files\s+\$uri\s+=404;/);
+
 console.log(
-  `Nginx bearer-log protection source checks passed (${[...counts.values()].reduce((a, b) => a + b, 0)} guarded locations across ${files.length} configs).`,
+  `Nginx bearer-log protection source checks passed (${[...counts.values()].reduce((a, b) => a + b, 0)} guarded locations across ${files.length} configs; Docker legacy overlay suppresses both host logs).`,
 );
