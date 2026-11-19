@@ -15,6 +15,7 @@ type ToolGesture = {
 type Gesture = {
   scope: string;
   start: Point;
+  startedAt: number;
   position: Point;
   scale: number;
   token: Token | null;
@@ -28,6 +29,7 @@ type Config = {
   startTool?: (point: Point) => ToolGesture | null;
   scope: string;
   enabled: boolean;
+  pingTap?: (point: Point) => void;
   camera: { position: Point; scale: number };
   cameraChange: (position: Point, scale: number) => void;
   hit: (point: Point) => Token | null;
@@ -36,6 +38,9 @@ type Config = {
   preview: (token: Token, delta: Point | null) => void;
   commit: (token: Token, delta: Point) => void;
 };
+// Only a deliberate short tap can send a ping, never a hold/context gesture.
+const PING_TAP_MAX_MS = 500;
+const DRAG_SLOP_PX = 8;
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 const midpoint = (a: Point, b: Point) => ({
   x: (a.x + b.x) / 2,
@@ -224,6 +229,7 @@ export function useMapTouch(config: Config) {
       gesture.current = {
         scope: latest.current.scope,
         start: point,
+        startedAt: event.timeStamp,
         position: c.position,
         scale: c.scale,
         // A drawing/ruler/fog tool owns the whole gesture, even over a token.
@@ -292,7 +298,7 @@ export function useMapTouch(config: Config) {
       g.tool.move(point);
       return;
     }
-    if (distance(point, g.start) < 8 && !g.moved) return;
+    if (distance(point, g.start) < DRAG_SLOP_PX && !g.moved) return;
     g.moved = true;
     const delta = { x: point.x - g.start.x, y: point.y - g.start.y };
     if (g.token && latest.current.movable(g.token)) {
@@ -336,10 +342,21 @@ export function useMapTouch(config: Config) {
       g.tool.move(point);
       g.tool.finish();
       g.tool = null;
+      return;
     }
+    if (
+      g &&
+      !g.multi &&
+      !g.token &&
+      !g.moved &&
+      distance(point, g.start) < DRAG_SLOP_PX &&
+      event.timeStamp >= g.startedAt &&
+      event.timeStamp - g.startedAt <= PING_TAP_MAX_MS
+    )
+      latest.current.pingTap?.(point);
     if (g && !g.multi && g.token) {
       latest.current.preview(g.token, null);
-      if (!g.moved && distance(point, g.start) < 8)
+      if (!g.moved && distance(point, g.start) < DRAG_SLOP_PX)
         latest.current.select(g.token);
       else if (latest.current.movable(g.token))
         latest.current.commit(g.token, {

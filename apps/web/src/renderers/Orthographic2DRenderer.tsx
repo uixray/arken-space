@@ -3541,6 +3541,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   };
 
   const touchPending = useRef(new Set<string>());
+  const touchPingConnection = props.socket?.id;
   const touch = useMapTouch({
     scope:
       props.scene.id +
@@ -3551,7 +3552,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       ":" +
       props.tool +
       ":" +
-      Boolean(props.socket?.connected) +
+      (props.tool === "PING" ? touchPingConnection : Boolean(props.socket?.connected)) +
       ":" +
       brushRadius +
       ":" +
@@ -3559,6 +3560,18 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       ":" +
       drawingStrokeWidth,
     enabled: !props.paused,
+    pingTap:
+      props.tool === "PING" && props.socket?.connected
+        ? (point) => {
+            // Socket.IO buffers emits while offline. Recheck the live socket at
+            // release so a stale tap never pings after reconnecting.
+            if (!props.socket?.connected || props.socket.id !== touchPingConnection) return;
+            props.onPing({
+              x: (point.x - position.x) / scale,
+              y: (point.y - position.y) / scale,
+            });
+          }
+        : undefined,
     camera: { position, scale },
     cameraChange: (next, zoom) => {
       setPosition(next);
