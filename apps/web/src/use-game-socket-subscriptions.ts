@@ -1,3 +1,4 @@
+import { createPlayerFogResync } from "./player-fog-resync";
 import { shareStructure } from "./structural-sharing";
 import {
   applyHiddenTokenPreview,
@@ -167,6 +168,9 @@ export function useGameSocketSubscriptions({
       for (const timer of redactedPreviewRecovery.values()) clearTimeout(timer);
       redactedPreviewRecovery.clear();
     };
+    const playerFog = createPlayerFogResync((sequence) => {
+      if (next.connected) next.emit("game:resync", sequence);
+    });
     let canonicalAudioFloor = initialSnapshotVersionRef.current ?? 0;
     setSocket(next);
     next.on("connect", () => {
@@ -182,6 +186,7 @@ export function useGameSocketSubscriptions({
       );
     });
     next.on("disconnect", (reason) => {
+      playerFog.reset();
       discardRedactedPreviews();
       if (lastSceneViewEmissionRef.current?.socket === next)
         lastSceneViewEmissionRef.current = null;
@@ -221,6 +226,9 @@ export function useGameSocketSubscriptions({
           reconcileGameSnapshot(current, nextSnapshot),
         );
         if (reconciled.campaign.id !== campaignId) return reconciled;
+        playerFog.scope(reconciled.scenes.find((scene) => scene.active)?.id);
+        if (nextSnapshot.campaign.id === campaignId)
+          playerFog.snapshot(nextSnapshot.scenes.find((scene) => scene.active)?.id, nextSnapshot.snapshotVersion);
         recordTokenRemovals(current, reconciled, tokenRemovalWatermarks);
         if (nextSnapshot.snapshotVersion >= canonicalAudioFloor)
           canonicalAudioFloor = nextSnapshot.snapshotVersion;
@@ -255,18 +263,18 @@ export function useGameSocketSubscriptions({
       setConnection("ONLINE");
     });
     next.on("scene:activated", (event) =>
-      setSnapshot((current) =>
-        current && event.sequence > current.snapshotVersion
-          ? {
-              ...current,
-              snapshotVersion: event.sequence,
-              scenes: current.scenes.map((scene) => ({
-                ...scene,
-                active: scene.id === event.data,
-              })),
-            }
-          : current,
-      ),
+      setSnapshot((current) => {
+        if (!current || event.sequence <= current.snapshotVersion) return current;
+        playerFog.scope(event.data);
+        return {
+          ...current,
+          snapshotVersion: event.sequence,
+          scenes: current.scenes.map((scene) => ({
+            ...scene,
+            active: scene.id === event.data,
+          })),
+        };
+      }),
     );
     next.on("token:moving", (movement) => {
       const redaction = redactedPreviews.get(movement.tokenId);
@@ -330,9 +338,14 @@ export function useGameSocketSubscriptions({
         if (!visibleScene) return current;
         const exists = current.fogReveals.some((fog) => fog.id === event.data.id);
         if (event.sequence <= current.snapshotVersion) {
-          if (!exists) requestFogResync(current.snapshotVersion);
+          if (!exists) {
+            if (current.me.role === "PLAYER") playerFog.request(event.data.sceneId, current.snapshotVersion);
+            else requestFogResync(current.snapshotVersion);
+          }
           return current;
         }
+        if (!exists && current.me.role === "PLAYER")
+          playerFog.request(event.data.sceneId, event.sequence);
         return {
           ...current,
           snapshotVersion: event.sequence,
@@ -343,11 +356,15 @@ export function useGameSocketSubscriptions({
     next.on("fog:removed", (event) =>
       setSnapshot((current) => {
         if (!current) return current;
-        const exists = current.fogReveals.some((fog) => fog.id === event.data.fogRevealId);
+        const previous = current.fogReveals.find((fog) => fog.id === event.data.fogRevealId);
+        const playerScene = current.me.role === "PLAYER" && previous &&
+          current.scenes.some((scene) => scene.active && scene.id === previous.sceneId);
         if (event.sequence <= current.snapshotVersion) {
-          if (exists) requestFogResync(current.snapshotVersion);
+          if (playerScene) playerFog.request(previous.sceneId, current.snapshotVersion);
+          else if (previous && current.me.role === "GM") requestFogResync(current.snapshotVersion);
           return current;
         }
+        if (playerScene) playerFog.request(previous.sceneId, event.sequence);
         return {
           ...current,
           snapshotVersion: event.sequence,
@@ -518,6 +535,7 @@ export function useGameSocketSubscriptions({
     next.on("presence:updated", setPresence);
     next.on("server:error", (problem) => setError(problem.message));
     return () => {
+      playerFog.reset();
       discardRedactedPreviews();
       next.disconnect();
       if (lastSceneViewEmissionRef.current?.socket === next)
