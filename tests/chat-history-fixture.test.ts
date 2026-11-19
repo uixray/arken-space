@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import * as schema from "../packages/db/src/schema.js";
 import { createMigratedPglite } from "./helpers/pglite-template.js";
+import { createOwnedCampaignHistory } from "./e2e/owned-campaign-history.js";
 import {
   historyMessageBody,
   insertOwnedChatHistory,
@@ -27,7 +28,19 @@ it("bulk history preserves exact bodies, order and campaign isolation; rejects f
       ])
       .returning();
     const owner = { campaignId: a.id, membershipId: gm.id };
-    const rows = await insertOwnedChatHistory(fixtureDb, owner, 40);
+    let rows: Awaited<ReturnType<typeof insertOwnedChatHistory>> = [];
+    const history = createOwnedCampaignHistory({
+      databaseUrl: "postgres://localhost/disposable_pglite_adapter",
+      createCampaign: async () => owner,
+      insertHistory: async (owned, count) => {
+        rows = await insertOwnedChatHistory(fixtureDb, owned, count);
+      },
+    });
+    const token = await history.create("owned");
+    await expect(history.seed("foreign-worker-token", 40)).rejects.toThrow(
+      "owned campaigns",
+    );
+    await history.seed(token, 40);
     expect(rows).toHaveLength(40);
     expect(rows.map((r) => r.sequence)).toEqual(
       [...rows.map((r) => r.sequence)].sort((a, b) => a - b),
@@ -68,4 +81,4 @@ it("bulk history preserves exact bodies, order and campaign isolation; rejects f
   } finally {
     await client.close();
   }
-});
+}, 60_000);

@@ -1,10 +1,42 @@
+const SHARED_CAMPAIGN_SETUP_PATHS = [
+  "tests/e2e/campaign-fixture.ts",
+  "tests/e2e/chat-history-fixture.ts",
+  "tests/e2e/owned-campaign-history.ts",
+  "tests/owned-campaign-history.test.ts",
+  "tests/chat-history-fixture.test.ts",
+];
+const MANUAL_REVIEW_PATHS = new Set([
+  ...SHARED_CAMPAIGN_SETUP_PATHS,
+  "apps/web/src/cartographic-label-placement.css",
+  "apps/web/src/PositionedCartographicLabel.tsx",
+  "apps/web/src/CartographicLabelFields.tsx",
+]);
+
 export const UIX694_REVIEWED_PATHS = [
+  ...SHARED_CAMPAIGN_SETUP_PATHS,
   "tests/e2e/mocked-chat-app.ts",
   "tests/e2e/uix289-bundled-motion.spec.ts",
   "tests/e2e/chat-icon-states.spec.ts",
   "tests/mocked-chat-app.test.ts",
   "scripts/qa/impact-map.mjs",
   "tests/qa-impact-map.test.ts",
+  "scripts/qa/impact-report.mjs",
+  "tests/qa-impact-report.test.ts",
+  "apps/server/src/account-campaigns.ts",
+  "apps/server/src/auth.ts",
+  "apps/server/src/session-routes.ts",
+  "apps/web/src/AccountAuthWorkspace.tsx",
+  "apps/web/src/account-campaign-client.ts",
+  "packages/contracts/src/account-auth.ts",
+  "apps/server/src/realtime.ts",
+  "apps/server/src/preview-snapshot.ts",
+  "apps/server/src/token-preview-epochs.ts",
+  "apps/server/src/account-link-realtime.integration.test.ts",
+  "apps/server/src/account-realtime-auth.integration.test.ts",
+  "tests/realtime.test.ts",
+  "apps/web/src/cartographic-label-placement.css",
+  "apps/web/src/PositionedCartographicLabel.tsx",
+  "apps/web/src/CartographicLabelFields.tsx",
 ];
 
 const UIX289_CASES = [
@@ -25,7 +57,7 @@ export const UIX694_IMPACT_MAP = {
     {
       id: "mocked-chat-transport",
       invariant:
-        "Shared bootstrap and Engine.IO/Socket.IO transport remain ordered and authenticated while consumer API routes stay local.",
+        "Shared bootstrap and Engine.IO/Socket.IO transport remain protocol-ordered while consumer API routes stay local.",
       paths: [
         "tests/e2e/mocked-chat-app.ts",
         "tests/e2e/uix289-bundled-motion.spec.ts",
@@ -99,6 +131,159 @@ export const UIX694_IMPACT_MAP = {
         },
       ],
     },
+    {
+      id: "read-only-impact-report",
+      invariant:
+        "Deduced journeys are advisory and never started by the reporter.",
+      paths: ["scripts/qa/impact-report.mjs", "tests/qa-impact-report.test.ts"],
+      journeys: [
+        {
+          spec: "tests/qa-impact-report.test.ts",
+          evidenceKind: "unit",
+          fullFile: true,
+          requirements: ["preserve untracked paths and exact committed base"],
+        },
+      ],
+    },
+    {
+      id: "account-campaign-boundary",
+      invariant:
+        "Account provenance, independent campaign membership and frontend session behavior remain distinct.",
+      paths: [
+        "apps/server/src/account-campaigns.ts",
+        "apps/server/src/auth.ts",
+        "apps/server/src/session-routes.ts",
+        "apps/web/src/AccountAuthWorkspace.tsx",
+        "apps/web/src/account-campaign-client.ts",
+        "packages/contracts/src/account-auth.ts",
+      ],
+      journeys: [
+        {
+          spec: "apps/server/src/account-campaigns.integration.test.ts",
+          evidenceKind: "backend-runtime",
+          fullFile: true,
+          requirements: [
+            "test campaign creation and scoped selection",
+            "preserve invite claims and CSRF",
+          ],
+        },
+        {
+          spec: "apps/server/src/account-session-provenance.integration.test.ts",
+          evidenceKind: "backend-runtime",
+          fullFile: true,
+          requirements: [
+            "test session provenance and negative access cases",
+            "preserve revocation behavior",
+          ],
+        },
+        {
+          spec: "apps/web/src/AccountAuthWorkspace.test.tsx",
+          evidenceKind: "unit",
+          fullFile: true,
+          requirements: ["preserve campaign selection and account UI behavior"],
+        },
+      ],
+    },
+    {
+      id: "realtime-campaign-boundary",
+      invariant:
+        "Socket delivery remains campaign-scoped, previews respect visibility and epoch, and fully initialized sessions are invalidated on revocation.",
+      paths: [
+        "apps/server/src/realtime.ts",
+        "apps/server/src/preview-snapshot.ts",
+        "apps/server/src/token-preview-epochs.ts",
+        "apps/server/src/account-link-realtime.integration.test.ts",
+        "apps/server/src/account-realtime-auth.integration.test.ts",
+        "tests/realtime.test.ts",
+      ],
+      journeys: [
+        {
+          spec: "tests/realtime.test.ts",
+          evidenceKind: "backend-runtime",
+          fullFile: true,
+          requirements: [
+            "confirm delivery to the correct campaign room in both directions",
+            "preserve visible and redacted token preview transitions and durable movement",
+          ],
+        },
+        {
+          spec: "apps/server/src/account-link-realtime.integration.test.ts",
+          evidenceKind: "backend-runtime",
+          fullFile: true,
+          requirements: [
+            "verify campaign mismatch and invalidation after links or credentials change",
+          ],
+        },
+        {
+          spec: "apps/server/src/account-realtime-auth.integration.test.ts",
+          evidenceKind: "backend-runtime",
+          fullFile: true,
+          requirements: [
+            "verify logout disconnect and independent account membership binding",
+          ],
+        },
+      ],
+    },
+    {
+      id: "cartographic-label-presentation",
+      manualReview: true,
+      invariant:
+        "Labels preserve semantic text, configured offsets and opt-in; detached captions must not block neighboring pins. DOM tests alone do not prove CSS hit targets.",
+      paths: [
+        "apps/web/src/cartographic-label-placement.css",
+        "apps/web/src/PositionedCartographicLabel.tsx",
+        "apps/web/src/CartographicLabelFields.tsx",
+      ],
+      journeys: [
+        {
+          spec: "apps/web/src/PositionedCartographicLabel.test.tsx",
+          evidenceKind: "unit",
+          fullFile: true,
+          requirements: [
+            "preserve semantic name and visual clamp without changing configuration",
+            "separately check neighboring pin hit targets in a built browser candidate",
+            "review tests/e2e/cartographic-label-hit-target.spec.ts and both real label consumers; DOM tests are not paint or clipping acceptance",
+          ],
+        },
+        {
+          spec: "apps/web/src/CartographicLabelFields.test.tsx",
+          evidenceKind: "unit",
+          fullFile: true,
+          requirements: [
+            "preserve presentation choice and explicit title opt-in",
+            "do not infer persistence, permissions or physical input from DOM coverage",
+          ],
+        },
+      ],
+    },
+    {
+      id: "owned-campaign-history",
+      manualReview: true,
+      invariant:
+        "Shared campaign setup validates the local database before opening it, owns only its worker campaigns, and retains SQL GM checks. Browser consumers still require manual selection.",
+      paths: [...SHARED_CAMPAIGN_SETUP_PATHS],
+      journeys: [
+        {
+          spec: "tests/owned-campaign-history.test.ts",
+          evidenceKind: "unit",
+          fullFile: true,
+          requirements: [
+            "reject unsafe routing before opening a database",
+            "preserve worker ownership, count bounds, asynchronous failures and cleanup",
+            "manually review real browser consumers of campaign-fixture.ts; this is not their acceptance",
+          ],
+        },
+        {
+          spec: "tests/chat-history-fixture.test.ts",
+          evidenceKind: "backend-runtime",
+          fullFile: true,
+          requirements: [
+            "preserve real SQL GM/campaign checks and exact ordered history bodies",
+            "never infer HTTP authentication or rate-limit acceptance from direct SQL preparation",
+          ],
+        },
+      ],
+    },
   ],
 };
 
@@ -109,7 +294,13 @@ const ROOT_KEYS = new Set([
   "reviewedPaths",
   "rules",
 ]);
-const RULE_KEYS = new Set(["id", "invariant", "paths", "journeys"]);
+const RULE_KEYS = new Set([
+  "id",
+  "invariant",
+  "paths",
+  "journeys",
+  "manualReview",
+]);
 const JOURNEY_KEYS = new Set([
   "spec",
   "evidenceKind",
@@ -125,6 +316,17 @@ const MOCKED_BROWSER_PROJECTS = ["chromium", "firefox"];
 const CHAT_ICON_ROLE_MATRIX = ["GM", "PLAYER"];
 const CHAT_ICON_WIDTH_MATRIX = [1280, 360];
 const ALLOWED_REFERENCED_SPECS = new Set([
+  "tests/owned-campaign-history.test.ts",
+  "tests/chat-history-fixture.test.ts",
+  "apps/web/src/PositionedCartographicLabel.test.tsx",
+  "apps/web/src/CartographicLabelFields.test.tsx",
+  "apps/server/src/account-link-realtime.integration.test.ts",
+  "apps/server/src/account-realtime-auth.integration.test.ts",
+  "tests/realtime.test.ts",
+  "tests/qa-impact-report.test.ts",
+  "apps/server/src/account-campaigns.integration.test.ts",
+  "apps/server/src/account-session-provenance.integration.test.ts",
+  "apps/web/src/AccountAuthWorkspace.test.tsx",
   "tests/e2e/uix289-bundled-motion.spec.ts",
   "tests/e2e/chat-icon-states.spec.ts",
   "tests/mocked-chat-app.test.ts",
@@ -232,7 +434,9 @@ export function validateImpactMap(map, options) {
     new Set(reviewedPaths).size !== reviewedPaths.length ||
     !sameArray([...reviewedPaths].sort(), [...UIX694_REVIEWED_PATHS].sort())
   )
-    errors.push("reviewedPaths must equal the exact six canonical owned paths");
+    errors.push(
+      "reviewedPaths must equal the exact canonical owned path inventory",
+    );
 
   const readSource = (path, missingMessage) => {
     if (!readText) return undefined;
@@ -266,6 +470,14 @@ export function validateImpactMap(map, options) {
     }
     if (!hasOnlyKeys(rule, RULE_KEYS))
       errors.push("rule contains unsupported fields");
+    if (Object.hasOwn(rule, "manualReview") && rule.manualReview !== true)
+      errors.push("manualReview must be true when supplied");
+    if (
+      Array.isArray(rule.paths) &&
+      rule.paths.some((path) => MANUAL_REVIEW_PATHS.has(path)) &&
+      rule.manualReview !== true
+    )
+      errors.push("shared setup and label presentation require manualReview");
     if (typeof rule.id !== "string" || rule.id.trim() === "")
       errors.push("rule id must be non-empty");
     else if (ruleIds.has(rule.id)) errors.push("rule ids must be unique");
@@ -462,10 +674,16 @@ export function selectImpact(map, changedPaths, options) {
     }
   }
   return {
-    matchedRules: matched.map(({ id, invariant }) => ({ id, invariant })),
+    matchedRules: matched.map(({ id, invariant, manualReview }) => ({
+      id,
+      invariant,
+      ...(manualReview ? { manualReview: true } : {}),
+    })),
     journeys,
     unmatchedPaths,
-    reviewRequired: unmatchedPaths.length > 0,
+    reviewRequired:
+      unmatchedPaths.length > 0 ||
+      matched.some((rule) => rule.manualReview === true),
     advisoryOnly: true,
     validationErrors: [],
   };
