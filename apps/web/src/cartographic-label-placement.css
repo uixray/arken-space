@@ -30,9 +30,7 @@
   overflow: visible;
 }
 /* Plain means no ribbon, not unprotected text against arbitrary map pixels. */
-.world-map-marker--configured
-  .positioned-cartographic-label
-  > span:not(.cartographic-label) {
+.positioned-cartographic-label > span:not(.cartographic-label) {
   display: block;
   padding: 2px 6px;
   border: 1px solid var(--line-strong);
