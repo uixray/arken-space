@@ -11,6 +11,8 @@
  * Keep the legacy inline layout for locations without explicit configuration. */
 .world-map-marker--configured > .world-map-marker__label--configured {
   position: absolute;
+  /* A detached caption must not steal pointer input from nearby map pins. */
+  pointer-events: none;
   left: calc(100% + 4px);
   top: 50%;
   transform: translateY(-50%);
