@@ -1,6 +1,9 @@
 import { AbilityAccordion } from "../AbilityAccordion";
 import { CharacterActionCard } from "../SkillCards";
-import { groupAbilities, usesAmberionAbilityGroups } from "../ability-presentation";
+import {
+  groupAbilities,
+  usesAmberionAbilityGroups,
+} from "../ability-presentation";
 import "./roll-controls.css";
 import "./bugpool-ui2.css";
 import {
@@ -347,7 +350,11 @@ export function QuickRollPanel({
             >
               <span className="quick-roll-button__name">
                 <AppIcon
-                  icon={Object.hasOwn(statIcons, stat.key) ? statIcons[stat.key] : DiceTrayIcon}
+                  icon={
+                    (Object.hasOwn(statIcons, stat.key)
+                      ? statIcons[stat.key]
+                      : undefined) ?? DiceTrayIcon
+                  }
                 />
                 {stat.label}
               </span>
@@ -626,16 +633,29 @@ export function QuickRollPanel({
           hidden={!stacked && activeTab !== "abilities"}
         >
           {usesAmberionAbilityGroups(campaignId, characterOwnerRole) ? (
-            groupAbilities(abilityEntries).map(group => (
-            <section className="quick-ability-group" key={group.id}>
-              <h4>{group.label}</h4>
-              {group.entries.map(entry => <AbilityAccordion entry={entry} key={entry.id}>
-                <CharacterActionCard entry={entry} disabled={!canControlCharacter || !onEntryAction}
-                  draftScopeKey={draftScope} characterStats={rollCharacter.stats}
-                  onAction={async input => { await submitEntry(entry, input.mode, input.rollActionId, input.executeAll); }} />
-              </AbilityAccordion>)}
-            </section>
-          ))
+            groupAbilities(abilityEntries).map((group) => (
+              <section className="quick-ability-group" key={group.id}>
+                <h4>{group.label}</h4>
+                {group.entries.map((entry) => (
+                  <AbilityAccordion entry={entry} key={entry.id}>
+                    <CharacterActionCard
+                      entry={entry}
+                      disabled={!canControlCharacter || !onEntryAction}
+                      draftScopeKey={draftScope}
+                      characterStats={rollCharacter.stats}
+                      onAction={async (input) => {
+                        await submitEntry(
+                          entry,
+                          input.mode,
+                          input.rollActionId,
+                          input.executeAll,
+                        );
+                      }}
+                    />
+                  </AbilityAccordion>
+                ))}
+              </section>
+            ))
           ) : abilityEntries.length > 0 ? (
             <div
               className="activity-quick-rolls quick-roll-panel__ability-group"
