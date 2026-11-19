@@ -27,7 +27,11 @@ import useImage from "use-image";
 import Konva from "konva";
 import { TokenConditionMenu } from "./TokenConditionMenu";
 import type { SceneRendererProps } from "./SceneRenderer";
-import type { ClientToServerEvents, DrawingDto, TokenDto } from "@arken/contracts";
+import type {
+  ClientToServerEvents,
+  DrawingDto,
+  TokenDto,
+} from "@arken/contracts";
 import {
   rulerPolylineDistance,
   resolveTokenSpriteFrame,
@@ -39,6 +43,10 @@ import { FogPatternOverlay } from "./FogPatternOverlay";
 import { paintFogBrushStroke } from "./fog-brush-stroke";
 import { centerRectAtScale, fitRect } from "./camera-fit";
 import { useLatestRef } from "../use-latest-ref";
+import {
+  createDrawingStyleQueue,
+  type DrawingStylePatch,
+} from "./drawing-style-queue";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { AppIcon } from "../ui/AppIcon";
 import {
@@ -475,14 +483,23 @@ function TokenImage({
   useEffect(() => () => onUnmount?.(tokenId), [onUnmount, tokenId]);
   const displayed = imageState.displayedImage;
   // Preserve portrait proportions inside the token mask: crop, never stretch.
-  const crop = displayed && displayed.width > 0 && displayed.height > 0
-    ? (() => {
-        const scale = Math.max(props.width / displayed.width, props.height / displayed.height);
-        const width = props.width / scale;
-        const height = props.height / scale;
-        return { x: (displayed.width - width) / 2, y: (displayed.height - height) / 2, width, height };
-      })()
-    : undefined;
+  const crop =
+    displayed && displayed.width > 0 && displayed.height > 0
+      ? (() => {
+          const scale = Math.max(
+            props.width / displayed.width,
+            props.height / displayed.height,
+          );
+          const width = props.width / scale;
+          const height = props.height / scale;
+          return {
+            x: (displayed.width - width) / 2,
+            y: (displayed.height - height) / 2,
+            width,
+            height,
+          };
+        })()
+      : undefined;
   return <Image image={displayed ?? undefined} {...props} crop={crop} />;
 }
 
@@ -555,17 +572,25 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   const objectListTriggerRef = useRef<HTMLButtonElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [tokenDragGuard] = useState(createTokenDragGuard);
-  const heldTokenPreviewRef = useRef<Parameters<ClientToServerEvents["token:moving"]>[0] | null>(null);
+  const heldTokenPreviewRef = useRef<
+    Parameters<ClientToServerEvents["token:moving"]>[0] | null
+  >(null);
   useEffect(() => {
     heldTokenPreviewRef.current = null;
     const socket = props.socket;
     if (!socket || props.paused) return;
-    const clear = () => { heldTokenPreviewRef.current = null; };
+    const clear = () => {
+      heldTokenPreviewRef.current = null;
+    };
     // Refresh only a live pointer gesture. Reuse the last point to renew
     // the visibility lease, never as a synthetic move on other clients.
     const keepalive = window.setInterval(() => {
       const point = heldTokenPreviewRef.current;
-      if (point && socket.connected && point.previewEpoch === socket.previewEpoch)
+      if (
+        point &&
+        socket.connected &&
+        point.previewEpoch === socket.previewEpoch
+      )
         socket.volatile.emit("token:moving", { ...point, hold: true });
     }, 2500);
     window.addEventListener("pointerup", clear, true);
@@ -1015,17 +1040,39 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   const brushUpRef = useRef<() => void>(() => undefined);
   const [drawingColor, setDrawingColor] = useState<string>(visual.color.edit);
   const [drawingStrokeWidth, setDrawingStrokeWidth] = useState<number>(3);
-  const drawingColorUpdateTimeoutRef = useRef<number | null>(null);
-  const drawingWidthUpdateTimeoutRef = useRef<number | null>(null);
-  useEffect(
-    () => () => {
-      if (drawingColorUpdateTimeoutRef.current !== null)
-        window.clearTimeout(drawingColorUpdateTimeoutRef.current);
-      if (drawingWidthUpdateTimeoutRef.current !== null)
-        window.clearTimeout(drawingWidthUpdateTimeoutRef.current);
-    },
-    [],
-  );
+  const drawingUpdateRef = useLatestRef(props.onDrawingUpdate);
+  const drawingStyleQueueRef = useRef<ReturnType<
+    typeof createDrawingStyleQueue
+  > | null>(null);
+  const [drawingStyleDrafts, setDrawingStyleDrafts] = useState<
+    Record<string, DrawingStylePatch>
+  >({});
+  useLayoutEffect(() => {
+    setDrawingStyleDrafts({});
+    const queue = createDrawingStyleQueue({
+      save: async (id, revision, patch) => {
+        const update = drawingUpdateRef.current;
+        if (!update) throw new Error("Drawing updates unavailable");
+        await update(id, revision, patch);
+      },
+      onPending: (id, patch) =>
+        setDrawingStyleDrafts((current) => {
+          const next = { ...current };
+          if (patch) next[id] = patch;
+          else delete next[id];
+          return next;
+        }),
+      // The application mutation handler already reports/reconciles failures.
+      // The queue rolls back the local preview without an unhandled rejection.
+      onError: () => {},
+    });
+    drawingStyleQueueRef.current = queue;
+    return () => {
+      queue.dispose();
+      if (drawingStyleQueueRef.current === queue)
+        drawingStyleQueueRef.current = null;
+    };
+  }, [props.scene.id, drawingUpdateRef]);
   const [backgroundDraft, setBackgroundDraft] = useState(
     props.scene.backgroundFrame,
   );
@@ -1488,20 +1535,34 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
   // Campaign opt-in: fit the newly entered map to the actual container once.
   const initialSceneFitRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!props.autoFitOnSceneEntry || initialSceneFitRef.current === props.scene.id) return;
+    if (
+      !props.autoFitOnSceneEntry ||
+      initialSceneFitRef.current === props.scene.id
+    )
+      return;
     const bounds = containerRef.current?.getBoundingClientRect();
     if (!bounds || bounds.width <= 1 || bounds.height <= 1) return;
-    const scale = Math.min(3, Math.min(
-      bounds.width / props.scene.width, bounds.height / props.scene.height,
-    ) * 0.92);
+    const scale = Math.min(
+      3,
+      Math.min(
+        bounds.width / props.scene.width,
+        bounds.height / props.scene.height,
+      ) * 0.92,
+    );
     setScale(scale);
     setPosition({
       x: (bounds.width - props.scene.width * scale) / 2,
       y: (bounds.height - props.scene.height * scale) / 2,
     });
     initialSceneFitRef.current = props.scene.id;
-  }, [props.autoFitOnSceneEntry, props.scene.id, props.scene.width, props.scene.height,
-      viewport.width, viewport.height]);
+  }, [
+    props.autoFitOnSceneEntry,
+    props.scene.id,
+    props.scene.width,
+    props.scene.height,
+    viewport.width,
+    viewport.height,
+  ]);
 
   // UIX-311: while a SCENE_REGION encounter is ACTIVE on this scene, every
   // client (GM and players) fits its own camera to the persisted
@@ -5131,26 +5192,23 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
               drawing.authorMembershipId === props.membershipId));
         if (!drawing && props.tool !== "DRAW") return null;
 
-        const activeColor = canEditDrawing ? drawing.color : drawingColor;
+        const activeColor = canEditDrawing
+          ? (drawingStyleDrafts[drawing.id]?.color ?? drawing.color)
+          : drawingColor;
         const activeWidth = canEditDrawing
-          ? (drawing.strokeWidth ?? 3)
+          ? (drawingStyleDrafts[drawing.id]?.strokeWidth ??
+            drawing.strokeWidth ??
+            3)
           : drawingStrokeWidth;
 
         const updateColor = (color: string) => {
           setDrawingColor(color);
           if (canEditDrawing) {
-            if (drawingColorUpdateTimeoutRef.current !== null) {
-              window.clearTimeout(drawingColorUpdateTimeoutRef.current);
-            }
-            // Debounced: a native color/range input fires onChange on every
-            // pointer tick, and each call would otherwise PATCH with the same
-            // stale `drawing.revision` faster than the prior request's ack
-            // can update it, producing a storm of 409 DRAWING_CONFLICT.
-            drawingColorUpdateTimeoutRef.current = window.setTimeout(() => {
-              void props.onDrawingUpdate?.(drawing.id, drawing.revision, {
-                color,
-              });
-            }, 200);
+            drawingStyleQueueRef.current?.enqueue(
+              drawing.id,
+              drawing.revision,
+              { color },
+            );
           }
         };
 
@@ -5158,14 +5216,11 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
           const clamped = Math.max(1, Math.min(100, strokeWidth));
           setDrawingStrokeWidth(clamped);
           if (canEditDrawing) {
-            if (drawingWidthUpdateTimeoutRef.current !== null) {
-              window.clearTimeout(drawingWidthUpdateTimeoutRef.current);
-            }
-            drawingWidthUpdateTimeoutRef.current = window.setTimeout(() => {
-              void props.onDrawingUpdate?.(drawing.id, drawing.revision, {
-                strokeWidth: clamped,
-              });
-            }, 200);
+            drawingStyleQueueRef.current?.enqueue(
+              drawing.id,
+              drawing.revision,
+              { strokeWidth: clamped },
+            );
           }
         };
 
