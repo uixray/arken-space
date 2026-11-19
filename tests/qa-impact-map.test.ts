@@ -31,7 +31,66 @@ function expectInvalidSelection(
 }
 
 describe("UIX-694 advisory impact map", () => {
-  it("validates its exact six owned paths and every source-backed full journey", () => {
+  it("keeps shared campaign setup manual even when narrow checks are mapped", () => {
+    const result = select(UIX694_IMPACT_MAP, [
+      "tests/e2e/owned-campaign-history.ts",
+      "tests/e2e/campaign-fixture.ts",
+    ]);
+    expect(result.validationErrors).toEqual([]);
+    expect(result.unmatchedPaths).toEqual([]);
+    expect(result.reviewRequired).toBe(true);
+    expect(result.matchedRules).toEqual([
+      expect.objectContaining({
+        id: "owned-campaign-history",
+        manualReview: true,
+      }),
+    ]);
+    expect(result.journeys.map((j) => j.spec)).toEqual([
+      "tests/owned-campaign-history.test.ts",
+      "tests/chat-history-fixture.test.ts",
+    ]);
+    for (const value of [false, "yes", undefined]) {
+      const candidate = cloneMap();
+      const rule = candidate.rules.find(
+        (r) => r.id === "owned-campaign-history",
+      )!;
+      if (value === undefined) delete rule.manualReview;
+      else (rule as unknown as { manualReview: unknown }).manualReview = value;
+      expect(validateImpactMap(candidate, { readText }).valid).toBe(false);
+    }
+  });
+  it("does not treat label DOM checks as complete browser paint acceptance", () => {
+    const result = select(UIX694_IMPACT_MAP, [
+      "apps/web/src/cartographic-label-placement.css",
+    ]);
+    expect(result.validationErrors).toEqual([]);
+    expect(result.unmatchedPaths).toEqual([]);
+    expect(result.reviewRequired).toBe(true);
+    expect(result.matchedRules[0].manualReview).toBe(true);
+  });
+  it("suggests bounded label checks but leaves shared styles and map ownership for review", () => {
+    const result = select(UIX694_IMPACT_MAP, [
+      "apps/web/src/cartographic-label-placement.css",
+      "apps/web/src/CartographicLabelFields.tsx",
+      "apps/web/src/styles.css",
+      "apps/web/src/WorldMapsWorkspace.tsx",
+    ]);
+    expect(result.matchedRules.map(({ id }) => id)).toEqual([
+      "cartographic-label-presentation",
+    ]);
+    expect(result.journeys.map(({ spec }) => spec)).toEqual([
+      "apps/web/src/PositionedCartographicLabel.test.tsx",
+      "apps/web/src/CartographicLabelFields.test.tsx",
+    ]);
+    expect(result.unmatchedPaths).toEqual([
+      "apps/web/src/styles.css",
+      "apps/web/src/WorldMapsWorkspace.tsx",
+    ]);
+    expect(result.reviewRequired).toBe(true);
+    expect(result.advisoryOnly).toBe(true);
+  });
+
+  it("validates its exact reviewed paths and every source-backed full journey", () => {
     expect(validateImpactMap(UIX694_IMPACT_MAP, { readText })).toEqual({
       valid: true,
       errors: [],
@@ -95,6 +154,28 @@ describe("UIX-694 advisory impact map", () => {
     expect(
       select(duplicate, ["scripts/qa/impact-map.mjs"]).journeys,
     ).toHaveLength(1);
+  });
+
+  it("maps realtime changes to all three local journeys and keeps shared contracts for review", () => {
+    const result = select(UIX694_IMPACT_MAP, [
+      "apps/server/src/realtime.ts",
+      "apps/server/src/preview-snapshot.ts",
+      "apps/server/src/account-link-realtime.integration.test.ts",
+      "packages/contracts/src/index.ts",
+    ]);
+    expect(result.validationErrors).toEqual([]);
+    expect(result.matchedRules.map(({ id }) => id)).toEqual([
+      "realtime-campaign-boundary",
+    ]);
+    expect(result.journeys.map(({ spec }) => spec)).toEqual([
+      "tests/realtime.test.ts",
+      "apps/server/src/account-link-realtime.integration.test.ts",
+      "apps/server/src/account-realtime-auth.integration.test.ts",
+    ]);
+    expect(result.journeys.every((journey) => journey.fullFile)).toBe(true);
+    expect(result.unmatchedPaths).toEqual(["packages/contracts/src/index.ts"]);
+    expect(result.reviewRequired).toBe(true);
+    expect(result.advisoryOnly).toBe(true);
   });
 
   it("fails selection closed for invalid version, forbidden fields, unreviewed paths, and empty journeys", () => {

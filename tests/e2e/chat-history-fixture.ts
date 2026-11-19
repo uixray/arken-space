@@ -5,6 +5,7 @@ import {
   memberships,
 } from "../../packages/db/src/schema.js";
 import type { createDatabase } from "../../packages/db/src/index.js";
+import { assertHistoryCount } from "./owned-campaign-history.js";
 
 export const historyMessageBody = (index: number) =>
   `Запись журнала ${index} — ${"достаточно длинная, чтобы занять высоту и переполнить ленту событий. ".repeat(4)}`;
@@ -15,8 +16,7 @@ export async function insertOwnedChatHistory(
   owner: { campaignId: string; membershipId: string },
   count: number,
 ) {
-  if (!Number.isSafeInteger(count) || count < 1 || count > 100)
-    throw new Error("Invalid history count");
+  assertHistoryCount(count);
   return db.transaction(async (tx) => {
     const [member] = await tx
       .select({ id: memberships.id })

@@ -1,6 +1,6 @@
 import { test as base } from "./react-console-guard";
-import { randomUUID } from "node:crypto";
 import { insertOwnedChatHistory } from "./chat-history-fixture";
+import { withOwnedCampaignHistory } from "./owned-campaign-history";
 import { createDatabase } from "../../packages/db/src/index.js";
 import { createCampaignWithGmAccess } from "../../apps/server/src/seed.js";
 
@@ -13,9 +13,9 @@ import { createCampaignWithGmAccess } from "../../apps/server/src/seed.js";
  * не через параллельность. Два полных прогона подряд на неизменном дереве
  * давали разные наборы падений, и все упавшие проходили поодиночке.
  *
- * Кампания создаётся прямо в базе, а не через API: создания кампании наружу
- * нет ни одним route, и заводить его ради тестов значило бы открыть в
- * production путь, нужный только здесь.
+ * Кампания создаётся каноническим seed initializer, без HTTP-подготовки
+ * журнала. Это не приёмка публичного account-create API: у него свои тесты.
+ * Fixture не меняет режим авторизации сервера и не выдаёт operator-доступ.
  *
  * Кампании не удаляются после теста. Часть внешних ключей объявлена
  * `restrict`, и удаление зависело бы от того, что тест успел создать, — то
@@ -56,41 +56,28 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
             "перед запуском: set -a; . ./.env; set +a",
         );
       }
-      const { client, db } = createDatabase(databaseUrl);
-      const owned = new Map<
-        string,
-        { campaignId: string; membershipId: string }
-      >();
-      const create = async (name: string) => {
-        const token = `e2e-${randomUUID()}-${randomUUID()}`;
-        const { campaign, gm } = await createCampaignWithGmAccess(
-          db,
-          name,
-          token,
-        );
-        owned.set(token, { campaignId: campaign.id, membershipId: gm.id });
-        return token;
-      };
-      try {
-        await provide({
-          create,
-          seed: async (token, count) => {
-            const owner = owned.get(token);
-            if (!owner)
-              throw new Error(
-                "Cannot seed history outside this worker owned campaigns",
+      await withOwnedCampaignHistory(
+        databaseUrl,
+        async () => {
+          const { client, db } = createDatabase(databaseUrl);
+          return {
+            createCampaign: async (name, token) => {
+              const { campaign, gm } = await createCampaignWithGmAccess(
+                db,
+                name,
+                token,
               );
-            const host = new URL(databaseUrl).hostname;
-            if (!["localhost", "127.0.0.1", "[::1]"].includes(host))
-              throw new Error(
-                "Chat history fixture requires isolated loopback database",
-              );
-            await insertOwnedChatHistory(db, owner, count);
-          },
-        });
-      } finally {
-        await client.end();
-      }
+              if (!gm)
+                throw new Error("Campaign fixture did not create its GM");
+              return { campaignId: campaign.id, membershipId: gm.id };
+            },
+            insertHistory: (owner, count) =>
+              insertOwnedChatHistory(db, owner, count),
+            close: () => client.end(),
+          };
+        },
+        provide,
+      );
     },
     { scope: "worker" },
   ],
