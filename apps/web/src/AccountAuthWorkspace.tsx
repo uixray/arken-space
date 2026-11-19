@@ -957,59 +957,69 @@ export function AccountAuthWorkspace({
           ) : (
             <p>Войдите в подтверждённый аккаунт, чтобы принять приглашение.</p>
           )}
-          {!session && (
-            <>
-              <label>
-                {capabilities.localAccounts
-                  ? "Локальный логин"
-                  : "Логин или email"}
-                <FormInput
-                  type="text"
-                  autoComplete="username"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  required
-                />
-              </label>
-              <label>
-                Пароль
-                <FormInput
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  required
-                />
-              </label>
-            </>
-          )}
-          {!token && (
-            <label>
-              Код приглашения
-              <FormInput
-                value={inviteTokenInput}
-                onChange={(event) => setInviteTokenInput(event.target.value)}
-                required
-              />
-            </label>
-          )}
-          {error && (
-            <p role="alert" className="account-auth-error">
-              {error}
-            </p>
-          )}
-          {notice && <p role="status">{notice}</p>}
-          <Button
-            type="button"
-            disabled={
-              busy ||
-              claimPendingSnapshot ||
-              (!token && !inviteTokenInput.trim())
-            }
-            onClick={() => void acceptJoinInvite()}
+          <form
+            aria-label="Принять приглашение"
+            aria-busy={busy}
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (busy || claimPendingSnapshot || (!token && !inviteTokenInput.trim()))
+                return;
+              void acceptJoinInvite();
+            }}
           >
-            Принять приглашение
-          </Button>
+            {!session && (
+              <>
+                <label>
+                  {capabilities.localAccounts
+                    ? "Локальный логин"
+                    : "Логин или email"}
+                  <FormInput
+                    type="text"
+                    autoComplete="username"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    required
+                  />
+                </label>
+                <label>
+                  Пароль
+                  <FormInput
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    required
+                  />
+                </label>
+              </>
+            )}
+            {!token && (
+              <label>
+                Код приглашения
+                <FormInput
+                  value={inviteTokenInput}
+                  onChange={(event) => setInviteTokenInput(event.target.value)}
+                  required
+                />
+              </label>
+            )}
+            {error && (
+              <p role="alert" className="account-auth-error">
+                {error}
+              </p>
+            )}
+            {notice && <p role="status">{notice}</p>}
+            <Button
+              type="submit"
+              disabled={
+                busy ||
+                claimPendingSnapshot ||
+                (!token && !inviteTokenInput.trim())
+              }
+            >
+              Принять приглашение
+            </Button>
+          </form>
           {!session && capabilities.registrationEnabled && (
             <Button
               type="button"

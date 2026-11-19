@@ -346,7 +346,9 @@ export function QuickRollPanel({
               }}
             >
               <span className="quick-roll-button__name">
-                <AppIcon icon={statIcons[stat.key] ?? DiceTrayIcon} />
+                <AppIcon
+                  icon={Object.hasOwn(statIcons, stat.key) ? statIcons[stat.key] : DiceTrayIcon}
+                />
                 {stat.label}
               </span>
               {hasVisibleValue && (
