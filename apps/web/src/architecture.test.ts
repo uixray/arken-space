@@ -1,11 +1,53 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import ts from "typescript";
 
 const readSource = (relative: string) =>
   readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
 
 describe("Архитектурные инварианты (docs/CODING_GUIDELINES.md)", () => {
+  it("UIX-398 keeps the Sidebar boundary at 21 named props without inline callbacks or hidden spreads", () => {
+    const source = ts.createSourceFile(
+      "App.tsx",
+      readSource("./App.tsx"),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const sidebars: (ts.JsxOpeningElement | ts.JsxSelfClosingElement)[] = [];
+    const visit = (node: ts.Node) => {
+      if (
+        (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+        node.tagName.getText(source) === "Sidebar"
+      )
+        sidebars.push(node);
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    expect(sidebars).toHaveLength(1);
+    const attributes = sidebars[0]!.attributes.properties;
+    expect(attributes.filter(ts.isJsxSpreadAttribute)).toEqual([]);
+    const named = attributes
+      .filter(ts.isJsxAttribute)
+      .filter((attribute) => attribute.name.getText(source) !== "key");
+    expect(named).toHaveLength(21);
+    const inlineCallbacks = named.filter((attribute) => {
+      const value = attribute.initializer;
+      if (!value || !ts.isJsxExpression(value) || !value.expression)
+        return false;
+      let expression = value.expression;
+      while (ts.isParenthesizedExpression(expression))
+        expression = expression.expression;
+      return (
+        ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)
+      );
+    });
+    expect(
+      inlineCallbacks.map((attribute) => attribute.name.getText(source)),
+    ).toEqual([]);
+  });
+
   it("App.tsx не разрастается обратно в монолит (лимит размера)", () => {
     const source = readSource("./App.tsx");
     const lineCount = source.split("\n").length;
