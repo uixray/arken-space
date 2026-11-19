@@ -480,7 +480,11 @@ it("uses different standard stat icons and the same fallback for custom stats", 
   const custom = new Set(icons.slice(standardKeys.length));
   expect(standard.size).toBe(standardKeys.length);
   expect(custom.size).toBe(1);
-  expect(standard.has(icons[standardKeys.length])).toBe(false);
+  const customIcon = icons[standardKeys.length];
+  if (customIcon === undefined) {
+    throw new Error("Expected a rendered custom dice icon after the standard icons");
+  }
+  expect(standard.has(customIcon)).toBe(false);
 });
 
 it("keeps Amberion player-owned abilities grouped in the quick panel", () => {
