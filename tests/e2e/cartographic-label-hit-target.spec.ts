@@ -71,3 +71,39 @@ for (const width of [1440, 390]) {
     await expect(page.getByLabel("Selected location")).toHaveText("first");
   });
 }
+
+for (const width of [1440, 390]) {
+  test(`configured captions escape control clipping and protect plain text at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 700 });
+    await page.setContent(`
+      <style>
+        :root { --palette-ink-900:#202820; --palette-ink-100:#f1f0ed;
+          --line-strong:#667766; --radius-sm:4px; }
+        .map { position:relative; width:320px; height:200px;
+          --world-map-width:320px; background:#fff; }
+        .world-map-marker { position:absolute; left:20px; top:80px;
+          width:32px; height:28px; padding:0; }
+        /* The compact dialog's ordinary controls may clip their contents. */
+        .world-maps-workspace :is(button) { overflow:hidden; }
+      </style>
+      <section class="world-maps-workspace"><div class="map">
+        <button class="world-map-marker world-map-marker--configured">
+          <span aria-hidden="true">●</span>
+          <span class="world-map-marker__label--configured">
+            <span class="positioned-cartographic-label"><span>Длинное название пристани</span></span>
+          </span>
+        </button>
+      </div></section>
+    `);
+    const pin = page.getByRole("button", { name: "Длинное название пристани" });
+    await expect(pin).toHaveCSS("overflow", "hidden");
+    await page.addStyleTag({ content: placementCss });
+    await expect(pin).toHaveCSS("overflow", "visible");
+    const text = pin.locator(".positioned-cartographic-label > span");
+    await expect(text).toHaveCSS("background-color", "rgb(32, 40, 32)");
+    await expect(text).toHaveCSS("color", "rgb(241, 240, 237)");
+    await expect(text).toHaveCSS("display", "block");
+    await expect(pin.locator(".world-map-marker__label--configured"))
+      .toHaveCSS("pointer-events", "none");
+  });
+}

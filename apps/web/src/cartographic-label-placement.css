@@ -24,6 +24,24 @@
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
+/* Compact dialogs clip ordinary controls. A configured map pin deliberately
+ * paints its caption outside the control; the map boundary owns clipping. */
+.world-maps-workspace .world-map-marker.world-map-marker--configured {
+  overflow: visible;
+}
+/* Plain means no ribbon, not unprotected text against arbitrary map pixels. */
+.world-map-marker--configured
+  .positioned-cartographic-label
+  > span:not(.cartographic-label) {
+  display: block;
+  padding: 2px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  /* Theme surfaces can be translucent; fixed ink keeps map pixels out of the
+   * text/background contrast pair in both light and dark player themes. */
+  background: var(--palette-ink-900);
+  color: var(--palette-ink-100);
+}
 .cartographic-label-fields {
   display: grid;
   gap: 8px;
