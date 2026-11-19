@@ -72,6 +72,32 @@ for (const width of [1440, 390]) {
   });
 }
 
+test("plain scene titles use the same opaque text protection outside marker buttons", async ({ page }) => {
+  await page.setContent(`
+    <style>:root { --palette-ink-900:#181816; --palette-ink-100:#e8e4da;
+      --line-strong:#666; --radius-sm:4px; }
+      .map { position:relative; width:320px; height:240px; background:#fff; }
+    </style>
+    <div class="map" data-cartographic-boundary>
+      <h2 class="scene-cartographic-title"><span class="positioned-cartographic-label">
+        <span>Длинный заголовок освещённой сцены</span>
+      </span></h2>
+      <div class="world-space" style="transform:translate(40px,20px) scale(2)"></div>
+    </div>
+  `);
+  await page.addStyleTag({ content: placementCss });
+  const title = page.getByRole("heading", { name: "Длинный заголовок освещённой сцены" });
+  const text = title.locator(".positioned-cartographic-label > span");
+  await expect(text).toHaveCSS("background-color", "rgb(24, 24, 22)");
+  await expect(text).toHaveCSS("color", "rgb(232, 228, 218)");
+  await expect(title).toHaveCSS("pointer-events", "none");
+  const before = await title.boundingBox();
+  await page.locator(".world-space").evaluate((element: HTMLElement) => {
+    element.style.transform = "translate(-70px,50px) scale(.5)";
+  });
+  expect(await title.boundingBox()).toEqual(before);
+});
+
 for (const width of [1440, 390]) {
   test(`configured captions escape control clipping and protect plain text at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 700 });
