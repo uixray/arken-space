@@ -27,6 +27,7 @@ const boundary = vi.hoisted(() => ({
   events: new Map<string, (snapshot: GameSnapshot) => void>(),
   results: [] as string[],
   actionValues: [] as unknown[],
+  actionFunctions: [] as Array<Record<string, unknown>>,
 }));
 vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
@@ -58,6 +59,18 @@ vi.mock("./Sidebar", async () => {
     Sidebar: (_props: ComponentProps<typeof Sidebar>) => {
       const actions = useCampaignActions();
       boundary.actionValues.push(actions);
+      // Snapshot references during the render itself. Keeping only the context
+      // object would miss commands mutated in place between two renders.
+      boundary.actionFunctions.push(
+        Object.fromEntries(
+          Object.entries(actions).flatMap(([domain, commands]) =>
+            Object.entries(commands).map(([command, handler]) => [
+              `${domain}.${command}`,
+              handler,
+            ]),
+          ),
+        ),
+      );
       return (
         <aside className="sidebar" data-testid="app-sidebar">
           <button
@@ -125,6 +138,7 @@ beforeEach(() => {
   boundary.events.clear();
   boundary.results.length = 0;
   boundary.actionValues.length = 0;
+  boundary.actionFunctions.length = 0;
   boundary.api.mockReset();
   window.localStorage.clear();
 });
@@ -212,10 +226,34 @@ it("reports removed canonical character in Russian, skips the queued phantom PAT
       ]),
     );
   const initialCommandReferences = commandReferences(initialActions);
+  expect(boundary.actionFunctions).toHaveLength(boundary.actionValues.length);
+  const firstFunctions = boundary.actionFunctions[0]!;
+  expect(Object.keys(firstFunctions).length).toBeGreaterThan(17);
+  for (const captured of boundary.actionFunctions) {
+    expect(Object.keys(captured)).toEqual(Object.keys(firstFunctions));
+    for (const [command, handler] of Object.entries(captured)) {
+      expect(typeof handler, command).toBe("function");
+      expect(handler, command).toBe(firstFunctions[command]);
+    }
+  }
   for (const value of boundary.actionValues as CampaignActions[]) {
     expect(value).toBe(initialActions);
     expect(Object.keys(value)).toEqual(CAMPAIGN_ACTION_DOMAIN_KEYS);
     expect(commandReferences(value)).toEqual(initialCommandReferences);
+    // Inspect the real App assembly in every domain, not just a synthetic
+    // provider: live state must never sneak into the function-only context.
+    for (const domain of CAMPAIGN_ACTION_DOMAIN_KEYS) {
+      const entries = Object.entries(value[domain]);
+      expect(entries.length).toBeGreaterThan(0);
+      for (const [command, handler] of entries) {
+        expect(typeof handler, `${domain}.${command}`).toBe("function");
+        expect(handler, `${domain}.${command}`).toBe(
+          (initialActions[domain] as unknown as Record<string, unknown>)[
+            command
+          ],
+        );
+      }
+    }
   }
 
   // Retain the original context callback across the App snapshot refresh. It
