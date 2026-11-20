@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { and, eq, gt, isNotNull, isNull } from "drizzle-orm";
 import {
   accountSessions,
+  campaignArchiveState,
   gmAccessCredentials,
   invites,
   memberships,
@@ -15,6 +16,7 @@ import { hashToken, randomToken } from "./security.js";
 import { accountAssuranceWhere } from "./account-assurance.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 export interface AuthContext {
   membershipId: string;
@@ -161,10 +163,12 @@ export async function authFromSessionToken(
     })
     .from(sessions)
     .innerJoin(memberships, eq(sessions.membershipId, memberships.id))
+    .leftJoin(campaignArchiveState, eq(campaignArchiveState.campaignId, memberships.campaignId))
     .where(
       and(
         eq(sessions.tokenHash, hashToken(token)),
         isNull(memberships.accessRevokedAt),
+        isNull(campaignArchiveState.archivedAt),
         gt(sessions.expiresAt, new Date()),
       ),
     )
@@ -196,11 +200,13 @@ export async function sessionIsActive(
     })
     .from(sessions)
     .innerJoin(memberships, eq(sessions.membershipId, memberships.id))
+    .leftJoin(campaignArchiveState, eq(campaignArchiveState.campaignId, memberships.campaignId))
     .where(
       and(
         eq(sessions.id, sessionId),
         gt(sessions.expiresAt, new Date()),
         isNull(memberships.accessRevokedAt),
+        isNull(campaignArchiveState.archivedAt),
       ),
     )
     .limit(1);
@@ -258,9 +264,8 @@ export async function requireOperator(
   return auth;
 }
 
-export async function createSession(
-  db: Database,
-  reply: FastifyReply,
+export async function insertGameSession(
+  db: Database | Transaction,
   membershipId: string,
   provenance: SessionProvenance,
 ) {
@@ -380,6 +385,10 @@ export async function createSession(
     tokenHash: hashToken(token),
     expiresAt,
   });
+  return { token, expiresAt };
+}
+
+export function writeGameSessionCookie(reply: FastifyReply, {token, expiresAt}: {token: string; expiresAt: Date}) {
   reply.setCookie(env.SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: env.NODE_ENV === "production",
@@ -387,4 +396,13 @@ export async function createSession(
     path: "/",
     expires: expiresAt,
   });
+}
+
+export async function createSession(
+  db: Database,
+  reply: FastifyReply,
+  membershipId: string,
+  provenance: SessionProvenance,
+) {
+  writeGameSessionCookie(reply, await insertGameSession(db, membershipId, provenance));
 }

@@ -346,6 +346,18 @@ export const campaigns = pgTable("campaigns", {
     .notNull(),
 });
 
+export const campaignArchiveState = pgTable(
+  "campaign_archive_state",
+  {
+    campaignId: uuid("campaign_id").primaryKey().references(() => campaigns.id, { onDelete: "cascade" }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    revision: integer("revision").notNull(),
+    lastActionId: uuid("last_action_id").notNull(),
+    lastActorUserId: uuid("last_actor_user_id").notNull(),
+  },
+  (table) => [check("campaign_archive_state_revision_check", sql`${table.revision} > 0`)],
+);
+
 /** Authenticated people are distinct from campaign-scoped memberships/roles. */
 export const users = pgTable(
   "users",
