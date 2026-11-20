@@ -330,6 +330,61 @@ describe.each(["activity", "chat"] as const)(
       expect(input()).toHaveFocus();
     });
 
+    it("retains a draft through a 229 confirmation after compositionend", async () => {
+      const current = mount(surface);
+      const user = userEvent.setup();
+      await user.type(input(), "Draft");
+      fireEvent.compositionStart(input());
+      fireEvent.compositionEnd(input());
+      for (const modifiers of [{}, { ctrlKey: true }, { metaKey: true }]) {
+        fireEvent.keyDown(input(), {
+          key: "Enter",
+          keyCode: 229,
+          isComposing: false,
+          ...modifiers,
+        });
+      }
+      expect(input()).toHaveValue("Draft");
+      expect(current.onChat).not.toHaveBeenCalled();
+      expect(current.onRoll).not.toHaveBeenCalled();
+      await user.keyboard("{Enter}");
+      expect(current.onChat).toHaveBeenCalledExactlyOnceWith(
+        "Draft",
+        "PUBLIC",
+        "TABLE",
+      );
+      expect(input()).toHaveValue("");
+    });
+
+    it("does not navigate, dismiss or activate suggestions on a 229 key", async () => {
+      const current = mount(surface);
+      const user = userEvent.setup();
+      await user.type(input(), "/");
+      fireEvent.compositionStart(input());
+      fireEvent.compositionEnd(input());
+      const imeKey = (target: HTMLElement, key: string) =>
+        fireEvent.keyDown(target, { key, keyCode: 229, isComposing: false });
+      imeKey(input(), "ArrowDown");
+      expect(input()).toHaveFocus();
+      imeKey(input(), "Escape");
+      expect(popup()).toBeVisible();
+      const option = screen.getAllByRole("option")[0]!;
+      act(() => option.focus());
+      imeKey(option, "Tab");
+      expect(popup()).toBeVisible();
+      imeKey(option, "ArrowDown");
+      expect(option).toHaveFocus();
+      // fireEvent has no browser activation default: assert cancellation itself.
+      expect(imeKey(option, "Enter")).toBe(false);
+      expect(imeKey(option, " ")).toBe(false);
+      expect(current.onRoll).not.toHaveBeenCalled();
+      expect(current.onChat).not.toHaveBeenCalled();
+      expect(input()).toHaveValue("/");
+      await user.keyboard("{Escape}");
+      expect(popup()).not.toBeInTheDocument();
+      expect(input()).toHaveFocus();
+    });
+
     it.each(["campaign", "member", "role", "character"] as const)(
       "closes stale suggestions on %s changes without erasing draft",
       async (scope) => {
