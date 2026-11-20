@@ -71,11 +71,17 @@ export function useComposerSuggestions(
     };
   }, [visible, scope]);
 
+  // A key processed by an IME can arrive after compositionend with only
+  // the legacy 229 (Process) signal. Leave candidate confirmation to the IME.
+  const isComposing = (event: KeyboardEvent<HTMLElement>) =>
+    composingRef.current ||
+    event.nativeEvent.isComposing ||
+    event.nativeEvent.keyCode === 229;
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!visible || event.defaultPrevented) return;
-    const composing = event.nativeEvent.isComposing || composingRef.current;
     // Native buttons must not activate a command while IME owns Enter/Space.
-    if (composing) {
+    if (isComposing(event)) {
       if (
         (event.key === "Enter" || event.key === " ") &&
         (event.target as Element).closest('[role="option"]')
@@ -141,8 +147,7 @@ export function useComposerSuggestions(
     dismiss,
     complete,
     onKeyDown,
-    isComposing: (event: KeyboardEvent<HTMLTextAreaElement>) =>
-      event.nativeEvent.isComposing || composingRef.current,
+    isComposing,
     onCompositionStart: () => {
       composingRef.current = true;
     },
