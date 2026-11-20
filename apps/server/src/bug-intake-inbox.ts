@@ -72,17 +72,27 @@ export async function persistTelegramBugUpdate(
         const duplicate = old.conflictingPayloads.some(
           (variant) => variant.hash === payloadHash,
         );
+        // A known variant is already durable. Replaying it must not revoke an
+        // operator's KEEP_CURRENT decision or churn the unresolved inbox row.
+        if (duplicate)
+          return {
+            status: "PERSISTED" as const,
+            quarantined: old.state === "QUARANTINED",
+            id: old.id,
+            duplicate: true,
+          };
         // Bounded quarantine: refuse acknowledgement if evidence cannot be saved.
-        if (!duplicate && old.conflictingPayloads.length >= 8)
+        if (old.conflictingPayloads.length >= 8)
           return { status: "COLLISION_CAPACITY_EXCEEDED" as const, id: old.id };
         await tx
           .update(bugIntakeUpdates)
           .set({
             state: "QUARANTINED",
             reason: "UPDATE_ID_COLLISION",
-            conflictingPayloads: duplicate
-              ? old.conflictingPayloads
-              : [...old.conflictingPayloads, { hash: payloadHash, payload }],
+            conflictingPayloads: [
+              ...old.conflictingPayloads,
+              { hash: payloadHash, payload },
+            ],
             updatedAt: new Date(),
           })
           .where(eq(bugIntakeUpdates.id, old.id));
@@ -90,7 +100,7 @@ export async function persistTelegramBugUpdate(
           status: "PERSISTED" as const,
           quarantined: true,
           id: old.id,
-          duplicate,
+          duplicate: false,
         };
       }
       return { status: "PERSISTED" as const, id: old.id, duplicate: true };
