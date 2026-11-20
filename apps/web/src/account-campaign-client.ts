@@ -6,6 +6,7 @@ export type AccountCampaign = {
   role: "GM" | "PLAYER";
   membershipId: string;
   selected: boolean;
+  archive?: { archivedAt: string | null; revision: number };
 };
 export type AccountCampaignList = { campaigns: AccountCampaign[] };
 export type AccountCampaignCreateResult = {
@@ -61,3 +62,16 @@ export const claimAccountCampaignInvite = (token: string, csrfToken: string) =>
       body: JSON.stringify({ token }),
     },
   );
+
+export const transitionAccountCampaignArchive = (
+  campaignId: string,
+  archived: boolean,
+  expectedRevision: number,
+  actionId: string,
+  csrfToken: string,
+) =>
+  api<{ id: string; archivedAt: string | null; revision: number }>("/api/account/campaigns/archive", {
+    method: "POST",
+    headers: { "x-csrf-token": csrfToken },
+    body: JSON.stringify({ campaignId, archived, expectedRevision, actionId }),
+  });

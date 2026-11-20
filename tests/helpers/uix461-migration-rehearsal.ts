@@ -27,9 +27,9 @@ export async function rehearseCreationMigration(database: ReturnType<typeof crea
     const journal = JSON.parse(await readFile(join(source, "meta", "_journal.json"), "utf8")) as {
       entries: Array<{ idx: number; tag: string }>;
     } & Record<string, unknown>;
-    if (journal.entries.at(-1)?.tag !== "0088_creation_consumption_undo")
+    if (journal.entries[88]?.tag !== "0088_creation_consumption_undo")
       throw new Error("Unexpected candidate migration history");
-    const before = journal.entries.slice(0, -1);
+    const before = journal.entries.slice(0, 88);
     for (const entry of before) {
       const name = `${entry.tag}.sql`;
       await copyFile(join(source, name), join(folder, name));

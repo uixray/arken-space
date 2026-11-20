@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ApiError } from "./api";
 import { App } from "./App";
 import { AuthGate } from "./AuthGate";
 import {
@@ -19,11 +20,11 @@ export function CampaignRouter() {
   const isAccount = path === "/account" || path.startsWith("/account/");
   const needsResolution =
     path === "/" || Boolean(campaignId) || invalidCampaignPath;
-  const [state, setState] = useState<"loading" | "game" | "error">(
+  const [state, setState] = useState<"loading" | "game" | "error" | "archived">(
     needsResolution ? "loading" : "game",
   );
   // StrictMode must not issue the session-changing selection twice.
-  const task = useRef<Promise<"game" | "redirect"> | null>(null);
+  const task = useRef<Promise<"game" | "redirect" | "archived"> | null>(null);
 
   useEffect(() => {
     if (!needsResolution) return;
@@ -44,7 +45,17 @@ export function CampaignRouter() {
           return "redirect";
         }
         // The server checks account ownership and replaces the game session.
-        await selectAccountCampaign(campaignId, session.csrfToken);
+        try {
+          await selectAccountCampaign(campaignId, session.csrfToken);
+        } catch (error) {
+          if (
+            error instanceof ApiError &&
+            error.status === 409 &&
+            error.code === "CAMPAIGN_ARCHIVED"
+          )
+            return "archived";
+          throw error;
+        }
         return "game";
       }
       if (session.authenticated) {
@@ -55,7 +66,7 @@ export function CampaignRouter() {
     })();
     void task.current.then(
       (result) => {
-        if (active && result === "game") setState("game");
+        if (active && result !== "redirect") setState(result);
       },
       () => {
         if (active) setState("error");
@@ -82,13 +93,15 @@ export function CampaignRouter() {
         <p role="status">Открываем кампанию…</p>
       </main>
     );
-  if (state === "error")
+  if (state === "error" || state === "archived")
     return (
       <main className="account-auth-shell">
         <section className="account-auth-card">
-          <h1>Не удалось открыть кампанию</h1>
+          <h1>{state === "archived" ? "Кампания в архиве" : "Не удалось открыть кампанию"}</h1>
           <p role="alert">
-            Проверьте подключение и доступ к кампании, затем попробуйте ещё раз.
+            {state === "archived"
+              ? "Вернитесь к выбору кампании."
+              : "Проверьте подключение и доступ к кампании, затем попробуйте ещё раз."}
           </p>
           <a href="/account">Вернуться к выбору кампании</a>
         </section>

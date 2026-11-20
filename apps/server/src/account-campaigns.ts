@@ -1,5 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { and, count, eq, gt, isNull, inArray, sql } from "drizzle-orm";
+import { z } from "zod";
+import { campaignArchiveAllowsGameAccess, campaignArchiveState, lockCampaignForArchive, transitionCampaignArchive } from "./campaign-archive-draft.js";
 import {
   accountCampaignCreations,
   accountCampaignInvites,
@@ -28,6 +30,8 @@ type RealtimeSessions = {
 };
 export type AccountCampaignOptions = {
   localInstanceId?: string;
+  // Opt-in via CAMPAIGN_ARCHIVE_ENABLED; default routes retain their prior behavior.
+  archivePreviewEnabled?: boolean;
   enabled: boolean;
   creationEnabled: boolean;
   creationLimit: number;
@@ -150,6 +154,13 @@ async function replaceSelectedGameSession(
   const token = randomToken();
   const expiresAt = new Date(Date.now() + options.sessionTtlDays * 86_400_000);
   const result = await db.transaction(async (tx) => {
+    {
+      const [scope] = await tx.select({ campaignId: memberships.campaignId })
+        .from(memberships).where(eq(memberships.id, membershipId)).limit(1);
+      if (!scope || !(await lockCampaignForArchive(tx, scope.campaignId))) return null;
+      if (!(await campaignArchiveAllowsGameAccess(tx, scope.campaignId)))
+        return { archived: true as const };
+    }
     const [parent] = await tx
       .select({ userId: accountSessions.userId })
       .from(accountSessions)
@@ -221,6 +232,10 @@ async function replaceSelectedGameSession(
     await reply.code(401).send({ error: "ACCOUNT_AUTH_REQUIRED" });
     return false;
   }
+  if ("archived" in result) {
+    await reply.code(409).send({ error: "CAMPAIGN_ARCHIVED" });
+    return false;
+  }
   for (const id of result.staleIds)
     io.in(`session:${id}`).disconnectSockets(true);
   reply.setCookie(options.gameCookieName, token, {
@@ -239,6 +254,31 @@ export function registerAccountCampaignRoutes(
   io: RealtimeSessions,
   options: AccountCampaignOptions,
 ) {
+  if (options.archivePreviewEnabled) {
+    const command = z.object({
+      campaignId: z.uuid(),
+      actionId: z.uuid(),
+      archived: z.boolean(),
+      expectedRevision: z.number().int().nonnegative(),
+    }).strict();
+    app.post("/api/account/campaigns/archive", { bodyLimit: 2048 }, async (request, reply) => {
+      const account = await requireAccount(request, reply, db, options, true);
+      if (!account) return;
+      const body = command.safeParse(request.body);
+      if (!body.success) return reply.code(400).send({ error: "INVALID_CAMPAIGN_ARCHIVE" });
+      const result = await transitionCampaignArchive(db, { ...body.data, actorUserId: account.userId });
+      if (result.kind === "notFound") return reply.code(404).send({ error: "CAMPAIGN_NOT_FOUND" });
+      if (result.kind === "conflict" || result.kind === "unchanged")
+        return reply.code(409).send({ error: "CAMPAIGN_ARCHIVE_CONFLICT", revision: result.revision });
+      if (result.kind !== "updated" && result.kind !== "replay") return;
+      for (const id of result.disconnectedSessionIds)
+        io.in(`session:${id}`).disconnectSockets(true);
+      return reply.header("cache-control", "no-store").send({
+        id: body.data.campaignId, archivedAt: result.archivedAt?.toISOString() ?? null, revision: result.revision,
+      });
+    });
+  }
+
   app.get("/api/account/campaigns", async (request, reply) => {
     const account = await requireAccount(request, reply, db, options);
     if (!account) return;
@@ -269,6 +309,22 @@ export function registerAccountCampaignRoutes(
           isNull(memberships.accessRevokedAt),
         ),
       );
+    if (rows.length) {
+      const states = await db.select().from(campaignArchiveState)
+        .where(inArray(campaignArchiveState.campaignId, rows.map(row => row.id)));
+      const byCampaign = new Map(states.map(row => [row.campaignId, row]));
+      return reply.header("cache-control", "no-store").send(accountCampaignListSchema.parse({
+        campaigns: rows.flatMap((row) => {
+          const state = byCampaign.get(row.id);
+          if (state?.archivedAt && (row.role !== "GM" || !options.archivePreviewEnabled)) return [];
+          return [{
+            ...row,
+            selected: Boolean(row.selected) && !state?.archivedAt,
+            ...(row.role === "GM" && options.archivePreviewEnabled ? { archive: { archivedAt: state?.archivedAt?.toISOString() ?? null, revision: state?.revision ?? 0 } } : {}),
+          }];
+        }),
+      }));
+    }
     return reply.header("cache-control", "no-store").send(
       accountCampaignListSchema.parse({
         campaigns: rows.map((row) => ({
@@ -670,6 +726,13 @@ export function registerAccountCampaignRoutes(
       const now = new Date();
       try {
         const claimed = await db.transaction(async (tx) => {
+          {
+            const [scope] = await tx.select({ campaignId: accountCampaignInvites.campaignId })
+              .from(accountCampaignInvites)
+              .where(eq(accountCampaignInvites.tokenHash, hashToken(body.data.token))).limit(1);
+            if (!scope || !(await lockCampaignForArchive(tx, scope.campaignId))) return null;
+            if (!(await campaignArchiveAllowsGameAccess(tx, scope.campaignId))) return null;
+          }
           // A lost response must not strand the account after the one-time
           // invitation has already been consumed. Replay only for the same
           // verified account and an existing membership; never recreate access.

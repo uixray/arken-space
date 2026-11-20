@@ -471,6 +471,7 @@ export function registerRoutes(
     mailKeyring: mailContext.keyring,
   });
   registerAccountCampaignRoutes(app, db, io, {
+    archivePreviewEnabled: env.CAMPAIGN_ARCHIVE_ENABLED,
     localInstanceId:
       env.DEPLOYMENT_MODE === "LOCAL_HOST" ? env.LOCAL_INSTANCE_ID : undefined,
     enabled: env.ACCOUNT_AUTH_ENABLED,

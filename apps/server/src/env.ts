@@ -66,6 +66,10 @@ export const env = z
       .enum(["true", "false"])
       .default("false")
       .transform((value) => value === "true"),
+    CAMPAIGN_ARCHIVE_ENABLED: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
     CAMPAIGN_LINK_ACCESS_ENABLED: z
       .enum(["true", "false"])
       .default("false")
@@ -217,6 +221,12 @@ export const env = z
         path: ["ACCOUNT_CAMPAIGN_CREATION_POLICY_APPROVED"],
         message:
           "Public campaign creation requires an explicitly approved policy",
+      });
+    if (value.CAMPAIGN_ARCHIVE_ENABLED && !value.ACCOUNT_AUTH_ENABLED)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["CAMPAIGN_ARCHIVE_ENABLED"],
+        message: "Campaign archive requires account auth",
       });
     if (value.CAMPAIGN_LINK_ACCESS_ENABLED && !value.ACCOUNT_AUTH_ENABLED)
       ctx.addIssue({

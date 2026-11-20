@@ -22,6 +22,7 @@ import {
   createAccountCampaignInvite,
   listAccountCampaigns,
   selectAccountCampaign,
+  transitionAccountCampaignArchive,
   type AccountCampaign,
 } from "./account-campaign-client";
 import "./account-auth.css";
@@ -132,6 +133,9 @@ export function AccountAuthWorkspace({
     "loading" | "ready" | "error"
   >("loading");
   const campaignsRequest = useRef(0);
+  const archiveRequest = useRef<{ key: string; id: string; pending: boolean } | null>(null);
+  const activeCampaigns = campaigns.filter(campaign => !campaign.archive?.archivedAt);
+  const archivedCampaigns = campaigns.filter(campaign => campaign.role === "GM" && campaign.archive?.archivedAt);
   const [campaignName, setCampaignName] = useState("");
   const [firstRun, setFirstRun] = useState<{
     campaignId: string;
@@ -447,6 +451,33 @@ export function AccountAuthWorkspace({
       setBusy(false);
     }
   };
+  const changeCampaignArchive = async (campaign: AccountCampaign, archived: boolean) => {
+    if (!session || busy || campaign.role !== "GM" || !campaign.archive || archiveRequest.current?.pending) return;
+    const key = campaign.id + ":" + campaign.archive.revision + ":" + archived;
+    const attempt = archiveRequest.current?.key === key
+      ? archiveRequest.current
+      : { key, id: crypto.randomUUID(), pending: false };
+    archiveRequest.current = attempt;
+    attempt.pending = true;
+    setBusy(true);
+    setError("");
+    try {
+      await transitionAccountCampaignArchive(campaign.id, archived, campaign.archive.revision, attempt.id, session.csrfToken);
+      archiveRequest.current = null;
+      setFirstRun(current => current?.campaignId === campaign.id ? null : current);
+      await refreshCampaigns();
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.code === "CAMPAIGN_ARCHIVE_CONFLICT") {
+        archiveRequest.current = null;
+        await refreshCampaigns().catch(() => {});
+        setError("Состояние кампании изменилось. Проверьте список и повторите действие.");
+      } else setError(friendlyError(reason, capabilities.localAccounts));
+    } finally {
+      attempt.pending = false;
+      setBusy(false);
+    }
+  };
+
   const selectCampaign = async (campaignId: string) => {
     if (!session || busy) return;
     setBusy(true);
@@ -734,15 +765,17 @@ export function AccountAuthWorkspace({
                 </Button>
               </div>
             )}
-            {campaignsState === "ready" && campaigns.length === 0 && (
+            {campaignsState === "ready" && activeCampaigns.length === 0 && (
               <p>
-                {capabilities.campaignCreationEnabled
-                  ? "Пока нет кампаний. Создайте свою или примите приглашение мастера."
-                  : "Пока нет кампаний. Примите приглашение мастера; создание новых кампаний сейчас выключено."}
+                {archivedCampaigns.length > 0
+                  ? "Нет активных кампаний."
+                  : capabilities.campaignCreationEnabled
+                    ? "Пока нет кампаний. Создайте свою или примите приглашение мастера."
+                    : "Пока нет кампаний. Примите приглашение мастера; создание новых кампаний сейчас выключено."}
               </p>
             )}
             <ul>
-              {campaigns.map((campaign) => (
+              {activeCampaigns.map((campaign) => (
                 <li key={campaign.id}>
                   <div className="account-campaign-heading">
                     <span
@@ -799,9 +832,38 @@ export function AccountAuthWorkspace({
                       </form>
                     </details>
                   )}
+                  {campaign.role === "GM" && campaign.archive && (
+                    <details className="account-campaign-invite">
+                      <summary>Архивировать кампанию</summary>
+                      <p>
+                        В отличие от паузы, архив убирает кампанию из списка активных.
+                        Данные и права доступа сохранятся. Мастер и игроки выйдут
+                        из кампании. Если игра на паузе, после восстановления она
+                        останется на паузе.
+                      </p>
+                      <Button type="button" disabled={busy} onClick={() => void changeCampaignArchive(campaign, true)}>
+                        Подтвердить архивацию
+                      </Button>
+                    </details>
+                  )}
                 </li>
               ))}
             </ul>
+            {archivedCampaigns.length > 0 && (
+              <details className="account-home-disclosure">
+                <summary>Архив ({archivedCampaigns.length})</summary>
+                <ul>
+                  {archivedCampaigns.map(campaign => (
+                    <li key={campaign.id}>
+                      <strong>{campaign.name}</strong>
+                      <Button type="button" disabled={busy} onClick={() => void changeCampaignArchive(campaign, false)}>
+                        Восстановить кампанию
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
             {capabilities.campaignCreationEnabled && (
               <details className="account-home-disclosure">
                 <summary>Создать кампанию</summary>

@@ -26,82 +26,90 @@ import {
   inviteClaimSchema,
   rotateGmAccessSchema,
 } from "@arken/contracts";
-import { createSession, requireAuth } from "./auth.js";
+import { insertGameSession, requireAuth, writeGameSessionCookie } from "./auth.js";
+import { withCampaignGameIssuance } from "./campaign-archive-draft.js";
 import { buildSnapshot, withoutPersonalTheme } from "./snapshot.js";
 import { findAction } from "./action-lookup.js";
 import { errorMessage } from "./error-message.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 type RealtimeServer = Server<ClientToServerEvents, ServerToClientEvents>;
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 export async function claimInviteOwnership(
   db: Database,
   invite: typeof invites.$inferSelect,
   displayName: string,
 ) {
-  return db.transaction(async (tx) => {
-    const [lockedInvite] = await tx
-      .select({ id: invites.id })
-      .from(invites)
-      .where(
-        and(
-          eq(invites.id, invite.id),
-          eq(invites.campaignId, invite.campaignId),
-        ),
-      )
-      .for("update")
-      .limit(1);
-    if (!lockedInvite) throw new Error("INVITE_UNAVAILABLE");
-    const [claimed] = await tx
-      .update(invites)
-      .set({ claimedAt: new Date() })
-      .where(
-        and(
-          eq(invites.id, invite.id),
-          eq(invites.campaignId, invite.campaignId),
-          isNull(invites.claimedAt),
-          isNull(invites.revokedAt),
-          sql`${invites.expiresAt} > clock_timestamp()`,
-        ),
-      )
-      .returning({ id: invites.id });
-    if (!claimed) throw new Error("INVITE_UNAVAILABLE");
-    const membershipId = randomUUID();
-    const [member] = await tx
-      .insert(memberships)
-      .values({
-        id: membershipId,
-        campaignId: invite.campaignId,
-        role: "PLAYER",
-        displayName,
-        defaultThemeId: defaultThemeForMembership(membershipId),
-      })
-      .returning();
-    if (!member) throw new Error("MEMBER_CREATE_FAILED");
-    await tx
-      .update(characters)
-      .set({ ownerMembershipId: member.id, updatedAt: new Date() })
-      .where(
-        and(
-          eq(characters.id, invite.characterId),
-          eq(characters.campaignId, invite.campaignId),
-        ),
-      );
-    await tx
-      .insert(characterControllers)
-      .values({ characterId: invite.characterId, membershipId: member.id })
-      .onConflictDoNothing();
-    await tx.execute(sql`insert into token_controllers (token_definition_id, membership_id)
-      select d.id, ${member.id} from token_definitions d
-      where d.character_id = ${invite.characterId} and d.campaign_id = ${invite.campaignId}
-      and not exists (select 1 from token_controllers c where c.token_definition_id = d.id)
-      on conflict do nothing`);
-    await tx
-      .update(invites)
-      .set({ claimedByMembershipId: member.id })
-      .where(eq(invites.id, invite.id));
-    return member;
-  });
+  return db.transaction((tx) => claimInviteInTransaction(tx, invite, displayName));
+}
+
+async function claimInviteInTransaction(
+  tx: Transaction,
+  invite: typeof invites.$inferSelect,
+  displayName: string,
+) {
+  const [lockedInvite] = await tx
+    .select({ id: invites.id })
+    .from(invites)
+    .where(
+      and(
+        eq(invites.id, invite.id),
+        eq(invites.campaignId, invite.campaignId),
+      ),
+    )
+    .for("update")
+    .limit(1);
+  if (!lockedInvite) throw new Error("INVITE_UNAVAILABLE");
+  const [claimed] = await tx
+    .update(invites)
+    .set({ claimedAt: new Date() })
+    .where(
+      and(
+        eq(invites.id, invite.id),
+        eq(invites.campaignId, invite.campaignId),
+        isNull(invites.claimedAt),
+        isNull(invites.revokedAt),
+        sql`${invites.expiresAt} > clock_timestamp()`,
+      ),
+    )
+    .returning({ id: invites.id });
+  if (!claimed) throw new Error("INVITE_UNAVAILABLE");
+  const membershipId = randomUUID();
+  const [member] = await tx
+    .insert(memberships)
+    .values({
+      id: membershipId,
+      campaignId: invite.campaignId,
+      role: "PLAYER",
+      displayName,
+      defaultThemeId: defaultThemeForMembership(membershipId),
+    })
+    .returning();
+  if (!member) throw new Error("MEMBER_CREATE_FAILED");
+  await tx
+    .update(characters)
+    .set({ ownerMembershipId: member.id, updatedAt: new Date() })
+    .where(
+      and(
+        eq(characters.id, invite.characterId),
+        eq(characters.campaignId, invite.campaignId),
+      ),
+    );
+  await tx
+    .insert(characterControllers)
+    .values({ characterId: invite.characterId, membershipId: member.id })
+    .onConflictDoNothing();
+  await tx.execute(sql`insert into token_controllers (token_definition_id, membership_id)
+    select d.id, ${member.id} from token_definitions d
+    where d.character_id = ${invite.characterId} and d.campaign_id = ${invite.campaignId}
+    and not exists (select 1 from token_controllers c where c.token_definition_id = d.id)
+    on conflict do nothing`);
+  await tx
+    .update(invites)
+    .set({ claimedByMembershipId: member.id })
+    .where(eq(invites.id, invite.id));
+  return member;
 }
 
 /**
@@ -144,6 +152,19 @@ export function registerSessionRoutes(
     io.in(sessionRoom(old.id)).disconnectSockets(true);
   };
 
+  async function issueLinkUnderArchiveGuard(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    campaignId: string,
+    issue: (tx: Transaction) => ReturnType<typeof insertGameSession>,
+  ) {
+    const result = await withCampaignGameIssuance(db, campaignId, issue);
+    if (!result) return reply.code(409).send({ error: "CAMPAIGN_ARCHIVED" });
+    await rotateCurrentGameCookieSession(request);
+    writeGameSessionCookie(reply, result);
+    return { ok: true };
+  }
+
   app.get("/healthz", { logLevel: "silent" }, async (_request, reply) => {
     try {
       await db.execute(sql`select 1`);
@@ -185,13 +206,11 @@ export function registerSessionRoutes(
       safeEqual(hashToken(body.token), credential.tokenHash),
     );
     if (!gm) return reply.code(403).send({ error: "INVALID_MASTER_TOKEN" });
-    await rotateCurrentGameCookieSession(request);
-    await createSession(db, reply, gm.membershipId, {
-      source: "GM_LINK",
-      campaignId: gm.campaignId,
-      credentialRevision: gm.credentialRevision,
-    });
-    return { ok: true };
+    return issueLinkUnderArchiveGuard(request, reply, gm.campaignId, tx =>
+      insertGameSession(tx, gm.membershipId, {
+        source: "GM_LINK", campaignId: gm.campaignId, credentialRevision: gm.credentialRevision,
+      }),
+    );
   });
 
   app.post("/api/auth/invite", async (request, reply) => {
@@ -218,18 +237,14 @@ export function registerSessionRoutes(
       )
       .limit(1);
     if (grant) {
-      if (body.displayName)
-        await db
-          .update(memberships)
-          .set({ displayName: body.displayName })
-          .where(eq(memberships.id, grant.membershipId));
-      await rotateCurrentGameCookieSession(request);
-      await createSession(db, reply, grant.membershipId, {
-        source: "PLAYER_GRANT",
-        grantId: grant.id,
-        grantRevision: grant.revision,
+      return issueLinkUnderArchiveGuard(request, reply, grant.campaignId, async tx => {
+        if (body.displayName)
+          await tx.update(memberships).set({ displayName: body.displayName })
+            .where(eq(memberships.id, grant.membershipId));
+        return insertGameSession(tx, grant.membershipId, {
+          source: "PLAYER_GRANT", grantId: grant.id, grantRevision: grant.revision,
+        });
       });
-      return { ok: true };
     }
 
     const [invite] = await db
@@ -246,24 +261,16 @@ export function registerSessionRoutes(
       .limit(1);
     if (!invite) return reply.code(410).send({ error: "INVITE_EXPIRED" });
 
-    let result: Awaited<ReturnType<typeof claimInviteOwnership>>;
     try {
-      result = await claimInviteOwnership(
-        db,
-        invite,
-        body.displayName ?? invite.label,
-      );
+      return await issueLinkUnderArchiveGuard(request, reply, invite.campaignId, async tx => {
+        const member = await claimInviteInTransaction(tx, invite, body.displayName ?? invite.label);
+        return insertGameSession(tx, member.id, { source: "LEGACY_INVITE", inviteId: invite.id });
+      });
     } catch (error) {
       if (errorMessage(error).includes("INVITE_UNAVAILABLE"))
         return reply.code(410).send({ error: "INVITE_EXPIRED" });
       throw error;
     }
-    await rotateCurrentGameCookieSession(request);
-    await createSession(db, reply, result.id, {
-      source: "LEGACY_INVITE",
-      inviteId: invite.id,
-    });
-    return { ok: true };
   });
 
   // Temporary closed-beta shortcut. This intentionally authenticates by a
