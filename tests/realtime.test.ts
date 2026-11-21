@@ -1076,8 +1076,15 @@ describe("durable realtime token commands", () => {
       `insert into fog_reveals
         (scene_id, x, y, width, height, operation, shape, geometry, bbox)
         values ($1,$2,$3,$4,$5,'COVER','RECT',$6,$7)`,
-      [ids.scene, bbox.x, bbox.y, bbox.width, bbox.height,
-        JSON.stringify({ type: "RECT", ...bbox }), JSON.stringify(bbox)],
+      [
+        ids.scene,
+        bbox.x,
+        bbox.y,
+        bbox.width,
+        bbox.height,
+        JSON.stringify({ type: "RECT", ...bbox }),
+        JSON.stringify(bbox),
+      ],
     );
     const command = (revision: number, x: number) => ({
       actionId: crypto.randomUUID(),
@@ -1094,30 +1101,43 @@ describe("durable realtime token commands", () => {
 
     const hiddenFrames: number[] = [];
     otherClient.on("token:moving", (frame) => {
-      if (frame.tokenId === ids.token && frame.x >= bbox.x) hiddenFrames.push(frame.x);
+      if (frame.tokenId === ids.token && frame.x >= bbox.x)
+        hiddenFrames.push(frame.x);
     });
     otherClient.on("token:moved", ({ data }) => {
       if (data.id === ids.token && data.x >= bbox.x) hiddenFrames.push(data.x);
     });
-    const preview = new Promise<Parameters<ServerToClientEvents["token:moving"]>[0]>(
-      (resolve) => otherClient.once("token:moving", resolve),
-    );
-    const emitPreview = (x: number) => gmClient.emit("token:moving", {
-      ...command(1, x), sceneId: ids.scene,
-      previewEpoch: tokenPreviewEpochs.current(ids.campaign), z: 0, levelId: null,
-    });
+    const preview = new Promise<
+      Parameters<ServerToClientEvents["token:moving"]>[0]
+    >((resolve) => otherClient.once("token:moving", resolve));
+    const emitPreview = (x: number) =>
+      gmClient.emit("token:moving", {
+        ...command(1, x),
+        sceneId: ids.scene,
+        previewEpoch: tokenPreviewEpochs.current(ids.campaign),
+        z: 0,
+        levelId: null,
+      });
     emitPreview(128);
-    await expect(preview).resolves.toMatchObject({ tokenId: ids.token, x: 128 });
-    const controllerPreview = new Promise<Parameters<ServerToClientEvents["token:moving"]>[0]>(
-      (resolve) => client.once("token:moving", resolve),
-    );
-    const redacted = new Promise<Parameters<ServerToClientEvents["token:preview-hidden"]>[0]>(
-      (resolve) => otherClient.once("token:preview-hidden", resolve),
-    );
+    await expect(preview).resolves.toMatchObject({
+      tokenId: ids.token,
+      x: 128,
+    });
+    const controllerPreview = new Promise<
+      Parameters<ServerToClientEvents["token:moving"]>[0]
+    >((resolve) => client.once("token:moving", resolve));
+    const redacted = new Promise<
+      Parameters<ServerToClientEvents["token:preview-hidden"]>[0]
+    >((resolve) => otherClient.once("token:preview-hidden", resolve));
     emitPreview(512);
-    await expect(controllerPreview).resolves.toMatchObject({ tokenId: ids.token, x: 512 });
+    await expect(controllerPreview).resolves.toMatchObject({
+      tokenId: ids.token,
+      x: 512,
+    });
     expect(await redacted).toEqual({
-      tokenId: ids.token, sceneId: ids.scene, revision: 1,
+      tokenId: ids.token,
+      sceneId: ids.scene,
+      revision: 1,
       previewEpoch: tokenPreviewEpochs.current(ids.campaign),
     });
     expect(tokenProjectionRefreshes).toBe(0);
@@ -1130,14 +1150,23 @@ describe("durable realtime token commands", () => {
       waitForSnapshot(otherClient, (snapshot) => !seesToken(snapshot)),
       waitForSnapshot(client, (snapshot) => seesToken(snapshot)?.x === 512),
     ]);
-    expect(hiddenAck).toMatchObject({ ok: true, data: { x: 512, revision: 2 } });
+    expect(hiddenAck).toMatchObject({
+      ok: true,
+      data: { x: 512, revision: 2 },
+    });
     expect(seesToken(controller)).toMatchObject({ x: 512, revision: 2 });
     expect(tokenProjectionRefreshes).toBe(1);
     const [visibleAck, visible] = await Promise.all([
       move(gmClient, command(2, 128)),
-      waitForSnapshot(otherClient, (snapshot) => seesToken(snapshot)?.x === 128),
+      waitForSnapshot(
+        otherClient,
+        (snapshot) => seesToken(snapshot)?.x === 128,
+      ),
     ]);
-    expect(visibleAck).toMatchObject({ ok: true, data: { x: 128, revision: 3 } });
+    expect(visibleAck).toMatchObject({
+      ok: true,
+      data: { x: 128, revision: 3 },
+    });
     expect(seesToken(visible)).toMatchObject({ x: 128, revision: 3 });
     expect(tokenProjectionRefreshes).toBe(2);
     expect(hiddenFrames).toEqual([]);

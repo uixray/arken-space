@@ -230,9 +230,16 @@ code {
   padding: 0.5rem;
   border-radius: var(--radius-sm);
 }
-.campaigns-back-link:hover { background: var(--surface-3); }
-.campaigns-back-link:focus-visible { outline: 2px solid var(--color-accent, #dc9b71); outline-offset: 2px; }
-.app-shell--compact .campaigns-back-link { display: none; }
+.campaigns-back-link:hover {
+  background: var(--surface-3);
+}
+.campaigns-back-link:focus-visible {
+  outline: 2px solid var(--color-accent, #dc9b71);
+  outline-offset: 2px;
+}
+.app-shell--compact .campaigns-back-link {
+  display: none;
+}
 /* An explicitly opened shell menu is a transient popup above non-modal
  * workspaces, not a blocking dialog. Raising its topbar stacking context (not
  * merely the nested menu) uses the reserved popup tier below all modals. */
@@ -8401,34 +8408,134 @@ button:not([role="tab"]),
   border: 1px solid var(--line);
   max-width: calc(100vw - 16px);
 }
-.stat-field__menu-items[popover]:not(:popover-open) { display: none; }
-.stat-field__menu[data-menu-side="above"] > .stat-field__menu-items[popover] { bottom: auto; }
+.stat-field__menu-items[popover]:not(:popover-open) {
+  display: none;
+}
+.stat-field__menu[data-menu-side="above"] > .stat-field__menu-items[popover] {
+  bottom: auto;
+}
 
 /* Compact spell summaries; details and formulas precede action buttons. */
-.ability-accordion { min-width: 0; width: 100%; border-bottom: 1px solid var(--line); }
-.ability-accordion > summary { display: flex; align-items: center; gap: 8px; padding: 10px 4px; cursor: pointer; list-style: none; }
-.ability-accordion > summary::-webkit-details-marker { display: none; }
-.ability-accordion > summary::before { content: "›"; flex: none; }
-.ability-accordion[open] > summary::before { transform: rotate(90deg); }
-.ability-accordion__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; font-weight: 600; }
-.ability-accordion__cost { flex: none; color: var(--text-muted); font-size: .85em; }
-.ability-accordion__body { padding: 4px 8px 12px; min-width: 0; }
-.ability-accordion .character-action-card { display: flex; flex-direction: column; gap: 10px; border: 0; padding: 0; }
-.ability-accordion .character-action-card__summary { display: none; }
-.character-action-card__description { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
-.ability-accordion .character-action-card__action { display: flex; flex-wrap: wrap; gap: 8px; order: 1; }
-.ability-accordion .character-action-card__action > span { flex-basis: 100%; min-width: 0; }
-.ability-accordion .character-action-card__action code { white-space: normal; overflow: visible; }
-.ability-accordion .character-action-card__action--primary { order: 2; }
-.ability-accordion .character-action-card__controls { order: 3; }
-.ability-accordion .field-error { order: 4; }
-.ability-management { margin-top: 8px; }
-.ability-management > summary { cursor: pointer; width: 32px; text-align: center; list-style: none; font-weight: bold; }
-.ability-management .inline-fields { display: flex; flex-wrap: wrap; }
-.quick-ability-group { min-width: 0; }
-.quick-ability-group h4 { margin: 12px 0 4px; font-size: .85em; color: var(--text-muted); }
+.ability-accordion {
+  min-width: 0;
+  width: 100%;
+  border-bottom: 1px solid var(--line);
+}
+.ability-accordion > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 4px;
+  cursor: pointer;
+  list-style: none;
+}
+.ability-accordion > summary::-webkit-details-marker {
+  display: none;
+}
+.ability-accordion > summary::before {
+  content: "›";
+  flex: none;
+}
+.ability-accordion[open] > summary::before {
+  transform: rotate(90deg);
+}
+.ability-accordion__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  font-weight: 600;
+}
+.ability-accordion__cost {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+.ability-accordion__body {
+  padding: 4px 8px 12px;
+  min-width: 0;
+}
+.ability-accordion .character-action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 0;
+  padding: 0;
+}
+.ability-accordion .character-action-card__summary {
+  display: none;
+}
+.character-action-card__description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.ability-accordion .character-action-card__action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  order: 1;
+}
+.ability-accordion .character-action-card__action > span {
+  flex-basis: 100%;
+  min-width: 0;
+}
+.ability-accordion .character-action-card__action code {
+  white-space: normal;
+  overflow: visible;
+}
+.ability-accordion .character-action-card__action--primary {
+  order: 2;
+}
+.ability-accordion .character-action-card__controls {
+  order: 3;
+}
+.ability-accordion .field-error {
+  order: 4;
+}
+.ability-management {
+  margin-top: 8px;
+}
+.ability-management > summary {
+  cursor: pointer;
+  width: 32px;
+  text-align: center;
+  list-style: none;
+  font-weight: bold;
+}
+.ability-management .inline-fields {
+  display: flex;
+  flex-wrap: wrap;
+}
+.quick-ability-group {
+  min-width: 0;
+}
+.quick-ability-group h4 {
+  margin: 12px 0 4px;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
 
-.gm-health-counter { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px; border:1px solid var(--line); border-radius:6px; }
-.gm-health-counter label { display:flex; align-items:center; gap:8px; font-weight:600; }
-.gm-health-counter input { width:68px; min-width:0; }
-.gm-health-counter [role="alert"] { flex-basis:100%; }
+.gm-health-counter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.gm-health-counter label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.gm-health-counter input {
+  width: 68px;
+  min-width: 0;
+}
+.gm-health-counter [role="alert"] {
+  flex-basis: 100%;
+}

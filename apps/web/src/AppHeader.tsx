@@ -177,7 +177,8 @@ export const AppHeader = memo(function AppHeader({
         и расчёт вместимости живут в `workspace-nav.ts`. */}
       <WorkspaceNav
         items={workspaceNavItems({
-          storyEnabled: snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092",
+          storyEnabled:
+            snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092",
           isGm: snapshot.me.role === "GM",
           operatorFeedbackAllowed,
         })}

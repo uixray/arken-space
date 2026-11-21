@@ -458,21 +458,53 @@ it("предлагает число бросков характеристики 
 
 it("uses different standard stat icons and the same fallback for custom stats", () => {
   const standardKeys = [
-    "strength", "agility", "vitality", "intelligence", "charisma", "willpower",
-    "luck", "initiative", "reaction", "melee", "ranged", "enduranceRegen", "manaRegen",
+    "strength",
+    "agility",
+    "vitality",
+    "intelligence",
+    "charisma",
+    "willpower",
+    "luck",
+    "initiative",
+    "reaction",
+    "melee",
+    "ranged",
+    "enduranceRegen",
+    "manaRegen",
   ];
-  const customKeys = ["customA", "customB", "constructor", "toString", "__proto__"];
+  const customKeys = [
+    "customA",
+    "customB",
+    "constructor",
+    "toString",
+    "__proto__",
+  ];
   const rows = [...standardKeys, ...customKeys].map((key, index) => ({
     key,
     label: `Характеристика ${index + 1}`,
   }));
-  renderComponent(<QuickRollPanel
-    rollCharacter={{ stats: Object.fromEntries(rows.map(({ key }) => [key, 1])), skills: [], entries: [] } as unknown as CharacterDto}
-    campaignId="control" membershipId="member" rows={rows}
-    quickRollPending={false} canControlCharacter gmOnly={false} onQuickRoll={() => {}}
-  />);
+  renderComponent(
+    <QuickRollPanel
+      rollCharacter={
+        {
+          stats: Object.fromEntries(rows.map(({ key }) => [key, 1])),
+          skills: [],
+          entries: [],
+        } as unknown as CharacterDto
+      }
+      campaignId="control"
+      membershipId="member"
+      rows={rows}
+      quickRollPending={false}
+      canControlCharacter
+      gmOnly={false}
+      onQuickRoll={() => {}}
+    />,
+  );
   const icons = rows.map(({ label }) => {
-    const svg = screen.getByRole("button", { name: new RegExp(`^${label}\\s*1$`) }).querySelector("svg");
+    const svg = screen
+      .getByRole("button", { name: new RegExp(`^${label}\\s*1$`) })
+      .querySelector("svg");
     expect(svg).not.toBeNull();
     return svg!.innerHTML;
   });
@@ -482,22 +514,42 @@ it("uses different standard stat icons and the same fallback for custom stats", 
   expect(custom.size).toBe(1);
   const customIcon = icons[standardKeys.length];
   if (customIcon === undefined) {
-    throw new Error("Expected a rendered custom dice icon after the standard icons");
+    throw new Error(
+      "Expected a rendered custom dice icon after the standard icons",
+    );
   }
   expect(standard.has(customIcon)).toBe(false);
 });
 
 it("keeps Amberion player-owned abilities grouped in the quick panel", () => {
-  renderComponent(<QuickRollPanel
-    rollCharacter={{ stats: {}, skills: [], entries: [
-      { id: "unique", kind: "ABILITY", name: "Теневой шаг", data: {} },
-      { id: "common", kind: "ABILITY", name: "Фокус", data: {} },
-    ] } as unknown as CharacterDto}
-    campaignId="eb6a55c4-a821-4739-8d4a-a1028e9d9092" characterOwnerRole="PLAYER"
-    membershipId="member" rows={[]} quickRollPending={false} canControlCharacter gmOnly={false}
-    onQuickRoll={() => {}} onEntryAction={vi.fn()}
-  />);
+  renderComponent(
+    <QuickRollPanel
+      rollCharacter={
+        {
+          stats: {},
+          skills: [],
+          entries: [
+            { id: "unique", kind: "ABILITY", name: "Теневой шаг", data: {} },
+            { id: "common", kind: "ABILITY", name: "Фокус", data: {} },
+          ],
+        } as unknown as CharacterDto
+      }
+      campaignId="eb6a55c4-a821-4739-8d4a-a1028e9d9092"
+      characterOwnerRole="PLAYER"
+      membershipId="member"
+      rows={[]}
+      quickRollPending={false}
+      canControlCharacter
+      gmOnly={false}
+      onQuickRoll={() => {}}
+      onEntryAction={vi.fn()}
+    />,
+  );
   fireEvent.click(screen.getByRole("tab", { name: "Скилы" }));
-  expect(screen.getByRole("heading", {name: "Уникальные заклинания"})).toBeVisible();
-  expect(screen.getByRole("heading", {name: "Общие способности"})).toBeVisible();
+  expect(
+    screen.getByRole("heading", { name: "Уникальные заклинания" }),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("heading", { name: "Общие способности" }),
+  ).toBeVisible();
 });

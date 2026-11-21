@@ -26,7 +26,11 @@ import {
   inviteClaimSchema,
   rotateGmAccessSchema,
 } from "@arken/contracts";
-import { insertGameSession, requireAuth, writeGameSessionCookie } from "./auth.js";
+import {
+  insertGameSession,
+  requireAuth,
+  writeGameSessionCookie,
+} from "./auth.js";
 import { withCampaignGameIssuance } from "./campaign-archive-draft.js";
 import { buildSnapshot, withoutPersonalTheme } from "./snapshot.js";
 import { findAction } from "./action-lookup.js";
@@ -41,7 +45,9 @@ export async function claimInviteOwnership(
   invite: typeof invites.$inferSelect,
   displayName: string,
 ) {
-  return db.transaction((tx) => claimInviteInTransaction(tx, invite, displayName));
+  return db.transaction((tx) =>
+    claimInviteInTransaction(tx, invite, displayName),
+  );
 }
 
 async function claimInviteInTransaction(
@@ -53,10 +59,7 @@ async function claimInviteInTransaction(
     .select({ id: invites.id })
     .from(invites)
     .where(
-      and(
-        eq(invites.id, invite.id),
-        eq(invites.campaignId, invite.campaignId),
-      ),
+      and(eq(invites.id, invite.id), eq(invites.campaignId, invite.campaignId)),
     )
     .for("update")
     .limit(1);
@@ -206,9 +209,11 @@ export function registerSessionRoutes(
       safeEqual(hashToken(body.token), credential.tokenHash),
     );
     if (!gm) return reply.code(403).send({ error: "INVALID_MASTER_TOKEN" });
-    return issueLinkUnderArchiveGuard(request, reply, gm.campaignId, tx =>
+    return issueLinkUnderArchiveGuard(request, reply, gm.campaignId, (tx) =>
       insertGameSession(tx, gm.membershipId, {
-        source: "GM_LINK", campaignId: gm.campaignId, credentialRevision: gm.credentialRevision,
+        source: "GM_LINK",
+        campaignId: gm.campaignId,
+        credentialRevision: gm.credentialRevision,
       }),
     );
   });
@@ -237,14 +242,23 @@ export function registerSessionRoutes(
       )
       .limit(1);
     if (grant) {
-      return issueLinkUnderArchiveGuard(request, reply, grant.campaignId, async tx => {
-        if (body.displayName)
-          await tx.update(memberships).set({ displayName: body.displayName })
-            .where(eq(memberships.id, grant.membershipId));
-        return insertGameSession(tx, grant.membershipId, {
-          source: "PLAYER_GRANT", grantId: grant.id, grantRevision: grant.revision,
-        });
-      });
+      return issueLinkUnderArchiveGuard(
+        request,
+        reply,
+        grant.campaignId,
+        async (tx) => {
+          if (body.displayName)
+            await tx
+              .update(memberships)
+              .set({ displayName: body.displayName })
+              .where(eq(memberships.id, grant.membershipId));
+          return insertGameSession(tx, grant.membershipId, {
+            source: "PLAYER_GRANT",
+            grantId: grant.id,
+            grantRevision: grant.revision,
+          });
+        },
+      );
     }
 
     const [invite] = await db
@@ -262,10 +276,22 @@ export function registerSessionRoutes(
     if (!invite) return reply.code(410).send({ error: "INVITE_EXPIRED" });
 
     try {
-      return await issueLinkUnderArchiveGuard(request, reply, invite.campaignId, async tx => {
-        const member = await claimInviteInTransaction(tx, invite, body.displayName ?? invite.label);
-        return insertGameSession(tx, member.id, { source: "LEGACY_INVITE", inviteId: invite.id });
-      });
+      return await issueLinkUnderArchiveGuard(
+        request,
+        reply,
+        invite.campaignId,
+        async (tx) => {
+          const member = await claimInviteInTransaction(
+            tx,
+            invite,
+            body.displayName ?? invite.label,
+          );
+          return insertGameSession(tx, member.id, {
+            source: "LEGACY_INVITE",
+            inviteId: invite.id,
+          });
+        },
+      );
     } catch (error) {
       if (errorMessage(error).includes("INVITE_UNAVAILABLE"))
         return reply.code(410).send({ error: "INVITE_EXPIRED" });

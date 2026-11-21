@@ -70,8 +70,16 @@ export const transitionAccountCampaignArchive = (
   actionId: string,
   csrfToken: string,
 ) =>
-  api<{ id: string; archivedAt: string | null; revision: number }>("/api/account/campaigns/archive", {
-    method: "POST",
-    headers: { "x-csrf-token": csrfToken },
-    body: JSON.stringify({ campaignId, archived, expectedRevision, actionId }),
-  });
+  api<{ id: string; archivedAt: string | null; revision: number }>(
+    "/api/account/campaigns/archive",
+    {
+      method: "POST",
+      headers: { "x-csrf-token": csrfToken },
+      body: JSON.stringify({
+        campaignId,
+        archived,
+        expectedRevision,
+        actionId,
+      }),
+    },
+  );

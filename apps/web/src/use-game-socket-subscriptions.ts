@@ -19,7 +19,12 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from "react";
-import type { AudioTrackDto, GameSnapshot, MapPing, ServerToClientEvents } from "@arken/contracts";
+import type {
+  AudioTrackDto,
+  GameSnapshot,
+  MapPing,
+  ServerToClientEvents,
+} from "@arken/contracts";
 import { reportClientEvent } from "./api";
 import { createGameSocket, type GameSocket } from "./realtime";
 import { appendChatMessage } from "./chat-state";
@@ -158,7 +163,10 @@ export function useGameSocketSubscriptions({
       string,
       Parameters<ServerToClientEvents["token:preview-hidden"]>[0]
     >();
-    const redactedPreviewRecovery = new Map<string, ReturnType<typeof setTimeout>>();
+    const redactedPreviewRecovery = new Map<
+      string,
+      ReturnType<typeof setTimeout>
+    >();
     const clearRedactedPreviewRecovery = (tokenId: string) => {
       clearTimeout(redactedPreviewRecovery.get(tokenId));
       redactedPreviewRecovery.delete(tokenId);
@@ -199,14 +207,21 @@ export function useGameSocketSubscriptions({
     });
     next.io.on("reconnect_attempt", () => setConnection("RECONNECTING"));
     next.io.on("reconnect_failed", () => setConnection("OFFLINE"));
-    next.on("token:preview-epoch", (epoch) => { next.previewEpoch = epoch; });
+    next.on("token:preview-epoch", (epoch) => {
+      next.previewEpoch = epoch;
+    });
     next.on("game:snapshot", (nextSnapshot) => {
       if (nextSnapshot.snapshotVersion >= (next.previewSnapshotVersion ?? 0)) {
-        const placements = new Map(nextSnapshot.tokens.map((token) => [token.id, token]));
+        const placements = new Map(
+          nextSnapshot.tokens.map((token) => [token.id, token]),
+        );
         for (const [id, redaction] of redactedPreviews) {
           const token = placements.get(id);
-          if (token?.revision !== redaction.revision ||
-              token.sceneId !== redaction.sceneId || redaction.previewEpoch !== next.previewEpoch) {
+          if (
+            token?.revision !== redaction.revision ||
+            token.sceneId !== redaction.sceneId ||
+            redaction.previewEpoch !== next.previewEpoch
+          ) {
             redactedPreviews.delete(id);
             clearRedactedPreviewRecovery(id);
           }
@@ -228,7 +243,10 @@ export function useGameSocketSubscriptions({
         if (reconciled.campaign.id !== campaignId) return reconciled;
         playerFog.scope(reconciled.scenes.find((scene) => scene.active)?.id);
         if (nextSnapshot.campaign.id === campaignId)
-          playerFog.snapshot(nextSnapshot.scenes.find((scene) => scene.active)?.id, nextSnapshot.snapshotVersion);
+          playerFog.snapshot(
+            nextSnapshot.scenes.find((scene) => scene.active)?.id,
+            nextSnapshot.snapshotVersion,
+          );
         recordTokenRemovals(current, reconciled, tokenRemovalWatermarks);
         if (nextSnapshot.snapshotVersion >= canonicalAudioFloor)
           canonicalAudioFloor = nextSnapshot.snapshotVersion;
@@ -256,7 +274,12 @@ export function useGameSocketSubscriptions({
         if (reconciled === current) return reconciled;
         return activeRedactions.reduce(
           (state, redaction) =>
-            applyHiddenTokenPreview(state, redaction, tokenRemovalWatermarks, previewEpoch),
+            applyHiddenTokenPreview(
+              state,
+              redaction,
+              tokenRemovalWatermarks,
+              previewEpoch,
+            ),
           reconciled,
         );
       });
@@ -264,7 +287,8 @@ export function useGameSocketSubscriptions({
     });
     next.on("scene:activated", (event) =>
       setSnapshot((current) => {
-        if (!current || event.sequence <= current.snapshotVersion) return current;
+        if (!current || event.sequence <= current.snapshotVersion)
+          return current;
         playerFog.scope(event.data);
         return {
           ...current,
@@ -278,15 +302,24 @@ export function useGameSocketSubscriptions({
     );
     next.on("token:moving", (movement) => {
       const redaction = redactedPreviews.get(movement.tokenId);
-      if (redaction && movement.previewEpoch === redaction.previewEpoch &&
-          movement.sceneId === redaction.sceneId && movement.revision === redaction.revision &&
-          (movement.snapshotVersion ?? 0) >= (redaction.snapshotVersion ?? 0)) {
+      if (
+        redaction &&
+        movement.previewEpoch === redaction.previewEpoch &&
+        movement.sceneId === redaction.sceneId &&
+        movement.revision === redaction.revision &&
+        (movement.snapshotVersion ?? 0) >= (redaction.snapshotVersion ?? 0)
+      ) {
         redactedPreviews.delete(movement.tokenId);
         clearRedactedPreviewRecovery(movement.tokenId);
       }
       setSnapshot((current) =>
         current
-          ? applyTokenPreview(current, movement, tokenRemovalWatermarks, next.previewEpoch)
+          ? applyTokenPreview(
+              current,
+              movement,
+              tokenRemovalWatermarks,
+              next.previewEpoch,
+            )
           : current,
       );
     });
@@ -295,18 +328,26 @@ export function useGameSocketSubscriptions({
       redactedPreviews.set(event.tokenId, event);
       setSnapshot((current) =>
         current
-          ? applyHiddenTokenPreview(current, event, tokenRemovalWatermarks, next.previewEpoch)
+          ? applyHiddenTokenPreview(
+              current,
+              event,
+              tokenRemovalWatermarks,
+              next.previewEpoch,
+            )
           : current,
       );
       // An abandoned drag might not commit. Fall back to the server's
       // canonical view rather than leaving the token hidden indefinitely.
       clearRedactedPreviewRecovery(event.tokenId);
-      redactedPreviewRecovery.set(event.tokenId, setTimeout(() => {
-        redactedPreviews.delete(event.tokenId);
-        redactedPreviewRecovery.delete(event.tokenId);
-        if (next.connected)
-          next.emit("game:resync", next.previewSnapshotVersion ?? 0);
-      }, 8000));
+      redactedPreviewRecovery.set(
+        event.tokenId,
+        setTimeout(() => {
+          redactedPreviews.delete(event.tokenId);
+          redactedPreviewRecovery.delete(event.tokenId);
+          if (next.connected)
+            next.emit("game:resync", next.previewSnapshotVersion ?? 0);
+        }, 8000),
+      );
     });
     next.on("token:moved", (event) =>
       setSnapshot((current) =>
@@ -333,13 +374,20 @@ export function useGameSocketSubscriptions({
         if (!current) return current;
         // A scene switch can overtake the server relay after it selected the
         // audience. Do not attach fog from a scene no longer in this view.
-        const visibleScene = current.scenes.some((scene) => scene.active && scene.id === event.data.sceneId) ||
-          (current.me.role === "GM" && viewedSceneIdRef.current === event.data.sceneId);
+        const visibleScene =
+          current.scenes.some(
+            (scene) => scene.active && scene.id === event.data.sceneId,
+          ) ||
+          (current.me.role === "GM" &&
+            viewedSceneIdRef.current === event.data.sceneId);
         if (!visibleScene) return current;
-        const exists = current.fogReveals.some((fog) => fog.id === event.data.id);
+        const exists = current.fogReveals.some(
+          (fog) => fog.id === event.data.id,
+        );
         if (event.sequence <= current.snapshotVersion) {
           if (!exists) {
-            if (current.me.role === "PLAYER") playerFog.request(event.data.sceneId, current.snapshotVersion);
+            if (current.me.role === "PLAYER")
+              playerFog.request(event.data.sceneId, current.snapshotVersion);
             else requestFogResync(current.snapshotVersion);
           }
           return current;
@@ -349,26 +397,38 @@ export function useGameSocketSubscriptions({
         return {
           ...current,
           snapshotVersion: event.sequence,
-          fogReveals: exists ? current.fogReveals : [...current.fogReveals, event.data],
+          fogReveals: exists
+            ? current.fogReveals
+            : [...current.fogReveals, event.data],
         };
       }),
     );
     next.on("fog:removed", (event) =>
       setSnapshot((current) => {
         if (!current) return current;
-        const previous = current.fogReveals.find((fog) => fog.id === event.data.fogRevealId);
-        const playerScene = current.me.role === "PLAYER" && previous &&
-          current.scenes.some((scene) => scene.active && scene.id === previous.sceneId);
+        const previous = current.fogReveals.find(
+          (fog) => fog.id === event.data.fogRevealId,
+        );
+        const playerScene =
+          current.me.role === "PLAYER" &&
+          previous &&
+          current.scenes.some(
+            (scene) => scene.active && scene.id === previous.sceneId,
+          );
         if (event.sequence <= current.snapshotVersion) {
-          if (playerScene) playerFog.request(previous.sceneId, current.snapshotVersion);
-          else if (previous && current.me.role === "GM") requestFogResync(current.snapshotVersion);
+          if (playerScene)
+            playerFog.request(previous.sceneId, current.snapshotVersion);
+          else if (previous && current.me.role === "GM")
+            requestFogResync(current.snapshotVersion);
           return current;
         }
         if (playerScene) playerFog.request(previous.sceneId, event.sequence);
         return {
           ...current,
           snapshotVersion: event.sequence,
-          fogReveals: current.fogReveals.filter((fog) => fog.id !== event.data.fogRevealId),
+          fogReveals: current.fogReveals.filter(
+            (fog) => fog.id !== event.data.fogRevealId,
+          ),
         };
       }),
     );

@@ -97,7 +97,11 @@ export function CampaignRouter() {
     return (
       <main className="account-auth-shell">
         <section className="account-auth-card">
-          <h1>{state === "archived" ? "Кампания в архиве" : "Не удалось открыть кампанию"}</h1>
+          <h1>
+            {state === "archived"
+              ? "Кампания в архиве"
+              : "Не удалось открыть кампанию"}
+          </h1>
           <p role="alert">
             {state === "archived"
               ? "Вернитесь к выбору кампании."

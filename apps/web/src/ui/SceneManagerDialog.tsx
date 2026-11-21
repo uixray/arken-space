@@ -174,48 +174,50 @@ export function SceneManagerDialog({
               Сцен пока нет. Создайте сцену для подготовки игры.
             </p>
           )}
-          {orderCampaignScenes(snapshot.scenes, snapshot.campaign.id).map((scene) => {
-            const viewed =
-              scene.id === viewedSceneId || (!viewedSceneId && scene.active);
-            return (
-              <article className="scene-manager-card" key={scene.id}>
-                <div>
-                  <strong>{scene.name}</strong>
-                  <div className="scene-manager-meta">
-                    <span>{placementCount(scene.id)} токенов на сцене</span>
-                    <div className="scene-manager-statuses">
-                      {viewed && (
-                        <Label theme="info">Просматривается мастером</Label>
-                      )}
-                      {scene.active && (
-                        <Label theme="success">Показана игрокам</Label>
-                      )}
+          {orderCampaignScenes(snapshot.scenes, snapshot.campaign.id).map(
+            (scene) => {
+              const viewed =
+                scene.id === viewedSceneId || (!viewedSceneId && scene.active);
+              return (
+                <article className="scene-manager-card" key={scene.id}>
+                  <div>
+                    <strong>{scene.name}</strong>
+                    <div className="scene-manager-meta">
+                      <span>{placementCount(scene.id)} токенов на сцене</span>
+                      <div className="scene-manager-statuses">
+                        {viewed && (
+                          <Label theme="info">Просматривается мастером</Label>
+                        )}
+                        {scene.active && (
+                          <Label theme="success">Показана игрокам</Label>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="dialog-actions">
-                  <Button
-                    view="action"
-                    onClick={() => onView(scene.id)}
-                    disabled={viewed}
-                  >
-                    Открыть для мастера
-                  </Button>
-                  {!scene.active && (
-                    <Button onClick={() => void onPublish(scene.id)}>
-                      Показать игрокам
+                  <div className="dialog-actions">
+                    <Button
+                      view="action"
+                      onClick={() => onView(scene.id)}
+                      disabled={viewed}
+                    >
+                      Открыть для мастера
                     </Button>
-                  )}
-                  <Button
-                    data-scene-configure={scene.id}
-                    onClick={() => setEditing(scene)}
-                  >
-                    Настроить
-                  </Button>
-                </div>
-              </article>
-            );
-          })}
+                    {!scene.active && (
+                      <Button onClick={() => void onPublish(scene.id)}>
+                        Показать игрокам
+                      </Button>
+                    )}
+                    <Button
+                      data-scene-configure={scene.id}
+                      onClick={() => setEditing(scene)}
+                    >
+                      Настроить
+                    </Button>
+                  </div>
+                </article>
+              );
+            },
+          )}
         </div>
       )}
       {editing && (

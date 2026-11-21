@@ -318,7 +318,12 @@ async function emitCampaignSnapshots(
         if (auth?.campaignId === campaignId) {
           // UIX-408: мастеру приходит канвас и той сцены, которую он
           // рассматривает, — иначе он рисовал бы туман поверх якобы пустой.
-          emitPreviewSnapshot(io, socket, campaignId, await buildSnapshot(db, auth, viewedScenes(socket.data), readSet));
+          emitPreviewSnapshot(
+            io,
+            socket,
+            campaignId,
+            await buildSnapshot(db, auth, viewedScenes(socket.data), readSet),
+          );
         }
       }),
     );

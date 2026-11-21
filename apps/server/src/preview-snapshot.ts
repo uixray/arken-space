@@ -1,5 +1,9 @@
 import type { Server } from "socket.io";
-import type { ClientToServerEvents, GameSnapshot, ServerToClientEvents } from "@arken/contracts";
+import type {
+  ClientToServerEvents,
+  GameSnapshot,
+  ServerToClientEvents,
+} from "@arken/contracts";
 import { tokenPreviewEpochs } from "./token-preview-epochs.js";
 import { campaignRoom } from "./rooms.js";
 
@@ -14,8 +18,13 @@ export function emitPreviewSnapshot(
   campaignId: string,
   snapshot: GameSnapshot,
 ): void {
-  const { epoch, changed } = tokenPreviewEpochs.snapshot(socket.id, campaignId, snapshot.tokens.map(token => token.id));
-  if (changed) io.to(campaignRoom(campaignId)).emit("token:preview-epoch", epoch);
+  const { epoch, changed } = tokenPreviewEpochs.snapshot(
+    socket.id,
+    campaignId,
+    snapshot.tokens.map((token) => token.id),
+  );
+  if (changed)
+    io.to(campaignRoom(campaignId)).emit("token:preview-epoch", epoch);
   else socket.emit("token:preview-epoch", epoch);
   socket.emit("game:snapshot", snapshot);
 }

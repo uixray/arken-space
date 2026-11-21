@@ -30,7 +30,10 @@ export function createPlayerFogResync(send: (sequence: number) => void) {
         sent = null;
         if (!pending) return;
         if (pending.sequence === sequence) {
-          if (retried) { reset(); return; }
+          if (retried) {
+            reset();
+            return;
+          }
           retried = true;
         }
         arm();

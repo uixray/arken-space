@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { GameSnapshot, TokenDto } from "@arken/contracts";
 import { act, renderComponent } from "./test-support/render";
@@ -53,7 +53,9 @@ function Harness({ player = false }: { player?: boolean }) {
   const [state, setSnapshot] = useState<GameSnapshot | null>(() =>
     player ? playerSnapshot(100) : initial(),
   );
-  observed = state!;
+  useEffect(() => {
+    if (state) observed = state;
+  }, [state]);
   const chatIds = useRef(new Set<string>()),
     threadId = useRef<string | null>(null),
     chatOpen = useRef(false);
@@ -117,11 +119,41 @@ it("handles interleaved movement, deletion, ID reuse and scene changes through t
     fake.fire("token:updated", { sequence: 105, data: token("a", 3, "b", 90) }),
   );
   expect(observed.tokens[0]).toMatchObject({ revision: 0, sceneId: "b", x: 4 });
-  await act(async () => fake.fire("token:moving", { tokenId: "a", revision: 0, sceneId: "b", snapshotVersion: 104, previewEpoch: "old", x: 90, y: 0 }));
+  await act(async () =>
+    fake.fire("token:moving", {
+      tokenId: "a",
+      revision: 0,
+      sceneId: "b",
+      snapshotVersion: 104,
+      previewEpoch: "old",
+      x: 90,
+      y: 0,
+    }),
+  );
   expect(observed.tokens[0]).toMatchObject({ x: 4 });
-  await act(async () => fake.fire("token:moving", { tokenId: "a", revision: 0, sceneId: "a", snapshotVersion: 108, previewEpoch: "new", x: 90, y: 0 }));
+  await act(async () =>
+    fake.fire("token:moving", {
+      tokenId: "a",
+      revision: 0,
+      sceneId: "a",
+      snapshotVersion: 108,
+      previewEpoch: "new",
+      x: 90,
+      y: 0,
+    }),
+  );
   expect(observed.tokens[0]).toMatchObject({ x: 4 });
-  await act(async () => fake.fire("token:moving", { tokenId: "a", revision: 0, sceneId: "b", snapshotVersion: 108, previewEpoch: "new", x: 20, y: 0 }));
+  await act(async () =>
+    fake.fire("token:moving", {
+      tokenId: "a",
+      revision: 0,
+      sceneId: "b",
+      snapshotVersion: 108,
+      previewEpoch: "new",
+      x: 20,
+      y: 0,
+    }),
+  );
   expect(observed.tokens[0]).toMatchObject({ x: 20 });
   await act(async () =>
     fake.fire("token:moved", { sequence: 109, data: token("a", 1, "b", 30) }),
@@ -135,7 +167,8 @@ it("handles interleaved movement, deletion, ID reuse and scene changes through t
 
 function playerSnapshot(snapshotVersion: number) {
   const base = gmSnapshot({
-    snapshotVersion, tokens: [{ ...token("a", 0), visible: true }],
+    snapshotVersion,
+    tokens: [{ ...token("a", 0), visible: true }],
   });
   return { ...base, me: { ...base.me, role: "PLAYER" as const } };
 }
@@ -146,16 +179,27 @@ it("keeps a held redaction across unrelated snapshots, then resyncs an abandoned
     fake.socket.connected = true;
     renderComponent(<Harness player />);
     await act(async () => fake.fire("token:preview-epoch", "current"));
-    const event = { tokenId: "a", sceneId: "a", revision: 0, previewEpoch: "current" };
+    const event = {
+      tokenId: "a",
+      sceneId: "a",
+      revision: 0,
+      previewEpoch: "current",
+    };
     await act(async () => fake.fire("token:preview-hidden", event));
     expect(observed.tokens[0]).toMatchObject({ visible: false, x: 0 });
     await act(async () => fake.fire("game:snapshot", playerSnapshot(101)));
     expect(observed.tokens[0]).toMatchObject({ visible: false, x: 0 });
-    await act(async () => { await vi.advanceTimersByTimeAsync(7000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(7000);
+    });
     await act(async () => fake.fire("token:preview-hidden", event));
-    await act(async () => { await vi.advanceTimersByTimeAsync(7999); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(7999);
+    });
     expect(fake.socket.emit).not.toHaveBeenCalledWith("game:resync", 101);
-    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
     expect(fake.socket.emit).toHaveBeenCalledWith("game:resync", 101);
     await act(async () => fake.fire("game:snapshot", playerSnapshot(101)));
     expect(observed.tokens[0]).toMatchObject({ visible: true, x: 0 });

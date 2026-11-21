@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createPlayerFogResync } from "./player-fog-resync";
 
-beforeEach(() => { vi.useFakeTimers(); });
-afterEach(() => { vi.useRealTimers(); });
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 it("batches a burst, allows one in flight, then one tail for uncovered edits", () => {
   const send = vi.fn();

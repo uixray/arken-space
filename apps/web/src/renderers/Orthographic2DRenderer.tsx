@@ -3552,7 +3552,9 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       ":" +
       props.tool +
       ":" +
-      (props.tool === "PING" ? touchPingConnection : Boolean(props.socket?.connected)) +
+      (props.tool === "PING"
+        ? touchPingConnection
+        : Boolean(props.socket?.connected)) +
       ":" +
       brushRadius +
       ":" +
@@ -3565,7 +3567,11 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
         ? (point) => {
             // Socket.IO buffers emits while offline. Recheck the live socket at
             // release so a stale tap never pings after reconnecting.
-            if (!props.socket?.connected || props.socket.id !== touchPingConnection) return;
+            if (
+              !props.socket?.connected ||
+              props.socket.id !== touchPingConnection
+            )
+              return;
             props.onPing({
               x: (point.x - position.x) / scale,
               y: (point.y - position.y) / scale,
