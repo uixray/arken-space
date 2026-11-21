@@ -37,6 +37,89 @@ import {
 } from "./character-access.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
+type EditTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+export async function persistCharacterEdit(
+  tx: EditTransaction,
+  auth: { campaignId: string; membershipId: string },
+  current: typeof characters.$inferSelect,
+  mergedUpdates: Partial<
+    Omit<z.infer<typeof characterCommandSchema>, "actionId" | "revision">
+  >,
+  actionId: string,
+) {
+  const { id } = current;
+  const [next] = await tx
+    .update(characters)
+    .set({
+      ...mergedUpdates,
+      revision: current.revision + 1,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(characters.id, id),
+        eq(characters.campaignId, auth.campaignId),
+        eq(characters.revision, current.revision),
+      ),
+    )
+    .returning();
+  if (!next) return null;
+  const [event] = await tx
+    .insert(gameEvents)
+    .values({
+      campaignId: auth.campaignId,
+      actionId,
+      membershipId: auth.membershipId,
+      type: "character.updated",
+      entityType: "character",
+      entityId: next.id,
+      entityRevision: next.revision,
+      payload: { characterId: next.id },
+    })
+    .returning();
+  if (!event) throw new Error("EVENT_RECORD_FAILED");
+  return { next, event };
+}
+
+export async function persistCatalogEdit(
+  tx: EditTransaction,
+  auth: { campaignId: string; membershipId: string },
+  current: typeof catalogEntries.$inferSelect,
+  updates: Partial<
+    Omit<z.infer<typeof catalogEntryCommandSchema>, "actionId" | "revision">
+  >,
+  actionId: string,
+) {
+  const { id } = current;
+  const [next] = await tx
+    .update(catalogEntries)
+    .set({
+      ...updates,
+      revision: current.revision + 1,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(catalogEntries.id, id),
+        eq(catalogEntries.campaignId, auth.campaignId),
+        eq(catalogEntries.revision, current.revision),
+      ),
+    )
+    .returning();
+  if (!next) return null;
+  await tx.insert(gameEvents).values({
+    campaignId: auth.campaignId,
+    actionId,
+    membershipId: auth.membershipId,
+    type: "catalog.updated",
+    entityType: "catalog_entry",
+    entityId: id,
+    entityRevision: next.revision,
+  });
+  return next;
+}
+
 type PublishCharacter = (
   campaignId: string,
   change: {
@@ -275,35 +358,9 @@ export function registerCharacterRoutes(
           },
         }
       : updates;
-    const updated = await db.transaction(async (tx) => {
-      const [next] = await tx
-        .update(characters)
-        .set({
-          ...mergedUpdates,
-          revision: current.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(eq(characters.id, id), eq(characters.revision, current.revision)),
-        )
-        .returning();
-      if (!next) return null;
-      const [event] = await tx
-        .insert(gameEvents)
-        .values({
-          campaignId: auth.campaignId,
-          actionId,
-          membershipId: auth.membershipId,
-          type: "character.updated",
-          entityType: "character",
-          entityId: next.id,
-          entityRevision: next.revision,
-          payload: { characterId: next.id },
-        })
-        .returning();
-      if (!event) throw new Error("EVENT_RECORD_FAILED");
-      return { next, event };
-    });
+    const updated = await db.transaction((tx) =>
+      persistCharacterEdit(tx, auth, current, mergedUpdates, actionId),
+    );
     if (!updated) return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
     /**
      * UIX-412: the name and portrait reach everyone (identities, token
@@ -430,33 +487,9 @@ export function registerCharacterRoutes(
     )
       return reply.code(404).send({ error: "DICE_FRAME_NOT_FOUND" });
     const { actionId, revision: _revision, ...updates } = body;
-    const updated = await db.transaction(async (tx) => {
-      const [next] = await tx
-        .update(catalogEntries)
-        .set({
-          ...updates,
-          revision: current.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(catalogEntries.id, id),
-            eq(catalogEntries.revision, current.revision),
-          ),
-        )
-        .returning();
-      if (!next) return null;
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId,
-        membershipId: auth.membershipId,
-        type: "catalog.updated",
-        entityType: "catalog_entry",
-        entityId: id,
-        entityRevision: next.revision,
-      });
-      return next;
-    });
+    const updated = await db.transaction((tx) =>
+      persistCatalogEdit(tx, auth, current, updates, actionId),
+    );
     if (!updated) return reply.code(409).send({ error: "CATALOG_CONFLICT" });
     await broadcast(auth.campaignId);
     return updated;
