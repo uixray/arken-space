@@ -19,7 +19,8 @@ function Changes({ draft }: { draft: Draft }) {
         <div key={key}>
           <dt>{key}</dt>
           <dd>
-            {JSON.stringify(draft.before[key])} → {JSON.stringify(value)}
+            <span>Было: {JSON.stringify(draft.before[key])}</span>{" "}
+            <span>Стало: {JSON.stringify(value)}</span>
           </dd>
         </div>
       ))}
@@ -61,8 +62,8 @@ export function EditorPilot({
   }
 
   return (
-    <details open>
-      <summary>Редактор Bionic · Бал Амбериона</summary>
+    <section aria-label="Редактор Bionic">
+      <h2>Редактор Bionic · Бал Амбериона</h2>
       <button
         disabled={busy}
         onClick={() =>
@@ -139,6 +140,6 @@ export function EditorPilot({
         </ul>
       )}
       <p role="status">{status}</p>
-    </details>
+    </section>
   );
 }
