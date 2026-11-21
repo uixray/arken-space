@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { gmSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -49,7 +50,8 @@ for (const width of [1280, 390]) {
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
-        if (message.toString() === "40") socket.send('40{"sid":"recovery"}');
+        if (isGameSocketConnect(message.toString()))
+          socket.send('40{"sid":"recovery"}');
       });
       socket.send(
         '0{"sid":"recovery-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

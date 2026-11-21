@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Route } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
@@ -67,7 +68,8 @@ for (const mode of ["close", "revoked"] as const) {
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
-        if (message.toString() === "40") socket.send('40{"sid":"operator"}');
+        if (isGameSocketConnect(message.toString()))
+          socket.send('40{"sid":"operator"}');
       });
       socket.send(
         '0{"sid":"operator-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

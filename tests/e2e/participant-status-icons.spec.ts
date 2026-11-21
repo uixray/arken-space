@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { WebSocketRoute } from "@playwright/test";
 import type { CharacterDto } from "@arken/contracts";
@@ -71,7 +72,8 @@ for (const role of ["GM"] as const)
       await page.routeWebSocket(/\/socket\.io\//, (s) => {
         socket = s;
         s.onMessage((m) => {
-          if (m.toString() === "40") s.send('40{"sid":"stat-controls"}');
+          if (isGameSocketConnect(m.toString()))
+            s.send('40{"sid":"stat-controls"}');
         });
         s.send(
           '0{"sid":"stat-controls","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

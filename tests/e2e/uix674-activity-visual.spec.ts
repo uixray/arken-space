@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test, type Page } from "@playwright/test";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
@@ -130,7 +131,8 @@ async function mockReadOnlyApp(page: Page, snapshot: GameSnapshot) {
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40") socket.send('40{"sid":"uix674-visual"}');
+      if (isGameSocketConnect(message.toString()))
+        socket.send('40{"sid":"uix674-visual"}');
     });
     socket.send(
       '0{"sid":"uix674-visual-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

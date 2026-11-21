@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Locator } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -5126,7 +5127,7 @@ test("GM can move tokens, pan the map, choose drawing color, and cannot republis
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
       const packet = message.toString();
-      if (packet === "40") {
+      if (isGameSocketConnect(packet)) {
         socketConnected = true;
         socket.send('40{"sid":"concept-test-socket"}');
         return;
@@ -5252,7 +5253,7 @@ test("sidebar collapse persists and hidden-chat rolls surface their authoritativ
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     gameSocket = socket;
     socket.onMessage((message) => {
-      if (message.toString() === "40")
+      if (isGameSocketConnect(message.toString()))
         socket.send('40{"sid":"sidebar-test-socket"}');
     });
     socket.send(

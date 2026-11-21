@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Locator, WebSocketRoute } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
@@ -186,7 +187,7 @@ for (const role of ["GM", "PLAYER"] as const)
       socket = s;
       s.onMessage((m) => {
         const raw = m.toString();
-        if (raw === "40") {
+        if (isGameSocketConnect(raw)) {
           s.send('40{"sid":"music-icons"}');
           return;
         }

@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -286,7 +287,7 @@ async function installMocks(
     ws = socket;
     socket.onMessage((message) => {
       const wire = message.toString();
-      if (wire === "40") socket.send('40{"sid":"uix347-mock"}');
+      if (isGameSocketConnect(wire)) socket.send('40{"sid":"uix347-mock"}');
     });
     socket.send(
       '0{"sid":"uix347-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

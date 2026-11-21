@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
@@ -98,7 +99,8 @@ async function preferenceFixture(page: Page, role: "GM" | "PLAYER") {
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40") socket.send('40{"sid":"theme-socket"}');
+      if (isGameSocketConnect(message.toString()))
+        socket.send('40{"sid":"theme-socket"}');
     });
     socket.send(
       '0{"sid":"theme-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

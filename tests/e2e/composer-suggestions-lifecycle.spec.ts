@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { GameSnapshot } from "@arken/contracts";
 import { starterStatLayout } from "@arken/system";
@@ -390,7 +391,7 @@ for (const role of ["GM", "PLAYER"] as const) {
       });
       await page.routeWebSocket(/\/socket\.io\//, (socket) => {
         socket.onMessage((m) => {
-          if (m.toString() === "40")
+          if (isGameSocketConnect(m.toString()))
             socket.send('40{"sid":"activity-selectors"}');
         });
         socket.send(

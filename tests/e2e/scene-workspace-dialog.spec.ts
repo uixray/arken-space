@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { openWorkspaceSection } from "./workspace-nav-helper";
@@ -569,7 +570,7 @@ for (const role of ["GM", "PLAYER"] as const) {
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
-        if (message.toString() === "40")
+        if (isGameSocketConnect(message.toString()))
           socket.send('40{"sid":"feedback-menu"}');
       });
       socket.send(
@@ -710,7 +711,8 @@ for (const role of ["GM", "PLAYER"] as const) {
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((m) => {
-        if (m.toString() === "40") socket.send('40{"sid":"cursor-menu"}');
+        if (isGameSocketConnect(m.toString()))
+          socket.send('40{"sid":"cursor-menu"}');
       });
       socket.send(
         '0{"sid":"cursor-menu","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
@@ -880,7 +882,8 @@ for (const width of [1280, 360]) {
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((m) => {
-        if (m.toString() === "40") socket.send('40{"sid":"toolbar-settings"}');
+        if (isGameSocketConnect(m.toString()))
+          socket.send('40{"sid":"toolbar-settings"}');
       });
       socket.send(
         '0{"sid":"toolbar-settings","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
@@ -996,7 +999,8 @@ test("UIX-644 pending grid save preserves newer outside focus", async ({
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((m) => {
-      if (m.toString() === "40") socket.send('40{"sid":"grid-pending"}');
+      if (isGameSocketConnect(m.toString()))
+        socket.send('40{"sid":"grid-pending"}');
     });
     socket.send(
       '0{"sid":"grid-pending","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

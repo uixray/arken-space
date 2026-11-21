@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { readFile } from "node:fs/promises";
 import { expect, test } from "./react-console-guard";
@@ -81,7 +82,7 @@ for (const width of [1280, 360]) {
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
         const text = message.toString();
-        if (text === "40") socket.send('40{"sid":"audio-draft"}');
+        if (isGameSocketConnect(text)) socket.send('40{"sid":"audio-draft"}');
         else if (text.startsWith("42")) commands.push(text);
       });
       socket.send(
@@ -310,7 +311,7 @@ for (const role of ["GM", "PLAYER"] as const) {
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
         const text = message.toString();
-        if (text === "40") {
+        if (isGameSocketConnect(text)) {
           socket.send('40{"sid":"audio"}');
           publish = () =>
             socket.send(`42${JSON.stringify(["game:snapshot", current])}`);

@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { CharacterDto, GameSnapshot, StatLayout } from "@arken/contracts";
 import type { Locator, Page } from "@playwright/test";
@@ -194,7 +195,8 @@ async function mockApi(
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40") socket.send('40{"sid":"uix682"}');
+      if (isGameSocketConnect(message.toString()))
+        socket.send('40{"sid":"uix682"}');
     });
     socket.send(
       '0{"sid":"uix682","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

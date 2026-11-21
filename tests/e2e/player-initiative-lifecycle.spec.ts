@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import type { WebSocketRoute } from "@playwright/test";
 import type { EncounterDto, GameSnapshot } from "@arken/contracts";
 import { expect, test } from "./react-console-guard";
@@ -102,7 +103,7 @@ for (const [label, sidebarWidth] of [
     await page.routeWebSocket(/\/socket\.io\//, (s) => {
       socket = s;
       s.onMessage((m) => {
-        if (m.toString() === "40") s.send('40{"sid":"uix505"}');
+        if (isGameSocketConnect(m.toString())) s.send('40{"sid":"uix505"}');
       });
       s.send(
         '0{"sid":"uix505","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

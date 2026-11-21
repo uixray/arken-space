@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { CharacterDto, GameSnapshot, StatLayout } from "@arken/contracts";
 import type { Route, WebSocketRoute } from "@playwright/test";
@@ -48,7 +49,7 @@ test("canonical removal rejects queued character edit without phantom PATCH and 
   let held: Route | undefined;
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40") {
+      if (isGameSocketConnect(message.toString())) {
         sockets.add(socket);
         socket.send('40{"sid":"character-queue-socket"}');
       }

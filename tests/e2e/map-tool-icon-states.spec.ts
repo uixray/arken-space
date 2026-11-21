@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Locator } from "@playwright/test";
 import {
@@ -102,7 +103,7 @@ for (const role of ["GM", "PLAYER"] as const)
       });
       await page.routeWebSocket(/\/socket\.io\//, (socket) => {
         socket.onMessage((message) => {
-          if (message.toString() === "40")
+          if (isGameSocketConnect(message.toString()))
             socket.send('40{"sid":"icons-socket"}');
         });
         socket.send(

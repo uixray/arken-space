@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { CharacterDto, StatLayout } from "@arken/contracts";
 import type { Route } from "@playwright/test";
@@ -70,7 +71,8 @@ test("UIX-624 PLAYER sheet targets and pending backstory survive journal and rot
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40") socket.send('40{"sid":"sheet-socket"}');
+      if (isGameSocketConnect(message.toString()))
+        socket.send('40{"sid":"sheet-socket"}');
     });
     socket.send(
       '0{"sid":"sheet-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

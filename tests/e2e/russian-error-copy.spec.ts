@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { AssetDto, CommandAck, GameSnapshot } from "@arken/contracts";
 import { readFile, writeFile } from "node:fs/promises";
@@ -74,7 +75,7 @@ async function installErrorFixture(page: Page, initiallyOffline: boolean) {
     // Existing concept.spec.ts transport pattern: no connectToServer call.
     socket.onMessage((message) => {
       const packet = message.toString();
-      if (packet === "40") {
+      if (isGameSocketConnect(packet)) {
         state.socketConnections += 1;
         socket.send('40{"sid":"russian-copy-socket"}');
         return;

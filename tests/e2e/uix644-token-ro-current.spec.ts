@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Page } from "@playwright/test";
 import { starterStatLayout } from "@arken/system";
@@ -89,7 +90,8 @@ async function install(page: Page) {
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40") socket.send('40{"sid":"uix644-ro"}');
+      if (isGameSocketConnect(message.toString()))
+        socket.send('40{"sid":"uix644-ro"}');
     });
     socket.send(
       '0{"sid":"uix644-ro-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

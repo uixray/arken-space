@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
@@ -309,7 +310,7 @@ test("compact PLAYER inventory commits normalized lines and survives acknowledge
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40")
+      if (isGameSocketConnect(message.toString()))
         socket.send('40{"sid":"inventory-socket"}');
     });
     socket.send(

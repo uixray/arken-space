@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import type { Locator, Page, Route, WebSocketRoute } from "@playwright/test";
@@ -893,7 +894,7 @@ test("UIX-613 GM creates and places token on active scene in one action", async 
   const sockets = new Set<WebSocketRoute>();
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40") {
+      if (isGameSocketConnect(message.toString())) {
         sockets.add(socket);
         socket.send('40{"sid":"token-success-socket"}');
       }
