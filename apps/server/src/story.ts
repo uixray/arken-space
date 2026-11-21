@@ -491,6 +491,101 @@ function emitStory(io: RealtimeServer, post: Post) {
   else io.to(gmRoom(post.campaignId)).emit("story:changed", event);
 }
 
+export async function persistStoryEdit(
+  tx: StoryDatabase,
+  auth: AuthContext,
+  current: Post,
+  body: ReturnType<typeof updateStoryPostSchema.parse>,
+  content: ReturnType<typeof mergedContent>,
+  currentMedia: MediaInput[],
+  commandHash: string,
+) {
+  const nextRevision = current.revision + 1;
+  const nextLifecycle =
+    current.lifecycle === "PUBLISHED" ? "CORRECTED" : current.lifecycle;
+  await claimNewMedia(tx, auth, content.media, currentMedia);
+  const [post] = await tx
+    .update(storyPosts)
+    .set({
+      title: content.title,
+      body: content.body,
+      entityLinks: content.entityLinks,
+      worldDay: content.worldDay,
+      era: content.era,
+      gmNotes: body.gmNotes ?? current.gmNotes,
+      lifecycle: nextLifecycle,
+      correctedAt:
+        nextLifecycle === "CORRECTED" ? new Date() : current.correctedAt,
+      revision: nextRevision,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(storyPosts.id, current.id),
+        eq(storyPosts.revision, current.revision),
+      ),
+    )
+    .returning();
+  if (!post) throw new Error("STORY_POST_CONFLICT");
+  await persistRevision(
+    tx,
+    post,
+    auth.membershipId,
+    { ...content, gmNotes: post.gmNotes, lifecycle: post.lifecycle },
+    nextRevision,
+  );
+
+  const result = dto(
+    post,
+    await mediaForRevision(tx, auth.campaignId, post.id, nextRevision),
+    true,
+    null,
+    (await storyLinkTargetsFor(tx, auth, [post])).get(post.id),
+  );
+  const event = await recordEvent(
+    tx,
+    auth,
+    body.actionId,
+    "story.updated",
+    post,
+    result,
+    commandHash,
+  );
+  return { post, result, event };
+}
+
+export async function persistEditorStoryDraft(
+  tx: StoryDatabase,
+  auth: AuthContext,
+  post: Post,
+  actionId: string,
+  values: { title?: string; body?: string },
+) {
+  const body = updateStoryPostSchema.parse({
+    ...values,
+    actionId,
+    postId: post.id,
+    revision: post.revision,
+  });
+  const media = (
+    await mediaForRevision(tx, auth.campaignId, post.id, post.revision)
+  ).map(({ media }) => ({
+    contentId: media.contentId,
+    order: media.sortOrder,
+    altText: media.altText,
+    caption: media.caption,
+  }));
+  return persistStoryEdit(
+    tx,
+    auth,
+    post,
+    body,
+    mergedContent(post, body, media),
+    media,
+    storyCommandHash("story.updated", body),
+  );
+}
+
 export function registerStoryRoutes(
   app: FastifyInstance,
   db: Database,
@@ -861,60 +956,17 @@ export function registerStoryRoutes(
         current.entityLinks as StoryEntityLink[],
       );
 
-      const nextRevision = current.revision + 1;
-      const nextLifecycle =
-        current.lifecycle === "PUBLISHED" ? "CORRECTED" : current.lifecycle;
-      const saved = await db.transaction(async (tx) => {
-        await claimNewMedia(tx, auth, content.media, currentMedia);
-        const [post] = await tx
-          .update(storyPosts)
-          .set({
-            title: content.title,
-            body: content.body,
-            entityLinks: content.entityLinks,
-            worldDay: content.worldDay,
-            era: content.era,
-            gmNotes: body.gmNotes ?? current.gmNotes,
-            lifecycle: nextLifecycle,
-            correctedAt:
-              nextLifecycle === "CORRECTED" ? new Date() : current.correctedAt,
-            revision: nextRevision,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(storyPosts.id, current.id),
-              eq(storyPosts.revision, current.revision),
-            ),
-          )
-          .returning();
-        if (!post) throw new Error("STORY_POST_CONFLICT");
-        await persistRevision(
-          tx,
-          post,
-          auth.membershipId,
-          { ...content, gmNotes: post.gmNotes, lifecycle: post.lifecycle },
-          nextRevision,
-        );
-
-        const result = dto(
-          post,
-          await mediaForRevision(tx, auth.campaignId, post.id, nextRevision),
-          true,
-          null,
-          (await storyLinkTargetsFor(tx, auth, [post])).get(post.id),
-        );
-        const event = await recordEvent(
+      const saved = await db.transaction((tx) =>
+        persistStoryEdit(
           tx,
           auth,
-          body.actionId,
-          "story.updated",
-          post,
-          result,
+          current,
+          body,
+          content,
+          currentMedia,
           commandHash,
-        );
-        return { post, result, event };
-      });
+        ),
+      );
       emitStory(io, saved.post);
       return saved.result;
     } catch (error) {

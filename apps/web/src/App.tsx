@@ -25,6 +25,7 @@ import type {
   AudioPurpose,
 } from "@arken/contracts";
 import { api, ApiError } from "./api";
+import { EditorPilot } from "./EditorPilot";
 import { mergeTokenPlacementUpdate } from "./token-projection";
 import { AuthGate } from "./AuthGate";
 import { useGameSocketSubscriptions } from "./use-game-socket-subscriptions";
@@ -2189,6 +2190,19 @@ export function App() {
             campaignId={snapshot.campaign.id}
             enabled={!previewSnapshot}
           />
+          {!previewSnapshot &&
+            snapshot.me.role === "GM" &&
+            snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092" &&
+            new URLSearchParams(window.location.search).has("editor-pilot") && (
+              <EditorPilot
+                campaignId={snapshot.campaign.id}
+                draftId={
+                  new URLSearchParams(window.location.search).get(
+                    "editor-pilot",
+                  ) ?? ""
+                }
+              />
+            )}
           <MusicBar
             campaignId={snapshot.campaign.id}
             audio={snapshot.audio}
