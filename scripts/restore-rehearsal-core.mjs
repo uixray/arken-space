@@ -78,6 +78,7 @@ const applicationCountTableNames = [
   "economy_offers",
   "economy_purchases",
   "economy_quotes",
+  "editor_changes",
   "encounters",
   "feedback_attachments",
   "feedback_operator_audits",
