@@ -4,6 +4,8 @@ import { Button } from "./design-system/Button";
 import { FormInput } from "./ui/GravityFormControls";
 import { ApiError } from "./api";
 import { Brand } from "./Brand";
+import { AppIcon } from "./ui/AppIcon";
+import { CustomActionIcon } from "./ui/icons";
 import {
   changeAccountPassword,
   confirmPasswordReset,
@@ -814,7 +816,7 @@ export function AccountAuthWorkspace({
                       className="account-campaign-symbol"
                       aria-hidden="true"
                     >
-                      ✦
+                      <AppIcon icon={CustomActionIcon} />
                     </span>
                     <div>
                       <span className="account-campaign-role">

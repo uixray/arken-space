@@ -1032,6 +1032,7 @@ describe("durable realtime token commands", () => {
       if (event.data.id === ids.token) leakedCommit = true;
     });
     gmClient.emit("token:moving", {
+      previewEpoch: tokenPreviewEpochs.current(ids.campaign),
       actionId: crypto.randomUUID(),
       tokenId: ids.token,
       x: 40,
@@ -1188,6 +1189,7 @@ describe("durable realtime token commands", () => {
       Parameters<ServerToClientEvents["token:moving"]>[0]
     >((resolve) => client.once("token:moving", resolve));
     gmClient.emit("token:moving", {
+      previewEpoch: tokenPreviewEpochs.current(ids.campaign),
       actionId: crypto.randomUUID(),
       tokenId: ids.token,
       x: 64,
@@ -1258,6 +1260,7 @@ describe("durable realtime token commands", () => {
       Parameters<ServerToClientEvents["token:moving"]>[0]
     >((resolve) => gmClient.once("token:moving", resolve));
     client.emit("token:moving", {
+      previewEpoch: tokenPreviewEpochs.current(ids.campaign),
       actionId: crypto.randomUUID(),
       tokenId: ids.token,
       x: 64,
@@ -1330,6 +1333,7 @@ describe("durable realtime token commands", () => {
       if (movement.tokenId === ids.token) leakedPreview = true;
     });
     otherClient.emit("token:moving", {
+      previewEpoch: tokenPreviewEpochs.current(ids.campaign),
       actionId: crypto.randomUUID(),
       tokenId: ids.token,
       x: 512,
@@ -2552,6 +2556,7 @@ describe("campaign pause Canvas realtime guards (UIX-583)", () => {
     otherClient.on("map:ping", onPing);
 
     client.emit("token:moving", {
+      previewEpoch: tokenPreviewEpochs.current(ids.campaign),
       actionId: crypto.randomUUID(),
       tokenId: ids.token,
       x: 128,
@@ -2614,6 +2619,7 @@ describe("campaign pause Canvas realtime guards (UIX-583)", () => {
       otherClient.once("map:ping", () => resolve()),
     );
     client.emit("token:moving", {
+      previewEpoch: tokenPreviewEpochs.current(ids.campaign),
       actionId: crypto.randomUUID(),
       tokenId: ids.token,
       x: 64,

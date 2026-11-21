@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { Button } from "./design-system/Button";
+import { AppIcon } from "./ui/AppIcon";
+import { AddIcon, DecreaseIcon } from "./ui/icons";
 
 type Note = { text: string; revision: number };
 type Health = { current: number; maximum: number };
@@ -127,7 +129,7 @@ export function GmHealthCounter({ characterId }: { characterId: string }) {
           void save({ ...health, current: Math.max(0, health.current - 1) })
         }
       >
-        −
+        <AppIcon icon={DecreaseIcon} />
       </Button>
       <Button
         disabled={!health || busy || draftDirty}
@@ -136,7 +138,7 @@ export function GmHealthCounter({ characterId }: { characterId: string }) {
           health && void save({ ...health, current: health.current + 1 })
         }
       >
-        +
+        <AppIcon icon={AddIcon} />
       </Button>
       <details>
         <summary aria-label="Максимум здоровья">…</summary>

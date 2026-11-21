@@ -40,6 +40,7 @@ const SOURCES = [
  * вредно — человек раскрыл ресурсы и работает рядом с ними.
  */
 const IN_FLOW_SECTIONS = new Set([
+  "ability-management",
   "initiative-panel",
   "resource-counters",
   "character-hero__backstory",
@@ -119,6 +120,7 @@ describe("поповеры закрываются общим механизмо�
       .filter((item) => IN_FLOW_SECTIONS.has(item.className))
       .map((item) => item.className);
     expect([...new Set(inFlow)].sort()).toEqual([
+      "ability-management",
       "character-hero__backstory",
       "initiative-panel",
       "resource-counters",

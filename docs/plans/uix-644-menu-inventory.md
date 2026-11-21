@@ -1287,3 +1287,10 @@ historical snapshots and must not be silently carried forward to these sites.
 
 - Reviewed source controls in AbilityAreaPanel, Achievements, CartographicLabelFields, CharacterProgression, EconomyManager, EconomyWorkspace, InstanceBindings, WorldRegionPicker and CharacterInventory. Added 14 newly discovered static buckets; SpellSchoolsWorkspace gains one select (7 → 8).
 - The current source index contains **77 buckets / 151 occurrences**. All added buckets and the changed school-select bucket remain **BLOCKED: current runtime evidence pending**. Historical evidence is retained without extending it to these controls or this revision; static bookkeeping is not keyboard, clipping, dismissal or browser acceptance.
+
+# Сверка новых элементов
+
+В реестр добавлены раскрывающиеся разделы и поля выбора из редактора создания,
+а также секции аккаунта, здоровья мастера и карточки персонажа. Раздел настройки
+способностей в карточке персонажа раскрывается в потоке страницы.
+Для новых и изменённых групп браузерная проверка остаётся открытой.

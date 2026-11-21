@@ -8433,11 +8433,16 @@ button:not([role="tab"]),
   display: none;
 }
 .ability-accordion > summary::before {
-  content: "›";
+  content: "";
+  width: 0.42rem;
+  height: 0.42rem;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(-45deg);
   flex: none;
 }
 .ability-accordion[open] > summary::before {
-  transform: rotate(90deg);
+  transform: rotate(45deg);
 }
 .ability-accordion__name {
   min-width: 0;

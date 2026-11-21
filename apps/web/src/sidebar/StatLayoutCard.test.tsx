@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   renderComponent,
   screen,
@@ -16,6 +16,40 @@ import { ApiError } from "../api";
  * настоящие: проверка «отказ остаётся перед глазами» опирается именно на них,
  * и подменить их значило бы проверить заглушку.
  */
+// jsdom implements the closed-popover stylesheet but lacks the browser methods.
+const openPopovers = new WeakSet<HTMLElement>();
+beforeAll(() => {
+  const nativeMatches = HTMLElement.prototype.matches;
+  vi.spyOn(HTMLElement.prototype, "matches").mockImplementation(function (
+    this: HTMLElement,
+    selector: string,
+  ) {
+    return selector === ":popover-open"
+      ? openPopovers.has(this)
+      : nativeMatches.call(this, selector);
+  });
+  Object.defineProperties(HTMLElement.prototype, {
+    showPopover: {
+      configurable: true,
+      value(this: HTMLElement) {
+        openPopovers.add(this);
+        this.style.display = "block";
+      },
+    },
+    hidePopover: {
+      configurable: true,
+      value(this: HTMLElement) {
+        openPopovers.delete(this);
+        this.style.removeProperty("display");
+      },
+    },
+  });
+});
+afterAll(() => {
+  vi.restoreAllMocks();
+  Reflect.deleteProperty(HTMLElement.prototype, "showPopover");
+  Reflect.deleteProperty(HTMLElement.prototype, "hidePopover");
+});
 const rows = [
   { key: "strength", label: "Сила" },
   { key: "agility", label: "Ловкость" },
@@ -37,24 +71,31 @@ const defaultCardProps = () => ({
   onDeleteRow: vi.fn(async () => {}),
   onMoveRow: vi.fn(async () => {}),
 });
-const renderCard = (
+const renderCard = async (
   overrides: Partial<Parameters<typeof StatLayoutCard>[0]> = {},
   openMenus = true,
 ) => {
   const props = { ...defaultCardProps(), ...overrides };
   const rendered = renderComponent(<StatLayoutCard {...props} />);
-  if (openMenus)
+  if (openMenus) {
     rendered.container
       .querySelectorAll("details.stat-field__menu")
       .forEach((menu) => {
         (menu as HTMLDetailsElement).open = true;
       });
+    await waitFor(() => {
+      for (const popup of rendered.container.querySelectorAll<HTMLElement>(
+        "[popover]",
+      ))
+        expect(popup.matches(":popover-open")).toBe(true);
+    });
+  }
   return props;
 };
 
 describe("карточка группы характеристик", () => {
-  it("shows concise text labels for stat row menu actions", () => {
-    renderCard();
+  it("shows concise text labels for stat row menu actions", async () => {
+    await renderCard();
     expect(screen.getAllByText("Выше").length).toBe(2);
     expect(screen.getAllByText("Ниже").length).toBe(2);
     expect(screen.getAllByText("Переименовать").length).toBeGreaterThan(0);
@@ -87,7 +128,7 @@ describe("карточка группы характеристик", () => {
   });
 
   it("dismisses a row menu on outside pointer without stealing focus from the next owner", async () => {
-    renderCard({}, false);
+    await renderCard({}, false);
     const firstSummary = screen.getByLabelText("Действия строки «Сила»");
     const secondSummary = screen.getByLabelText("Действия строки «Ловкость»");
     const firstMenu = firstSummary.closest("details")!;
@@ -130,7 +171,7 @@ describe("карточка группы характеристик", () => {
         height,
         toJSON: () => ({}),
       }) as DOMRect;
-    let summaryRect = makeRect(560, 588);
+    let summaryRect = makeRect(690, 718);
     let popupHeight = 160;
     body.getBoundingClientRect = () => makeRect(50, 600);
     summary.getBoundingClientRect = () => summaryRect;
@@ -159,30 +200,26 @@ describe("карточка группы характеристик", () => {
       await userEvent.click(summary);
       fireEvent(menu, new Event("toggle", { bubbles: true }));
       flushFrames();
-      expect(menu).toHaveAttribute("data-menu-side", "above");
-      expect(menu.style.getPropertyValue("--stat-field-menu-max-height")).toBe(
-        "",
-      );
+      expect(popup.style.top).toBe("522px");
+      expect(popup.style.maxHeight).toBe("682px");
 
       summaryRect = makeRect(150, 178);
       fireEvent(window, new Event("resize"));
       flushFrames();
-      expect(menu).toHaveAttribute("data-menu-side", "below");
+      expect(popup.style.top).toBe("186px");
 
-      popupHeight = 500;
+      popupHeight = 600;
       summaryRect = makeRect(300, 328);
       fireEvent(window, new Event("resize"));
       flushFrames();
-      expect(menu).toHaveAttribute("data-menu-side", "below");
-      expect(menu.style.getPropertyValue("--stat-field-menu-max-height")).toBe(
-        "264px",
-      );
+      expect(popup.style.top).toBe("336px");
+      expect(popup.style.maxHeight).toBe("432px");
     } finally {
       raf.mockRestore();
     }
   });
 
-  it("intersects nested clipping ancestors when placing row actions", async () => {
+  it("places top-layer row actions beyond nested clipping ancestors", async () => {
     const props = defaultCardProps();
     const rendered = renderComponent(
       <div className="outer-clip" style={{ overflowY: "auto" }}>
@@ -245,21 +282,21 @@ describe("карточка группы характеристик", () => {
       fireEvent(menu, new Event("toggle", { bubbles: true }));
       for (const callback of scheduledFrames.splice(0)) callback(0);
 
-      // The inner viewport alone has 234px below and would choose below;
-      // the outer clip leaves only 34px there, so the menu must flip above.
-      expect(menu).toHaveAttribute("data-menu-side", "above");
+      expect(popup.matches(":popover-open")).toBe(true);
+      expect(popup.style.top).toBe("466px");
+      expect(popup.style.maxHeight).toBe("302px");
     } finally {
       raf.mockRestore();
     }
   });
 
   it("does not intercept Escape owned by a nested dialog", async () => {
-    renderCard({}, false);
+    await renderCard({}, false);
     const summary = screen.getByLabelText("Действия строки «Ловкость»");
     const menu = summary.closest("details")!;
     await userEvent.click(summary);
     await userEvent.click(
-      screen.getByRole("button", { name: "Переименовать «Ловкость»" }),
+      await screen.findByRole("button", { name: "Переименовать «Ловкость»" }),
     );
     expect(screen.getByRole("dialog")).toBeVisible();
 
@@ -280,12 +317,12 @@ describe("карточка группы характеристик", () => {
   });
 
   it("hides editing actions behind the row menu and exposes a six-dot keyboard handle", async () => {
-    const props = renderCard({}, false);
+    const props = await renderCard({}, false);
     const menu = screen.getByLabelText("Действия строки «Ловкость»");
     expect(menu.closest("details")).not.toHaveAttribute("open");
     await userEvent.click(menu);
     expect(
-      screen.getByRole("button", { name: "Переименовать «Ловкость»" }),
+      await screen.findByRole("button", { name: "Переименовать «Ловкость»" }),
     ).toBeVisible();
     const handle = screen.getByRole("button", {
       name: "Переместить «Ловкость»",
@@ -294,9 +331,9 @@ describe("карточка группы характеристик", () => {
     fireEvent.keyDown(handle, { key: "ArrowUp" });
     expect(props.onMoveRow).toHaveBeenCalledWith("agility", "up");
   });
-  it("submits the dropped row and target as one persisted reorder", () => {
+  it("submits the dropped row and target as one persisted reorder", async () => {
     const onReorderRow = vi.fn(async () => {});
-    renderCard({ onReorderRow }, false);
+    await renderCard({ onReorderRow }, false);
     const handle = screen.getByRole("button", { name: "Переместить «Сила»" });
     const dataTransfer = { setData: vi.fn(), effectAllowed: "" };
     fireEvent.dragStart(handle, { dataTransfer });
@@ -305,22 +342,22 @@ describe("карточка группы характеристик", () => {
     );
     expect(onReorderRow).toHaveBeenCalledExactlyOnceWith("strength", "agility");
   });
-  it("renders the campaign editor without character rolls or values", () => {
-    renderCard({ layoutOnly: true });
+  it("renders the campaign editor without character rolls or values", async () => {
+    await renderCard({ layoutOnly: true });
     expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
     expect(
       screen.queryByRole("button", { name: "Сила" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Сила")).toBeVisible();
   });
-  it("показывает строки со значениями персонажа", () => {
-    renderCard();
+  it("показывает строки со значениями персонажа", async () => {
+    await renderCard();
     expect(screen.getByDisplayValue("4")).toBeInTheDocument();
     expect(screen.getByText("Ловкость")).toBeInTheDocument();
   });
 
-  it("показывает иконки действий без подмены доступных имён", () => {
-    renderCard();
+  it("показывает иконки действий без подмены доступных имён", async () => {
+    await renderCard();
     const actionNames = [
       "Переместить «Ловкость» выше",
       "Переместить «Ловкость» ниже",
@@ -340,7 +377,7 @@ describe("карточка группы характеристик", () => {
   it.each([true, false])(
     "names the stat value without action labels (layout editing=%s)",
     async (canEditLayout) => {
-      renderCard({ canEditLayout });
+      await renderCard({ canEditLayout });
       const input = screen.getByRole("spinbutton", {
         name: "Сила",
       });
@@ -353,8 +390,8 @@ describe("карточка группы характеристик", () => {
   );
 
   it("keeps labels attached to their own fields across two cards", async () => {
-    renderCard();
-    renderCard();
+    await renderCard();
+    await renderCard();
     const inputs = screen.getAllByRole("spinbutton", {
       name: "Сила",
     });
@@ -367,7 +404,7 @@ describe("карточка группы характеристик", () => {
   });
 
   it("changes the value with flanking step controls and has no separate roll action", async () => {
-    const props = renderCard();
+    const props = await renderCard();
     expect(
       screen.queryByRole("button", { name: "Бросок" }),
     ).not.toBeInTheDocument();
@@ -382,10 +419,10 @@ describe("карточка группы характеристик", () => {
     expect(props.onChangeValue).toHaveBeenLastCalledWith("strength", 4);
   });
 
-  it("не предлагает игроку править раскладку", () => {
+  it("не предлагает игроку править раскладку", async () => {
     // Раскладка общая на кампанию: переименование игроком поменяло бы подпись
     // всем за столом. Значения при этом править можно — это его персонаж.
-    renderCard({ canEditLayout: false });
+    await renderCard({ canEditLayout: false });
     expect(screen.queryByText(/Добавить строку/)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Переименовать/ }),
@@ -396,7 +433,7 @@ describe("карточка группы характеристик", () => {
   it("переименовывает строку по её ключу, а не по подписи", async () => {
     // Ключ — то, на что ссылаются формулы. Если наверх уйдёт подпись, вызов
     // придётся сопоставлять обратно, и на двух одинаковых подписях он ошибётся.
-    const props = renderCard();
+    const props = await renderCard();
     await userEvent.click(
       screen.getByRole("button", { name: "Переименовать «Ловкость»" }),
     );
@@ -412,7 +449,7 @@ describe("карточка группы характеристик", () => {
     // Поле ввода отдаёт `"7"`, а `characters.stats` — запись чисел, и контракт
     // строку не примет. Преобразование должно случиться здесь, а не «где-то
     // дальше по пути».
-    const props = renderCard();
+    const props = await renderCard();
     const field = screen.getByDisplayValue("4");
     await userEvent.clear(field);
     await userEvent.type(field, "7");
@@ -422,7 +459,7 @@ describe("карточка группы характеристик", () => {
   });
 
   it("бросок идёт по ключу строки, а подпись — в сообщение", async () => {
-    const props = renderCard();
+    const props = await renderCard();
     await userEvent.click(screen.getByRole("button", { name: "Сила" }));
     expect(props.onRoll).toHaveBeenCalledWith(
       "1d20 + strength",
@@ -432,7 +469,7 @@ describe("карточка группы характеристик", () => {
   });
 
   it("передаёт модификатор одного броска из клавиши", async () => {
-    const props = renderCard();
+    const props = await renderCard();
     const user = userEvent.setup();
     await user.keyboard("{Control>}");
     await user.click(screen.getByRole("button", { name: "Сила" }));
@@ -445,7 +482,7 @@ describe("карточка группы характеристик", () => {
   });
 
   it("добавляет строку с введённой подписью", async () => {
-    const props = renderCard();
+    const props = await renderCard();
     await userEvent.click(screen.getByText(/Добавить строку/));
     await userEvent.type(screen.getByLabelText("Название"), "Внимательность");
     await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -454,12 +491,7 @@ describe("карточка группы характеристик", () => {
   });
 
   it("переставляет строку и не предлагает двигать крайние за край", async () => {
-    const props = renderCard();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Переместить «Ловкость» выше" }),
-    );
-    expect(props.onMoveRow).toHaveBeenCalledWith("agility", "up");
-
+    const props = await renderCard();
     // Верхнюю вверх и нижнюю вниз двигать некуда — кнопки должны быть
     // недоступны, иначе нажатие уходит в сервер и ничего не меняет.
     expect(
@@ -468,10 +500,14 @@ describe("карточка группы характеристик", () => {
     expect(
       screen.getByRole("button", { name: "Переместить «Ловкость» ниже" }),
     ).toBeDisabled();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Переместить «Ловкость» выше" }),
+    );
+    expect(props.onMoveRow).toHaveBeenCalledWith("agility", "up");
   });
 
   it("удаляет строку по подтверждению", async () => {
-    const props = renderCard();
+    const props = await renderCard();
     await userEvent.click(
       screen.getByRole("button", { name: "Удалить «Ловкость»" }),
     );
@@ -481,7 +517,7 @@ describe("карточка группы характеристик", () => {
   });
 
   it("объясняет нулём отключение системного регена, не запрещая обычное удаление", async () => {
-    const props = renderCard({
+    const props = await renderCard({
       rows: [
         { key: "enduranceRegen", label: "Восстановление сил" },
         { key: "agility", label: "Ловкость" },
@@ -512,7 +548,7 @@ describe("карточка группы характеристик", () => {
   it("показывает, что именно держит строку, вместо голого отказа", async () => {
     // Мастеру нужно имя того, что предстоит починить: «удалить нельзя» без
     // списка оставляет его гадать, где искать ссылку.
-    renderCard({
+    await renderCard({
       onDeleteRow: vi.fn(async () => {
         throw new ApiError(
           409,
@@ -538,7 +574,7 @@ describe("карточка группы характеристик", () => {
   it("не выдаёт обычную ошибку за ссылку на строку", async () => {
     // Сеть отвалилась — это не «строку кто-то держит». Подать одно как другое
     // значило бы отправить мастера искать несуществующую ссылку.
-    renderCard({
+    await renderCard({
       onDeleteRow: vi.fn(async () => {
         throw new ApiError(500, "REQUEST_FAILED", "Сервер недоступен");
       }),
@@ -555,7 +591,7 @@ describe("карточка группы характеристик", () => {
   it("не показывает прошлый отказ на следующей строке", async () => {
     // Иначе мастер увидит ссылки от «Ловкости», открыв удаление «Силы», и
     // решит, что держат обе.
-    renderCard({
+    await renderCard({
       onDeleteRow: vi.fn(async () => {
         throw new ApiError(
           409,
@@ -576,8 +612,9 @@ describe("карточка группы характеристик", () => {
     expect(await screen.findByText(/Навык: Меч/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Отмена" }));
+    await userEvent.click(screen.getByLabelText("Действия строки «Сила»"));
     await userEvent.click(
-      screen.getByRole("button", { name: "Удалить «Сила»" }),
+      await screen.findByRole("button", { name: "Удалить «Сила»" }),
     );
     expect(screen.queryByText(/Навык: Меч/)).not.toBeInTheDocument();
   });
@@ -585,7 +622,7 @@ describe("карточка группы характеристик", () => {
   it("показывает отказ вместо того, чтобы закрыть окно", async () => {
     // Ключ строится из подписи, и из «—» он не получается. Отказ должен
     // остаться перед глазами — иначе мастер решит, что строка добавлена.
-    renderCard({
+    await renderCard({
       onAddRow: vi.fn(async () => {
         throw new Error("Из этого названия не получается имя для формул.");
       }),
@@ -606,13 +643,13 @@ describe("карточка группы характеристик", () => {
  * не столкнётся с существующими.
  */
 describe("ключ новой строки", () => {
-  it("не затирает существующую строку с той же подписью", () => {
+  it("не затирает существующую строку с той же подписью", async () => {
     const taken = ["blizhniiBoi"];
     const key = uniqueStatKey(statKeyFromLabel("Ближний Бой"), taken);
     expect(key).toBe("blizhniiBoi2");
   });
 
-  it("остаётся пустым на подписи без букв — вызывающий обязан отказать", () => {
+  it("остаётся пустым на подписи без букв — вызывающий обязан отказать", async () => {
     expect(statKeyFromLabel("—")).toBe("");
   });
 });
