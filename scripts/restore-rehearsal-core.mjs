@@ -33,6 +33,7 @@ const applicationCountTableNames = [
   "bug_intake_update_actions",
   "bug_intake_updates",
   "bug_intake_versions",
+  "campaign_archive_state",
   "campaign_audio_tracks",
   "campaign_economies",
   "campaign_media_reservations",
