@@ -59,62 +59,65 @@ async function installSnapshot(page: Page) {
   return { snapshot, sceneViews };
 }
 
-for (const width of [390, 1024]) {
-  test(`UIX-644 scene picker selection and focus lifecycle with mocked snapshot (${width}px)`, async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width, height: 844 });
-    const { sceneViews } = await installSnapshot(page);
-    await mockAuthenticatedGameCapabilities(page);
-    await page.goto("/");
-    await expect(page.locator(".map-viewport")).toBeVisible();
-    const trigger = page.getByLabel("Выбрать просматриваемую сцену");
-    if (width === 390) {
-      await expect(trigger).toBeHidden();
-      test.skip(
-        true,
-        "ScenePicker is intentionally absent from the compact header",
-      );
-    }
-    await expect(trigger).toBeVisible();
-    const menu = page.getByRole("menu", { name: "Сцены", exact: true });
-    await trigger.click();
-    const next = menu.getByRole("menuitemradio", { name: /Следующая/ });
-    await expect(next).toBeVisible();
-    await next.click();
-    await expect(menu).toBeHidden();
-    await expect(trigger).toContainText("Следующая");
-    await expect(trigger).toBeFocused();
-    await expect
-      .poll(() => sceneViews)
-      .toContainEqual({ sceneId: "uix644-scene-1" });
-
-    await trigger.press("ArrowDown");
-    await expect(
-      menu.getByRole("menuitemradio", { name: /Следующая/ }),
-    ).toBeFocused();
-    await page.keyboard.press("Home");
-    await expect(
-      menu.getByRole("menuitemradio", { name: /Текущая/ }),
-    ).toBeFocused();
-    await page.keyboard.press("Enter");
-    await expect(trigger).toContainText("Текущая");
-    await expect(menu).toBeHidden();
-    await expect
-      .poll(() => sceneViews)
-      .toContainEqual({ sceneId: "uix644-scene-0" });
-
-    await trigger.press("ArrowDown");
-    await page.keyboard.press("End");
-    await expect(
-      menu.getByRole("menuitemradio", { name: /Следующая/ }),
-    ).toBeFocused();
-    await page.keyboard.press("Escape");
-    await expect(menu).toBeHidden();
-    await expect(trigger).toBeFocused();
-    await expect(trigger).toContainText("Текущая");
-  });
+async function openScenePickerSnapshot(page: Page, width: number) {
+  await page.setViewportSize({ width, height: 844 });
+  const { sceneViews } = await installSnapshot(page);
+  await mockAuthenticatedGameCapabilities(page);
+  await page.goto("/");
+  await expect(page.locator(".map-viewport")).toBeVisible();
+  const trigger = page.getByLabel("Выбрать просматриваемую сцену");
+  return { trigger, sceneViews };
 }
+
+test("UIX-644 compact header hides the scene picker at 390px", async ({
+  page,
+}) => {
+  const { trigger } = await openScenePickerSnapshot(page, 390);
+  await expect(trigger).toBeHidden();
+});
+
+test("UIX-644 scene picker selection and focus lifecycle at 1024px", async ({
+  page,
+}) => {
+  const { trigger, sceneViews } = await openScenePickerSnapshot(page, 1024);
+  await expect(trigger).toBeVisible();
+  const menu = page.getByRole("menu", { name: "Сцены", exact: true });
+  await trigger.click();
+  const next = menu.getByRole("menuitemradio", { name: /Следующая/ });
+  await expect(next).toBeVisible();
+  await next.click();
+  await expect(menu).toBeHidden();
+  await expect(trigger).toContainText("Следующая");
+  await expect(trigger).toBeFocused();
+  await expect
+    .poll(() => sceneViews)
+    .toContainEqual({ sceneId: "uix644-scene-1" });
+
+  await trigger.press("ArrowDown");
+  await expect(
+    menu.getByRole("menuitemradio", { name: /Следующая/ }),
+  ).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(
+    menu.getByRole("menuitemradio", { name: /Текущая/ }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(trigger).toContainText("Текущая");
+  await expect(menu).toBeHidden();
+  await expect
+    .poll(() => sceneViews)
+    .toContainEqual({ sceneId: "uix644-scene-0" });
+
+  await trigger.press("ArrowDown");
+  await page.keyboard.press("End");
+  await expect(
+    menu.getByRole("menuitemradio", { name: /Следующая/ }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(trigger).toBeFocused();
+  await expect(trigger).toContainText("Текущая");
+});
 
 test("UIX-644 PlayerRequests custom selectors retain keyboard focus and state at compact width", async ({
   page,

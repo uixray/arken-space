@@ -22,14 +22,12 @@ it("keeps an adjudicated collision closed on replay but not on new evidence", as
     await db
       .insert(schema.campaigns)
       .values({ id: campaign, name: "Synthetic" });
-    await db
-      .insert(schema.memberships)
-      .values({
-        id: operator,
-        campaignId: campaign,
-        role: "GM",
-        displayName: "Synthetic",
-      });
+    await db.insert(schema.memberships).values({
+      id: operator,
+      campaignId: campaign,
+      role: "GM",
+      displayName: "Synthetic",
+    });
     const persist = (text: string) =>
       persistTelegramBugUpdate(
         db as never,

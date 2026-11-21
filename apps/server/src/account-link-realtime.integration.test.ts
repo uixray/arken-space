@@ -33,9 +33,7 @@ beforeEach(async () => {
   await app.register(cookie);
   realtime = new Server(app.server);
   sockets = [];
-  registerRealtime(realtime as never, db as never, app.log, {
-    buildSnapshot: async () => ({}) as never,
-  });
+  registerRealtime(realtime as never, db as never, app.log);
   await app.listen({ host: "127.0.0.1", port: 0 });
 });
 
@@ -130,7 +128,7 @@ async function assertConnectedSessionIsRejectedAfterInvalidation(
     serverSocket.on("cursor:gone", () => processedEvents.push("cursor:gone")),
   );
   const socket = await connectGame(token);
-  await waitFor(socket, "connect");
+  await waitFor(socket, "game:snapshot");
   const disconnected = waitFor<string>(socket, "disconnect");
   await invalidate();
   // A client event after revocation exercises the production per-event session
@@ -164,7 +162,7 @@ describe("link provenance at the realtime boundary", () => {
     const error = await waitFor<Error>(wrong, "connect_error");
     expect(error.message).toBe("CAMPAIGN_SESSION_CHANGED");
     const correct = await connectGame(token, campaign.id);
-    await waitFor(correct, "connect");
+    await waitFor(correct, "game:snapshot");
     expect(correct.connected).toBe(true);
   });
   it("rejects an already-connected PLAYER after grant revocation and on reconnect", async () => {

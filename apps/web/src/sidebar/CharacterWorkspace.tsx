@@ -1,5 +1,8 @@
 import { GmHealthCounter } from "../GmHealthCounter";
-import { groupAbilities, usesAmberionAbilityGroups } from "../ability-presentation";
+import {
+  groupAbilities,
+  usesAmberionAbilityGroups,
+} from "../ability-presentation";
 import { AbilityAccordion } from "../AbilityAccordion";
 import { CharacterInventory } from "./CharacterInventory";
 import { Achievements } from "../Achievements";
@@ -131,9 +134,19 @@ export function CharacterWorkspace({
       .map((id) => byId.get(id))
       .filter((character): character is CharacterDto => Boolean(character));
   }, [props.snapshot.characters, props.snapshot.me]);
-  const singleCharacter = props.snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092";
+  const singleCharacter =
+    props.snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092";
   const [state, dispatch] = useReducer(
-    (state: Parameters<typeof characterWorkspaceReducer>[0], action: Parameters<typeof characterWorkspaceReducer>[1]) => characterWorkspaceReducer(state, singleCharacter && action.type === "OPEN" ? {type: "OPEN_EXCLUSIVE", id: action.id} : action),
+    (
+      state: Parameters<typeof characterWorkspaceReducer>[0],
+      action: Parameters<typeof characterWorkspaceReducer>[1],
+    ) =>
+      characterWorkspaceReducer(
+        state,
+        singleCharacter && action.type === "OPEN"
+          ? { type: "OPEN_EXCLUSIVE", id: action.id }
+          : action,
+      ),
     characters.map((character) => character.id),
     createCharacterWorkspaceState,
   );
@@ -231,7 +244,8 @@ export function CharacterWorkspace({
       dispatch({ type: "OPEN", id: onlyCharacterId });
   }, [active, onlyCharacterId, noSheetOpen]);
   const openCount = state.openIds.length;
-  const sheetLimitReached = !singleCharacter && openCount >= MAX_OPEN_CHARACTER_SHEETS;
+  const sheetLimitReached =
+    !singleCharacter && openCount >= MAX_OPEN_CHARACTER_SHEETS;
   return createPortal(
     <main
       ref={workspaceRef}
@@ -287,7 +301,9 @@ export function CharacterWorkspace({
           snapshot={props.snapshot}
         />
         <p className="muted">
-          {singleCharacter ? "Один персонаж" : `Открыто ${openCount}/${MAX_OPEN_CHARACTER_SHEETS}`}
+          {singleCharacter
+            ? "Один персонаж"
+            : `Открыто ${openCount}/${MAX_OPEN_CHARACTER_SHEETS}`}
         </p>
         {props.snapshot.me.role === "GM" && (
           <Button
@@ -1337,8 +1353,13 @@ export function CharacterPanel({
   const ownerRole = snapshot.members.find(
     (member) => member.id === character.ownerMembershipId,
   )?.role;
-  const useAbilityGroups = usesAmberionAbilityGroups(snapshot.campaign.id, ownerRole);
-  const groupedAbilities = useAbilityGroups ? groupAbilities(abilityEntries) : [];
+  const useAbilityGroups = usesAmberionAbilityGroups(
+    snapshot.campaign.id,
+    ownerRole,
+  );
+  const groupedAbilities = useAbilityGroups
+    ? groupAbilities(abilityEntries)
+    : [];
   // UIX-391: exclude entries the character already has assigned so the "add
   // existing" picker can't offer — and silently create — a duplicate
   // assignment. See catalog-entry-selection.ts for the matching rule.
@@ -1400,25 +1421,24 @@ export function CharacterPanel({
     ...characterSkillModifiers,
   ];
   const renderAbilityContent = (entry: (typeof abilityEntries)[number]) => {
-    const management = editable && !entry.creationManaged ? (
-      <div className="inline-fields">
-        <Button onClick={() => setEntryEditor(entry)}>
-          Редактировать
-        </Button>
-        <Button
-          className="danger-link"
-          onClick={() =>
-            void catalogActions.onDeleteCharacterEntry(
-              character.id,
-              entry.id,
-              entry.revision,
-            )
-          }
-        >
-          Удалить
-        </Button>
-      </div>
-    ) : null;
+    const management =
+      editable && !entry.creationManaged ? (
+        <div className="inline-fields">
+          <Button onClick={() => setEntryEditor(entry)}>Редактировать</Button>
+          <Button
+            className="danger-link"
+            onClick={() =>
+              void catalogActions.onDeleteCharacterEntry(
+                character.id,
+                entry.id,
+                entry.revision,
+              )
+            }
+          >
+            Удалить
+          </Button>
+        </div>
+      ) : null;
 
     return (
       <>
@@ -1437,26 +1457,32 @@ export function CharacterPanel({
             })
           }
         />
-        {entry.data.uses && (!entry.creationManaged || snapshot.me.role === "GM") && (
-          <Button
-            disabled={!editable}
-            onClick={() =>
-              catalogActions.onRechargeEntry(
-                character.id,
-                entry.id,
-                entry.revision,
-              )
-            }
-          >
-            Перезарядить
-          </Button>
-        )}
-        {management && (useAbilityGroups ? (
-          <details className="ability-management">
-            <summary aria-label={`Действия способности «${entry.name}»`}>…</summary>
-            {management}
-          </details>
-        ) : management)}
+        {entry.data.uses &&
+          (!entry.creationManaged || snapshot.me.role === "GM") && (
+            <Button
+              disabled={!editable}
+              onClick={() =>
+                catalogActions.onRechargeEntry(
+                  character.id,
+                  entry.id,
+                  entry.revision,
+                )
+              }
+            >
+              Перезарядить
+            </Button>
+          )}
+        {management &&
+          (useAbilityGroups ? (
+            <details className="ability-management">
+              <summary aria-label={`Действия способности «${entry.name}»`}>
+                …
+              </summary>
+              {management}
+            </details>
+          ) : (
+            management
+          ))}
       </>
     );
   };
@@ -2031,20 +2057,22 @@ export function CharacterPanel({
                             })
                           }
                         />
-                        {entry.data.uses && (!entry.creationManaged || snapshot.me.role === "GM") && (
-                          <Button
-                            disabled={!editable}
-                            onClick={() =>
-                              catalogActions.onRechargeEntry(
-                                character.id,
-                                entry.id,
-                                entry.revision,
-                              )
-                            }
-                          >
-                            Перезарядить
-                          </Button>
-                        )}
+                        {entry.data.uses &&
+                          (!entry.creationManaged ||
+                            snapshot.me.role === "GM") && (
+                            <Button
+                              disabled={!editable}
+                              onClick={() =>
+                                catalogActions.onRechargeEntry(
+                                  character.id,
+                                  entry.id,
+                                  entry.revision,
+                                )
+                              }
+                            >
+                              Перезарядить
+                            </Button>
+                          )}
                         {editable && !entry.creationManaged && (
                           <div className="inline-fields">
                             <Button onClick={() => setEntryEditor(entry)}>
@@ -2110,20 +2138,27 @@ export function CharacterPanel({
                       </div>
                     ))}
                   {abilityEntries.length ? (
-                    useAbilityGroups ? groupedAbilities.map((group) => (
-                      <section key={group.id} aria-label={group.label || "Способности"}>
-                        {group.label && <h4>{group.label}</h4>}
-                        {group.entries.map((entry) => (
-                          <AbilityAccordion entry={entry} key={entry.id}>
-                            {renderAbilityContent(entry)}
-                          </AbilityAccordion>
-                        ))}
-                      </section>
-                    )) : abilityEntries.map((entry) => (
-                      <div className="character-card__row" key={entry.id}>
-                        {renderAbilityContent(entry)}
-                      </div>
-                    ))
+                    useAbilityGroups ? (
+                      groupedAbilities.map((group) => (
+                        <section
+                          key={group.id}
+                          aria-label={group.label || "Способности"}
+                        >
+                          {group.label && <h4>{group.label}</h4>}
+                          {group.entries.map((entry) => (
+                            <AbilityAccordion entry={entry} key={entry.id}>
+                              {renderAbilityContent(entry)}
+                            </AbilityAccordion>
+                          ))}
+                        </section>
+                      ))
+                    ) : (
+                      abilityEntries.map((entry) => (
+                        <div className="character-card__row" key={entry.id}>
+                          {renderAbilityContent(entry)}
+                        </div>
+                      ))
+                    )
                   ) : character.spells.length === 0 ? (
                     <p className="muted">Способности ещё не добавлены.</p>
                   ) : null}
@@ -2306,7 +2341,9 @@ export function CharacterPanel({
         hidden={vitalsTab !== "inventory"}
       >
         <div className="character-vitals" aria-label="Ключевые показатели">
-          {snapshot.me.role === "GM" && <GmHealthCounter key={character.id} characterId={character.id} />}
+          {snapshot.me.role === "GM" && (
+            <GmHealthCounter key={character.id} characterId={character.id} />
+          )}
           <div className="character-vitals__actions">
             <Button
               view="outlined"

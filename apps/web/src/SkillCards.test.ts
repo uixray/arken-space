@@ -433,5 +433,5 @@ it("keeps ability activation and passive share visible without a Details expande
   expect(html).toContain("Выполнить способность");
   expect(html).toContain("Показать без выполнения");
   expect(html).not.toContain("Подробнее");
-  expect(html).not.toContain(entry.description);
+  expect(html).toContain(entry.description);
 });

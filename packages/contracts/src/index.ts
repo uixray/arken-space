@@ -3361,7 +3361,11 @@ export interface MapPing {
 }
 
 export interface StoryChangedEvent {
-  presentation?: { key: string; title: string; media: Array<{ contentId: string; altText: string; caption: string }> };
+  presentation?: {
+    key: string;
+    title: string;
+    media: Array<{ contentId: string; altText: string; caption: string }>;
+  };
   campaignId: string;
   postId: string | null;
 }

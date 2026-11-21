@@ -1595,9 +1595,11 @@ test("GM and six isolated players recover authoritative state without security l
     await expect(
       pages[0]!.locator(".message", { hasText: publicMarkers[1] }),
     ).toBeVisible();
-    await pages[0]!.locator(".message-list").evaluate((element) => {
-      element.scrollTop = 0;
-    });
+    await pages[0]!
+      .locator("#chat-panel-activity .message-list")
+      .evaluate((element) => {
+        element.scrollTop = 0;
+      });
     await expect(pages[0]!.locator(".chat-compose textarea")).toBeVisible();
     await expect(
       pages[0]!.getByRole("button", { name: /^Отправить\./ }),

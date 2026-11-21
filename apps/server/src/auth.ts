@@ -163,7 +163,10 @@ export async function authFromSessionToken(
     })
     .from(sessions)
     .innerJoin(memberships, eq(sessions.membershipId, memberships.id))
-    .leftJoin(campaignArchiveState, eq(campaignArchiveState.campaignId, memberships.campaignId))
+    .leftJoin(
+      campaignArchiveState,
+      eq(campaignArchiveState.campaignId, memberships.campaignId),
+    )
     .where(
       and(
         eq(sessions.tokenHash, hashToken(token)),
@@ -200,7 +203,10 @@ export async function sessionIsActive(
     })
     .from(sessions)
     .innerJoin(memberships, eq(sessions.membershipId, memberships.id))
-    .leftJoin(campaignArchiveState, eq(campaignArchiveState.campaignId, memberships.campaignId))
+    .leftJoin(
+      campaignArchiveState,
+      eq(campaignArchiveState.campaignId, memberships.campaignId),
+    )
     .where(
       and(
         eq(sessions.id, sessionId),
@@ -230,13 +236,11 @@ export async function requireAuth(
   }
   const expectedCampaign = request.headers["x-arken-campaign-id"];
   if (expectedCampaign !== undefined && expectedCampaign !== auth.campaignId) {
-    await reply
-      .code(409)
-      .send({
-        error: "CAMPAIGN_SESSION_CHANGED",
-        message:
-          "Кампания в другой вкладке изменилась. Откройте эту кампанию снова.",
-      });
+    await reply.code(409).send({
+      error: "CAMPAIGN_SESSION_CHANGED",
+      message:
+        "Кампания в другой вкладке изменилась. Откройте эту кампанию снова.",
+    });
     return null;
   }
   return auth;
@@ -388,7 +392,10 @@ export async function insertGameSession(
   return { token, expiresAt };
 }
 
-export function writeGameSessionCookie(reply: FastifyReply, {token, expiresAt}: {token: string; expiresAt: Date}) {
+export function writeGameSessionCookie(
+  reply: FastifyReply,
+  { token, expiresAt }: { token: string; expiresAt: Date },
+) {
   reply.setCookie(env.SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: env.NODE_ENV === "production",
@@ -404,5 +411,8 @@ export async function createSession(
   membershipId: string,
   provenance: SessionProvenance,
 ) {
-  writeGameSessionCookie(reply, await insertGameSession(db, membershipId, provenance));
+  writeGameSessionCookie(
+    reply,
+    await insertGameSession(db, membershipId, provenance),
+  );
 }

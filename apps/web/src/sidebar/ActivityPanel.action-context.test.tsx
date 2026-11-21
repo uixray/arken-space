@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { ComponentProps, ReactNode } from "react";
+import { starterStatLayout } from "@arken/system";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -45,7 +46,7 @@ function character(id: string, name: string, revision: number): CharacterDto {
     lifecycle: "ACTIVE",
     archivedAt: null,
     archivedByMembershipId: null,
-    statLayout: [],
+    statLayout: starterStatLayout,
   };
 }
 

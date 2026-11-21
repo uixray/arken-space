@@ -600,8 +600,10 @@ describe("WorldArtbookImport", () => {
         name: "4. Подтвердить сопоставления и загрузку",
       }),
     );
+    await waitFor(() =>
+      expect(lookupActionIds.slice(2)).toEqual(firstLookupIds.slice(0, 2)),
+    );
     expect(uploadActionIds).toEqual(firstUploadIds);
-    expect(lookupActionIds.slice(2)).toEqual(firstLookupIds.slice(0, 2));
     expect(client.updateWorldContent).toHaveBeenCalledTimes(1);
     expect(client.addWorldContentMedia).toHaveBeenCalledTimes(1);
     expect(mediaRows).toHaveLength(1);

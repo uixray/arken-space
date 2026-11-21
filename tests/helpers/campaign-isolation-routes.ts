@@ -76,7 +76,8 @@ export const CREATION_HISTORY_PROBE_KEYS = [
   "GET /api/creation/versions/:id/reviews",
 ] as const satisfies readonly HttpRouteKey[];
 
-export const STORY_WITHDRAW_PROBE_KEY = "POST /api/story/posts/:postId/withdraw" satisfies HttpRouteKey;
+export const STORY_WITHDRAW_PROBE_KEY =
+  "POST /api/story/posts/:postId/withdraw" satisfies HttpRouteKey;
 
 export const CAMPAIGN_ROUTE_KEYS = [
   ...CREATION_HISTORY_PROBE_KEYS,

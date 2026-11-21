@@ -34,9 +34,7 @@ beforeEach(async () => {
   await app.register(cookie);
   realtime = new Server(app.server);
   sockets = [];
-  registerRealtime(realtime as never, db as never, app.log, {
-    buildSnapshot: async () => ({}) as never,
-  });
+  registerRealtime(realtime as never, db as never, app.log);
   const outbox = createTestMailOutbox();
   registerAccountAuthRoutes(app as never, db as never, realtime as never, {
     enabled: true,
@@ -144,7 +142,7 @@ describe("account-backed realtime authorization", () => {
       .returning();
 
     const socket = await connectGame(gameToken);
-    await waitFor(socket, "connect");
+    await waitFor(socket, "game:snapshot");
     const disconnected = waitFor<string>(socket, "disconnect");
     const response = await fetch(
       `http://127.0.0.1:${(app.server.address() as import("node:net").AddressInfo).port}/api/account/logout`,

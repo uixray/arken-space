@@ -258,10 +258,10 @@ describe("UIX-583 Canvas guard inventory", () => {
     (start, end, awaited, emitted) => {
       const handler = between(realtime, start, end);
       const awaitAt = handler.indexOf(awaited);
-      const connectedAt = handler.indexOf(
-        "if (!socket.connected) return",
-        awaitAt,
-      );
+      const guardOffset = handler
+        .slice(awaitAt)
+        .search(/if\s*\(\s*!socket\.connected(?:\s*\|\|[^;]*)?\)\s*return;/);
+      const connectedAt = guardOffset < 0 ? -1 : awaitAt + guardOffset;
       const emitAt = handler.indexOf(emitted, connectedAt);
       expect(awaitAt).toBeGreaterThanOrEqual(0);
       expect(connectedAt).toBeGreaterThan(awaitAt);

@@ -531,10 +531,13 @@ describe("PLAYER-owned character stat layout", () => {
     expect(result.statusCode, result.body).toBe(200);
     expect(result.json()).toEqual({ characterId: ids.character, revision: 2 });
     const ownerEvent = snapshotEmissions.find(
-      (item) => item.membershipId === ids.owner,
+      (item) =>
+        item.membershipId === ids.owner && item.event === "game:snapshot",
     );
     const siblingEvent = snapshotEmissions.find(
-      (item) => item.membershipId === ids.siblingOwner,
+      (item) =>
+        item.membershipId === ids.siblingOwner &&
+        item.event === "game:snapshot",
     );
     expect(ownerEvent?.event).toBe("game:snapshot");
     expect(

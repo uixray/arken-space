@@ -5,7 +5,11 @@ import {
 } from "@arken/contracts";
 import { starterStatLayout } from "@arken/system";
 import { normalizeSystemRegenStatRows } from "./stat-layout.js";
-import { characterCatalogEntries, characters, creationObjects } from "@arken/db";
+import {
+  characterCatalogEntries,
+  characters,
+  creationObjects,
+} from "@arken/db";
 import { eq } from "drizzle-orm";
 import {
   normalizeLegacyEntryData,
@@ -13,15 +17,28 @@ import {
 } from "./entry-data.js";
 
 type CharacterRow = typeof characters.$inferSelect;
-type CharacterEntryRow = typeof characterCatalogEntries.$inferSelect & { creationManaged?: boolean };
+type CharacterEntryRow = typeof characterCatalogEntries.$inferSelect & {
+  creationManaged?: boolean;
+};
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
 /** Match the snapshot projection in point events and mutation responses. */
-export async function loadCharacterEntries(db: Database, characterId: string): Promise<CharacterEntryRow[]> {
-  const rows = await db.select({ entry: characterCatalogEntries, creationId: creationObjects.id })
-    .from(characterCatalogEntries).leftJoin(creationObjects, eq(creationObjects.entryId, characterCatalogEntries.id))
+export async function loadCharacterEntries(
+  db: Database,
+  characterId: string,
+): Promise<CharacterEntryRow[]> {
+  const rows = await db
+    .select({ entry: characterCatalogEntries, creationId: creationObjects.id })
+    .from(characterCatalogEntries)
+    .leftJoin(
+      creationObjects,
+      eq(creationObjects.entryId, characterCatalogEntries.id),
+    )
     .where(eq(characterCatalogEntries.characterId, characterId));
-  return rows.map(({entry, creationId}) => ({ ...entry, creationManaged: creationId !== null }));
+  return rows.map(({ entry, creationId }) => ({
+    ...entry,
+    creationManaged: creationId !== null,
+  }));
 }
 
 function normalizeWalletValue(value: unknown) {

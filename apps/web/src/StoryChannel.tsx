@@ -107,7 +107,9 @@ export function StoryPost({
         ? onPublish?.(adminPost)
         : onArchive?.(adminPost));
     } catch {
-      setUpdateError("Не удалось опубликовать запись. Обновите список и проверьте её статус.");
+      setUpdateError(
+        "Не удалось опубликовать запись. Обновите список и проверьте её статус.",
+      );
     } finally {
       setPending(null);
     }
@@ -406,7 +408,10 @@ export function StoryPost({
           </label>
         </div>
       ) : (
-        post.body && post.era !== "Бал Амбериона — иллюстрации" && <p className="story-post__body">{post.body}</p>
+        post.body &&
+        post.era !== "Бал Амбериона — иллюстрации" && (
+          <p className="story-post__body">{post.body}</p>
+        )
       )}
       {!editing && (
         <StoryLinkChips targets={post.linkTargets ?? []} isGm={isGm} />
@@ -437,9 +442,20 @@ export function StoryPost({
                   )
                 }
               />
-              {media.caption && post.era !== "Бал Амбериона — иллюстрации" && <figcaption>{media.caption}</figcaption>}
+              {media.caption && post.era !== "Бал Амбериона — иллюстрации" && (
+                <figcaption>{media.caption}</figcaption>
+              )}
               {post.era === "Бал Амбериона — иллюстрации" && (
-                <button type="button" onClick={() => openStoryImage({ key: post.id, title: post.title, media: [media] })}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    openStoryImage({
+                      key: post.id,
+                      title: post.title,
+                      media: [media],
+                    })
+                  }
+                >
                   На весь экран
                 </button>
               )}
@@ -732,7 +748,10 @@ export function StoryChannel({
           ))}
         </div>
       )}
-      <div className={`story-channel__timeline${posts.some(p => p.era === "Бал Амбериона — иллюстрации") ? " story-gallery" : ""}`} aria-live="polite">
+      <div
+        className={`story-channel__timeline${posts.some((p) => p.era === "Бал Амбериона — иллюстрации") ? " story-gallery" : ""}`}
+        aria-live="polite"
+      >
         {legacyMessages.map((message) => (
           <article className="story-post story-post--legacy" key={message.id}>
             <header className="story-post__header">
@@ -755,25 +774,28 @@ export function StoryChannel({
             {"В сюжетной ленте пока нет публикаций."}
           </p>
         ) : (
-          [...posts].sort((a, b) => {
-            const ag = a.era === "Бал Амбериона — иллюстрации";
-            const bg = b.era === "Бал Амбериона — иллюстрации";
-            if (ag && bg) return a.title.localeCompare(b.title, "ru", { numeric: true });
-            return ag ? -1 : bg ? 1 : 0;
-          }).map((post) => (
-            <StoryPost
-              key={post.id}
-              compact={post.era === "Бал Амбериона — иллюстрации"}
-              post={post}
-              isGm={isGm}
-              onPublish={onPublish}
-              onArchive={onArchive}
-              onUpdate={onUpdate}
-              onUploadImage={onUploadImage}
-              mediaUrl={mediaUrl}
-              onSearchLinkTargets={isGm ? onSearchLinkTargets : undefined}
-            />
-          ))
+          [...posts]
+            .sort((a, b) => {
+              const ag = a.era === "Бал Амбериона — иллюстрации";
+              const bg = b.era === "Бал Амбериона — иллюстрации";
+              if (ag && bg)
+                return a.title.localeCompare(b.title, "ru", { numeric: true });
+              return ag ? -1 : bg ? 1 : 0;
+            })
+            .map((post) => (
+              <StoryPost
+                key={post.id}
+                compact={post.era === "Бал Амбериона — иллюстрации"}
+                post={post}
+                isGm={isGm}
+                onPublish={onPublish}
+                onArchive={onArchive}
+                onUpdate={onUpdate}
+                onUploadImage={onUploadImage}
+                mediaUrl={mediaUrl}
+                onSearchLinkTargets={isGm ? onSearchLinkTargets : undefined}
+              />
+            ))
         )}
       </div>
       {nextCursor && onLoadMore && (

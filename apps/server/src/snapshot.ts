@@ -310,7 +310,10 @@ const loadAssignedEntries = (db: Database, campaignId: string) =>
       characters,
       eq(characterCatalogEntries.characterId, characters.id),
     )
-    .leftJoin(creationObjects, eq(creationObjects.entryId, characterCatalogEntries.id))
+    .leftJoin(
+      creationObjects,
+      eq(creationObjects.entryId, characterCatalogEntries.id),
+    )
     .where(eq(characters.campaignId, campaignId));
 
 const loadCharacterMedia = (db: Database, campaignId: string) =>
@@ -1056,9 +1059,7 @@ export async function buildSnapshot(
       diceFrameAssetId: me.diceFrameAssetId,
     },
     personalTheme: personalThemeDto(me),
-    ...(geometricDiceNames
-      ? { personalDiceNames: "GEOMETRIC" as const }
-      : {}),
+    ...(geometricDiceNames ? { personalDiceNames: "GEOMETRIC" as const } : {}),
     members: (auth.role === "GM"
       ? memberRows
       : memberRows.filter((member) => member.id === auth.membershipId)
@@ -1226,7 +1227,9 @@ export async function buildSnapshot(
         unreadCount: Number(unreadGroups[index]?.[0]?.value ?? 0),
       };
     }),
-    assets: visibleAssets.map((asset) => campaignAssetLabel(auth.campaignId, assetDto(asset))),
+    assets: visibleAssets.map((asset) =>
+      campaignAssetLabel(auth.campaignId, assetDto(asset)),
+    ),
     audio: audio
       ? {
           assetId: audio.assetId,

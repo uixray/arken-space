@@ -52,9 +52,15 @@ export function registerCharacterArchiveRoutes(
       .limit(1);
     const campaignLayout = resolveStatLayout(campaign?.statLayout);
     const entryRows = await db
-      .select({ entry: characterCatalogEntries, creationId: creationObjects.id })
+      .select({
+        entry: characterCatalogEntries,
+        creationId: creationObjects.id,
+      })
       .from(characterCatalogEntries)
-      .leftJoin(creationObjects, eq(creationObjects.entryId, characterCatalogEntries.id))
+      .leftJoin(
+        creationObjects,
+        eq(creationObjects.entryId, characterCatalogEntries.id),
+      )
       .where(
         inArray(
           characterCatalogEntries.characterId,
@@ -70,10 +76,17 @@ export function registerCharacterArchiveRoutes(
           rows.map((row) => row.id),
         ),
       );
-    const entriesByCharacter = new Map<string, Array<typeof characterCatalogEntries.$inferSelect & {creationManaged: boolean}>>();
-    for (const {entry,creationId} of entryRows) {
+    const entriesByCharacter = new Map<
+      string,
+      Array<
+        typeof characterCatalogEntries.$inferSelect & {
+          creationManaged: boolean;
+        }
+      >
+    >();
+    for (const { entry, creationId } of entryRows) {
       const list = entriesByCharacter.get(entry.characterId) ?? [];
-      list.push({...entry,creationManaged:creationId != null});
+      list.push({ ...entry, creationManaged: creationId != null });
       entriesByCharacter.set(entry.characterId, list);
     }
     const controllersByCharacter = new Map<string, string[]>();

@@ -116,7 +116,13 @@ export const accountCampaignListSchema = z
           role: z.enum(["GM", "PLAYER"]),
           membershipId: z.string().uuid(),
           selected: z.boolean(),
-          archive: z.object({ archivedAt: z.iso.datetime().nullable(), revision: z.number().int().nonnegative() }).strict().optional(),
+          archive: z
+            .object({
+              archivedAt: z.iso.datetime().nullable(),
+              revision: z.number().int().nonnegative(),
+            })
+            .strict()
+            .optional(),
         })
         .strict(),
     ),

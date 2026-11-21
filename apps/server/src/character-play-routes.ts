@@ -16,7 +16,10 @@ import type {
 } from "@arken/contracts";
 import { randomInt } from "node:crypto";
 import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
-import { assertCreationEntryUsable, lockBoundCreationEntry } from "./creation-runtime-state.js";
+import {
+  assertCreationEntryUsable,
+  lockBoundCreationEntry,
+} from "./creation-runtime-state.js";
 import { requireCreationMember } from "./creation-state.js";
 import { lockInventoryGraph } from "./inventory-assignment.js";
 import { consumeCreationApplication } from "./creation-consumption.js";
@@ -248,10 +251,19 @@ export function registerCharacterPlayRoutes(
           "Фигурка переместилась. Просмотрите область заново.",
         ],
         ENTRY_CONFLICT: [409, "Способность изменилась. Выберите её заново."],
-        CREATION_CONSUMPTION_UNAVAILABLE: [409, "Одноразовый созданный предмет пока нельзя применить с отменой."],
+        CREATION_CONSUMPTION_UNAVAILABLE: [
+          409,
+          "Одноразовый созданный предмет пока нельзя применить с отменой.",
+        ],
         CREATION_APPROVAL_REQUIRED: [409, "Допуск мастера к версии отозван."],
-        CREATION_OBJECT_UNAVAILABLE: [409, "Созданный объект больше недоступен."],
-        CREATION_DATA_UNAVAILABLE: [409, "Версия объекта не соответствует сохранённой записи."],
+        CREATION_OBJECT_UNAVAILABLE: [
+          409,
+          "Созданный объект больше недоступен.",
+        ],
+        CREATION_DATA_UNAVAILABLE: [
+          409,
+          "Версия объекта не соответствует сохранённой записи.",
+        ],
         AREA_SCALE_REQUIRED: [
           409,
           "Мастер должен задать метров в клетке для этой сцены.",
@@ -683,7 +695,8 @@ export function registerCharacterPlayRoutes(
       );
       const result = await db.transaction(async (tx) => {
         const bound = await lockBoundCreationEntry(tx, auth, row.entry.id);
-        if (bound && auth.role !== "GM") return "CREATION_RECHARGE_REQUIRES_GM" as const;
+        if (bound && auth.role !== "GM")
+          return "CREATION_RECHARGE_REQUIRES_GM" as const;
         const [clock] = await tx
           .select({
             day: campaigns.day,
@@ -834,7 +847,10 @@ export function registerCharacterPlayRoutes(
       };
       let formula: string | null = null;
       let result: ReturnType<typeof rollFormulaWithMode> | null = null;
-      const referencedEntries = new Map<string, typeof characterCatalogEntries.$inferSelect>();
+      const referencedEntries = new Map<
+        string,
+        typeof characterCatalogEntries.$inferSelect
+      >();
       const rolledActions: Array<{
         action: NonNullable<typeof parsedData.data.rollActions>[number];
         formula: string;
@@ -946,7 +962,10 @@ export function registerCharacterPlayRoutes(
                   .limit(1);
                 if (referenced) {
                   const previous = referencedEntries.get(referenced.entry.id);
-                  if (previous && previous.revision !== referenced.entry.revision)
+                  if (
+                    previous &&
+                    previous.revision !== referenced.entry.revision
+                  )
                     return reply.code(409).send({ error: "ENTRY_CONFLICT" });
                   referencedEntries.set(referenced.entry.id, referenced.entry);
                 }
@@ -1168,7 +1187,9 @@ export function registerCharacterPlayRoutes(
             await lockInventoryGraph(tx, auth.campaignId);
             await requireCreationMember(tx, auth);
           }
-          const bound = mode === "EXECUTE" && await lockBoundCreationEntry(tx, auth, row.entry.id);
+          const bound =
+            mode === "EXECUTE" &&
+            (await lockBoundCreationEntry(tx, auth, row.entry.id));
           let consumesCreation = false;
           {
             // Serialize all public dice with inspiration spending.
@@ -1184,16 +1205,34 @@ export function registerCharacterPlayRoutes(
           if (mode === "EXECUTE" && (bound || referencedEntries.size)) {
             const expected = new Map(referencedEntries);
             expected.set(row.entry.id, row.entry);
-            const entries = await tx.select().from(characterCatalogEntries)
+            const entries = await tx
+              .select()
+              .from(characterCatalogEntries)
               .where(inArray(characterCatalogEntries.id, [...expected.keys()]))
-              .orderBy(asc(characterCatalogEntries.id)).for("update");
-            if (entries.length !== expected.size || entries.some(entry =>
-              entry.characterId !== row.character.id || entry.revision !== expected.get(entry.id)!.revision))
+              .orderBy(asc(characterCatalogEntries.id))
+              .for("update");
+            if (
+              entries.length !== expected.size ||
+              entries.some(
+                (entry) =>
+                  entry.characterId !== row.character.id ||
+                  entry.revision !== expected.get(entry.id)!.revision,
+              )
+            )
               throw new Error("ENTRY_CONFLICT_TX");
             for (const entry of entries) {
-              const created = await assertCreationEntryUsable(tx, auth, entry, row.character);
-              if (created?.snapshot.entryData.creationConsumption === "BOUND_ITEM_ON_APPLICATION") {
-                if (entry.id !== row.entry.id) throw new Error("CREATION_CONSUMPTION_UNAVAILABLE");
+              const created = await assertCreationEntryUsable(
+                tx,
+                auth,
+                entry,
+                row.character,
+              );
+              if (
+                created?.snapshot.entryData.creationConsumption ===
+                "BOUND_ITEM_ON_APPLICATION"
+              ) {
+                if (entry.id !== row.entry.id)
+                  throw new Error("CREATION_CONSUMPTION_UNAVAILABLE");
                 consumesCreation = true;
               }
             }
@@ -1256,7 +1295,13 @@ export function registerCharacterPlayRoutes(
             if (!updated) throw new Error("ENTRY_CONFLICT_TX");
           }
           const consumption = consumesCreation
-            ? await consumeCreationApplication(tx, auth, row.entry, row.character, new Date())
+            ? await consumeCreationApplication(
+                tx,
+                auth,
+                row.entry,
+                row.character,
+                new Date(),
+              )
             : undefined;
           const [message] = await tx
             .insert(chatMessages)

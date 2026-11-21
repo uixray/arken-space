@@ -190,7 +190,8 @@ function SidebarContent(props: Props) {
   // «Событиям», и панель не может отрисоваться без своей вкладки.
   const activeFeed = allowedSidebarFeed(selectedFeed, isGm);
   const [directMode, setDirectMode] = useState(false);
-  const characterTabs = props.snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092";
+  const characterTabs =
+    props.snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092";
   const [characterMode, setCharacterMode] = useState(false);
   const chatVisible = props.chatVisible ?? !props.collapsed;
   const [activeDirectThreadId, setActiveDirectThreadId] = useState<
@@ -216,7 +217,10 @@ function SidebarContent(props: Props) {
     () => onWorkspaceChange(null),
     [onWorkspaceChange],
   );
-  const storyWorkspaceOpen = props.workspace === "story" && (isGm || props.snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092");
+  const storyWorkspaceOpen =
+    props.workspace === "story" &&
+    (isGm ||
+      props.snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092");
   const storyThreadId = threadForStream(props.snapshot, "STORY")?.id ?? null;
   const storyHistory = useThreadHistory(
     storyWorkspaceOpen ? props.snapshot : null,
@@ -369,11 +373,25 @@ function SidebarContent(props: Props) {
           role="tablist"
           onKeyDown={(event) => {
             if (characterTabs) {
-              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+              if (
+                !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)
+              )
+                return;
               event.preventDefault();
-              const next = event.key === "Home" ? false : event.key === "End" ? true : !characterMode;
+              const next =
+                event.key === "Home"
+                  ? false
+                  : event.key === "End"
+                    ? true
+                    : !characterMode;
               setCharacterMode(next);
-              requestAnimationFrame(() => document.getElementById(next ? "chat-tab-character" : "chat-tab-activity")?.focus());
+              requestAnimationFrame(() =>
+                document
+                  .getElementById(
+                    next ? "chat-tab-character" : "chat-tab-activity",
+                  )
+                  ?.focus(),
+              );
               return;
             }
             const nextFeed = nextChatFeed(
@@ -397,8 +415,14 @@ function SidebarContent(props: Props) {
             role="tab"
             id="chat-tab-activity"
             aria-controls="chat-panel-activity"
-            aria-selected={!directMode && !characterMode && activeFeed === "ACTIVITY"}
-            tabIndex={!directMode && !characterMode && activeFeed === "ACTIVITY" ? 0 : -1}
+            aria-selected={
+              !directMode && !characterMode && activeFeed === "ACTIVITY"
+            }
+            tabIndex={
+              !directMode && !characterMode && activeFeed === "ACTIVITY"
+                ? 0
+                : -1
+            }
             onClick={() => {
               setDirectMode(false);
               setActiveFeed("ACTIVITY");
@@ -407,67 +431,82 @@ function SidebarContent(props: Props) {
           >
             {characterTabs ? "Журнал" : "События"}
           </Button>
-          {!characterTabs && chatFeedOrder(isGm)
-            .filter((feed): feed is ChatStream => feed !== "ACTIVITY")
-            .map((stream) => {
-              const unread = unreadCountForStream(props.snapshot, stream);
-              return (
-                <Button
-                  key={stream}
-                  view="flat"
-                  role="tab"
-                  id={`chat-tab-${stream.toLowerCase()}`}
-                  aria-controls={`chat-panel-${stream.toLowerCase()}`}
-                  aria-selected={!directMode && activeFeed === stream}
-                  tabIndex={!directMode && activeFeed === stream ? 0 : -1}
-                  onClick={() => {
-                    setDirectMode(false);
-                    setActiveFeed(stream);
-                  }}
+          {!characterTabs &&
+            chatFeedOrder(isGm)
+              .filter((feed): feed is ChatStream => feed !== "ACTIVITY")
+              .map((stream) => {
+                const unread = unreadCountForStream(props.snapshot, stream);
+                return (
+                  <Button
+                    key={stream}
+                    view="flat"
+                    role="tab"
+                    id={`chat-tab-${stream.toLowerCase()}`}
+                    aria-controls={`chat-panel-${stream.toLowerCase()}`}
+                    aria-selected={!directMode && activeFeed === stream}
+                    tabIndex={!directMode && activeFeed === stream ? 0 : -1}
+                    onClick={() => {
+                      setDirectMode(false);
+                      setActiveFeed(stream);
+                    }}
+                  >
+                    {CHAT_STREAM_LABEL[stream]}
+                    {unread > 0 && (
+                      <span
+                        className="chat-unread-badge"
+                        aria-label={`${unread} непрочитанных`}
+                      >
+                        {unread}
+                      </span>
+                    )}
+                  </Button>
+                );
+              })}
+          {characterTabs ? (
+            <Button
+              view="flat"
+              role="tab"
+              id="chat-tab-character"
+              aria-controls="chat-panel-character"
+              aria-selected={characterMode}
+              tabIndex={characterMode ? 0 : -1}
+              onClick={() => {
+                setCharacterMode(true);
+                setDirectMode(false);
+                setActiveFeed("ACTIVITY");
+              }}
+            >
+              Персонаж
+            </Button>
+          ) : (
+            <Button
+              view="flat"
+              role="tab"
+              id="chat-tab-direct"
+              aria-controls="chat-panel-direct"
+              aria-selected={directMode}
+              tabIndex={directMode ? 0 : -1}
+              onClick={() => setDirectMode(true)}
+            >
+              Личные
+              {directThreads(props.snapshot).reduce(
+                (sum, thread) =>
+                  sum + directUnreadCount(props.snapshot, thread.id),
+                0,
+              ) > 0 && (
+                <span
+                  className="chat-unread-badge"
+                  aria-label="Непрочитанные личные сообщения"
                 >
-                  {CHAT_STREAM_LABEL[stream]}
-                  {unread > 0 && (
-                    <span
-                      className="chat-unread-badge"
-                      aria-label={`${unread} непрочитанных`}
-                    >
-                      {unread}
-                    </span>
+                  {directThreads(props.snapshot).reduce(
+                    (sum, thread) =>
+                      sum + directUnreadCount(props.snapshot, thread.id),
+                    0,
                   )}
-                </Button>
-              );
-            })}
-          {characterTabs ? <Button view="flat" role="tab" id="chat-tab-character"
-            aria-controls="chat-panel-character" aria-selected={characterMode} tabIndex={characterMode ? 0 : -1}
-            onClick={() => { setCharacterMode(true); setDirectMode(false); setActiveFeed("ACTIVITY"); }}>
-            Персонаж
-          </Button> : (          <Button
-            view="flat"
-            role="tab"
-            id="chat-tab-direct"
-            aria-controls="chat-panel-direct"
-            aria-selected={directMode}
-            tabIndex={directMode ? 0 : -1}
-            onClick={() => setDirectMode(true)}
-          >
-            Личные
-            {directThreads(props.snapshot).reduce(
-              (sum, thread) =>
-                sum + directUnreadCount(props.snapshot, thread.id),
-              0,
-            ) > 0 && (
-              <span
-                className="chat-unread-badge"
-                aria-label="Непрочитанные личные сообщения"
-              >
-                {directThreads(props.snapshot).reduce(
-                  (sum, thread) =>
-                    sum + directUnreadCount(props.snapshot, thread.id),
-                  0,
-                )}
-              </span>
-            )}
-          </Button>)}
+                </span>
+              )}
+            </Button>
+          )}
         </nav>
       }
       <div className="panel-scroll chat-scroll">
@@ -495,7 +534,13 @@ function SidebarContent(props: Props) {
         <div className="chat-feed-slot" hidden={directMode} inert={directMode}>
           {activeFeed === "ACTIVITY" ? (
             <ActivityPanel
-              view={characterTabs ? (characterMode ? "character" : "journal") : "combined"}
+              view={
+                characterTabs
+                  ? characterMode
+                    ? "character"
+                    : "journal"
+                  : "combined"
+              }
               snapshot={props.snapshot}
               storyPosts={props.storyPosts}
               activityFilters={activityFilters}
@@ -546,63 +591,74 @@ function SidebarContent(props: Props) {
             onClose={() => onWorkspaceChange(null)}
           />
         )}
-        {props.workspace === "story" && (isGm || props.snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092") && (
-          <ArkenDialog
-            open
-            footer={false}
-            title="Сюжет"
-            className="story-workspace"
-            variant="workspace"
-            onClose={closeWorkspace}
-          >
-            {storyHistory.hasMore && (
-              <button
-                type="button"
-                disabled={storyHistory.pending}
-                onClick={() => void storyHistory.loadOlder()}
-              >
-                {storyHistory.pending
-                  ? "Загрузка…"
-                  : "Показать ранние сообщения сюжета"}
-              </button>
-            )}
-            {storyHistory.error && <p role="alert">{storyHistory.error}</p>}
-
-            <StoryChannel
-              posts={props.storyPosts}
-              nextCursor={props.storyNextCursor}
-              onLoadMore={storyActions.onLoadMoreStoryPosts}
-              legacyMessages={messagesForStream(
-                props.snapshot.messages,
-                "STORY",
-                props.snapshot.chatThreads,
+        {props.workspace === "story" &&
+          (isGm ||
+            props.snapshot.campaign.id ===
+              "eb6a55c4-a821-4739-8d4a-a1028e9d9092") && (
+            <ArkenDialog
+              open
+              footer={false}
+              title="Сюжет"
+              className="story-workspace"
+              variant="workspace"
+              onClose={closeWorkspace}
+            >
+              {storyHistory.hasMore && (
+                <button
+                  type="button"
+                  disabled={storyHistory.pending}
+                  onClick={() => void storyHistory.loadOlder()}
+                >
+                  {storyHistory.pending
+                    ? "Загрузка…"
+                    : "Показать ранние сообщения сюжета"}
+                </button>
               )}
-              isGm={isGm}
-              onCreateDraft={isGm ? storyActions.onCreateStoryDraft : undefined}
-              onPublish={isGm ? storyActions.onPublishStoryPost : undefined}
-              onUpdate={isGm ? storyActions.onUpdateStoryPost : undefined}
-              onArchive={isGm ? storyActions.onArchiveStoryPost : undefined}
-              onUploadImage={
-                isGm ? chatActions.onUploadChatAttachment : undefined
-              }
-              eras={props.storyEras ?? []}
-              eraFilter={props.storyEraFilter ?? null}
-              onSelectEra={storyActions.onSelectStoryEra}
-              onLoadEventSources={
-                isGm ? storyActions.onLoadStoryEventSources : undefined
-              }
-              onCreateFromEvent={
-                isGm ? storyActions.onCreateStoryFromEvent : undefined
-              }
-              onSearchLinkTargets={
-                isGm ? storyActions.onSearchStoryLinkTargets : undefined
-              }
-            />
-            {isGm && <details className="story-library-tools"><summary>Управление файлами вложений</summary>
-              <StoryAttachmentLibrary campaignId={props.snapshot.campaign.id} isGm={isGm} />
-            </details>}
-          </ArkenDialog>
-        )}
+              {storyHistory.error && <p role="alert">{storyHistory.error}</p>}
+
+              <StoryChannel
+                posts={props.storyPosts}
+                nextCursor={props.storyNextCursor}
+                onLoadMore={storyActions.onLoadMoreStoryPosts}
+                legacyMessages={messagesForStream(
+                  props.snapshot.messages,
+                  "STORY",
+                  props.snapshot.chatThreads,
+                )}
+                isGm={isGm}
+                onCreateDraft={
+                  isGm ? storyActions.onCreateStoryDraft : undefined
+                }
+                onPublish={isGm ? storyActions.onPublishStoryPost : undefined}
+                onUpdate={isGm ? storyActions.onUpdateStoryPost : undefined}
+                onArchive={isGm ? storyActions.onArchiveStoryPost : undefined}
+                onUploadImage={
+                  isGm ? chatActions.onUploadChatAttachment : undefined
+                }
+                eras={props.storyEras ?? []}
+                eraFilter={props.storyEraFilter ?? null}
+                onSelectEra={storyActions.onSelectStoryEra}
+                onLoadEventSources={
+                  isGm ? storyActions.onLoadStoryEventSources : undefined
+                }
+                onCreateFromEvent={
+                  isGm ? storyActions.onCreateStoryFromEvent : undefined
+                }
+                onSearchLinkTargets={
+                  isGm ? storyActions.onSearchStoryLinkTargets : undefined
+                }
+              />
+              {isGm && (
+                <details className="story-library-tools">
+                  <summary>Управление файлами вложений</summary>
+                  <StoryAttachmentLibrary
+                    campaignId={props.snapshot.campaign.id}
+                    isGm={isGm}
+                  />
+                </details>
+              )}
+            </ArkenDialog>
+          )}
         {props.workspace === "tokens" && (
           <TokenPaletteWorkspacePortal props={props} />
         )}
@@ -710,10 +766,15 @@ function SidebarContent(props: Props) {
             campaignId={props.snapshot.campaign.id}
             membershipId={props.snapshot.me.id}
             gm={isGm}
-            characters={props.snapshot.characters.filter((character) =>
-              character.lifecycle === "ACTIVE" &&
-              (isGm || character.ownerMembershipId === props.snapshot.me.id ||
-                character.controllerMembershipIds.includes(props.snapshot.me.id)))}
+            characters={props.snapshot.characters.filter(
+              (character) =>
+                character.lifecycle === "ACTIVE" &&
+                (isGm ||
+                  character.ownerMembershipId === props.snapshot.me.id ||
+                  character.controllerMembershipIds.includes(
+                    props.snapshot.me.id,
+                  )),
+            )}
             onClose={closeWorkspace}
           />
         )}
