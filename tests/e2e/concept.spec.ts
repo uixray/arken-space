@@ -2700,7 +2700,7 @@ for (const viewport of [
     await expect(page.locator(".activity-roll-controls")).toBeVisible();
     await expect(page.locator(".chat-compose")).toBeVisible();
     const dimensions = await page
-      .locator(".message-list")
+      .locator("#chat-panel-activity .message-list")
       .evaluate((element) => ({
         clientHeight: element.clientHeight,
         scrollHeight: element.scrollHeight,
@@ -2730,9 +2730,11 @@ for (const viewport of [
       .getByText(/^Длинное сообщение/)
       .evaluate((element) => element.scrollWidth <= element.clientWidth);
     expect(longBodyWraps).toBe(true);
-    await page.locator(".message-list").evaluate((element) => {
-      element.scrollTop = 0;
-    });
+    await page
+      .locator("#chat-panel-activity .message-list")
+      .evaluate((element) => {
+        element.scrollTop = 0;
+      });
     await expect(page.locator(".chat-compose textarea")).toBeVisible();
   });
 }
