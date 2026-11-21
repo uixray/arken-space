@@ -1,4 +1,6 @@
 import { createInterface } from "node:readline";
+import process from "node:process";
+import { URL, URLSearchParams } from "node:url";
 
 const base = new URL(
   process.env.ARKEN_EDITOR_URL ?? "https://arken-khar.space",
@@ -92,11 +94,11 @@ async function call({ name, arguments: args }) {
     default:
       throw new Error("Неизвестный инструмент.");
   }
-  const response = await fetch(new URL(path, base.origin), {
+  const response = await globalThis.fetch(new URL(path, base.origin), {
     method,
     body,
     redirect: "error",
-    signal: AbortSignal.timeout(15000),
+    signal: globalThis.AbortSignal.timeout(15000),
     headers: {
       authorization: `Bearer ${token}`,
       ...(body && { "content-type": "application/json" }),
