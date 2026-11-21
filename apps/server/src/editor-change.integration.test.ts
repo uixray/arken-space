@@ -155,6 +155,7 @@ it("confirms and restores three real domain records in a migrated test database"
       expect(preview.json().before[field]).toBe(before);
       const approval = new URL(preview.json().approvalUrl);
       expect(approval.origin).toBe(new URL(env.PUBLIC_URL).origin);
+      expect(approval.pathname).toBe(`/campaign/${campaignId}`);
       expect(approval.searchParams.get("editor-pilot")).toBe(preview.json().id);
       const first = preview.json().id as string;
       const confirm = (draftId: string, human: boolean) =>

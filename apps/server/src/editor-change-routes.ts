@@ -52,10 +52,16 @@ export function registerEditorChangeRoutes(
   app: FastifyInstance,
   options: Options,
 ) {
-  const withApproval = <T extends { id: string }>(draft: T) => ({
+  const withApproval = <
+    T extends { id: string; target: { campaignId: string } },
+  >(
+    draft: T,
+  ) => ({
     ...draft,
-    approvalUrl: new URL(`/?editor-pilot=${draft.id}`, options.approvalOrigin)
-      .href,
+    approvalUrl: new URL(
+      `/campaign/${draft.target.campaignId}?editor-pilot=${draft.id}`,
+      options.approvalOrigin,
+    ).href,
   });
   async function handle(
     request: FastifyRequest,

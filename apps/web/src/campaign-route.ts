@@ -14,3 +14,16 @@ export function campaignHeaders(init?: HeadersInit): Headers {
   if (campaign) headers.set("x-arken-campaign-id", campaign);
   return headers;
 }
+const idPattern =
+  "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const campaignReturnPattern = new RegExp(
+  `^/campaign/(${idPattern})/?(?:\\?editor-pilot=(${idPattern}))?$`,
+  "i",
+);
+
+/** Preserve a specific editor draft through account login, using only an internal campaign URL. */
+export function campaignReturnPath(candidate: string | null): string | null {
+  const match = candidate?.match(campaignReturnPattern);
+  if (!match) return null;
+  return `/campaign/${match[1]!.toLowerCase()}${match[2] ? `?editor-pilot=${match[2].toLowerCase()}` : ""}`;
+}

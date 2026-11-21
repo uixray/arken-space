@@ -7,6 +7,7 @@ import {
   getAccountSession,
 } from "./account-auth-client";
 import { selectAccountCampaign } from "./account-campaign-client";
+import { campaignReturnPath } from "./campaign-route";
 
 const campaignPath =
   /^\/campaign\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
@@ -39,9 +40,11 @@ export function CampaignRouter() {
       const session = await getAccountSession();
       if (campaignId) {
         if (!session.authenticated || session.account.passwordChangeRequired) {
-          window.location.replace(
-            `/account?next=${encodeURIComponent(`/campaign/${campaignId}`)}`,
-          );
+          const next =
+            campaignReturnPath(
+              window.location.pathname + window.location.search,
+            ) ?? `/campaign/${campaignId}`;
+          window.location.replace(`/account?next=${encodeURIComponent(next)}`);
           return "redirect";
         }
         // The server checks account ownership and replaces the game session.
