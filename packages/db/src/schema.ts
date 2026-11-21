@@ -362,6 +362,37 @@ export const campaignArchiveState = pgTable(
   ],
 );
 
+export const editorChanges = pgTable(
+  "editor_changes",
+  {
+    id: uuid("id").primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    draft: jsonb("draft").notNull(),
+    receipt: jsonb("receipt"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      "editor_changes_receipt_check",
+      sql`(${table.receipt} IS NULL) = (${table.confirmedAt} IS NULL)`,
+    ),
+    index("editor_changes_history_idx")
+      .on(
+        table.campaignId,
+        sql`(${table.draft} #>> '{target,kind}')`,
+        sql`(${table.draft} #>> '{target,id}')`,
+        table.confirmedAt.desc(),
+        table.id.desc(),
+      )
+      .where(sql`${table.confirmedAt} IS NOT NULL`),
+  ],
+);
+
 /** Authenticated people are distinct from campaign-scoped memberships/roles. */
 export const users = pgTable(
   "users",
