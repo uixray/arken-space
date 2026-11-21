@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { timingSafeEqual } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
-import { memberships } from "@arken/db";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { campaignArchiveState, memberships, users } from "@arken/db";
 import { authFromSessionToken } from "./auth.js";
 import { hashToken } from "./security.js";
 import { env } from "./env.js";
@@ -49,12 +49,22 @@ export function registerBrowserEditor(app: FastifyInstance, db: Database) {
             displayName: memberships.displayName,
           })
           .from(memberships)
+          .innerJoin(users, eq(users.id, memberships.userId))
+          .leftJoin(
+            campaignArchiveState,
+            eq(campaignArchiveState.campaignId, memberships.campaignId),
+          )
           .where(
             and(
               eq(memberships.id, membershipId),
               eq(memberships.campaignId, campaignId),
               eq(memberships.role, "GM"),
               isNull(memberships.accessRevokedAt),
+              eq(users.identityKind, "HOSTED"),
+              isNotNull(users.hostedApprovedAt),
+              eq(users.passwordChangeRequired, false),
+              isNull(users.disabledAt),
+              isNull(campaignArchiveState.archivedAt),
             ),
           );
         return actor ?? null;
