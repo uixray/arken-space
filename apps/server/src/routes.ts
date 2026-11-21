@@ -47,6 +47,7 @@ import {
 } from "./snapshot-metrics.js";
 import { registerWorldMapRoutes } from "./world-map-routes.js";
 import { registerStoryRoutes } from "./story.js";
+import { registerBrowserEditor } from "./editor-change-browser.js";
 import { registerStoryAttachmentLifecycleRoutes } from "./story-attachment-lifecycle.js";
 import { registerStickerPackAdminRoutes } from "./sticker-pack-admin.js";
 import { registerGlobalStickerRoutes } from "./global-sticker-catalog.js";
@@ -497,6 +498,7 @@ export function registerRoutes(
   );
   registerTerrainStampRoutes(app, db);
   registerStoryRoutes(app, db, io);
+  registerBrowserEditor(app, db);
   registerStoryAttachmentLifecycleRoutes(app, db);
   registerStickerPackAdminRoutes(app, db, (request, reply) =>
     requireAuth(request, reply, db),

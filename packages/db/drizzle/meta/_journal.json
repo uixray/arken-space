@@ -631,6 +631,13 @@
       "tag": "0089_campaign_archive",
       "breakpoints": true,
       "idx": 89
+    },
+    {
+      "version": "7",
+      "when": 1795262400000,
+      "tag": "0090_editor_changes",
+      "breakpoints": true,
+      "idx": 90
     }
   ]
 }
