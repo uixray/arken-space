@@ -97,7 +97,7 @@ for (const width of [390, 1280]) {
     ).toBeVisible();
     expect(listQueries.at(-1)?.get("relatedTo")).toBe(subjectId);
 
-    const search = page.getByRole("textbox", { name: "Поиск" });
+    const search = page.getByRole("textbox", { name: "Поиск", exact: true });
     await search.fill("Visible");
     await search.press("Enter");
     await expect.poll(() => listQueries.at(-1)?.get("q")).toBe("Visible");

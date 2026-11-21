@@ -48,6 +48,13 @@ describe("e2e mock API contract (UIX-693)", () => {
     expect(
       unmockedResponse("GET", "/api/characters/c-1/spell-branches"),
     ).toEqual({ status: 200, json: { branches: [], nextCursor: null } });
+    expect(
+      unmockedResponse("GET", "/api/characters/c-1/private-notebook"),
+    ).toEqual({ status: 200, json: { text: "", revision: 0 } });
+    expect(unmockedResponse("GET", "/api/world-content-regions")).toEqual({
+      status: 200,
+      json: { items: [], hasMore: false },
+    });
     expect(() =>
       accountCampaignListSchema.parse(
         EMPTY_OBJECT_GETS["/api/account/campaigns"],

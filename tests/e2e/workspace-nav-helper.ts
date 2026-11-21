@@ -31,7 +31,11 @@ export async function openWorkspaceSection(
     await page.locator("#compact-nav-menu").click();
     const menu = page.getByRole("region", { name: "Меню кампании" });
     await expect(menu).toBeVisible();
-    await menu.getByRole("button", { name, exact: true }).click();
+    // Preparation tiles append a device hint to the visible workspace name.
+    await menu
+      .getByRole("button")
+      .filter({ has: page.getByText(name, { exact: true }) })
+      .click();
     await expect(menu).toBeHidden();
     return;
   }
