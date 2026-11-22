@@ -54,7 +54,7 @@ export function canPostToStream(auth: AuthContext, stream: ChatStream) {
 }
 
 export async function ensureStreamThread(
-  db: Database,
+  db: Pick<Database, "insert" | "select">,
   campaignId: string,
   stream: ChatStream,
 ) {

@@ -1,17 +1,19 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { starterStatLayout } from "@arken/system";
 import type { AuthContext } from "./auth.js";
 import {
   confirmEditorChange,
   EditorConflict,
   previewEditorChange,
+  previewEditorCreation,
   previewEditorRestore,
   type EditorTransaction,
 } from "./editor-change.js";
 
 const targetSchema = z
   .object({
-    kind: z.enum(["character-stat", "skill", "material"]),
+    kind: z.enum(["character-stat", "skill", "material", "bug-report"]),
     id: z.string().uuid(),
   })
   .strict();
@@ -44,6 +46,10 @@ interface Options {
     fn: (tx: EditorTransaction) => Promise<T>,
   ): Promise<T>;
   validate(target: Target, values: Values): boolean;
+  validateCreation(kind: Target["kind"], values: Values): Values | null;
+  onConfirmed?(
+    change: Awaited<ReturnType<typeof confirmEditorChange>>,
+  ): Promise<void>;
   history(actor: Actor, target: Target): Promise<unknown>;
   search(actor: Actor, kind: Target["kind"], query: string): Promise<unknown>;
 }
@@ -52,12 +58,18 @@ export function registerEditorChangeRoutes(
   app: FastifyInstance,
   options: Options,
 ) {
+  const statLabels = Object.fromEntries(
+    starterStatLayout.flatMap(({ rows }) =>
+      rows.map(({ key, label }) => [key, label]),
+    ),
+  );
   const withApproval = <
-    T extends { id: string; target: { campaignId: string } },
+    T extends { id: string; target: { campaignId: string; kind: string } },
   >(
     draft: T,
   ) => ({
     ...draft,
+    ...(draft.target.kind === "character-stat" && { fieldLabels: statLabels }),
     approvalUrl: new URL(
       `/campaign/${draft.target.campaignId}?editor-pilot=${draft.id}`,
       options.approvalOrigin,
@@ -81,6 +93,9 @@ export function registerEditorChangeRoutes(
     }
   }
 
+  app.get("/api/editor/capabilities", (request, reply) =>
+    handle(request, reply, "prepare", async () => ({ creation: true })),
+  );
   app.post("/api/editor/changes", { bodyLimit: 32_768 }, (request, reply) =>
     handle(request, reply, "prepare", async (actor) => {
       const body = draftSchema.safeParse(request.body);
@@ -104,12 +119,36 @@ export function registerEditorChangeRoutes(
       );
     }),
   );
+  app.post("/api/editor/creations", { bodyLimit: 32_768 }, (request, reply) =>
+    handle(request, reply, "prepare", async (actor) => {
+      const parsed = targetSchema
+        .pick({ kind: true })
+        .extend({ values: draftSchema.shape.values })
+        .safeParse(request.body);
+      if (!parsed.success)
+        return reply.code(400).send({ error: "EDITOR_INVALID_CREATION" });
+      const { kind, values } = parsed.data;
+      const validated = options.validateCreation(kind, values);
+      if (!validated)
+        return reply.code(400).send({ error: "EDITOR_INVALID_CREATION" });
+      return withApproval(
+        await options.transaction(actor, (tx) =>
+          previewEditorCreation(
+            tx,
+            { kind, campaignId: actor.campaignId },
+            actor.membershipId,
+            validated,
+          ),
+        ),
+      );
+    }),
+  );
   app.post("/api/editor/changes/:id/confirm", (request, reply) =>
     handle(request, reply, "confirm", async (actor) => {
       const id = idSchema.safeParse(request.params);
       if (!id.success)
         return reply.code(400).send({ error: "EDITOR_INVALID_ID" });
-      return options.transaction(actor, (tx) =>
+      const change = await options.transaction(actor, (tx) =>
         confirmEditorChange(
           tx,
           actor.campaignId,
@@ -117,6 +156,11 @@ export function registerEditorChangeRoutes(
           actor.membershipId,
         ),
       );
+      if (change.target.kind !== "bug-report")
+        await options
+          .onConfirmed?.(change)
+          .catch((error) => request.log.error(error));
+      return change;
     }),
   );
   app.post("/api/editor/changes/:id/restore-preview", (request, reply) =>
@@ -146,7 +190,7 @@ export function registerEditorChangeRoutes(
       );
       if (!draft || draft.authorId !== actor.membershipId)
         return reply.code(404).send({ error: "EDITOR_DRAFT_NOT_FOUND" });
-      return draft;
+      return withApproval(draft);
     }),
   );
   app.get("/api/editor/target", (request, reply) =>

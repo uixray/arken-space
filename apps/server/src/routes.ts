@@ -498,7 +498,16 @@ export function registerRoutes(
   );
   registerTerrainStampRoutes(app, db);
   registerStoryRoutes(app, db, io);
-  registerBrowserEditor(app, db);
+  registerBrowserEditor(app, db, async ({ target }) => {
+    if (target.kind === "material") {
+      io.to(gmRoom(target.campaignId)).emit("story:changed", {
+        campaignId: target.campaignId,
+        postId: target.id,
+      });
+      return;
+    }
+    await broadcastSnapshots(io, db, target.campaignId, "character");
+  });
   registerStoryAttachmentLifecycleRoutes(app, db);
   registerStickerPackAdminRoutes(app, db, (request, reply) =>
     requireAuth(request, reply, db),

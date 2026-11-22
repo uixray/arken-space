@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { starterStatLayout } from "@arken/system";
 import { api } from "./api";
 
 type Value = string | number | boolean | null;
@@ -9,18 +10,53 @@ type Draft = {
   before: Record<string, Value>;
   after: Record<string, Value>;
   restores?: string;
+  creates?: true;
+  fieldLabels?: Record<string, string>;
+  targetName?: string;
 };
 type Change = Draft & { committedRevision: number; confirmedAt: string };
+
+const labels: Record<string, string> = {
+  name: "Название",
+  title: "Заголовок",
+  description: "Описание",
+  body: "Текст",
+  steps: "Шаги воспроизведения",
+  expected: "Ожидаемое поведение",
+  actual: "Фактическое поведение",
+};
+const statLabels = Object.fromEntries(
+  starterStatLayout.flatMap(({ rows }) =>
+    rows.map(({ key, label }) => [key, label]),
+  ),
+);
 
 function Changes({ draft }: { draft: Draft }) {
   return (
     <dl>
       {Object.entries(draft.after).map(([key, value]) => (
-        <div key={key}>
-          <dt>{key}</dt>
-          <dd>
-            <span>Было: {JSON.stringify(draft.before[key])}</span>{" "}
-            <span>Стало: {JSON.stringify(value)}</span>
+        <div
+          key={key}
+          style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}
+        >
+          <dt>
+            {draft.fieldLabels?.[key] ??
+              (draft.target.kind === "character-stat"
+                ? statLabels[key]
+                : labels[key]) ??
+              key}
+          </dt>
+          <dd
+            style={{
+              margin: 0,
+              whiteSpace: "pre-wrap",
+              overflowWrap: "anywhere",
+            }}
+          >
+            {!draft.creates && (
+              <span>{String(draft.before[key] ?? "—")} → </span>
+            )}
+            <span>{String(value ?? "—")}</span>
           </dd>
         </div>
       ))}
@@ -81,10 +117,11 @@ export function EditorPilot({
       </button>
       {draft && (
         <section aria-label="Предпросмотр правки">
-          <p>
-            {draft.target.kind} · {draft.target.id} · версия{" "}
-            {draft.expectedRevision}
-          </p>
+          {draft.creates ? (
+            <p>Новая запись</p>
+          ) : (
+            draft.targetName && <p>{draft.targetName}</p>
+          )}
           <Changes draft={draft} />
           <button
             disabled={busy}
@@ -97,7 +134,13 @@ export function EditorPilot({
                 );
                 setDraft(undefined);
                 setStatus(
-                  draft.restores ? "Версия восстановлена" : "Правка сохранена",
+                  draft.restores
+                    ? "Версия восстановлена"
+                    : draft.creates
+                      ? draft.target.kind === "bug-report"
+                        ? `Баг-репорт отправлен · ${draft.target.id}`
+                        : "Запись создана"
+                      : "Правка сохранена",
                 );
                 const query = new URLSearchParams({
                   kind: draft.target.kind,
@@ -109,7 +152,11 @@ export function EditorPilot({
           >
             {draft.restores
               ? "Подтвердить восстановление"
-              : "Подтвердить правку"}
+              : draft.creates
+                ? draft.target.kind === "bug-report"
+                  ? "Отправить баг-репорт"
+                  : "Подтвердить создание"
+                : "Подтвердить правку"}
           </button>
         </section>
       )}
@@ -120,21 +167,23 @@ export function EditorPilot({
               Версия {change.committedRevision} ·{" "}
               {new Date(change.confirmedAt).toLocaleString()}
               <Changes draft={change} />
-              <button
-                disabled={busy}
-                onClick={() =>
-                  void run(async () => {
-                    setDraft(undefined);
-                    setDraft(
-                      await write(
-                        `/api/editor/changes/${change.id}/restore-preview`,
-                      ),
-                    );
-                  })
-                }
-              >
-                Предпросмотр отката
-              </button>
+              {!change.creates && (
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      setDraft(undefined);
+                      setDraft(
+                        await write(
+                          `/api/editor/changes/${change.id}/restore-preview`,
+                        ),
+                      );
+                    })
+                  }
+                >
+                  Предпросмотр отката
+                </button>
+              )}
             </li>
           ))}
         </ul>

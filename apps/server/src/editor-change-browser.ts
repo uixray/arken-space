@@ -12,13 +12,18 @@ import {
 import { registerEditorChangeRoutes } from "./editor-change-routes.js";
 import {
   editorTargets,
+  editorCreationValues,
   searchEditorTargets,
   validEditorPatch,
 } from "./editor-change-targets.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
-export function registerBrowserEditor(app: FastifyInstance, db: Database) {
+export function registerBrowserEditor(
+  app: FastifyInstance,
+  db: Database,
+  onConfirmed?: Parameters<typeof registerEditorChangeRoutes>[1]["onConfirmed"],
+) {
   const campaignId = process.env.ARKEN_EDITOR_PILOT_CAMPAIGN_ID;
   if (!campaignId) return;
   const origin = new URL(env.WEB_ORIGIN).origin;
@@ -94,7 +99,10 @@ export function registerBrowserEditor(app: FastifyInstance, db: Database) {
       );
     },
     validate: validEditorPatch,
-    history: (actor, target) => listEditorHistory(db, actor.campaignId, target),
+    validateCreation: editorCreationValues,
+    onConfirmed,
+    history: (actor, target) =>
+      listEditorHistory(db, actor.campaignId, target, actor.membershipId),
     search: (actor, kind, query) =>
       searchEditorTargets(db, actor.campaignId, kind, query),
   });
