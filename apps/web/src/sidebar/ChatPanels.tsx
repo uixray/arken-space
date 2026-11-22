@@ -911,7 +911,11 @@ export function ActivityPanel({
       id={view === "character" ? "chat-panel-character" : "chat-panel-activity"}
       aria-label={snapshot.me.role === "GM" ? "События" : undefined}
       aria-labelledby={
-        view === "character" ? "chat-tab-character" : snapshot.me.role === "GM" ? undefined : "chat-tab-activity"
+        view === "character"
+          ? "chat-tab-character"
+          : snapshot.me.role === "GM"
+            ? undefined
+            : "chat-tab-activity"
       }
     >
       <ActivityInitiativePanel
@@ -980,7 +984,12 @@ export function ActivityPanel({
             compact
           />
         )}
-        {snapshot.me.role === "GM" && rollCharacter && <GmHealthCounter key={rollCharacter.id} characterId={rollCharacter.id} />}
+        {snapshot.me.role === "GM" && rollCharacter && (
+          <GmHealthCounter
+            key={rollCharacter.id}
+            characterId={rollCharacter.id}
+          />
+        )}
         {resourceError && (
           <p className="composer-error" role="alert">
             {resourceError}
@@ -991,11 +1000,17 @@ export function ActivityPanel({
             <QuickRollPanel
               stacked={view === "character"}
               rollCharacter={rollCharacter}
-              characterOwnerRole={snapshot.members.find((member) => member.id === rollCharacter.ownerMembershipId)?.role}
+              characterOwnerRole={
+                snapshot.members.find(
+                  (member) => member.id === rollCharacter.ownerMembershipId,
+                )?.role
+              }
               campaignId={snapshot.campaign.id}
               membershipId={snapshot.me.id}
               rows={rollableStatRows(
-                (rollCharacter.statLayout ?? snapshot.campaign.statLayout).flatMap((group) =>
+                (
+                  rollCharacter.statLayout ?? snapshot.campaign.statLayout
+                ).flatMap((group) =>
                   group.rows
                     .filter((row) => row.source !== "RESOURCE")
                     .map(({ key, label }) => ({ key, label, group: group.id })),
@@ -1004,7 +1019,9 @@ export function ActivityPanel({
               quickRollPending={pendingQuickRoll !== null}
               canControlCharacter={canSpendResources}
               gmOnly={rollVisibility === "GM_ONLY"}
-              preparedActionTarget={view === "character" ? null : preparedActionTarget}
+              preparedActionTarget={
+                view === "character" ? null : preparedActionTarget
+              }
               physicalDiceControl={
                 <FormInput
                   className="compact-check quick-roll-panel__physical-dice"

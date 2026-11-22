@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { GameSnapshot } from "@arken/contracts";
 import type { Locator, Page, Route, WebSocketRoute } from "@playwright/test";
@@ -80,7 +81,7 @@ async function boundary(page: Page, initialSnapshot: GameSnapshot = fixture()) {
   let bootstrapReads = 0;
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40") {
+      if (isGameSocketConnect(message.toString())) {
         sockets.add(socket);
         socket.send('40{"sid":"selection-socket"}');
       }

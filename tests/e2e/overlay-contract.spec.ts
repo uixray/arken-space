@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { GameSnapshot, SceneDto } from "@arken/contracts";
 import type { Locator, Page } from "@playwright/test";
@@ -46,7 +47,8 @@ async function install(page: Page, role: "GM" | "PLAYER" = "GM") {
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((m) => {
-      if (m.toString() === "40") socket.send('40{"sid":"navigation"}');
+      if (isGameSocketConnect(m.toString()))
+        socket.send('40{"sid":"navigation"}');
     });
     socket.send(
       '0{"sid":"navigation","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

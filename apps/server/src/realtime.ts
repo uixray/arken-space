@@ -658,7 +658,11 @@ export function registerRealtime(
     let lastRedactedPreview: { key: string; sentAt: number } | undefined;
     socket.on("token:moving", async (input) => {
       const parsed = tokenMovingSchema.safeParse(input);
-      if (!parsed.success || parsed.data.previewEpoch !== tokenPreviewEpochs.current(auth.campaignId)) return;
+      if (
+        !parsed.success ||
+        parsed.data.previewEpoch !== tokenPreviewEpochs.current(auth.campaignId)
+      )
+        return;
       await runCampaignCanvasRelay(db, auth.campaignId, async (tx) => {
         const projection = await projectedToken(
           tx,
@@ -666,8 +670,12 @@ export function registerRealtime(
           parsed.data.tokenId,
         );
         if (!canEditProjectedToken(auth, projection) || !projection) return;
-        if (parsed.data.revision !== projection.token.revision ||
-            (parsed.data.sceneId && parsed.data.sceneId !== projection.token.sceneId)) return;
+        if (
+          parsed.data.revision !== projection.token.revision ||
+          (parsed.data.sceneId &&
+            parsed.data.sceneId !== projection.token.sceneId)
+        )
+          return;
         const previewToken = {
           ...projection.token,
           x: parsed.data.x,
@@ -684,7 +692,12 @@ export function registerRealtime(
           projection.activeSceneId,
           projection.token.controllerMembershipIds,
         );
-        if (!socket.connected || parsed.data.previewEpoch !== tokenPreviewEpochs.current(auth.campaignId)) return;
+        if (
+          !socket.connected ||
+          parsed.data.previewEpoch !==
+            tokenPreviewEpochs.current(auth.campaignId)
+        )
+          return;
         if (!parsed.data.hold)
           socket.to(delivery.rooms).emit("token:moving", parsed.data);
         const key = `${previewToken.id}:${previewToken.revision}:${parsed.data.previewEpoch}`;
@@ -697,23 +710,30 @@ export function registerRealtime(
         }
         // Restricted delivery with a public original necessarily means
         // the candidate point is hidden, since tokenDelivery checks both.
-        if (!wasPublicInTokenProjection(
-          projection.token, delivery.fogByScene, projection.activeSceneId,
-        )) return;
+        if (
+          !wasPublicInTokenProjection(
+            projection.token,
+            delivery.fogByScene,
+            projection.activeSceneId,
+          )
+        )
+          return;
         const now = Date.now();
-        if (lastRedactedPreview?.key !== key ||
-            now - lastRedactedPreview.sentAt >= 2000) {
+        if (
+          lastRedactedPreview?.key !== key ||
+          now - lastRedactedPreview.sentAt >= 2000
+        ) {
           lastRedactedPreview = { key, sentAt: now };
-          socket.to(campaignRoom(auth.campaignId)).except(delivery.rooms).emit(
-            "token:preview-hidden",
-            {
+          socket
+            .to(campaignRoom(auth.campaignId))
+            .except(delivery.rooms)
+            .emit("token:preview-hidden", {
               tokenId: previewToken.id,
               sceneId: previewToken.sceneId,
               revision: previewToken.revision,
               previewEpoch: parsed.data.previewEpoch,
               snapshotVersion: parsed.data.snapshotVersion,
-            },
-          );
+            });
         }
       });
     });
@@ -916,17 +936,24 @@ export function registerRealtime(
       // projections only on a boundary crossing, not on ordinary moves.
       const activeSceneId = committedProjection.activeSceneId;
       const previousPublic = wasPublicInTokenProjection(
-        current, delivery.fogByScene, activeSceneId,
+        current,
+        delivery.fogByScene,
+        activeSceneId,
       );
       const latestPublic = wasPublicInTokenProjection(
-        latestToken, delivery.fogByScene, activeSceneId,
+        latestToken,
+        delivery.fogByScene,
+        activeSceneId,
       );
       if (previousPublic !== latestPublic && runtime.refreshTokenProjection) {
         try {
           await runtime.refreshTokenProjection(auth.campaignId);
         } catch (error) {
           // The move has already committed and remains acknowledged.
-          log.warn({ err: error, actionId: command.actionId }, "token.projection_refresh_failed");
+          log.warn(
+            { err: error, actionId: command.actionId },
+            "token.projection_refresh_failed",
+          );
         }
       }
       log.info(

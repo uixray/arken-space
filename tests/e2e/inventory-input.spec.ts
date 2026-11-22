@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Page } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
@@ -106,9 +107,10 @@ async function openInventory(page: Page) {
   );
   const workspace = page.locator(".character-workspace");
   await workspace.getByRole("tab", { name: "Инвентарь" }).click();
-  const inventory = workspace.getByLabel(
-    /\u0418\u043d\u0432\u0435\u043d\u0442\u0430\u0440\u044c \(/,
-  );
+  const inventory = workspace.getByRole("textbox", {
+    name: "Текстовые записи инвентаря (сохранены отдельно)",
+    exact: true,
+  });
   await expect(inventory).toBeVisible();
   return { inventory, workspace };
 }
@@ -309,7 +311,7 @@ test("compact PLAYER inventory commits normalized lines and survives acknowledge
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40")
+      if (isGameSocketConnect(message.toString()))
         socket.send('40{"sid":"inventory-socket"}');
     });
     socket.send(

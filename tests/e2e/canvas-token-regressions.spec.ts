@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { makePng } from "./helpers/generated-png";
 import { expectSelectedMenuIcon } from "./helpers/selected-menu-icon";
@@ -219,7 +220,7 @@ for (const role of ["GM", "PLAYER"] as const) {
           );
           await page.routeWebSocket(/\/socket\.io\//, (socket) => {
             socket.onMessage((message) => {
-              if (message.toString() === "40")
+              if (isGameSocketConnect(message.toString()))
                 socket.send('40{"sid":"object-icons"}');
             });
             socket.send(
@@ -765,7 +766,7 @@ test("rapid single-token drags serialize and resync after a newer revision", asy
     gameSocket = socket;
     socket.onMessage((message) => {
       const packet = message.toString();
-      if (packet === "40") {
+      if (isGameSocketConnect(packet)) {
         socketConnected = true;
         socket.send('40{"sid":"rapid-token-move-socket"}');
         return;
@@ -1138,7 +1139,8 @@ test("UIX-405 WASD moves only a selected token in PAN and ignores held repeats",
   );
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40") socket.send('40{"sid":"wasd-socket"}');
+      if (isGameSocketConnect(message.toString()))
+        socket.send('40{"sid":"wasd-socket"}');
     });
     socket.send(
       '0{"sid":"wasd-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
@@ -2804,7 +2806,7 @@ for (const tool of ["PAN", "DRAW"] as const) {
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
         const raw = message.toString();
-        if (raw === "40") {
+        if (isGameSocketConnect(raw)) {
           socket.send('40{"sid":"ctrl-ping-socket"}');
           return;
         }
@@ -2992,7 +2994,7 @@ for (const role of ["GM", "PLAYER"] as const) {
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
         const raw = message.toString();
-        if (raw === "40") {
+        if (isGameSocketConnect(raw)) {
           socket.send('40{"sid":"shift-ruler"}');
           connected = true;
           return;
@@ -3222,7 +3224,8 @@ async function verifyTokenMenuViewportSequence(
   await installCanvasReviewRoutes(page);
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40") socket.send('40{"sid":"menu-resize"}');
+      if (isGameSocketConnect(message.toString()))
+        socket.send('40{"sid":"menu-resize"}');
     });
     socket.send(
       '0{"sid":"menu-resize","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
@@ -3443,7 +3446,8 @@ async function setupKeyboardTokenMenu(page: Page, width: number) {
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40") socket.send('40{"sid":"menu-keyboard"}');
+      if (isGameSocketConnect(message.toString()))
+        socket.send('40{"sid":"menu-keyboard"}');
     });
     socket.send(
       '0{"sid":"menu-keyboard","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
@@ -3645,7 +3649,8 @@ for (const width of [1280, 390]) {
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
-        if (message.toString() === "40") socket.send('40{"sid":"player-menu"}');
+        if (isGameSocketConnect(message.toString()))
+          socket.send('40{"sid":"player-menu"}');
       });
       socket.send(
         '0{"sid":"player-menu","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
@@ -3738,7 +3743,8 @@ for (const role of ["GM", "PLAYER"] as const) {
       );
       await page.routeWebSocket(/\/socket\.io\//, (socket) => {
         socket.onMessage((message) => {
-          if (message.toString() === "40") socket.send('40{"sid":"menu-tab"}');
+          if (isGameSocketConnect(message.toString()))
+            socket.send('40{"sid":"menu-tab"}');
         });
         socket.send(
           '0{"sid":"menu-tab","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
@@ -3893,7 +3899,7 @@ for (const change of [
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
-        if (message.toString() === "40") {
+        if (isGameSocketConnect(message.toString())) {
           socket.send('40{"sid":"bulk-lifecycle"}');
           publish = () =>
             socket.send(`42${JSON.stringify(["game:snapshot", current])}`);
@@ -4054,7 +4060,7 @@ for (const width of [1280, 390]) {
     }
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
-        if (message.toString() === "40") {
+        if (isGameSocketConnect(message.toString())) {
           socket.send('40{"sid":"live-menu"}');
           publish = () =>
             socket.send(`42${JSON.stringify(["game:snapshot", current])}`);
@@ -4166,7 +4172,7 @@ for (const width of [1280, 390]) {
       );
       await page.routeWebSocket(/\/socket\.io\//, (socket) => {
         socket.onMessage((message) => {
-          if (message.toString() === "40") {
+          if (isGameSocketConnect(message.toString())) {
             socket.send('40{"sid":"menu-access"}');
             publish = () =>
               socket.send(`42${JSON.stringify(["game:snapshot", current])}`);
@@ -4301,7 +4307,8 @@ for (const scenario of [
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
-        if (message.toString() === "40") socket.send('40{"sid":"wasd-role"}');
+        if (isGameSocketConnect(message.toString()))
+          socket.send('40{"sid":"wasd-role"}');
       });
       socket.send(
         '0{"sid":"wasd-role-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
@@ -4454,7 +4461,7 @@ for (const role of ["GM", "PLAYER"] as const) {
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((m) => {
-        if (m.toString() === "40") {
+        if (isGameSocketConnect(m.toString())) {
           socket.send('40{"sid":"images"}');
           publish = () =>
             socket.send(`42${JSON.stringify(["game:snapshot", current])}`);

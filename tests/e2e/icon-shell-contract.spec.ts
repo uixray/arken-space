@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { inspectIconStructure } from "./helpers/icon-structure";
 import {
   readIconKeyboardFocus,
@@ -77,7 +78,7 @@ for (const themeId of ["system", ...PLAYER_THEMES.map(({ id }) => id)])
         });
         await page.routeWebSocket(/\/socket\.io\//, (socket) => {
           socket.onMessage((message) => {
-            if (message.toString() === "40")
+            if (isGameSocketConnect(message.toString()))
               socket.send('40{"sid":"icons-socket"}');
           });
           socket.send(

@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
 const placementCss = readFileSync(
-  new URL("../../apps/web/src/cartographic-label-placement.css", import.meta.url),
+  new URL(
+    "../../apps/web/src/cartographic-label-placement.css",
+    import.meta.url,
+  ),
   "utf8",
 );
 
@@ -72,7 +75,9 @@ for (const width of [1440, 390]) {
   });
 }
 
-test("plain scene titles use the same opaque text protection outside marker buttons", async ({ page }) => {
+test("plain scene titles use the same opaque text protection outside marker buttons", async ({
+  page,
+}) => {
   await page.setContent(`
     <style>:root { --palette-ink-900:#181816; --palette-ink-100:#e8e4da;
       --line-strong:#666; --radius-sm:4px; }
@@ -86,7 +91,9 @@ test("plain scene titles use the same opaque text protection outside marker butt
     </div>
   `);
   await page.addStyleTag({ content: placementCss });
-  const title = page.getByRole("heading", { name: "Длинный заголовок освещённой сцены" });
+  const title = page.getByRole("heading", {
+    name: "Длинный заголовок освещённой сцены",
+  });
   const text = title.locator(".positioned-cartographic-label > span");
   await expect(text).toHaveCSS("background-color", "rgb(24, 24, 22)");
   await expect(text).toHaveCSS("color", "rgb(232, 228, 218)");
@@ -99,7 +106,9 @@ test("plain scene titles use the same opaque text protection outside marker butt
 });
 
 for (const width of [1440, 390]) {
-  test(`configured captions escape control clipping and protect plain text at ${width}px`, async ({ page }) => {
+  test(`configured captions escape control clipping and protect plain text at ${width}px`, async ({
+    page,
+  }) => {
     await page.setViewportSize({ width, height: 700 });
     await page.setContent(`
       <style>
@@ -129,7 +138,9 @@ for (const width of [1440, 390]) {
     await expect(text).toHaveCSS("background-color", "rgb(32, 40, 32)");
     await expect(text).toHaveCSS("color", "rgb(241, 240, 237)");
     await expect(text).toHaveCSS("display", "block");
-    await expect(pin.locator(".world-map-marker__label--configured"))
-      .toHaveCSS("pointer-events", "none");
+    await expect(pin.locator(".world-map-marker__label--configured")).toHaveCSS(
+      "pointer-events",
+      "none",
+    );
   });
 }

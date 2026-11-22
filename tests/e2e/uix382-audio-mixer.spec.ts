@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import {
@@ -57,7 +58,7 @@ for (const width of [1280, 390]) {
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
         const value = message.toString();
-        if (value === "40") socket.send('40{"sid":"mixer"}');
+        if (isGameSocketConnect(value)) socket.send('40{"sid":"mixer"}');
         if (value.includes("audio:track:set")) commands.push(value);
       });
       socket.send(
@@ -128,7 +129,7 @@ for (const width of [1280, 390]) {
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
         const value = message.toString();
-        if (value === "40") socket.send('40{"sid":"player"}');
+        if (isGameSocketConnect(value)) socket.send('40{"sid":"player"}');
         if (value.includes("audio:track:set") || value.includes('"audio:set"'))
           commands.push(value);
       });

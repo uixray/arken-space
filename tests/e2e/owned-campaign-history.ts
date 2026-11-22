@@ -120,17 +120,17 @@ export async function withOwnedCampaignHistory(
   } catch (error) {
     failed = true;
     failure = error;
-    throw error;
-  } finally {
-    try {
-      await resource.close();
-    } catch (cleanupError) {
-      if (failed)
-        throw new AggregateError(
-          [failure, cleanupError],
-          "Campaign fixture and cleanup failed",
-        );
-      throw cleanupError;
-    }
   }
+  try {
+    await resource.close();
+  } catch (cleanupError) {
+    if (failed)
+      throw new AggregateError(
+        [failure, cleanupError],
+        "Campaign fixture and cleanup failed",
+        { cause: cleanupError },
+      );
+    throw cleanupError;
+  }
+  if (failed) throw failure;
 }

@@ -8,15 +8,15 @@
     "revision": "cce56397a6b1e91fcf2fc6951e506d64b62647cb",
     "workflowRun": "35388600465",
     "staticInventory": {
-      "buckets": 37,
-      "jsxOccurrences": 76
+      "buckets": 94,
+      "jsxOccurrences": 212
     },
     "fullAcceptanceDenominator": {
-      "buckets": 37,
-      "jsxOccurrences": 76,
-      "passBuckets": 26,
+      "buckets": 94,
+      "jsxOccurrences": 212,
+      "passBuckets": 25,
       "failBuckets": 2,
-      "blockedBuckets": 9
+      "blockedBuckets": 67
     },
     "nonApplicabilityBlockedSubset": {
       "buckets": 29,
@@ -395,6 +395,16 @@
   },
   "sites": [
     {
+      "file": "apps/web/src/AbilityAccordion.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+    },
+    {
       "file": "apps/web/src/AbilityAreaPanel.tsx",
       "kind": "tag:select",
       "count": 1,
@@ -403,6 +413,16 @@
       "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
       "evidence": [],
       "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+    },
+    {
+      "file": "apps/web/src/AccountAuthWorkspace.tsx",
+      "kind": "tag:details",
+      "count": 6,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
     },
     {
       "file": "apps/web/src/Achievements.tsx",
@@ -505,6 +525,136 @@
       "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
     },
     {
+      "file": "apps/web/src/CreationManager.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+    },
+    {
+      "file": "apps/web/src/CreationManager.tsx",
+      "kind": "tag:select",
+      "count": 5,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+    },
+    {
+      "file": "apps/web/src/CreationObjects.tsx",
+      "kind": "tag:details",
+      "count": 3,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+    },
+    {
+      "file": "apps/web/src/CreationObjects.tsx",
+      "kind": "tag:select",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+    },
+    {
+      "file": "apps/web/src/CreationParts.tsx",
+      "kind": "tag:details",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+    },
+    {
+      "file": "apps/web/src/CreationRules.tsx",
+      "kind": "tag:details",
+      "count": 9,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+    },
+    {
+      "file": "apps/web/src/CreationRules.tsx",
+      "kind": "tag:select",
+      "count": 14,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+    },
+    {
+      "file": "apps/web/src/CreationStore.tsx",
+      "kind": "tag:details",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+    },
+    {
+      "file": "apps/web/src/CreationStore.tsx",
+      "kind": "tag:select",
+      "count": 4,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+    },
+    {
+      "file": "apps/web/src/CreationStudio.tsx",
+      "kind": "tag:details",
+      "count": 4,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+    },
+    {
+      "file": "apps/web/src/CreationStudio.tsx",
+      "kind": "tag:select",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+    },
+    {
+      "file": "apps/web/src/CreationVersionHistory.tsx",
+      "kind": "tag:details",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+    },
+    {
+      "file": "apps/web/src/CreationWorkspace.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+    },
+    {
       "file": "apps/web/src/EconomyManager.tsx",
       "kind": "tag:details",
       "count": 4,
@@ -573,6 +723,16 @@
       "scope": "GM-only native select for choosing an owned global pack, conditional on packs being present. No runtime render, keyboard, focus, popup or selection evidence is recorded.",
       "evidence": [],
       "next": "With an authorized GM fixture containing packs, verify actual open/select/close, focus and placement in desktop/compact browsers; do not infer runtime PASS from static discovery."
+    },
+    {
+      "file": "apps/web/src/GmHealthCounter.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
     },
     {
       "file": "apps/web/src/InstanceBindings.tsx",
@@ -671,6 +831,16 @@
       "scope": "Scene picker dropdown details element in topbar.",
       "evidence": ["scenePicker"],
       "next": "Real multiplayer persistence and physical devices remain separate gates."
+    },
+    {
+      "file": "apps/web/src/Sidebar.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "new-static-site",
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
     },
     {
       "file": "apps/web/src/SoundClipEditor.tsx",
@@ -1025,12 +1195,12 @@
     {
       "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
       "kind": "tag:details",
-      "count": 1,
-      "status": "PASS",
+      "count": 2,
+      "status": "BLOCKED",
       "classification": "in-flow",
-      "scope": "PLAYER compact backstory native Enter/Space/pointer close/reopen and pending draft retention; ordinary in-flow disclosure, not floating popup.",
-      "evidence": ["disclosureCurrent"],
-      "next": "GM/non-owner and full viewport matrix not claimed. Keep ordinary disclosure criteria separate from popup layering."
+      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "evidence": [],
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
     },
     {
       "file": "apps/web/src/sidebar/ChatPanels.tsx",

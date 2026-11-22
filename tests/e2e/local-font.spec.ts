@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import { buildGameSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -42,7 +43,8 @@ for (const width of [390, 1440]) {
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
-        if (message.toString() === "40") socket.send('40{"sid":"font-test"}');
+        if (isGameSocketConnect(message.toString()))
+          socket.send('40{"sid":"font-test"}');
       });
       socket.send(
         '0{"sid":"font-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { RULER_COLOR_PALETTE } from "@arken/contracts";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
@@ -70,7 +71,7 @@ test("UIX-509 deterministic ruler colors render on synthetic light, dark and bus
     socket.onMessage((message) => {
       const text = message.toString();
       outgoing.push(text);
-      if (text === "40") socket.send('40{"sid":"uix509-browser"}');
+      if (isGameSocketConnect(text)) socket.send('40{"sid":"uix509-browser"}');
       if (text.startsWith("42")) {
         const [eventName, payload] = JSON.parse(text.slice(2)) as [
           string,
@@ -258,7 +259,7 @@ test("UIX-509 a GM-assigned black ruler keeps a light halo on a dark map and a p
     sendToClient = (text) => socket.send(text);
     socket.onMessage((message) => {
       const text = message.toString();
-      if (text === "40") socket.send('40{"sid":"uix509-dark"}');
+      if (isGameSocketConnect(text)) socket.send('40{"sid":"uix509-dark"}');
     });
     socket.send(
       '0{"sid":"uix509-dark-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

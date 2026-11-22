@@ -3,9 +3,19 @@
   "scope": "apps/web/src/**/*.tsx; исключены файлы test/spec/story и директории tests/stories/test-support; только статические теги и роли с литеральными значениями",
   "sites": [
     {
+      "file": "apps/web/src/AbilityAccordion.tsx",
+      "kind": "tag:details",
+      "count": 1
+    },
+    {
       "file": "apps/web/src/AbilityAreaPanel.tsx",
       "kind": "tag:select",
       "count": 1
+    },
+    {
+      "file": "apps/web/src/AccountAuthWorkspace.tsx",
+      "kind": "tag:details",
+      "count": 6
     },
     {
       "file": "apps/web/src/Achievements.tsx",
@@ -58,6 +68,71 @@
       "count": 1
     },
     {
+      "file": "apps/web/src/CreationManager.tsx",
+      "kind": "tag:details",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/CreationManager.tsx",
+      "kind": "tag:select",
+      "count": 5
+    },
+    {
+      "file": "apps/web/src/CreationObjects.tsx",
+      "kind": "tag:details",
+      "count": 3
+    },
+    {
+      "file": "apps/web/src/CreationObjects.tsx",
+      "kind": "tag:select",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/CreationParts.tsx",
+      "kind": "tag:details",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/CreationRules.tsx",
+      "kind": "tag:details",
+      "count": 9
+    },
+    {
+      "file": "apps/web/src/CreationRules.tsx",
+      "kind": "tag:select",
+      "count": 14
+    },
+    {
+      "file": "apps/web/src/CreationStore.tsx",
+      "kind": "tag:details",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/CreationStore.tsx",
+      "kind": "tag:select",
+      "count": 4
+    },
+    {
+      "file": "apps/web/src/CreationStudio.tsx",
+      "kind": "tag:details",
+      "count": 4
+    },
+    {
+      "file": "apps/web/src/CreationStudio.tsx",
+      "kind": "tag:select",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/CreationVersionHistory.tsx",
+      "kind": "tag:details",
+      "count": 2
+    },
+    {
+      "file": "apps/web/src/CreationWorkspace.tsx",
+      "kind": "tag:select",
+      "count": 1
+    },
+    {
       "file": "apps/web/src/EconomyManager.tsx",
       "kind": "tag:details",
       "count": 4
@@ -90,6 +165,11 @@
     {
       "file": "apps/web/src/GlobalStickerPackManager.tsx",
       "kind": "tag:select",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/GmHealthCounter.tsx",
+      "kind": "tag:details",
       "count": 1
     },
     {
@@ -134,6 +214,11 @@
     },
     {
       "file": "apps/web/src/ScenePicker.tsx",
+      "kind": "tag:details",
+      "count": 1
+    },
+    {
+      "file": "apps/web/src/Sidebar.tsx",
       "kind": "tag:details",
       "count": 1
     },
@@ -300,7 +385,7 @@
     {
       "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
       "kind": "tag:details",
-      "count": 1
+      "count": 2
     },
     {
       "file": "apps/web/src/sidebar/ChatPanels.tsx",

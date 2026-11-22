@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import type { Locator, Page, WebSocketRoute } from "@playwright/test";
@@ -105,7 +106,8 @@ async function bootFogScene(
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket: WebSocketRoute) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40") socket.send('40{"sid":"uix314-mock"}');
+      if (isGameSocketConnect(message.toString()))
+        socket.send('40{"sid":"uix314-mock"}');
     });
     socket.send(
       '0{"sid":"uix314-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

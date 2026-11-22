@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type {
   AssetDto,
@@ -197,7 +198,7 @@ async function installBoundary(page: Page, editExisting = false) {
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
       const packet = message.toString();
-      if (packet === "40") {
+      if (isGameSocketConnect(packet)) {
         sockets.add(socket);
         socket.send('40{"sid":"upload-source-socket"}');
         return;

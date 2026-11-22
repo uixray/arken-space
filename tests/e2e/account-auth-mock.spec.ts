@@ -4,9 +4,11 @@ import { fulfillUnmocked } from "./mock-api-contract";
 const accountSession = {
   authenticated: true,
   account: {
+    identityKind: "EMAIL",
     id: "11111111-1111-4111-8111-111111111111",
     email: "person@example.test",
     verified: true,
+    passwordChangeRequired: false,
   },
   csrfToken: "synthetic-csrf",
 };
@@ -85,7 +87,7 @@ test("account registration, verification, reset, login and logout in browser (mo
   await page.getByLabel("Пароль").fill("secure phrase more than twelve");
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(
-    page.getByRole("heading", { name: "Почта подтверждена" }),
+    page.getByRole("heading", { name: "Добро пожаловать" }),
   ).toBeVisible();
   await expect(page.getByText("person@example.test")).toBeVisible();
   await page.getByRole("button", { name: "Выйти из аккаунта" }).click();

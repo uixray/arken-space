@@ -89,7 +89,10 @@ async function patchCharacterElsewhere(
 }
 
 const inventoryField = (page: Page) =>
-  page.locator("label.field", { hasText: "Инвентарь" }).locator("textarea");
+  page.getByRole("textbox", {
+    name: "Текстовые записи инвентаря (сохранены отдельно)",
+    exact: true,
+  });
 
 test("фокус в поле инвентаря переживает чужую правку персонажа", async ({
   page,

@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { expect, test } from "./react-console-guard";
 import AxeBuilder from "@axe-core/playwright";
@@ -69,7 +70,8 @@ for (const width of [1280, 390]) {
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
-        if (message.toString() === "40") socket.send('40{"sid":"list"}');
+        if (isGameSocketConnect(message.toString()))
+          socket.send('40{"sid":"list"}');
       });
       socket.send(
         '0{"sid":"list-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

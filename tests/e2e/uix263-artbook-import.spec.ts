@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { expect, test } from "./react-console-guard";
 import type { Page } from "@playwright/test";
 import {
@@ -70,7 +71,8 @@ async function configureGmArtbook(
   }
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40") socket.send('40{"sid":"artbook"}');
+      if (isGameSocketConnect(message.toString()))
+        socket.send('40{"sid":"artbook"}');
     });
     socket.send(
       '0{"sid":"artbook","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

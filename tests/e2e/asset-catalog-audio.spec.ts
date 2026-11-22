@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { readFile } from "node:fs/promises";
 import { expect, test } from "./react-console-guard";
@@ -54,7 +55,8 @@ for (const width of [1280, 390]) {
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
-        if (message.toString() === "40") socket.send('40{"sid":"catalog"}');
+        if (isGameSocketConnect(message.toString()))
+          socket.send('40{"sid":"catalog"}');
         if (message.toString().includes('"audio:set"'))
           commands.push(message.toString());
       });

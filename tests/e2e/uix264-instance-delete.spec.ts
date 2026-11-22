@@ -71,6 +71,23 @@ for (const width of [390, 1280]) {
       }
       if (pathname.endsWith("/relations") || pathname.endsWith("/media"))
         return route.fulfill({ json: [] });
+      const bindingTarget = rows.find(
+        (row) => pathname === `/api/world-content-instances/${row.id}/bindings`,
+      );
+      if (bindingTarget && request.method() === "GET") {
+        return route.fulfill({
+          json: {
+            revision: 0,
+            tokenDefinitionId: null,
+            containerInstanceId: null,
+            type: canonical.type,
+            tokens: [],
+            containers: rows
+              .filter((row) => row.id !== bindingTarget.id)
+              .map((row) => ({ id: row.id, name: row.displayNameOverride })),
+          },
+        });
+      }
       if (
         pathname === "/api/world-content-instances" &&
         request.method() === "GET"

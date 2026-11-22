@@ -956,7 +956,11 @@ export function registerStoryRoutes(
         ...(request.params as object),
       });
       const eventType =
-        target === "PUBLISHED" ? "story.published" : target === "DRAFT" ? "story.withdrawn" : "story.archived";
+        target === "PUBLISHED"
+          ? "story.published"
+          : target === "DRAFT"
+            ? "story.withdrawn"
+            : "story.archived";
       const commandHash = storyCommandHash(eventType, body);
       const replay = await actionReplay(
         db,
@@ -978,7 +982,11 @@ export function registerStoryRoutes(
         current.lifecycle !== "ARCHIVED"
       )
         return storyError(reply, "STORY_POST_TRANSITION_INVALID", 409);
-      if (target === "DRAFT" && (auth.campaignId !== "eb6a55c4-a821-4739-8d4a-a1028e9d9092" || current.lifecycle === "DRAFT"))
+      if (
+        target === "DRAFT" &&
+        (auth.campaignId !== "eb6a55c4-a821-4739-8d4a-a1028e9d9092" ||
+          current.lifecycle === "DRAFT")
+      )
         return storyError(reply, "STORY_POST_TRANSITION_INVALID", 409);
       if (target === "ARCHIVED" && current.lifecycle === "ARCHIVED")
         return storyError(reply, "STORY_POST_TRANSITION_INVALID", 409);
@@ -1019,7 +1027,12 @@ export function registerStoryRoutes(
               lifecycle: target,
               visibility: target === "PUBLISHED" ? "PUBLIC" : "GM_ONLY",
               revision: nextRevision,
-              publishedAt: target === "PUBLISHED" ? now : target === "DRAFT" ? null : current.publishedAt,
+              publishedAt:
+                target === "PUBLISHED"
+                  ? now
+                  : target === "DRAFT"
+                    ? null
+                    : current.publishedAt,
               archivedAt: target === "ARCHIVED" ? now : null,
               updatedAt: now,
             })
@@ -1068,14 +1081,23 @@ export function registerStoryRoutes(
             campaignId: auth.campaignId,
             postId: saved.post.id,
           });
-        else if (auth.campaignId === "eb6a55c4-a821-4739-8d4a-a1028e9d9092" && saved.result.media.length > 0) {
+        else if (
+          auth.campaignId === "eb6a55c4-a821-4739-8d4a-a1028e9d9092" &&
+          saved.result.media.length > 0
+        ) {
           io.to(campaignRoom(auth.campaignId)).emit("story:changed", {
             campaignId: auth.campaignId,
             postId: saved.post.id,
             presentation: {
               key: `${saved.post.id}:${saved.post.revision}`,
               title: saved.result.title,
-              media: saved.result.media.map(({ contentId, altText, caption }) => ({ contentId, altText, caption })),
+              media: saved.result.media.map(
+                ({ contentId, altText, caption }) => ({
+                  contentId,
+                  altText,
+                  caption,
+                }),
+              ),
             },
           });
         } else emitStory(io, saved.post);

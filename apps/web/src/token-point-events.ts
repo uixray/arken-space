@@ -76,15 +76,18 @@ function updateTokenPreview(
     (currentEpoch !== undefined && movement.previewEpoch !== currentEpoch) ||
     (movement.sceneId !== undefined && movement.sceneId !== existing.sceneId) ||
     (watermarks.has(movement.tokenId) &&
-      (currentEpoch === undefined || movement.previewEpoch !== currentEpoch ||
-       movement.snapshotVersion === undefined ||
-       movement.snapshotVersion < watermarks.get(movement.tokenId)!)) ||
+      (currentEpoch === undefined ||
+        movement.previewEpoch !== currentEpoch ||
+        movement.snapshotVersion === undefined ||
+        movement.snapshotVersion < watermarks.get(movement.tokenId)!)) ||
     existing.revision !== movement.revision
   )
     return current;
   return {
     ...current,
-    tokens: current.tokens.map((token) => token === existing ? update(token) : token),
+    tokens: current.tokens.map((token) =>
+      token === existing ? update(token) : token,
+    ),
   };
 }
 
@@ -94,12 +97,20 @@ export function applyTokenPreview(
   watermarks: ReadonlyMap<string, number>,
   currentEpoch?: string,
 ): GameSnapshot {
-  return updateTokenPreview(current, movement, watermarks, currentEpoch, (token) => ({
-    ...token, x: movement.x, y: movement.y,
-    // A player's canonical projection never includes an invisible token.
-    // Thus a valid public preview may restore a token hidden by a redacted one.
-    visible: current.me.role === "PLAYER" ? true : token.visible,
-  }));
+  return updateTokenPreview(
+    current,
+    movement,
+    watermarks,
+    currentEpoch,
+    (token) => ({
+      ...token,
+      x: movement.x,
+      y: movement.y,
+      // A player's canonical projection never includes an invisible token.
+      // Thus a valid public preview may restore a token hidden by a redacted one.
+      visible: current.me.role === "PLAYER" ? true : token.visible,
+    }),
+  );
 }
 
 export function applyHiddenTokenPreview(
@@ -109,7 +120,14 @@ export function applyHiddenTokenPreview(
   currentEpoch?: string,
 ): GameSnapshot {
   if (current.me.role !== "PLAYER" || !currentEpoch) return current;
-  return updateTokenPreview(current, event, watermarks, currentEpoch, (token) => ({
-    ...token, visible: false,
-  }));
+  return updateTokenPreview(
+    current,
+    event,
+    watermarks,
+    currentEpoch,
+    (token) => ({
+      ...token,
+      visible: false,
+    }),
+  );
 }

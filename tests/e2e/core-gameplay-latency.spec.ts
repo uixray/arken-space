@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Page, type Route, type WebSocketRoute } from "@playwright/test";
 import { expect, test } from "./react-console-guard";
@@ -139,7 +140,8 @@ async function openPlacementFixture(page: Page) {
     realtime = socket;
     socket.onMessage((message) => {
       const packet = message.toString();
-      if (packet === "40") socket.send('40{"sid":"latency-socket"}');
+      if (isGameSocketConnect(packet))
+        socket.send('40{"sid":"latency-socket"}');
     });
     socket.send(
       '0{"sid":"latency-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

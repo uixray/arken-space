@@ -59,7 +59,7 @@ describe("ruler geometry (UIX-381)", () => {
   });
 
   describe("rulerUpdateSchema", () => {
-    const sceneId = "11111111-1111-1111-1111-111111111111";
+    const sceneId = "11111111-1111-4111-8111-111111111111";
 
     it("accepts the single-segment case (back-compat)", () => {
       const result = rulerUpdateSchema.safeParse({
@@ -86,34 +86,27 @@ describe("ruler geometry (UIX-381)", () => {
     });
 
     it("rejects fewer than 2 points", () => {
-      expect(
-        rulerUpdateSchema.safeParse({ sceneId, points: [{ x: 0, y: 0 }] })
-          .success,
-      ).toBe(false);
-      expect(rulerUpdateSchema.safeParse({ sceneId, points: [] }).success).toBe(
-        false,
-      );
+      for (const points of [[], [{ x: 0, y: 0 }]]) {
+        const result = rulerUpdateSchema.safeParse({ sceneId, points });
+        expect(result.error?.issues).toMatchObject([
+          { path: ["points"], code: "too_small" },
+        ]);
+      }
     });
 
     it("rejects non-finite coordinates", () => {
-      expect(
-        rulerUpdateSchema.safeParse({
+      for (const x of [Infinity, NaN]) {
+        const result = rulerUpdateSchema.safeParse({
           sceneId,
           points: [
             { x: 0, y: 0 },
-            { x: Infinity, y: 10 },
+            { x, y: 10 },
           ],
-        }).success,
-      ).toBe(false);
-      expect(
-        rulerUpdateSchema.safeParse({
-          sceneId,
-          points: [
-            { x: 0, y: 0 },
-            { x: NaN, y: 10 },
-          ],
-        }).success,
-      ).toBe(false);
+        });
+        expect(result.error?.issues).toMatchObject([
+          { path: ["points", 1, "x"], code: "invalid_type" },
+        ]);
+      }
     });
 
     it("rejects a point count over the cap", () => {
@@ -121,9 +114,10 @@ describe("ruler geometry (UIX-381)", () => {
         x: i,
         y: i,
       }));
-      expect(rulerUpdateSchema.safeParse({ sceneId, points }).success).toBe(
-        false,
-      );
+      const result = rulerUpdateSchema.safeParse({ sceneId, points });
+      expect(result.error?.issues).toMatchObject([
+        { path: ["points"], code: "too_big" },
+      ]);
     });
 
     it("accepts exactly the cap", () => {

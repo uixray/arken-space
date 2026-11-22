@@ -596,9 +596,14 @@ export function registerWorldContentInstanceRoutes(
         );
         await lockInventoryGraph(tx, auth.campaignId);
         if (await boundCreationInstance(tx, auth.campaignId, id)) {
-          if ((changes.quantity !== undefined && changes.quantity !== existing.quantity) ||
-              (changes.inventoryCharacterId !== undefined && changes.inventoryCharacterId !== existing.inventoryCharacterId) ||
-              (changes.ownerMembershipId !== undefined && changes.ownerMembershipId !== existing.ownerMembershipId))
+          if (
+            (changes.quantity !== undefined &&
+              changes.quantity !== existing.quantity) ||
+            (changes.inventoryCharacterId !== undefined &&
+              changes.inventoryCharacterId !== existing.inventoryCharacterId) ||
+            (changes.ownerMembershipId !== undefined &&
+              changes.ownerMembershipId !== existing.ownerMembershipId)
+          )
             throw new CreationBoundInstance();
         }
         await validateInventoryAssignment(
@@ -731,13 +736,15 @@ export function registerWorldContentInstanceRoutes(
         return true;
       })
       .catch((error: unknown) => {
-        if (error instanceof CreationBoundInstance) return "CREATION_BOUND" as const;
+        if (error instanceof CreationBoundInstance)
+          return "CREATION_BOUND" as const;
         if (error instanceof InstanceReplay)
           return error.matches ? ("DUPLICATE" as const) : ("REUSED" as const);
         if (postgresErrorCode(error) === "23503") return "REFERENCED" as const;
         throw error;
       });
-    if (deleted === "CREATION_BOUND") return fail(reply, 409, "CREATION_OBJECT_HISTORY_REQUIRED");
+    if (deleted === "CREATION_BOUND")
+      return fail(reply, 409, "CREATION_OBJECT_HISTORY_REQUIRED");
     if (deleted === "DUPLICATE")
       return reply.code(200).send({ duplicate: true });
     if (deleted === "REUSED") return fail(reply, 409, "ACTION_ID_REUSED");

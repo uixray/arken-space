@@ -4,6 +4,8 @@ import { Button } from "./design-system/Button";
 import { FormInput } from "./ui/GravityFormControls";
 import { ApiError } from "./api";
 import { Brand } from "./Brand";
+import { AppIcon } from "./ui/AppIcon";
+import { CustomActionIcon } from "./ui/icons";
 import {
   changeAccountPassword,
   confirmPasswordReset,
@@ -133,9 +135,17 @@ export function AccountAuthWorkspace({
     "loading" | "ready" | "error"
   >("loading");
   const campaignsRequest = useRef(0);
-  const archiveRequest = useRef<{ key: string; id: string; pending: boolean } | null>(null);
-  const activeCampaigns = campaigns.filter(campaign => !campaign.archive?.archivedAt);
-  const archivedCampaigns = campaigns.filter(campaign => campaign.role === "GM" && campaign.archive?.archivedAt);
+  const archiveRequest = useRef<{
+    key: string;
+    id: string;
+    pending: boolean;
+  } | null>(null);
+  const activeCampaigns = campaigns.filter(
+    (campaign) => !campaign.archive?.archivedAt,
+  );
+  const archivedCampaigns = campaigns.filter(
+    (campaign) => campaign.role === "GM" && campaign.archive?.archivedAt,
+  );
   const [campaignName, setCampaignName] = useState("");
   const [firstRun, setFirstRun] = useState<{
     campaignId: string;
@@ -451,26 +461,50 @@ export function AccountAuthWorkspace({
       setBusy(false);
     }
   };
-  const changeCampaignArchive = async (campaign: AccountCampaign, archived: boolean) => {
-    if (!session || busy || campaign.role !== "GM" || !campaign.archive || archiveRequest.current?.pending) return;
+  const changeCampaignArchive = async (
+    campaign: AccountCampaign,
+    archived: boolean,
+  ) => {
+    if (
+      !session ||
+      busy ||
+      campaign.role !== "GM" ||
+      !campaign.archive ||
+      archiveRequest.current?.pending
+    )
+      return;
     const key = campaign.id + ":" + campaign.archive.revision + ":" + archived;
-    const attempt = archiveRequest.current?.key === key
-      ? archiveRequest.current
-      : { key, id: crypto.randomUUID(), pending: false };
+    const attempt =
+      archiveRequest.current?.key === key
+        ? archiveRequest.current
+        : { key, id: crypto.randomUUID(), pending: false };
     archiveRequest.current = attempt;
     attempt.pending = true;
     setBusy(true);
     setError("");
     try {
-      await transitionAccountCampaignArchive(campaign.id, archived, campaign.archive.revision, attempt.id, session.csrfToken);
+      await transitionAccountCampaignArchive(
+        campaign.id,
+        archived,
+        campaign.archive.revision,
+        attempt.id,
+        session.csrfToken,
+      );
       archiveRequest.current = null;
-      setFirstRun(current => current?.campaignId === campaign.id ? null : current);
+      setFirstRun((current) =>
+        current?.campaignId === campaign.id ? null : current,
+      );
       await refreshCampaigns();
     } catch (reason) {
-      if (reason instanceof ApiError && reason.code === "CAMPAIGN_ARCHIVE_CONFLICT") {
+      if (
+        reason instanceof ApiError &&
+        reason.code === "CAMPAIGN_ARCHIVE_CONFLICT"
+      ) {
         archiveRequest.current = null;
         await refreshCampaigns().catch(() => {});
-        setError("Состояние кампании изменилось. Проверьте список и повторите действие.");
+        setError(
+          "Состояние кампании изменилось. Проверьте список и повторите действие.",
+        );
       } else setError(friendlyError(reason, capabilities.localAccounts));
     } finally {
       attempt.pending = false;
@@ -782,7 +816,7 @@ export function AccountAuthWorkspace({
                       className="account-campaign-symbol"
                       aria-hidden="true"
                     >
-                      ✦
+                      <AppIcon icon={CustomActionIcon} />
                     </span>
                     <div>
                       <span className="account-campaign-role">
@@ -836,12 +870,18 @@ export function AccountAuthWorkspace({
                     <details className="account-campaign-invite">
                       <summary>Архивировать кампанию</summary>
                       <p>
-                        В отличие от паузы, архив убирает кампанию из списка активных.
-                        Данные и права доступа сохранятся. Мастер и игроки выйдут
-                        из кампании. Если игра на паузе, после восстановления она
-                        останется на паузе.
+                        В отличие от паузы, архив убирает кампанию из списка
+                        активных. Данные и права доступа сохранятся. Мастер и
+                        игроки выйдут из кампании. Если игра на паузе, после
+                        восстановления она останется на паузе.
                       </p>
-                      <Button type="button" disabled={busy} onClick={() => void changeCampaignArchive(campaign, true)}>
+                      <Button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void changeCampaignArchive(campaign, true)
+                        }
+                      >
                         Подтвердить архивацию
                       </Button>
                     </details>
@@ -853,10 +893,16 @@ export function AccountAuthWorkspace({
               <details className="account-home-disclosure">
                 <summary>Архив ({archivedCampaigns.length})</summary>
                 <ul>
-                  {archivedCampaigns.map(campaign => (
+                  {archivedCampaigns.map((campaign) => (
                     <li key={campaign.id}>
                       <strong>{campaign.name}</strong>
-                      <Button type="button" disabled={busy} onClick={() => void changeCampaignArchive(campaign, false)}>
+                      <Button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void changeCampaignArchive(campaign, false)
+                        }
+                      >
                         Восстановить кампанию
                       </Button>
                     </li>
@@ -1024,7 +1070,11 @@ export function AccountAuthWorkspace({
             aria-busy={busy}
             onSubmit={(event) => {
               event.preventDefault();
-              if (busy || claimPendingSnapshot || (!token && !inviteTokenInput.trim()))
+              if (
+                busy ||
+                claimPendingSnapshot ||
+                (!token && !inviteTokenInput.trim())
+              )
                 return;
               void acceptJoinInvite();
             }}

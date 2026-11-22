@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { makePng } from "./helpers/generated-png";
 import type { Route } from "@playwright/test";
@@ -104,7 +105,8 @@ for (const [width, longTitle] of [
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((m) => {
-        if (m.toString() === "40") socket.send('40{"sid":"replace"}');
+        if (isGameSocketConnect(m.toString()))
+          socket.send('40{"sid":"replace"}');
       });
       socket.send(
         '0{"sid":"replace-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',

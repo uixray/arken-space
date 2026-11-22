@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import { type Locator } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -635,14 +636,14 @@ test("UIX-462 shortcuts dialog exposes role-safe map commands", async ({
     ["Перемещение и выделение", ["V"]],
     ["Рисование", ["D"]],
     ["Линейка — измерить расстояние", ["R"]],
-    ["Пинг — показать точку остальным", ["P", "Ctrl", "клик"]],
+    ["Пинг — показать точку остальным", ["P", "Ctrl/⌘", "клик"]],
     ["Открыть туман областью", ["G"]],
     ["Закрыть туман областью", ["Shift", "G"]],
     ["Открыть туман кистью", ["B"]],
     ["Закрыть туман кистью", ["Shift", "B"]],
     ["Открыть туман полигоном", ["L"]],
     ["Закрыть туман полигоном", ["Shift", "L"]],
-    ["Бросок с преимуществом", ["Ctrl"]],
+    ["Бросок с преимуществом", ["Ctrl/⌘"]],
     ["Бросок с помехой", ["Alt"]],
   ] as const) {
     await expect(shortcutRow(gmDialog, action).locator("kbd")).toHaveText(keys);
@@ -661,8 +662,8 @@ test("UIX-462 shortcuts dialog exposes role-safe map commands", async ({
     ["Перемещение и выделение", ["V"]],
     ["Рисование", ["D"]],
     ["Линейка — измерить расстояние", ["R"]],
-    ["Пинг — показать точку остальным", ["P", "Ctrl", "клик"]],
-    ["Бросок с преимуществом", ["Ctrl"]],
+    ["Пинг — показать точку остальным", ["P", "Ctrl/⌘", "клик"]],
+    ["Бросок с преимуществом", ["Ctrl/⌘"]],
     ["Бросок с помехой", ["Alt"]],
   ] as const) {
     await expect(shortcutRow(playerDialog, action).locator("kbd")).toHaveText(
@@ -1780,7 +1781,7 @@ test("UIX-226 chat composer and canvas quick rolls submit explicit, server-safe 
     '.chat-composer-actions button[type="submit"]',
   );
   await expect(sendButton).toBeVisible();
-  await expect(sendButton).toHaveAttribute("title", /Ctrl\+Enter/);
+  await expect(sendButton).toHaveAttribute("title", /Ctrl\/⌘\+Enter/);
   await expect(activityPanel.locator(".chat-visibility-check")).toHaveCount(0);
   await composer.fill("/");
   const rollSuggestion = activityPanel
@@ -1841,10 +1842,6 @@ test("UIX-226 chat composer and canvas quick rolls submit explicit, server-safe 
 test("UIX-422 compact layout keeps sidebar custom roll reachable at 390x844", async ({
   page,
 }) => {
-  test.fixme(
-    true,
-    "UIX-422: compact in-game layout is not implemented; runtime remains desktop-first with a 960px minimum",
-  );
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route("**/api/bootstrap", (route) =>
     route.fulfill({
@@ -1859,7 +1856,11 @@ test("UIX-422 compact layout keeps sidebar custom roll reachable at 390x844", as
   await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
 
-  const composer = page.locator(".chat-compose textarea");
+  await page.locator("#compact-nav-journal").click();
+  const composer = page.locator("#chat-panel-activity").getByRole("textbox", {
+    name: "Сообщение или бросок",
+    exact: true,
+  });
   await expect(composer).toBeVisible();
   const box = await composer.boundingBox();
   expect(box).not.toBeNull();
@@ -2252,7 +2253,7 @@ test("GM shell keeps essential controls accessible across desktop widths", async
     }
     await expect(
       page.getByRole("tablist", { name: "Потоки чата" }),
-    ).toHaveCount(0);
+    ).toBeVisible();
     // UIX-472: раздел доступен либо кнопкой в строке, либо под «Ещё» —
     // что именно куда попадёт, решает ширина окна, и закреплять это в тесте
     // значит ломать его от любой правки подписей.
@@ -2389,7 +2390,9 @@ test("GM prepares a scene locally before publishing it to players", async ({
     .toBe("8476b502-02f8-4cd6-9c55-3816d70d44dc");
   await secretCard.getByRole("button", { name: "Настроить" }).click();
   const editor = page.getByRole("dialog", { name: /Настройка/ });
-  await expect(editor.getByLabel("Название")).toHaveValue("Тайная комната");
+  await expect(editor.getByLabel("Название", { exact: true })).toHaveValue(
+    "Тайная комната",
+  );
   await expect(editor.getByText("Игровая область")).toBeVisible();
   await expect(editor.getByText("Рамка изображения")).toBeVisible();
 });
@@ -2700,7 +2703,7 @@ for (const viewport of [
     await expect(page.locator(".activity-roll-controls")).toBeVisible();
     await expect(page.locator(".chat-compose")).toBeVisible();
     const dimensions = await page
-      .locator(".message-list")
+      .locator("#chat-panel-activity .message-list")
       .evaluate((element) => ({
         clientHeight: element.clientHeight,
         scrollHeight: element.scrollHeight,
@@ -2730,9 +2733,11 @@ for (const viewport of [
       .getByText(/^Длинное сообщение/)
       .evaluate((element) => element.scrollWidth <= element.clientWidth);
     expect(longBodyWraps).toBe(true);
-    await page.locator(".message-list").evaluate((element) => {
-      element.scrollTop = 0;
-    });
+    await page
+      .locator("#chat-panel-activity .message-list")
+      .evaluate((element) => {
+        element.scrollTop = 0;
+      });
     await expect(page.locator(".chat-compose textarea")).toBeVisible();
   });
 }
@@ -4460,22 +4465,25 @@ test("UIX-498 GM keeps story and rolls in Activity without redundant tabs", asyn
   });
   await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
-  await expect(page.getByRole("tablist", { name: "Потоки чата" })).toHaveCount(
-    0,
-  );
+  await expect(
+    page.getByRole("tablist", { name: "Потоки чата" }),
+  ).toBeVisible();
   await expect(page.locator("#chat-panel-activity")).toBeVisible();
-  await expect(page.locator("#chat-tab-activity")).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "События" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await expect(page.locator("#chat-tab-story")).toHaveCount(0);
   await expect(page.locator("#chat-tab-table")).toHaveCount(0);
   await expect(page.locator("#chat-tab-rolls")).toHaveCount(0);
-  await expect(page.locator("#chat-tab-direct")).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Личные" })).toBeVisible();
   await expect(page.getByText("STORY_ONLY_MARKER")).toBeVisible();
   await expect(page.getByText("ROLLS_ONLY_MARKER")).toBeVisible();
   await expect(page.locator(".story-composer")).toHaveCount(0);
   expect(storyDrafts).toHaveLength(0);
 });
 
-test("UIX-498 PLAYER keeps Story and ROLLS in Activity without private tabs", async ({
+test("UIX-498 PLAYER sees story and rolls in Activity alongside the private chat tab", async ({
   page,
 }) => {
   const fixture = structuredClone(snapshot);
@@ -4552,11 +4560,11 @@ test("UIX-498 PLAYER keeps Story and ROLLS in Activity without private tabs", as
   await mockAuthenticatedGameCapabilities(page);
   await page.goto("/");
   await expect(page.locator("#chat-panel-activity")).toBeVisible();
-  await expect(page.getByRole("tablist", { name: "Потоки чата" })).toHaveCount(
-    0,
-  );
+  await expect(
+    page.getByRole("tablist", { name: "Потоки чата" }),
+  ).toBeVisible();
   await expect(page.locator("#chat-tab-story")).toHaveCount(0);
-  await expect(page.locator("#chat-tab-direct")).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Личные" })).toBeVisible();
   await expect(page.getByText("PLAYER_STORY_MARKER")).toBeVisible();
   await expect(page.getByText("PLAYER_ROLL_MARKER")).toBeVisible();
   await expect(page.locator(".story-composer")).toHaveCount(0);
@@ -4666,10 +4674,6 @@ test("UIX-274 activity read state reconciles and stays read after reload", async
 test("UIX-267 direct chat stays private across sender and recipient reloads", async ({
   page,
 }) => {
-  test.fixme(
-    true,
-    "UIX-365: личные сообщения скрыты до отдельного редизайна механики",
-  );
   const sender = {
     id: "44444444-4444-4444-8444-444444444444",
     role: "PLAYER" as const,
@@ -4710,6 +4714,17 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
     createdAt: "2026-07-22T10:00:00.000Z",
     updatedAt: "2026-07-22T10:00:00.000Z",
   };
+  const directMessage = {
+    ...snapshot.messages[0]!,
+    id: "99999999-9999-4999-8999-999999999999",
+    sequence: 2,
+    membershipId: sender.id,
+    displayName: sender.displayName,
+    body: "UIX267_PRIVATE_MARKER",
+    kind: "TEXT" as const,
+    threadId,
+    stream: null,
+  };
   let viewer: "sender" | "recipient" | "player-c" | "gm" = "sender";
   let saved = false;
   const requests: Array<Record<string, unknown>> = [];
@@ -4739,18 +4754,7 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
         latestSequence: saved ? 2 : 0,
         unreadCount: viewer === "recipient" && saved ? 1 : 0,
       });
-      if (saved)
-        fixture.messages.push({
-          ...fixture.messages[0]!,
-          id: "99999999-9999-4999-8999-999999999999",
-          sequence: 2,
-          membershipId: sender.id,
-          displayName: sender.displayName,
-          body: "UIX267_PRIVATE_MARKER",
-          kind: "TEXT",
-          threadId,
-          stream: null,
-        });
+      if (saved) fixture.messages.push(directMessage);
     }
     return route.fulfill({
       status: 200,
@@ -4776,8 +4780,7 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
     saved = true;
     await route.fulfill({
       status: 201,
-      contentType: "application/json",
-      body: "{}",
+      json: directMessage,
     });
   });
   await page.route("**/api/chat/read", async (route) => {
@@ -4804,7 +4807,9 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
   await directTab.click();
   const peerSelect = page.locator(".direct-peer-select");
   await expect(peerSelect.locator("option")).toHaveCount(4);
-  await expect(peerSelect).not.toContainText(sender.id);
+  await expect(peerSelect.locator(`option[value="${sender.id}"]`)).toHaveCount(
+    0,
+  );
   await peerSelect.selectOption(recipient.id);
   await expect(peerSelect).toHaveValue(recipient.id);
   await page.locator(".direct-compose textarea").fill("UIX267_PRIVATE_MARKER");
@@ -4826,7 +4831,9 @@ test("UIX-267 direct chat stays private across sender and recipient reloads", as
   viewer = "recipient";
   await page.reload();
   await expect(page.locator("#chat-panel-activity")).toBeVisible();
-  await expect(page.getByText("UIX267_PRIVATE_MARKER")).toHaveCount(0);
+  await expect(
+    page.locator("#chat-panel-activity").getByText("UIX267_PRIVATE_MARKER"),
+  ).toHaveCount(0);
   await page.locator("#chat-tab-direct").click();
   await page.locator(".direct-peer-select").selectOption(sender.id);
   await expect(page.getByText("UIX267_PRIVATE_MARKER")).toBeVisible();
@@ -5007,12 +5014,12 @@ test("UIX-268 catalog picker routes authorized stickers and respects stream role
   await expect(page.locator(".chat-compose .sticker-picker")).toBeVisible();
   await expect(page.locator("#chat-tab-story")).toHaveCount(0);
   await expect(page.locator(".story-channel .sticker-picker")).toHaveCount(0);
-  await expect(page.locator("#chat-tab-direct")).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Личные" })).toBeVisible();
 
   playerStory = true;
   await page.reload();
   await expect(page.locator("#chat-tab-story")).toHaveCount(0);
-  await expect(page.locator("#chat-tab-direct")).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Личные" })).toBeVisible();
   await expect(page.locator(".story-channel .sticker-picker")).toHaveCount(0);
 
   catalog = [];
@@ -5122,7 +5129,7 @@ test("GM can move tokens, pan the map, choose drawing color, and cannot republis
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
       const packet = message.toString();
-      if (packet === "40") {
+      if (isGameSocketConnect(packet)) {
         socketConnected = true;
         socket.send('40{"sid":"concept-test-socket"}');
         return;
@@ -5248,7 +5255,7 @@ test("sidebar collapse persists and hidden-chat rolls surface their authoritativ
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     gameSocket = socket;
     socket.onMessage((message) => {
-      if (message.toString() === "40")
+      if (isGameSocketConnect(message.toString()))
         socket.send('40{"sid":"sidebar-test-socket"}');
     });
     socket.send(

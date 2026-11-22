@@ -534,26 +534,57 @@ describe("UIX-246 story HTTP integration", () => {
 it("withdraws only as Amberion GM and does not mutate the post on denied requests", async () => {
   const db = drizzle(database, { schema });
   const campaignId = "eb6a55c4-a821-4739-8d4a-a1028e9d9092";
-  const gmId = action(), playerId = action(), gmSecret = "a".repeat(40), playerSecret = "b".repeat(40);
-  await db.insert(schema.campaigns).values({ id: campaignId, name: "Synthetic Amberion" });
+  const gmId = action(),
+    playerId = action(),
+    gmSecret = "a".repeat(40),
+    playerSecret = "b".repeat(40);
+  await db
+    .insert(schema.campaigns)
+    .values({ id: campaignId, name: "Synthetic Amberion" });
   await db.insert(schema.memberships).values([
     { id: gmId, campaignId, role: "GM", displayName: "Synthetic GM" },
-    { id: playerId, campaignId, role: "PLAYER", displayName: "Synthetic player" },
+    {
+      id: playerId,
+      campaignId,
+      role: "PLAYER",
+      displayName: "Synthetic player",
+    },
   ]);
   await db.insert(schema.sessions).values([
-    { membershipId: gmId, tokenHash: hashToken(gmSecret), expiresAt: new Date(Date.now() + 60_000) },
-    { membershipId: playerId, tokenHash: hashToken(playerSecret), expiresAt: new Date(Date.now() + 60_000) },
+    {
+      membershipId: gmId,
+      tokenHash: hashToken(gmSecret),
+      expiresAt: new Date(Date.now() + 60_000),
+    },
+    {
+      membershipId: playerId,
+      tokenHash: hashToken(playerSecret),
+      expiresAt: new Date(Date.now() + 60_000),
+    },
   ]);
-  const draftResponse = await app.inject({ method: "POST", url: "/api/story/posts",
-    headers: headers(gmSecret), payload: { actionId: action(), body: "Synthetic story" } });
+  const draftResponse = await app.inject({
+    method: "POST",
+    url: "/api/story/posts",
+    headers: headers(gmSecret),
+    payload: { actionId: action(), body: "Synthetic story" },
+  });
   expect(draftResponse.statusCode).toBe(201);
   const draft = draftResponse.json();
-  const published = await app.inject({ method: "POST", url: `/api/story/posts/${draft.id}/publish`,
-    headers: headers(gmSecret), payload: { actionId: action(), revision: draft.revision } });
+  const published = await app.inject({
+    method: "POST",
+    url: `/api/story/posts/${draft.id}/publish`,
+    headers: headers(gmSecret),
+    payload: { actionId: action(), revision: draft.revision },
+  });
   expect(published.statusCode).toBe(200);
   const url = STORY_WITHDRAW_PROBE_KEY.slice(5).replace(":postId", draft.id);
-  const withdraw = (secret: string) => app.inject({ method: "POST", url, headers: headers(secret),
-    payload: { actionId: action(), revision: published.json().revision } });
+  const withdraw = (secret: string) =>
+    app.inject({
+      method: "POST",
+      url,
+      headers: headers(secret),
+      payload: { actionId: action(), revision: published.json().revision },
+    });
   const wrongRole = await withdraw(playerSecret);
   expect(wrongRole.statusCode).toBe(403);
   expect(wrongRole.json()).toEqual({ error: "GM_REQUIRED" });
@@ -562,8 +593,16 @@ it("withdraws only as Amberion GM and does not mutate the post on denied request
   expect(wrongCampaign.json()).toEqual({ error: "STORY_POST_NOT_FOUND" });
   const accepted = await withdraw(gmSecret);
   expect(accepted.statusCode).toBe(200);
-  expect(accepted.json()).toMatchObject({ id: draft.id, lifecycle: "DRAFT", revision: published.json().revision + 1 });
-  const visible = await app.inject({ method: "GET", url: "/api/story/posts", headers: headers(playerSecret) });
+  expect(accepted.json()).toMatchObject({
+    id: draft.id,
+    lifecycle: "DRAFT",
+    revision: published.json().revision + 1,
+  });
+  const visible = await app.inject({
+    method: "GET",
+    url: "/api/story/posts",
+    headers: headers(playerSecret),
+  });
   expect(visible.statusCode).toBe(200);
   expect(visible.json().posts).toEqual([]);
 });

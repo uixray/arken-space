@@ -32,7 +32,8 @@ export async function installMockedChatTransport(
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     options.onSocket?.(socket);
     socket.onMessage((message) => {
-      if (message.toString() !== "40") return;
+      const packet = message.toString();
+      if (packet !== "40" && !packet.startsWith("40{")) return;
 
       socket.send("40" + JSON.stringify({ sid: options.socketId }));
       options.onReady?.();

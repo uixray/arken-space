@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { mockAuthenticatedGameCapabilities } from "./mocked-game-capabilities";
 import type { Page } from "@playwright/test";
 import type { GameSnapshot } from "@arken/contracts";
@@ -167,7 +168,7 @@ async function mockSurfaceApp(page: Page, snapshot: GameSnapshot) {
   });
   await page.routeWebSocket(/\/socket\.io\//, (socket) => {
     socket.onMessage((message) => {
-      if (message.toString() === "40")
+      if (isGameSocketConnect(message.toString()))
         socket.send('40{"sid":"theme-surfaces"}');
     });
     socket.send(

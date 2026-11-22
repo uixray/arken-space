@@ -45,7 +45,8 @@ export function workspaceNavItems(context: {
     { id: "shops", label: "Магазины" },
     { id: "creations", label: "Мастерская" },
   ];
-  if (!context.isGm && context.storyEnabled) items.push({ id: "story", label: "Сюжет" });
+  if (!context.isGm && context.storyEnabled)
+    items.push({ id: "story", label: "Сюжет" });
   if (context.isGm)
     items.push(
       { id: "scenes", label: "Сцены" },

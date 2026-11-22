@@ -705,7 +705,8 @@ export function registerCharacterRoutes(
       const { actionId, revision: _revision, ...updates } = body;
       const updated = await db.transaction(async (tx) => {
         await lockInventoryGraph(tx, auth.campaignId);
-        if (await boundCreationEntry(tx, current.entry.id)) return "CREATION_BOUND_ENTRY" as const;
+        if (await boundCreationEntry(tx, current.entry.id))
+          return "CREATION_BOUND_ENTRY" as const;
         const [next] = await tx
           .update(characterCatalogEntries)
           .set({
@@ -775,7 +776,8 @@ export function registerCharacterRoutes(
         return reply.code(409).send({ error: "CHARACTER_ENTRY_CONFLICT" });
       const deleted = await db.transaction(async (tx) => {
         await lockInventoryGraph(tx, auth.campaignId);
-        if (await boundCreationEntry(tx, current.entry.id)) return "CREATION_BOUND_ENTRY" as const;
+        if (await boundCreationEntry(tx, current.entry.id))
+          return "CREATION_BOUND_ENTRY" as const;
         const [entry] = await tx
           .delete(characterCatalogEntries)
           .where(

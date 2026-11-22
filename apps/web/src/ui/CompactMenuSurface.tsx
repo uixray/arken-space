@@ -54,7 +54,12 @@ export const CompactMenuSurface = memo(function CompactMenuSurface({
 }: CompactMenuSurfaceProps) {
   // Preview must expose the viewed player's navigation, not GM-only sections.
   const isGm = viewSnapshot.me.role === "GM";
-  const navItems = workspaceNavItems({ isGm, operatorFeedbackAllowed, storyEnabled: viewSnapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092" });
+  const navItems = workspaceNavItems({
+    isGm,
+    operatorFeedbackAllowed,
+    storyEnabled:
+      viewSnapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092",
+  });
   const preparationIds: readonly WorkspaceId[] = [
     "setup",
     "world-encyclopedia",

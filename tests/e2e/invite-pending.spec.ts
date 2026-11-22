@@ -1,3 +1,4 @@
+import { isGameSocketConnect } from "./socket-connect-fixture";
 import { expect, test } from "./react-console-guard";
 import type { Route } from "@playwright/test";
 import { playerSnapshot } from "../../apps/web/src/test-support/game-snapshot-fixtures";
@@ -66,7 +67,8 @@ for (const width of [1280, 360]) {
     });
     await page.routeWebSocket(/\/socket\.io\//, (socket) => {
       socket.onMessage((message) => {
-        if (message.toString() === "40") socket.send('40{"sid":"invite"}');
+        if (isGameSocketConnect(message.toString()))
+          socket.send('40{"sid":"invite"}');
       });
       socket.send(
         '0{"sid":"invite-engine","upgrades":[],"pingInterval":60000,"pingTimeout":60000,"maxPayload":1000000}',
