@@ -34,6 +34,7 @@ export const EMPTY_COLLECTION_GETS = [
  */
 export const EMPTY_OBJECT_GETS: Record<string, unknown> = {
   "/api/account/campaigns": { campaigns: [] },
+  "/api/characters/:id/inventory": { items: [], nextCursor: null },
   "/api/characters/:characterId/private-notebook": { text: "", revision: 0 },
   "/api/characters/:characterId/spell-branches": {
     branches: [],

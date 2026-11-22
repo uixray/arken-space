@@ -11,7 +11,7 @@ import { registerRoutes } from "../../apps/server/src/routes.js";
 import { registerRealtime } from "../../apps/server/src/realtime.js";
 import { Server as SocketServer } from "socket.io";
 import { openWorkspaceSection } from "./workspace-nav-helper";
-import { hashToken } from "../../apps/server/src/security.js";
+import { seedProbeSessions } from "../../apps/server/src/pg-probe-auth.js";
 import { env } from "../../apps/server/src/env.js";
 const id = () => crypto.randomUUID();
 test("GM configures and publishes a ruleset using the regular form", async ({
@@ -35,17 +35,9 @@ test("GM configures and publishes a ruleset using the regular form", async ({
       { id: gm, campaignId, role: "GM", displayName: "GM" },
       { id: player, campaignId, role: "PLAYER", displayName: "Player" },
     ]);
-    await db.insert(schema.sessions).values([
-      {
-        membershipId: gm,
-        tokenHash: hashToken(gmSecret),
-        expiresAt: new Date(Date.now() + 180000),
-      },
-      {
-        membershipId: player,
-        tokenHash: hashToken(playerSecret),
-        expiresAt: new Date(Date.now() + 180000),
-      },
+    await seedProbeSessions(db as never, [
+      { membershipId: gm, campaignId, role: "GM", token: gmSecret },
+      { membershipId: player, campaignId, role: "PLAYER", token: playerSecret },
     ]);
     await db.insert(schema.characters).values({
       id: characterId,
@@ -238,13 +230,16 @@ test("buyer purchases an approved licence through the real local store routes", 
       { id: author, campaignId, role: "PLAYER", displayName: "Author" },
       { id: buyer, campaignId, role: "PLAYER", displayName: "Buyer" },
     ]);
-    await db.insert(schema.sessions).values(
-      ([gm, author, buyer] as const).map((member, i) => ({
-        membershipId: member,
-        tokenHash: hashToken([secrets.gm, secrets.author, secrets.buyer][i]!),
-        expiresAt: new Date(Date.now() + 300000),
-      })),
-    );
+    await seedProbeSessions(db as never, [
+      { membershipId: gm, campaignId, role: "GM", token: secrets.gm },
+      {
+        membershipId: author,
+        campaignId,
+        role: "PLAYER",
+        token: secrets.author,
+      },
+      { membershipId: buyer, campaignId, role: "PLAYER", token: secrets.buyer },
+    ]);
     await db.insert(schema.characters).values([
       {
         id: authorCharacter,
@@ -676,22 +671,15 @@ test("real creation API survives lost response and reload", async ({
       { id: player, campaignId, role: "PLAYER", displayName: "Player" },
       { id: buyer, campaignId, role: "PLAYER", displayName: "Buyer" },
     ]);
-    await db.insert(schema.sessions).values([
-      {
-        membershipId: gm,
-        tokenHash: hashToken(secrets.gm),
-        expiresAt: new Date(Date.now() + 120000),
-      },
+    await seedProbeSessions(db as never, [
+      { membershipId: gm, campaignId, role: "GM", token: secrets.gm },
       {
         membershipId: player,
-        tokenHash: hashToken(secrets.player),
-        expiresAt: new Date(Date.now() + 120000),
+        campaignId,
+        role: "PLAYER",
+        token: secrets.player,
       },
-      {
-        membershipId: buyer,
-        tokenHash: hashToken(secrets.buyer),
-        expiresAt: new Date(Date.now() + 120000),
-      },
+      { membershipId: buyer, campaignId, role: "PLAYER", token: secrets.buyer },
     ]);
     await db.insert(schema.characters).values([
       {
@@ -944,16 +932,10 @@ test("GM creates a rules draft through the system and reopens it after reload", 
       role: "PLAYER",
       displayName: "Player",
     });
-    await db.insert(schema.sessions).values({
-      membershipId: gm,
-      tokenHash: hashToken(secret),
-      expiresAt: new Date(Date.now() + 120000),
-    });
-    await db.insert(schema.sessions).values({
-      membershipId: player,
-      tokenHash: hashToken(playerSecret),
-      expiresAt: new Date(Date.now() + 120000),
-    });
+    await seedProbeSessions(db as never, [
+      { membershipId: gm, campaignId, role: "GM", token: secret },
+      { membershipId: player, campaignId, role: "PLAYER", token: playerSecret },
+    ]);
     await app.register(cookie);
     registerCreationRoutes(app, db as never, async () => {});
     await app.ready();
@@ -1192,16 +1174,13 @@ test("player and GM complete an approved creation and undo locally", async ({
       { id: gm, campaignId, role: "GM", displayName: "GM" },
       { id: player, campaignId, role: "PLAYER", displayName: "Player" },
     ]);
-    await db.insert(schema.sessions).values([
-      {
-        membershipId: gm,
-        tokenHash: hashToken(secrets.gm),
-        expiresAt: new Date(Date.now() + 300000),
-      },
+    await seedProbeSessions(db as never, [
+      { membershipId: gm, campaignId, role: "GM", token: secrets.gm },
       {
         membershipId: player,
-        tokenHash: hashToken(secrets.player),
-        expiresAt: new Date(Date.now() + 300000),
+        campaignId,
+        role: "PLAYER",
+        token: secrets.player,
       },
     ]);
     await db.insert(schema.characters).values({

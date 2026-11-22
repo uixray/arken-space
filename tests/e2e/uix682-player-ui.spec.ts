@@ -377,6 +377,7 @@ test("UIX-682 GM keeps campaign layout controls; non-owner PLAYER receives no la
   gmSnapshot.campaign.battleActive = true;
   const gmWrites: string[] = [];
   await mockApi(gmPage, gmSnapshot, (path) => gmWrites.push(path));
+  await mockAuthenticatedGameCapabilities(gmPage);
   await gmPage.goto("/");
   await openWorkspaceSection(gmPage, "Персонажи");
   const gmSheet = gmPage.getByRole("article", {
@@ -403,6 +404,7 @@ test("UIX-682 GM keeps campaign layout controls; non-owner PLAYER receives no la
     (path) => deniedWrites.push(path),
     true,
   );
+  await mockAuthenticatedGameCapabilities(playerPage);
   await playerPage.goto("/");
   await openWorkspaceSection(playerPage, "Персонажи");
   const foreignSheet = playerPage.getByRole("article", {
@@ -429,6 +431,7 @@ test("UIX-682 ability roll result is centered in the card at desktop and narrow 
   const snapshot = snapshotFor("PLAYER");
   seedAbilityResult(snapshot);
   await mockApi(page, snapshot, () => {});
+  await mockAuthenticatedGameCapabilities(page);
   for (const viewport of [
     { width: 1280, height: 900 },
     { width: 360, height: 640 },

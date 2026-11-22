@@ -636,14 +636,14 @@ test("UIX-462 shortcuts dialog exposes role-safe map commands", async ({
     ["Перемещение и выделение", ["V"]],
     ["Рисование", ["D"]],
     ["Линейка — измерить расстояние", ["R"]],
-    ["Пинг — показать точку остальным", ["P", "Ctrl", "клик"]],
+    ["Пинг — показать точку остальным", ["P", "Ctrl/⌘", "клик"]],
     ["Открыть туман областью", ["G"]],
     ["Закрыть туман областью", ["Shift", "G"]],
     ["Открыть туман кистью", ["B"]],
     ["Закрыть туман кистью", ["Shift", "B"]],
     ["Открыть туман полигоном", ["L"]],
     ["Закрыть туман полигоном", ["Shift", "L"]],
-    ["Бросок с преимуществом", ["Ctrl"]],
+    ["Бросок с преимуществом", ["Ctrl/⌘"]],
     ["Бросок с помехой", ["Alt"]],
   ] as const) {
     await expect(shortcutRow(gmDialog, action).locator("kbd")).toHaveText(keys);
@@ -662,8 +662,8 @@ test("UIX-462 shortcuts dialog exposes role-safe map commands", async ({
     ["Перемещение и выделение", ["V"]],
     ["Рисование", ["D"]],
     ["Линейка — измерить расстояние", ["R"]],
-    ["Пинг — показать точку остальным", ["P", "Ctrl", "клик"]],
-    ["Бросок с преимуществом", ["Ctrl"]],
+    ["Пинг — показать точку остальным", ["P", "Ctrl/⌘", "клик"]],
+    ["Бросок с преимуществом", ["Ctrl/⌘"]],
     ["Бросок с помехой", ["Alt"]],
   ] as const) {
     await expect(shortcutRow(playerDialog, action).locator("kbd")).toHaveText(
@@ -1781,7 +1781,7 @@ test("UIX-226 chat composer and canvas quick rolls submit explicit, server-safe 
     '.chat-composer-actions button[type="submit"]',
   );
   await expect(sendButton).toBeVisible();
-  await expect(sendButton).toHaveAttribute("title", /Ctrl\+Enter/);
+  await expect(sendButton).toHaveAttribute("title", /Ctrl\/⌘\+Enter/);
   await expect(activityPanel.locator(".chat-visibility-check")).toHaveCount(0);
   await composer.fill("/");
   const rollSuggestion = activityPanel
@@ -2390,7 +2390,9 @@ test("GM prepares a scene locally before publishing it to players", async ({
     .toBe("8476b502-02f8-4cd6-9c55-3816d70d44dc");
   await secretCard.getByRole("button", { name: "Настроить" }).click();
   const editor = page.getByRole("dialog", { name: /Настройка/ });
-  await expect(editor.getByLabel("Название")).toHaveValue("Тайная комната");
+  await expect(editor.getByLabel("Название", { exact: true })).toHaveValue(
+    "Тайная комната",
+  );
   await expect(editor.getByText("Игровая область")).toBeVisible();
   await expect(editor.getByText("Рамка изображения")).toBeVisible();
 });

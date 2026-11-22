@@ -124,7 +124,7 @@ test("scene editor stays above the workspace and restores its interaction", asyn
   await configure.click();
 
   const editor = page.getByRole("dialog", { name: /Настройка:/ });
-  const name = editor.getByLabel("Название");
+  const name = editor.getByLabel("Название", { exact: true });
   await expect(editor).toBeVisible();
   expect(
     await editor.evaluate((element) =>

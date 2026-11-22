@@ -107,9 +107,10 @@ async function openInventory(page: Page) {
   );
   const workspace = page.locator(".character-workspace");
   await workspace.getByRole("tab", { name: "Инвентарь" }).click();
-  const inventory = workspace.getByLabel(
-    /\u0418\u043d\u0432\u0435\u043d\u0442\u0430\u0440\u044c \(/,
-  );
+  const inventory = workspace.getByRole("textbox", {
+    name: "Текстовые записи инвентаря (сохранены отдельно)",
+    exact: true,
+  });
   await expect(inventory).toBeVisible();
   return { inventory, workspace };
 }
