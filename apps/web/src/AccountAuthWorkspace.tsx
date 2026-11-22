@@ -6,6 +6,7 @@ import { ApiError } from "./api";
 import { Brand } from "./Brand";
 import { AppIcon } from "./ui/AppIcon";
 import { CustomActionIcon } from "./ui/icons";
+import { campaignReturnPath } from "./campaign-route";
 import {
   changeAccountPassword,
   confirmPasswordReset,
@@ -140,6 +141,9 @@ export function AccountAuthWorkspace({
     id: string;
     pending: boolean;
   } | null>(null);
+  const requestedCampaign = campaignReturnPath(
+    new URLSearchParams(window.location.search).get("next"),
+  );
   const activeCampaigns = campaigns.filter(
     (campaign) => !campaign.archive?.archivedAt,
   );
@@ -692,16 +696,8 @@ export function AccountAuthWorkspace({
               Выберите кампанию, чтобы вернуться к игре.
             </p>
           </div>
-          {/^\/campaign\/[0-9a-f-]{36}$/i.test(
-            new URLSearchParams(window.location.search).get("next") ?? "",
-          ) && (
-            <a
-              className="account-home-return"
-              href={
-                new URLSearchParams(window.location.search).get("next") ??
-                "/account"
-              }
-            >
+          {requestedCampaign && (
+            <a className="account-home-return" href={requestedCampaign}>
               Открыть запрошенную кампанию →
             </a>
           )}
