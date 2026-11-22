@@ -586,6 +586,51 @@ export async function persistEditorStoryDraft(
   );
 }
 
+export async function createEditorStoryDraft(
+  tx: Transaction,
+  auth: AuthContext,
+  id: string,
+  actionId: string,
+  values: { title: string; body: string },
+) {
+  const thread = await ensureStreamThread(tx, auth.campaignId, "STORY");
+  const [post] = await tx
+    .insert(storyPosts)
+    .values({
+      id,
+      campaignId: auth.campaignId,
+      threadId: thread.id,
+      authorMembershipId: auth.membershipId,
+      worldDay: await currentCampaignDay(tx, auth.campaignId),
+      ...values,
+    })
+    .returning();
+  if (!post) throw new Error("STORY_POST_CREATE_FAILED");
+  await persistRevision(
+    tx,
+    post,
+    auth.membershipId,
+    {
+      ...values,
+      gmNotes: "",
+      entityLinks: [],
+      lifecycle: "DRAFT",
+      media: [],
+    },
+    post.revision,
+  );
+  await recordEvent(
+    tx,
+    auth,
+    actionId,
+    "story.created",
+    post,
+    { id: post.id },
+    storyCommandHash("editor.story.created", values),
+  );
+  return post.revision;
+}
+
 export function registerStoryRoutes(
   app: FastifyInstance,
   db: Database,

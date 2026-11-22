@@ -3,12 +3,12 @@ import { isDeepStrictEqual } from "node:util";
 
 export type EditorTarget = {
   campaignId: string;
-  kind: "character-stat" | "skill" | "material";
+  kind: "character-stat" | "skill" | "material" | "bug-report";
   id: string;
 };
 
 type Values = Record<string, string | number | boolean | null>;
-type Revision = { revision: number; values: Values };
+type Revision = { revision: number; values: Values; name?: string };
 
 export type EditorDraft = {
   id: string;
@@ -18,6 +18,8 @@ export type EditorDraft = {
   before: Values;
   after: Values;
   restores?: string;
+  creates?: true;
+  targetName?: string;
 };
 
 export type EditorChange = EditorDraft & {
@@ -34,6 +36,7 @@ export interface EditorTransaction {
   read(target: EditorTarget): Promise<Revision | null>;
   lockDraft(campaignId: string, draftId: string): Promise<EditorDraft | null>;
   saveDraft(draft: EditorDraft): Promise<void>;
+  create(draft: EditorDraft): Promise<number>;
   readChange(
     campaignId: string,
     changeId: string,
@@ -48,6 +51,25 @@ export interface EditorTransaction {
 }
 
 export class EditorConflict extends Error {}
+
+export async function previewEditorCreation(
+  tx: EditorTransaction,
+  target: Omit<EditorTarget, "id">,
+  authorId: string,
+  after: Values,
+): Promise<EditorDraft> {
+  const draft: EditorDraft = {
+    id: randomUUID(),
+    target: { ...target, id: randomUUID() },
+    authorId,
+    expectedRevision: 0,
+    before: {},
+    after,
+    creates: true,
+  };
+  await tx.saveDraft(draft);
+  return draft;
+}
 
 function selectFields(values: Values, keys: string[]): Values {
   return Object.fromEntries(
@@ -84,6 +106,7 @@ export async function previewEditorChange(
     expectedRevision,
     before,
     after,
+    ...(current.name && { targetName: current.name }),
   };
   await tx.saveDraft(draft);
   return draft;
@@ -107,16 +130,15 @@ export async function confirmEditorChange(
   const existing = await tx.readChange(campaignId, draftId);
   if (existing) return existing;
 
-  const current = await tx.read(draft.target);
-  if (!current || current.revision !== draft.expectedRevision) {
+  if (
+    !draft.creates &&
+    (await tx.read(draft.target))?.revision !== draft.expectedRevision
+  ) {
     throw new EditorConflict("EDITOR_REVISION_CONFLICT");
   }
-  const revision = await tx.write(
-    draft.target,
-    draft.expectedRevision,
-    draft.after,
-    draft,
-  );
+  const revision = draft.creates
+    ? await tx.create(draft)
+    : await tx.write(draft.target, draft.expectedRevision, draft.after, draft);
   if (revision === null) throw new EditorConflict("EDITOR_REVISION_CONFLICT");
   const change = {
     ...draft,
@@ -137,6 +159,8 @@ export async function previewEditorRestore(
   if (!change || change.target.campaignId !== campaignId) {
     throw new EditorConflict("EDITOR_CHANGE_NOT_FOUND");
   }
+  if (change.creates)
+    throw new EditorConflict("EDITOR_CREATION_NOT_REVERSIBLE");
   const current = await tx.read(change.target);
   if (
     !current ||
@@ -156,6 +180,7 @@ export async function previewEditorRestore(
     before: change.after,
     after: change.before,
     restores: change.id,
+    ...(current.name && { targetName: current.name }),
   };
   await tx.saveDraft(draft);
   return draft;

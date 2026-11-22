@@ -231,6 +231,102 @@ it("confirms and restores three real domain records in a migrated test database"
           ),
       ).toEqual([2, 1]);
     }
+    for (const [kind, values] of [
+      ["character-stat", { name: "Проверочный персонаж" }],
+      ["skill", { name: "Проверочный навык", description: "Описание" }],
+      ["material", { title: "Проверочный черновик", body: "Текст" }],
+      [
+        "bug-report",
+        {
+          title: "Кнопка не реагирует",
+          steps: "Открыть карту",
+          expected: "Открывается окно",
+          actual: "Ничего не произошло",
+        },
+      ],
+    ] as const) {
+      const preview = await app.inject({
+        method: "POST",
+        url: "/api/editor/creations",
+        headers: mcp,
+        payload: { kind, values },
+      });
+      expect(preview.statusCode, preview.body).toBe(200);
+      const draft = preview.json();
+      expect(draft).toMatchObject({ creates: true, before: {}, after: values });
+      const history = () =>
+        app.inject({
+          url: `/api/editor/history?kind=${kind}&id=${draft.target.id}`,
+          headers: mcp,
+        });
+      expect((await history()).json()).toEqual([]);
+      const report = () =>
+        db
+          .select()
+          .from(schema.feedbackReports)
+          .where(eq(schema.feedbackReports.id, draft.target.id));
+      const read = () =>
+        app.inject({
+          url: `/api/editor/target?kind=${kind}&id=${draft.target.id}`,
+          headers: mcp,
+        });
+      if (kind === "bug-report") expect(await report()).toEqual([]);
+      else expect((await read()).statusCode).toBe(404);
+      const url = `/api/editor/changes/${draft.id}/confirm`;
+      const headers = { ...browser, "x-arken-editor-confirm": "explicit" };
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url,
+            headers: { ...headers, ...mcp },
+          })
+        ).statusCode,
+      ).toBe(403);
+      const confirmed = await app.inject({ method: "POST", url, headers });
+      expect(confirmed.statusCode, confirmed.body).toBe(200);
+      expect(confirmed.json().committedRevision).toBe(0);
+      expect(
+        (await app.inject({ method: "POST", url, headers })).json(),
+      ).toEqual(confirmed.json());
+      expect((await history()).json()).toHaveLength(1);
+      if (kind === "bug-report") {
+        const [saved] = await report();
+        expect(saved).toMatchObject({
+          status: "NEW",
+          campaignId,
+          title: values.title,
+        });
+        expect(saved?.description).toContain(values.actual);
+      } else {
+        const created = await read();
+        expect(created.statusCode).toBe(200);
+        const edits = {
+          "character-stat": { strength: 9 },
+          skill: { description: "Отредактированное описание" },
+          material: { body: "Отредактированный текст" },
+        };
+        const edit = await app.inject({
+          method: "POST",
+          url: "/api/editor/changes",
+          headers: mcp,
+          payload: {
+            target: { kind, id: draft.target.id },
+            revision: 0,
+            values: edits[kind],
+          },
+        });
+        expect(edit.statusCode, edit.body).toBe(200);
+        const saved = await app.inject({
+          method: "POST",
+          url: `/api/editor/changes/${edit.json().id}/confirm`,
+          headers,
+        });
+        expect(saved.statusCode, saved.body).toBe(200);
+        expect((await read()).json().values).toMatchObject(edits[kind]);
+        expect((await history()).json()).toHaveLength(2);
+      }
+    }
     await db
       .update(schema.memberships)
       .set({ accessRevokedAt: new Date() })
