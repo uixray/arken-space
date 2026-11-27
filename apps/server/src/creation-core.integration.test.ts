@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as schema from "@arken/db";
 import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
 import { registerCreationRoutes } from "./creation-routes.js";
@@ -282,6 +282,41 @@ describe("UIX-461 creation lifecycle", () => {
         inputObjectIds: [],
         materialPicks: [],
       });
+      const [sourceQuote] = await db
+        .select()
+        .from(schema.creationOperationQuotes)
+        .where(eq(schema.creationOperationQuotes.id, quote.id));
+      const importedQuote = id();
+      await db
+        .insert(schema.creationOperationQuotes)
+        .values({
+          ...sourceQuote!,
+          id: importedQuote,
+          transferInvalidated: true,
+        });
+      const clock = vi.spyOn(Date, "now").mockReturnValue(Date.UTC(1960, 0, 1));
+      try {
+        const denied = await app.inject({
+          method: "POST",
+          url: "/api/creation/operations/commit",
+          headers: {
+            cookie: `${env.SESSION_COOKIE_NAME}=${secrets.player}`,
+            "x-creation-campaign": campaignId,
+            "x-creation-membership": player,
+          },
+          payload: { actionId: id(), quoteId: importedQuote },
+        });
+        expect(denied.statusCode, denied.body).toBe(409);
+        expect(denied.json().error).toBe("CREATION_QUOTE_EXPIRED");
+      } finally {
+        clock.mockRestore();
+      }
+      expect(
+        await db
+          .select()
+          .from(schema.creationObjects)
+          .where(eq(schema.creationObjects.campaignId, campaignId)),
+      ).toHaveLength(0);
       const command = { actionId: id(), quoteId: quote.id };
       const created = await request("player", "operations/commit", command);
       expect(created.entryId).toBeTruthy();

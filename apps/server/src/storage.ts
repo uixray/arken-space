@@ -1,6 +1,8 @@
 import { createReadStream } from "node:fs";
 import {
   mkdir,
+  open,
+  rmdir,
   readFile,
   stat,
   statfs,
@@ -43,7 +45,7 @@ export function mediaRoot() {
 }
 
 function storedPath(storageKey: string) {
-  if (storageKey !== storageKey.replace(/[^a-zA-Z0-9._-]/g, ""))
+  if (!/^import-media\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.bin$/.test(storageKey) && !/^chat-files\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/content\.webp$/.test(storageKey) && storageKey !== storageKey.replace(/[^a-zA-Z0-9._-]/g, ""))
     throw new Error("INVALID_STORAGE_KEY");
   const path = resolve(mediaRoot(), storageKey);
   const relation = relative(mediaRoot(), path);
@@ -56,6 +58,11 @@ export async function removeStoredUpload(storageKey: string) {
   await unlink(storedPath(storageKey)).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "ENOENT") throw error;
   });
+  if (storageKey.startsWith("chat-files/")) {
+    await rmdir(resolve(storedPath(storageKey), "..")).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT" && error.code !== "ENOTEMPTY") throw error;
+    });
+  }
 }
 
 export function assertStorageQuota(
@@ -427,35 +434,32 @@ export async function openStoredFile(
   storageKey: string,
   range: string | undefined,
 ) {
-  const path = storedPath(storageKey);
-  const info = await stat(path);
-  // UIX-474: `stat` на каталоге проходит, а чтение падает уже в потоке — то
-  // есть после отданных заголовков, когда ответ не переиграть. Проверка здесь
-  // превращает эту аварию в честный отказ до первого байта.
-  if (!info.isFile()) throw new Error("NOT_A_FILE");
-  if (!range)
-    return {
-      stream: createReadStream(path),
-      size: info.size,
-      start: 0,
-      end: info.size - 1,
-      partial: false,
+  const handle = await open(storedPath(storageKey), "r");
+  try {
+    // Stat and stream must refer to the same opened file, even when a repair
+    // atomically replaces its directory entry between these operations.
+    const info = await handle.stat();
+    if (!info.isFile()) throw new Error("NOT_A_FILE");
+    const cacheRevision = [info.ino,info.size,info.mtimeMs,info.ctimeMs].join(":");
+    if (!range) return {
+      stream: handle.createReadStream(), size: info.size, cacheRevision,
+      start: 0, end: info.size - 1, partial: false,
     };
-
-  const match = /^bytes=(\d+)-(\d*)$/.exec(range);
-  if (!match) throw new Error("INVALID_RANGE");
-  const start = Number(match[1]);
-  const requestedEnd = match[2] ? Number(match[2]) : info.size - 1;
-  const end = Math.min(requestedEnd, info.size - 1);
-  if (!Number.isFinite(start) || start < 0 || start > end)
-    throw new Error("INVALID_RANGE");
-  return {
-    stream: createReadStream(path, { start, end }),
-    size: info.size,
-    start,
-    end,
-    partial: true,
-  };
+    const match = /^bytes=(\d+)-(\d*)$/.exec(range);
+    if (!match) throw new Error("INVALID_RANGE");
+    const start = Number(match[1]);
+    const requestedEnd = match[2] ? Number(match[2]) : info.size - 1;
+    const end = Math.min(requestedEnd, info.size - 1);
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || start > end)
+      throw new Error("INVALID_RANGE");
+    return {
+      stream: handle.createReadStream({start,end}),size:info.size,cacheRevision,
+      start,end,partial:true,
+    };
+  } catch (error) {
+    await handle.close();
+    throw error;
+  }
 }
 
 export function displayNameFromUpload(name: string) {

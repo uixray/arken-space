@@ -96,7 +96,8 @@ export function installInputDiagnostics(
     return () => undefined;
 
   const events: SafeInputDiagnostic[] = [];
-  const remember = (event: SafeInputDiagnostic) => {
+  const remember = (event: SafeInputDiagnostic,source?:Event) => {
+    if(typeof Element!=="undefined"&&source?.target instanceof Element&&source.target.closest('[data-private], input[type="password"]'))return;
     events.push(event);
     if (events.length > MAX_EVENTS)
       events.splice(0, events.length - MAX_EVENTS);
@@ -116,25 +117,25 @@ export function installInputDiagnostics(
       shiftKey: event.shiftKey,
       metaKey: event.metaKey,
       composing: event.isComposing,
-    });
+    },event);
   const onBeforeInput = (event: InputEvent) =>
     remember({
       ...base(event),
       event: "beforeinput",
       inputType: event.inputType,
       composing: event.isComposing,
-    });
+    },event);
   const onComposition = (event: CompositionEvent) =>
     remember({
       ...base(event),
       event: event.type as "compositionstart" | "compositionend",
       composing: event.type === "compositionstart",
-    });
+    },event);
   const onFocus = (event: FocusEvent) =>
     remember({
       ...base(event),
       event: event.type as "focusin" | "focusout",
-    });
+    },event);
 
   window.addEventListener("keydown", onKeyDown, true);
   window.addEventListener("beforeinput", onBeforeInput as EventListener, true);

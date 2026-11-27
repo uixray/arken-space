@@ -1,7 +1,8 @@
+import { useWorkspacePortal } from "../workspace-portal";
+import { useGameReadOnly } from "../game-read-only";
 import { GmHealthCounter } from "../GmHealthCounter";
 import {
   groupAbilities,
-  usesAmberionAbilityGroups,
 } from "../ability-presentation";
 import { AbilityAccordion } from "../AbilityAccordion";
 import { CharacterInventory } from "./CharacterInventory";
@@ -82,6 +83,7 @@ import { AppIcon } from "../ui/AppIcon";
 import { notify } from "../ui/notifications";
 import {
   AddIcon,
+  MoreIcon,
   CharacterArchiveIcon,
   CloseIcon,
   CollapseCharacterRailIcon,
@@ -134,8 +136,7 @@ export function CharacterWorkspace({
       .map((id) => byId.get(id))
       .filter((character): character is CharacterDto => Boolean(character));
   }, [props.snapshot.characters, props.snapshot.me]);
-  const singleCharacter =
-    props.snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092";
+  const singleCharacter = true;
   const [state, dispatch] = useReducer(
     (
       state: Parameters<typeof characterWorkspaceReducer>[0],
@@ -150,6 +151,7 @@ export function CharacterWorkspace({
     characters.map((character) => character.id),
     createCharacterWorkspaceState,
   );
+  const portalTarget = useWorkspacePortal();
   const workspaceRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [createCharacterOpen, setCreateCharacterOpen] = useState(false);
@@ -448,7 +450,11 @@ export function CharacterWorkspace({
         >
           {state.openIds.length === 0 ? (
             <div className="character-sheet-deck__empty">
-              <p>Выберите персонажа в списке, чтобы открыть его лист.</p>
+              <p>
+                {characters.length === 0
+                  ? "Нажмите «Создать персонажа», чтобы открыть его лист."
+                  : "Выберите персонажа в списке, чтобы открыть его лист."}
+              </p>
             </div>
           ) : (
             state.openIds.map((id) => {
@@ -531,7 +537,7 @@ export function CharacterWorkspace({
         onClose={() => setRestoreDialogOpen(false)}
       />
     </main>,
-    document.body,
+    portalTarget,
   );
 }
 
@@ -977,6 +983,7 @@ export function CharacterPanel({
   onUpdateCounters: CampaignActions["character"]["updateCharacterCounters"];
   onArchive?: () => void;
 }) {
+  const readOnly = useGameReadOnly();
   // The catalog handlers are read here rather than passed in: this panel is
   // the only place that uses them, so threading them through the workspace
   // above only made two components know about them instead of one.
@@ -1039,11 +1046,13 @@ export function CharacterPanel({
    * не получилось.
    */
   const canEditCharacterLayout = Boolean(
+    !readOnly &&
     character &&
     snapshot.me.role === "PLAYER" &&
     character.ownerMembershipId === snapshot.me.id,
   );
-  const canEditLayout = snapshot.me.role === "GM" || canEditCharacterLayout;
+  const canEditLayout =
+    !readOnly && (snapshot.me.role === "GM" || canEditCharacterLayout);
   const hasPersonalLayout = Boolean(character?.statLayout);
   const statLayoutPendingRef = useRef(false);
   const saveLayout = async (next: typeof layout) => {
@@ -1258,6 +1267,7 @@ export function CharacterPanel({
     };
   }, []);
   const editable =
+    !readOnly &&
     character &&
     (snapshot.me.role === "GM" ||
       character.ownerMembershipId === snapshot.me.id ||
@@ -1266,6 +1276,7 @@ export function CharacterPanel({
   // not controllers — a narrower check than the general sheet `editable`,
   // so controllers don't see edit/reorder/detach buttons that 403 on click.
   const canEditMedia =
+    !readOnly &&
     character &&
     (snapshot.me.role === "GM" ||
       character.ownerMembershipId === snapshot.me.id);
@@ -1307,8 +1318,9 @@ export function CharacterPanel({
         text="Выберите доступный лист или создайте персонажа в списке персонажей. Мастер также может назначить вам готовый лист."
       />
     );
-  const editPermissionReason =
-    "Редактирование доступно мастеру, владельцу листа и назначенным контроллерам.";
+  const editPermissionReason = readOnly
+    ? "Сохранённая копия доступна только для просмотра."
+    : "Редактирование доступно мастеру, владельцу листа и назначенным контроллерам.";
   const newResourceKey = newResourceName.trim();
   const newResourceReason = !editable
     ? "У вас нет права добавлять дополнительные ресурсы."
@@ -1322,6 +1334,7 @@ export function CharacterPanel({
     label: string,
     mode: RollMode = "NORMAL",
   ) => {
+    if (readOnly) return;
     setRollPending(true);
     setRollError("");
     try {
@@ -1350,16 +1363,8 @@ export function CharacterPanel({
     (entry) => entry.kind === "ABILITY",
   );
   // Campaign-local presentation only: retain entry IDs and all action handlers.
-  const ownerRole = snapshot.members.find(
-    (member) => member.id === character.ownerMembershipId,
-  )?.role;
-  const useAbilityGroups = usesAmberionAbilityGroups(
-    snapshot.campaign.id,
-    ownerRole,
-  );
-  const groupedAbilities = useAbilityGroups
-    ? groupAbilities(abilityEntries)
-    : [];
+  const useAbilityGroups=abilityEntries.length>0;
+  const groupedAbilities=groupAbilities(abilityEntries);
   // UIX-391: exclude entries the character already has assigned so the "add
   // existing" picker can't offer — and silently create — a duplicate
   // assignment. See catalog-entry-selection.ts for the matching rule.
@@ -1476,7 +1481,7 @@ export function CharacterPanel({
           (useAbilityGroups ? (
             <details className="ability-management">
               <summary aria-label={`Действия способности «${entry.name}»`}>
-                …
+                <AppIcon icon={MoreIcon} />
               </summary>
               {management}
             </details>
@@ -1998,7 +2003,7 @@ export function CharacterPanel({
                         <RollButton
                           name={skill.name}
                           formula={skill.formula}
-                          disabled={rollPending}
+                          disabled={readOnly || rollPending}
                           onClick={(event) =>
                             void submitCharacterRoll(
                               skill.formula,
@@ -2010,7 +2015,7 @@ export function CharacterPanel({
                         {editable && (
                           <div className="inline-fields">
                             <Button
-                              disabled={standardSkillPending}
+                              disabled={readOnly || standardSkillPending}
                               aria-label={`Редактировать навык ${skill.name}`}
                               onClick={() => {
                                 setStandardSkillError("");
@@ -2026,7 +2031,7 @@ export function CharacterPanel({
                             </Button>
                             <Button
                               className="danger-link"
-                              disabled={standardSkillPending}
+                              disabled={readOnly || standardSkillPending}
                               aria-label={`Удалить навык ${skill.name}`}
                               onClick={() => {
                                 setStandardSkillError("");
@@ -2122,7 +2127,7 @@ export function CharacterPanel({
                         <p>{spell.description}</p>
                         {spell.formula && (
                           <Button
-                            disabled={rollPending}
+                            disabled={readOnly || rollPending}
                             onClick={(event) =>
                               void submitCharacterRoll(
                                 spell.formula!,
@@ -2224,7 +2229,7 @@ export function CharacterPanel({
                 value={standardSkillDraft.name}
                 maxLength={120}
                 required
-                disabled={standardSkillPending}
+                disabled={readOnly || standardSkillPending}
                 onChange={(event) =>
                   setStandardSkillDraft((draft) => ({
                     ...draft,
@@ -2241,7 +2246,7 @@ export function CharacterPanel({
                 step={1}
                 value={standardSkillDraft.rank}
                 required
-                disabled={standardSkillPending}
+                disabled={readOnly || standardSkillPending}
                 onChange={(event) =>
                   setStandardSkillDraft((draft) => ({
                     ...draft,
@@ -2256,7 +2261,7 @@ export function CharacterPanel({
                 value={standardSkillDraft.formula}
                 maxLength={160}
                 required
-                disabled={standardSkillPending}
+                disabled={readOnly || standardSkillPending}
                 onChange={(event) =>
                   setStandardSkillDraft((draft) => ({
                     ...draft,
@@ -2270,7 +2275,7 @@ export function CharacterPanel({
                 {standardSkillError}
               </p>
             )}
-            <Button type="submit" disabled={standardSkillPending}>
+            <Button type="submit" disabled={readOnly || standardSkillPending}>
               {standardSkillPending ? "Сохранение…" : "Сохранить навык"}
             </Button>
           </form>

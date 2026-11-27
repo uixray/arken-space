@@ -1,3 +1,9 @@
+import {
+  commitMembershipName,
+  SessionStateError,
+} from "./session-state-command.js";
+import { readMigrationFiles } from "drizzle-orm/migrator";
+import { fileURLToPath } from "node:url";
 import { isAbsolute, relative, resolve } from "node:path";
 import { registerBugIntakeRoutes } from "./bug-intake-routes.js";
 import { parseBugAssetOrigins } from "./bug-intake-origins.js";
@@ -24,6 +30,7 @@ import {
   feedbackReports,
   gameEvents,
   memberships,
+  scenes,
 } from "@arken/db";
 import { requireAuth } from "./auth.js";
 import { registerAccountAuthRoutes } from "./account-auth-routes.js";
@@ -100,6 +107,7 @@ import { registerWorldContentInstanceRoutes } from "./world-content-instances.js
 import { registerEconomyRoutes } from "./economy-routes.js";
 import { registerSpellPackRoutes } from "./spell-pack-routes.js";
 import { registerSpellAssignmentRoutes } from "./spell-assignment-routes.js";
+import { registerTelegramCampaignBridge } from "./telegram-campaign-bridge.js";
 import { registerSpellProjectionRoutes } from "./spell-projection-routes.js";
 import { chatBroadcastAudience } from "./chat.js";
 import {
@@ -263,6 +271,20 @@ async function publishDrawingChange(
 ) {
   const coalesce = snapshotCoalescers.get(io);
   await coalesce?.settled(campaignId);
+  const changedSceneId = change.after?.sceneId ?? change.before?.sceneId;
+  if (changedSceneId) {
+    const [layerScene] = await db
+      .select({ grid: scenes.grid })
+      .from(scenes)
+      .where(
+        and(eq(scenes.id, changedSceneId), eq(scenes.campaignId, campaignId)),
+      )
+      .limit(1);
+    if (layerScene?.grid.isometric) {
+      await broadcastSnapshots(io, db, campaignId, "drawing-fallback");
+      return;
+    }
+  }
   const [campaign] = await db
     .select({ activeSceneId: campaigns.activeSceneId })
     .from(campaigns)
@@ -324,6 +346,7 @@ async function emitCampaignSnapshots(
             socket,
             campaignId,
             await buildSnapshot(db, auth, viewedScenes(socket.data), readSet),
+            true,
           );
         }
       }),
@@ -354,7 +377,7 @@ async function emitCampaignSnapshots(
       const { bytes, byField } = measureSnapshot(snapshot);
       perSocket.push({ role: auth.role, bytes, ms });
       fieldReports.push(byField);
-      emitPreviewSnapshot(io, socket, campaignId, snapshot);
+      emitPreviewSnapshot(io, socket, campaignId, snapshot, true);
     }),
   );
   const measurement: BroadcastMeasurement = {
@@ -428,6 +451,7 @@ export function registerRoutes(
         minFreeBytes: env.PERFORMANCE_MIN_FREE_DISK_BYTES,
       })
     : undefined;
+  const stopTelegram = registerTelegramCampaignBridge(app, db);
   let lastJournalWarning = -Infinity;
   const warnJournal = () => {
     if (Date.now() - lastJournalWarning < 60_000) return;
@@ -477,6 +501,30 @@ export function registerRoutes(
     mailKeyring: mailContext.keyring,
   });
   registerAccountCampaignRoutes(app, db, io, {
+    ...(env.CAMPAIGN_TRANSFER_IMPORT_ENABLED
+      ? {
+          transferImport: {
+            root: resolve(env.MEDIA_ROOT, "..", "campaign-transfer-imports"),
+            migrations: readMigrationFiles({
+              migrationsFolder: fileURLToPath(
+                new URL("../../../packages/db/drizzle/", import.meta.url),
+              ),
+            }).map((m) => m.hash),
+          },
+        }
+      : {}),
+    ...(env.CAMPAIGN_TRANSFER_ENABLED
+      ? {
+          transfer: {
+            root: resolve(env.MEDIA_ROOT, "..", "campaign-transfer-exports"),
+            migrations: readMigrationFiles({
+              migrationsFolder: fileURLToPath(
+                new URL("../../../packages/db/drizzle/", import.meta.url),
+              ),
+            }).map((m) => m.hash),
+          },
+        }
+      : {}),
     archivePreviewEnabled: env.CAMPAIGN_ARCHIVE_ENABLED,
     localInstanceId:
       env.DEPLOYMENT_MODE === "LOCAL_HOST" ? env.LOCAL_INSTANCE_ID : undefined,
@@ -582,56 +630,18 @@ export function registerRoutes(
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
-    const body = renameCommandSchema
-      .extend({
-        name: z.string().trim().min(1).max(40),
-      })
-      .parse(request.body);
-    if (auth.role !== "GM" && id !== auth.membershipId)
-      return reply.code(403).send({ error: "MEMBERSHIP_FORBIDDEN" });
-    if (await findAction(db, auth.campaignId, body.actionId))
-      return reply.code(200).send({ duplicate: true });
-    const [current] = await db
-      .select()
-      .from(memberships)
-      .where(
-        and(
-          eq(memberships.id, id),
-          eq(memberships.campaignId, auth.campaignId),
-        ),
-      )
-      .limit(1);
-    if (!current)
-      return reply.code(404).send({ error: "MEMBERSHIP_NOT_FOUND" });
-    if (current.revision !== body.revision)
-      return reply
-        .code(409)
-        .send({ error: "MEMBERSHIP_CONFLICT", revision: current.revision });
-    const updated = await db.transaction(async (tx) => {
-      const [next] = await tx
-        .update(memberships)
-        .set({ displayName: body.name, revision: current.revision + 1 })
-        .where(
-          and(
-            eq(memberships.id, id),
-            eq(memberships.revision, current.revision),
-          ),
-        )
-        .returning();
-      if (!next) return null;
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        membershipId: auth.membershipId,
-        type: "membership.renamed",
-        entityType: "membership",
-        entityId: next.id,
-        entityRevision: next.revision,
-        payload: { membershipId: next.id, displayName: next.displayName },
-      });
-      return next;
-    });
-    if (!updated) return reply.code(409).send({ error: "MEMBERSHIP_CONFLICT" });
+    let result: Awaited<ReturnType<typeof commitMembershipName>>;
+    try {
+      result = await db.transaction((tx) =>
+        commitMembershipName(tx, auth, id, request.body),
+      );
+    } catch (error) {
+      if (error instanceof SessionStateError)
+        return reply.code(error.statusCode).send(error.details);
+      throw error;
+    }
+    if (result.duplicate) return reply.code(200).send({ duplicate: true });
+    const updated = result.updated;
     const sockets = await io.in(campaignRoom(auth.campaignId)).fetchSockets();
     for (const socket of sockets) {
       if (socket.data.auth?.membershipId === id)
@@ -913,4 +923,5 @@ export function registerRoutes(
   registerAssetRoutes(app, db, {
     broadcast: (campaignId) => broadcastSnapshots(io, db, campaignId, "asset"),
   });
+  return stopTelegram;
 }

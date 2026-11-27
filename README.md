@@ -14,6 +14,9 @@ Multi-level, isometric and full 3D rendering are deliberately deferred until the
 
 ## Local development
 
+Инструкция для пользователей: [первый вход, создание кампании и автономная
+Windows-версия](./docs/first-run.md).
+
 ```powershell
 Copy-Item .env.example .env
 corepack pnpm install

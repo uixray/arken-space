@@ -396,6 +396,30 @@ describe("player request mutation and replay", () => {
 });
 
 describe("player request filters and durable projection", () => {
+  it("lists only local requests when both campaigns have matching records", async () => {
+    const own = await create(secrets.author, { title: "First table request" });
+    const foreign = await create(secrets.foreign, { title: "Second table request" });
+    expect(own.statusCode).toBe(201);
+    expect(foreign.statusCode).toBe(201);
+
+    const firstId = own.json().id;
+    const secondId = foreign.json().id;
+    for (const [secret, expected, excluded] of [
+      [secrets.gm, firstId, secondId],
+      [secrets.foreign, secondId, firstId],
+    ] as const) {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/player-requests?state=OPEN&horizon=NOW&audience=PUBLIC",
+        headers: headers(secret),
+      });
+      expect(response.statusCode).toBe(200);
+      const visible = response.json<Array<{ id: string }>>().map(({ id }) => id);
+      expect(visible).toContain(expected);
+      expect(visible).not.toContain(excluded);
+    }
+  });
+
   it("filters OPEN/CLOSED with horizon/audience and applies projection ACL", async () => {
     const openPrivate = (
       await create(secrets.author, {

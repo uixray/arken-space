@@ -10,6 +10,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -1167,7 +1168,19 @@ export const characters = pgTable(
     backstory: text("backstory").notNull().default(""),
     inventory: jsonb("inventory").$type<string[]>().notNull().default([]),
     resources: jsonb("resources")
-      .$type<Record<string, { current: number; maximum?: number }>>()
+      .$type<
+        Record<
+          string,
+          {
+            current: number;
+            maximum?: number;
+            description?: string;
+            imageAssetId?: string | null;
+            recoverable?: boolean;
+            restAmount?: number;
+          }
+        >
+      >()
       .notNull()
       .default({}),
     wallet: jsonb("wallet")
@@ -1568,6 +1581,8 @@ export const scenes = pgTable(
       .default(1080),
     grid: jsonb("grid")
       .$type<{
+        isometric?: import("@arken/contracts").IsometricSceneGeometry;
+        threeD?: import("@arken/contracts").Map3dSpec;
         metersPerCell?: number | null;
         enabled: boolean;
         size: number;
@@ -1854,6 +1869,7 @@ export const tokens = pgTable(
 export const fogReveals = pgTable(
   "fog_reveals",
   {
+    levelId: uuid("level_id"),
     id: uuid("id").defaultRandom().primaryKey(),
     sceneId: uuid("scene_id")
       .notNull()
@@ -1881,12 +1897,20 @@ export const fogReveals = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [index("fog_scene_idx").on(table.sceneId)],
+  (table) => [
+    index("fog_scene_idx").on(table.sceneId),
+    index("fog_scene_level_idx").on(
+      table.sceneId,
+      table.levelId,
+      table.sequence,
+    ),
+  ],
 );
 
 export const drawings = pgTable(
   "drawings",
   {
+    levelId: uuid("level_id"),
     id: uuid("id").defaultRandom().primaryKey(),
     sceneId: uuid("scene_id")
       .notNull()
@@ -1917,6 +1941,7 @@ export const drawings = pgTable(
   },
   (table) => [
     index("drawings_scene_idx").on(table.sceneId),
+    index("drawings_scene_level_idx").on(table.sceneId, table.levelId),
     check(
       "drawings_kind_check",
       sql`${table.kind} in ('FREEHAND', 'STAMP', 'TEXTURE')`,
@@ -3365,6 +3390,274 @@ export const encounters = pgTable(
  * authorized campaign GM may detach their asset; the world-content record
  * remains and its cover/gallery association is removed by FK policy.
  */
+/** Short-lived Telegram claims tied to an existing, revocable game session. */
+export const telegramCampaignLinkCodes = pgTable(
+  "telegram_campaign_link_codes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    receiverId: uuid("receiver_id").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    telegramUserId: text("telegram_user_id").notNull(),
+    chatId: text("chat_id"),
+    threadId: text("thread_id").notNull().default("0"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  },
+);
+
+export const telegramCampaignMembers = pgTable(
+  "telegram_campaign_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    receiverId: uuid("receiver_id").notNull(),
+    telegramUserId: text("telegram_user_id").notNull(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    uniqueIndex("telegram_campaign_member_identity_idx").on(
+      t.receiverId,
+      t.telegramUserId,
+    ),
+  ],
+);
+
+export const telegramCampaignChats = pgTable(
+  "telegram_campaign_chats",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    receiverId: uuid("receiver_id").notNull(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    ownerSessionId: uuid("owner_session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    chatId: text("chat_id").notNull(),
+    threadId: text("thread_id").notNull().default("0"),
+  },
+  (t) => [
+    uniqueIndex("telegram_campaign_chat_campaign_idx").on(
+      t.receiverId,
+      t.campaignId,
+    ),
+    uniqueIndex("telegram_campaign_chat_destination_idx").on(
+      t.receiverId,
+      t.chatId,
+      t.threadId,
+    ),
+  ],
+);
+
+/** Durable dedup/outbox receipt survives session/campaign removal. No bearer tokens. */
+export const telegramCampaignUpdates = pgTable(
+  "telegram_campaign_updates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    receiverId: uuid("receiver_id").notNull(),
+    updateId: text("update_id").notNull(),
+    messageId: text("message_id").notNull(),
+    actionId: uuid("action_id").defaultRandom().notNull().unique(),
+    payloadHash: text("payload_hash").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    telegramUserId: text("telegram_user_id").notNull(),
+    chatId: text("chat_id").notNull(),
+    threadId: text("thread_id").notNull().default("0"),
+    sessionId: uuid("session_id"),
+    state: text("state").notNull().default("PENDING"),
+    replyState: text("reply_state").notNull().default("NONE"),
+    replyText: text("reply_text"),
+    replyMessageId: text("reply_message_id"),
+    errorCode: text("error_code"),
+    workerId: uuid("worker_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("telegram_campaign_update_identity_idx").on(
+      t.receiverId,
+      t.updateId,
+    ),
+    uniqueIndex("telegram_campaign_message_identity_idx").on(
+      t.receiverId,
+      t.chatId,
+      t.threadId,
+      t.messageId,
+    ),
+    index("telegram_campaign_update_queue_idx").on(
+      t.receiverId,
+      t.state,
+      t.createdAt,
+    ),
+    check(
+      "telegram_campaign_update_state_check",
+      sql`${t.state} IN ('PENDING', 'RUNNING', 'DONE', 'UNKNOWN', 'REJECTED')`,
+    ),
+    check(
+      "telegram_campaign_reply_state_check",
+      sql`${t.replyState} IN ('NONE', 'PENDING', 'SENDING', 'SENT', 'UNKNOWN', 'FAILED', 'CANCELLED')`,
+    ),
+  ],
+);
+
+/** Immutable image ownership independent of campaign asset metadata. */
+export const localSessionAuthorities = pgTable(
+  "local_session_authorities",
+  {
+    campaignId: uuid("campaign_id").primaryKey(),
+    hostId: uuid("host_id").notNull(),
+    sessionId: uuid("session_id").notNull(),
+    epoch: integer("epoch").notNull(),
+    active: boolean("active").notNull().default(true),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      name: "local_session_authorities_campaign_id_fkey",
+      columns: [t.campaignId],
+      foreignColumns: [campaigns.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "local_session_authorities_host_id_fkey",
+      columns: [t.hostId],
+      foreignColumns: [localHostInstances.id],
+    }).onDelete("restrict"),
+    check("local_session_authorities_epoch_check", sql`${t.epoch}>0`),
+  ],
+);
+export const localSessionPairings = pgTable(
+  "local_session_pairings",
+  {
+    id: uuid("id").primaryKey(),
+    campaignId: uuid("campaign_id").notNull(),
+    sessionId: uuid("session_id").notNull(),
+    epoch: integer("epoch").notNull(),
+    membershipId: uuid("membership_id").notNull(),
+    deviceId: uuid("device_id").notNull(),
+    tokenHash: text("token_hash")
+      .notNull()
+      .unique("local_session_pairings_token_hash_key"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  },
+  (t) => [
+    foreignKey({
+      name: "local_session_pairings_campaign_id_fkey",
+      columns: [t.campaignId],
+      foreignColumns: [localSessionAuthorities.campaignId],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "local_session_pairings_campaign_id_membership_id_fkey",
+      columns: [t.campaignId, t.membershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("cascade"),
+    index("local_pairings_member_idx").on(
+      t.campaignId,
+      t.membershipId,
+      t.deviceId,
+    ),
+    check("local_session_pairings_epoch_check", sql`${t.epoch}>0`),
+    check(
+      "local_session_pairings_token_hash_check",
+      sql`length(${t.tokenHash})=64`,
+    ),
+  ],
+);
+export const localSessionPeers = pgTable(
+  "local_session_peers",
+  {
+    campaignId: uuid("campaign_id").notNull(),
+    membershipId: uuid("membership_id").notNull(),
+    deviceId: uuid("device_id").notNull(),
+    sessionId: uuid("session_id").notNull(),
+    epoch: integer("epoch").notNull(),
+    credentialHash: text("credential_hash")
+      .notNull()
+      .unique("local_session_peers_credential_hash_key"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({
+      name: "local_session_peers_pkey",
+      columns: [t.campaignId, t.membershipId, t.deviceId],
+    }),
+    foreignKey({
+      name: "local_session_peers_campaign_id_fkey",
+      columns: [t.campaignId],
+      foreignColumns: [localSessionAuthorities.campaignId],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "local_session_peers_campaign_id_membership_id_fkey",
+      columns: [t.campaignId, t.membershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("cascade"),
+    check("local_session_peers_epoch_check", sql`${t.epoch}>0`),
+    check(
+      "local_session_peers_credential_hash_check",
+      sql`length(${t.credentialHash})=64`,
+    ),
+  ],
+);
+export const localCommandReceipts = pgTable(
+  "local_command_receipts",
+  {
+    campaignId: uuid("campaign_id").notNull(),
+    actionId: uuid("action_id").notNull(),
+    membershipId: uuid("membership_id").notNull(),
+    deviceId: uuid("device_id").notNull(),
+    requestHash: text("request_hash").notNull(),
+    sequence: bigint("sequence", { mode: "number" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      name: "local_command_receipts_pkey",
+      columns: [t.campaignId, t.actionId],
+    }),
+    foreignKey({
+      name: "local_command_receipts_campaign_id_fkey",
+      columns: [t.campaignId],
+      foreignColumns: [campaigns.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "local_command_receipts_campaign_id_membership_id_fkey",
+      columns: [t.campaignId, t.membershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("cascade"),
+    check(
+      "local_command_receipts_request_hash_check",
+      sql`length(${t.requestHash})=64`,
+    ),
+    check("local_command_receipts_sequence_check", sql`${t.sequence}>=0`),
+  ],
+);
+
+export const worldContentImages = pgTable("world_content_images", {
+  id: uuid("id").primaryKey(),
+  name: text("name").notNull(),
+  storageKey: text("storage_key").notNull().unique(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  width: integer("width"),
+  height: integer("height"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 export const worldContent = pgTable(
   "world_content",
   {
@@ -3390,10 +3683,10 @@ export const worldContent = pgTable(
     lifecycle: worldContentLifecycleEnum("lifecycle")
       .notNull()
       .default("DRAFT"),
-    /** Single nullable cover pointer; deleting the campaign asset detaches it. */
-    coverAssetId: uuid("cover_asset_id").references(() => assets.id, {
-      onDelete: "set null",
-    }),
+    /** Stable library image, not a campaign-owned asset reference. */
+    coverAssetId: uuid("cover_asset_id").references(
+      () => worldContentImages.id,
+    ),
     /** Import provenance (later, blocked stage); all nullable since GM-authored-from-scratch canon has none. */
     sourceUrl: text("source_url"),
     sourceExternalId: text("source_external_id"),
@@ -3489,7 +3782,7 @@ export const worldContentMedia = pgTable(
       .references(() => worldContent.id, { onDelete: "cascade" }),
     assetId: uuid("asset_id")
       .notNull()
-      .references(() => assets.id, { onDelete: "cascade" }),
+      .references(() => worldContentImages.id),
     caption: text("caption"),
     ordering: integer("ordering").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -4271,6 +4564,10 @@ export const economyQuotes = pgTable(
     inputHash: text("input_hash").notNull(),
     inputs: jsonb("inputs").$type<unknown>().notNull(),
     view: jsonb("view").$type<unknown>().notNull(),
+    /** Import invalidates old authorizations without altering historical quote data. */
+    transferInvalidated: boolean("transfer_invalidated")
+      .notNull()
+      .default(false),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -4707,6 +5004,10 @@ export const creationOperationQuotes = pgTable(
     inputHash: text("input_hash").notNull(),
     inputs: jsonb("inputs").$type<unknown>().notNull(),
     view: jsonb("view").$type<unknown>().notNull(),
+    /** Import invalidates old authorizations without altering historical quote data. */
+    transferInvalidated: boolean("transfer_invalidated")
+      .notNull()
+      .default(false),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -4927,6 +5228,10 @@ export const creationStoreQuotes = pgTable(
     inputHash: text("input_hash").notNull(),
     inputs: jsonb("inputs").$type<unknown>().notNull(),
     view: jsonb("view").$type<unknown>().notNull(),
+    /** Import invalidates old authorizations without altering historical quote data. */
+    transferInvalidated: boolean("transfer_invalidated")
+      .notNull()
+      .default(false),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -5137,5 +5442,388 @@ export const creationTemplateOrigins = pgTable(
         creationTemplateVersions.id,
       ],
     }),
+  ],
+);
+
+/** Durable acknowledgement of a completed, device-scoped peer image upload. */
+export const localChatUploadReceipts = pgTable(
+  "local_chat_upload_receipts",
+  {
+    campaignId: uuid("campaign_id").notNull(),
+    uploadId: uuid("upload_id").notNull(),
+    membershipId: uuid("membership_id").notNull(),
+    deviceId: uuid("device_id").notNull(),
+    sessionId: uuid("session_id").notNull(),
+    epoch: integer("epoch").notNull(),
+    requestHash: text("request_hash").notNull(),
+    contentId: uuid("content_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      name: "local_chat_upload_receipts_pkey",
+      columns: [t.campaignId, t.uploadId],
+    }),
+    foreignKey({
+      name: "local_chat_upload_receipts_campaign_id_fkey",
+      columns: [t.campaignId],
+      foreignColumns: [campaigns.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "local_chat_upload_receipts_campaign_id_membership_id_fkey",
+      columns: [t.campaignId, t.membershipId],
+      foreignColumns: [memberships.campaignId, memberships.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "local_chat_upload_receipts_campaign_id_content_id_fkey",
+      columns: [t.campaignId, t.contentId],
+      foreignColumns: [
+        chatAttachmentUploads.campaignId,
+        chatAttachmentUploads.contentId,
+      ],
+    }).onDelete("cascade"),
+    check(
+      "local_chat_upload_receipts_request_hash_check",
+      sql`length(${t.requestHash})=64`,
+    ),
+  ],
+);
+
+/** Server-only pending events; no campaign FK so deletion cannot lose pending sync. */
+export const localEventOutbox = pgTable(
+  "local_event_outbox",
+  {
+    originHostId: uuid("origin_host_id").notNull(),
+    eventSequence: bigint("event_sequence", { mode: "number" }).notNull(),
+    campaignId: uuid("campaign_id").notNull(),
+    actionId: uuid("action_id").notNull(),
+    authoritySessionId: uuid("authority_session_id").notNull(),
+    authorityEpoch: integer("authority_epoch").notNull(),
+    event: jsonb("event").$type<unknown>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      name: "local_event_outbox_pkey",
+      columns: [t.originHostId, t.eventSequence],
+    }),
+    uniqueIndex("local_event_outbox_origin_action_idx").on(
+      t.originHostId,
+      t.campaignId,
+      t.actionId,
+    ),
+    index("local_event_outbox_campaign_sequence_idx").on(
+      t.campaignId,
+      t.eventSequence,
+    ),
+    check("local_event_outbox_sequence_check", sql`${t.eventSequence}>0`),
+    check("local_event_outbox_epoch_check", sql`${t.authorityEpoch}>0`),
+    check(
+      "local_event_outbox_event_check",
+      sql`jsonb_typeof(${t.event})='object'`,
+    ),
+  ],
+);
+
+/** Cloud staging only: these rows never grant game-writer authority. */
+export const cloudSyncOrigins = pgTable(
+  "cloud_sync_origins",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    ownerUserId: uuid("owner_user_id").notNull(),
+    hostId: uuid("host_id").notNull(),
+    sessionId: uuid("session_id").notNull(),
+    epoch: integer("epoch").notNull(),
+    transferManifestSha256: text("transfer_manifest_sha256"),
+    baselineSequence: bigint("baseline_sequence", { mode: "bigint" }).notNull(),
+    receivedSequence: bigint("received_sequence", { mode: "bigint" }),
+    appliedSequence: bigint("applied_sequence", { mode: "bigint" }),
+    appliedCloudSequence: bigint("applied_cloud_sequence", { mode: "bigint" }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("cloud_sync_origins_identity_idx").on(
+      t.campaignId,
+      t.hostId,
+      t.sessionId,
+      t.epoch,
+    ),
+    check(
+      "cloud_sync_origins_bounds",
+      sql`${t.epoch}>0 AND ${t.baselineSequence}>=0 AND (${t.receivedSequence} IS NULL OR ${t.receivedSequence}>0)`,
+    ),
+  ],
+);
+export const cloudSyncReceipts = pgTable(
+  "cloud_sync_receipts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    originId: uuid("origin_id")
+      .notNull()
+      .references(() => cloudSyncOrigins.id, { onDelete: "cascade" }),
+    batchHash: text("batch_hash").notNull(),
+    lastSequence: bigint("last_sequence", { mode: "bigint" }).notNull(),
+    batchMetadata: jsonb("batch_metadata").$type<{
+      after: string | null;
+      hasMore: boolean;
+    }>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("cloud_sync_receipts_batch_idx").on(t.originId, t.batchHash),
+    check(
+      "cloud_sync_receipts_bounds",
+      sql`length(${t.batchHash})=64 AND ${t.lastSequence}>0`,
+    ),
+  ],
+);
+export const cloudSyncInbox = pgTable(
+  "cloud_sync_inbox",
+  {
+    originId: uuid("origin_id")
+      .notNull()
+      .references(() => cloudSyncOrigins.id, { onDelete: "cascade" }),
+    sequence: bigint("sequence", { mode: "bigint" }).notNull(),
+    actionId: uuid("action_id").notNull(),
+    receiptId: uuid("receipt_id")
+      .notNull()
+      .references(() => cloudSyncReceipts.id, { onDelete: "cascade" }),
+    envelope: jsonb("envelope").$type<unknown>().notNull(),
+  },
+  (t) => [
+    primaryKey({
+      name: "cloud_sync_inbox_pkey",
+      columns: [t.originId, t.sequence],
+    }),
+    uniqueIndex("cloud_sync_inbox_action_idx").on(t.originId, t.actionId),
+    check(
+      "cloud_sync_inbox_bounds",
+      sql`${t.sequence}>0 AND jsonb_typeof(${t.envelope})='object'`,
+    ),
+  ],
+);
+
+/** One rotating, expiring intake-only credential per registered source. */
+export const cloudSyncGrants = pgTable(
+  "cloud_sync_grants",
+  {
+    originId: uuid("origin_id")
+      .primaryKey()
+      .references(() => cloudSyncOrigins.id, { onDelete: "cascade" }),
+    id: uuid("id").notNull(),
+    ownerUserId: uuid("owner_user_id").notNull(),
+    membershipId: uuid("membership_id").notNull(),
+    grantScope: text("grant_scope").notNull().default("STAGING_ONLY"),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("cloud_sync_grants_token_idx").on(t.tokenHash),
+    uniqueIndex("cloud_sync_grants_id_idx").on(t.id),
+    check(
+      "cloud_sync_grants_scope_check",
+      sql`${t.grantScope} IN ('STAGING_ONLY','READ_RECEIPTS_ONLY')`,
+    ),
+    check("cloud_sync_grants_hash_check", sql`length(${t.tokenHash})=64`),
+  ],
+);
+
+/** Frozen outbound payloads and separately verified stored/applied progress.
+ * No campaign cascade; a lost network ACK replays identical bytes. */
+export const localCloudStreams = pgTable(
+  "local_cloud_streams",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    targetOrigin: text("target_origin").notNull(),
+    cloudOriginId: uuid("cloud_origin_id").notNull(),
+    originHostId: uuid("origin_host_id").notNull(),
+    campaignId: uuid("campaign_id").notNull(),
+    sessionId: uuid("session_id").notNull(),
+    epoch: integer("epoch").notNull(),
+    appliedSequence: bigint("applied_sequence", { mode: "bigint" }),
+    storedSequence: bigint("stored_sequence", { mode: "bigint" }),
+    frozenBatch: jsonb("frozen_batch").$type<unknown>(),
+    frozenHash: text("frozen_hash"),
+  },
+  (t) => [
+    index("local_cloud_streams_history_idx").on(
+      t.campaignId,
+      t.originHostId,
+      t.sessionId,
+      t.epoch,
+      t.id,
+    ),
+    uniqueIndex("local_cloud_streams_remote_idx").on(
+      t.targetOrigin,
+      t.cloudOriginId,
+    ),
+    check(
+      "local_cloud_streams_bounds",
+      sql`${t.epoch}>0 AND (${t.storedSequence} IS NULL OR ${t.storedSequence}>0)`,
+    ),
+    check(
+      "local_cloud_streams_frozen_check",
+      sql`(${t.frozenBatch} IS NULL AND ${t.frozenHash} IS NULL) OR (${t.frozenBatch} IS NOT NULL AND jsonb_typeof(${t.frozenBatch})='object' AND length(${t.frozenHash})=64 AND ${t.frozenHash} IS NOT NULL AND octet_length(${t.frozenBatch}::text)<=2097152)`,
+    ),
+  ],
+);
+export const localCloudStoredBatches = pgTable(
+  "local_cloud_stored_batches",
+  {
+    streamId: uuid("stream_id")
+      .notNull()
+      .references(() => localCloudStreams.id, { onDelete: "cascade" }),
+    batchHash: text("batch_hash").notNull(),
+    receiptId: uuid("receipt_id").notNull(),
+    lastSequence: bigint("last_sequence", { mode: "bigint" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    batchMetadata: jsonb("batch_metadata").$type<unknown>(),
+    appliedReceipt: jsonb("applied_receipt").$type<unknown>(),
+  },
+  (t) => [
+    index("local_cloud_stored_batches_sequence_idx").on(
+      t.streamId,
+      t.lastSequence,
+      t.receiptId,
+    ),
+    primaryKey({
+      name: "local_cloud_stored_batches_pkey",
+      columns: [t.streamId, t.batchHash],
+    }),
+    uniqueIndex("local_cloud_stored_batches_receipt_idx").on(
+      t.streamId,
+      t.receiptId,
+    ),
+    check(
+      "local_cloud_stored_batches_bounds",
+      sql`length(${t.batchHash})=64 AND ${t.lastSequence}>0`,
+    ),
+  ],
+);
+
+/** Atomic local import receipt, committed with the campaign. Never transferred. */
+export const localCampaignImports = pgTable(
+  "local_campaign_imports",
+  {
+    id: uuid("id").primaryKey(),
+    instanceId: uuid("instance_id")
+      .notNull()
+      .references(() => localHostInstances.id),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id),
+    campaignId: uuid("campaign_id").notNull(),
+    sourceBaselineSequence: bigint("source_baseline_sequence", {
+      mode: "bigint",
+    }),
+    sourceSchemaDigest: text("source_schema_digest"),
+    manifestSha256: text("manifest_sha256").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("local_campaign_imports_campaign_id_key").on(t.campaignId),
+    check(
+      "local_campaign_imports_manifest_sha256_check",
+      sql`${t.manifestSha256} ~ '^[a-f0-9]{64}$'`,
+    ),
+  ],
+);
+
+/** Cloud writer lease is runtime authority, never part of an exported campaign. */
+export const campaignWriterAuthorities = pgTable(
+  "campaign_writer_authorities",
+  {
+    campaignId: uuid("campaign_id")
+      .primaryKey()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    revision: bigint("revision", { mode: "bigint" }).notNull(),
+    writer: text("writer").notNull(),
+    originId: uuid("origin_id").references(() => cloudSyncOrigins.id),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    check("campaign_writer_revision_check", sql`${t.revision}>0`),
+    check(
+      "campaign_writer_kind_check",
+      sql`(${t.writer}='HOSTED' AND ${t.originId} IS NULL) OR (${t.writer}='LOCAL' AND ${t.originId} IS NOT NULL)`,
+    ),
+  ],
+);
+
+/** Proof of a committed typed reconciliation transaction, not inbox delivery. */
+export const cloudSyncApplications = pgTable(
+  "cloud_sync_applications",
+  {
+    receiptId: uuid("receipt_id")
+      .primaryKey()
+      .references(() => cloudSyncReceipts.id),
+    originId: uuid("origin_id")
+      .notNull()
+      .references(() => cloudSyncOrigins.id),
+    writerRevision: bigint("writer_revision", { mode: "bigint" }).notNull(),
+    mappings: jsonb("mappings")
+      .$type<
+        Array<{
+          sourceSequence: string;
+          cloudSequence: string;
+          actionId: string;
+        }>
+      >()
+      .notNull(),
+    appliedAt: timestamp("applied_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    check("cloud_sync_applications_revision_check", sql`${t.writerRevision}>0`),
+    check(
+      "cloud_sync_applications_mapping_check",
+      sql`jsonb_typeof(${t.mappings})='array' AND jsonb_array_length(${t.mappings}) BETWEEN 1 AND 64`,
+    ),
+  ],
+);
+
+/** Issued archive identity for cloud/import lineage; contains no campaign rows or credentials. */
+export const campaignTransferExports = pgTable(
+  "campaign_transfer_exports",
+  {
+    manifestSha256: text("manifest_sha256").primaryKey(),
+    campaignId: uuid("campaign_id").notNull(),
+    ownerUserId: uuid("owner_user_id").notNull(),
+    ownerMembershipId: uuid("owner_membership_id").notNull(),
+    baselineSequence: bigint("baseline_sequence", { mode: "bigint" }).notNull(),
+    schemaDigest: text("schema_digest").notNull(),
+    snapshotDigest: text("snapshot_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    check(
+      "campaign_transfer_exports_bounds",
+      sql`${t.manifestSha256} ~ '^[a-f0-9]{64}$' AND ${t.schemaDigest} ~ '^[a-f0-9]{64}$' AND ${t.snapshotDigest} ~ '^[a-f0-9]{64}$' AND ${t.baselineSequence}>=0`,
+    ),
   ],
 );

@@ -512,6 +512,7 @@ it("uses different standard stat icons and the same fallback for custom stats", 
   const custom = new Set(icons.slice(standardKeys.length));
   expect(standard.size).toBe(standardKeys.length);
   expect(custom.size).toBe(1);
+  expect(icons).toHaveLength(standardKeys.length + customKeys.length);
   const customIcon = icons[standardKeys.length];
   if (customIcon === undefined) {
     throw new Error(
@@ -521,7 +522,7 @@ it("uses different standard stat icons and the same fallback for custom stats", 
   expect(standard.has(customIcon)).toBe(false);
 });
 
-it("keeps Amberion player-owned abilities grouped in the quick panel", () => {
+it.each(["PLAYER", "GM"] as const)("groups abilities across campaigns for %s-owned characters", (ownerRole) => {
   renderComponent(
     <QuickRollPanel
       rollCharacter={
@@ -534,8 +535,8 @@ it("keeps Amberion player-owned abilities grouped in the quick panel", () => {
           ],
         } as unknown as CharacterDto
       }
-      campaignId="eb6a55c4-a821-4739-8d4a-a1028e9d9092"
-      characterOwnerRole="PLAYER"
+      campaignId="10000000-0000-4000-8000-000000000001"
+      characterOwnerRole={ownerRole}
       membershipId="member"
       rows={[]}
       quickRollPending={false}

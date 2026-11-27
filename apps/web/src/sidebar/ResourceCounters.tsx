@@ -1,3 +1,4 @@
+import {useGameReadOnly} from "../game-read-only";
 import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "../design-system/Button";
 import type { CharacterDto } from "@arken/contracts";
@@ -66,6 +67,8 @@ export function ResourceCounters({
   editable: boolean;
   onSpend: (intent: ResourceCounterIntent) => void | Promise<unknown>;
 }) {
+  const readOnly=useGameReadOnly();
+  editable=editable&&!readOnly;
   /**
    * Показанное значение до подтверждения сервером. Ключа здесь нет, пока по
    * ресурсу нечего показывать сверх серверного, — так пропадает вопрос, что

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   characterControllers,
@@ -60,6 +60,7 @@ export async function cancelAbilityArea(
   const command = abilityAreaApplySchema.parse(input),
     hash = areaApplicationHash(command);
   return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT id FROM campaigns WHERE id=${auth.campaignId} FOR UPDATE`);
     await lockEntryApplication(tx, auth.campaignId, command.actionId);
     const [actor] = await tx
       .select({ role: memberships.role, revoked: memberships.accessRevokedAt })

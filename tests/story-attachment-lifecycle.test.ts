@@ -1,3 +1,4 @@
+import {validateTransferMediaEvent} from "../apps/server/src/campaign-transfer-media-events.js";
 import { readFile } from "node:fs/promises";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -85,11 +86,13 @@ beforeEach(async () => {
   await app.ready();
 });
 afterEach(async () => {
-  await app?.close();
-  await pg?.close();
-  await Promise.all(
-    createdFiles.splice(0).map((path) => unlink(path).catch(() => undefined)),
-  );
+  try {
+    await app?.close();
+    if(pg){const events=await pg.query<{row_json:string}>(`SELECT to_jsonb(e)::text AS row_json FROM game_events e WHERE type='STORY_ATTACHMENT_DELETE_REQUESTED'`);for(const event of events.rows)validateTransferMediaEvent(JSON.parse(event.row_json));}
+  } finally {
+    try { await pg?.close(); }
+    finally { await Promise.all(createdFiles.splice(0).map(path=>unlink(path).catch(()=>undefined))); }
+  }
 });
 
 describe("story attachment lifecycle", () => {

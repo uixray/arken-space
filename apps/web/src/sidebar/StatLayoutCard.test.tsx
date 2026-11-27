@@ -1,3 +1,4 @@
+import { installPopoverMock } from "../test-support/dom-mocks";
 // @vitest-environment jsdom
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -82,6 +83,9 @@ const renderCard = async (
       .querySelectorAll("details.stat-field__menu")
       .forEach((menu) => {
         (menu as HTMLDetailsElement).open = true;
+        menu
+          .querySelector<HTMLElement>(".stat-field__menu-items")
+          ?.showPopover();
       });
     await waitFor(() => {
       for (const popup of rendered.container.querySelectorAll<HTMLElement>(
@@ -93,6 +97,19 @@ const renderCard = async (
   return props;
 };
 
+async function openRowActions(label: string) {
+  const summary = screen.getByLabelText("Действия строки «" + label + "»");
+  if (!(summary.closest("details") as HTMLDetailsElement).open)
+    await userEvent.click(summary);
+  await waitFor(() =>
+    expect(
+      summary
+        .closest("details")
+        ?.querySelector(".stat-field__menu-items")
+        ?.matches(":popover-open"),
+    ).toBe(true),
+  );
+}
 describe("карточка группы характеристик", () => {
   it("shows concise text labels for stat row menu actions", async () => {
     await renderCard();
@@ -143,7 +160,7 @@ describe("карточка группы характеристик", () => {
     expect(secondSummary).toHaveFocus();
   });
 
-  it("flips row actions into the available scroll viewport and clamps only when neither side fits", async () => {
+  it("places top-layer row actions against the browser viewport and clamps their height", async () => {
     const props = defaultCardProps();
     const rendered = renderComponent(
       <div
@@ -200,6 +217,7 @@ describe("карточка группы характеристик", () => {
       await userEvent.click(summary);
       fireEvent(menu, new Event("toggle", { bubbles: true }));
       flushFrames();
+      expect(popup.matches(":popover-open")).toBe(true);
       expect(popup.style.top).toBe("522px");
       expect(popup.style.maxHeight).toBe("682px");
 
@@ -282,6 +300,7 @@ describe("карточка группы характеристик", () => {
       fireEvent(menu, new Event("toggle", { bubbles: true }));
       for (const callback of scheduledFrames.splice(0)) callback(0);
 
+      // Browser top-layer popovers are not clipped by either scroll ancestor.
       expect(popup.matches(":popover-open")).toBe(true);
       expect(popup.style.top).toBe("466px");
       expect(popup.style.maxHeight).toBe("302px");
@@ -435,7 +454,7 @@ describe("карточка группы характеристик", () => {
     // придётся сопоставлять обратно, и на двух одинаковых подписях он ошибётся.
     const props = await renderCard();
     await userEvent.click(
-      screen.getByRole("button", { name: "Переименовать «Ловкость»" }),
+      await screen.findByRole("button", { name: "Переименовать «Ловкость»" }),
     );
     const field = screen.getByLabelText("Название");
     await userEvent.clear(field);
@@ -497,6 +516,7 @@ describe("карточка группы характеристик", () => {
     expect(
       screen.getByRole("button", { name: "Переместить «Сила» выше" }),
     ).toBeDisabled();
+    await openRowActions("Ловкость");
     expect(
       screen.getByRole("button", { name: "Переместить «Ловкость» ниже" }),
     ).toBeDisabled();
@@ -612,7 +632,7 @@ describe("карточка группы характеристик", () => {
     expect(await screen.findByText(/Навык: Меч/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Отмена" }));
-    await userEvent.click(screen.getByLabelText("Действия строки «Сила»"));
+    await openRowActions("Сила");
     await userEvent.click(
       await screen.findByRole("button", { name: "Удалить «Сила»" }),
     );
@@ -653,3 +673,9 @@ describe("ключ новой строки", () => {
     expect(statKeyFromLabel("—")).toBe("");
   });
 });
+
+let restorePopover: () => void;
+beforeAll(() => {
+  restorePopover = installPopoverMock();
+});
+afterAll(() => restorePopover());

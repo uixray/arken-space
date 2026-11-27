@@ -55,6 +55,61 @@ type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
  * image. Moved out of routes.ts unchanged (legacy cleanup after the 15.10
  * audit).
  */
+/** Shared HTTP/peer media ACL: authorize before opening any bytes. */
+export async function resolveReadableAsset(db:Database,auth:import("./auth.js").AuthContext,id:string,variant?:"poster",projection?:import("@arken/contracts").GameSnapshot){
+    const [asset] = await db
+      .select()
+      .from(assets)
+      .where(and(eq(assets.id, id), eq(assets.campaignId, auth.campaignId)))
+      .limit(1);
+    if (!asset) return null;
+    // UIX-457: постер есть только у рамки броска; остальным — честный 404.
+    const storageKey =
+      variant === "poster" ? asset.posterStorageKey : asset.storageKey;
+    if (!storageKey) return null;
+    if (auth.role !== "GM") {
+      const [soundUse] = await db
+        .select({ id: campaignSounds.id })
+        .from(campaignSounds)
+        .innerJoin(
+          campaignSoundPacks,
+          eq(campaignSoundPacks.id, campaignSounds.packId),
+        )
+        .where(
+          and(
+            eq(campaignSounds.campaignId, auth.campaignId),
+            eq(campaignSounds.assetId, asset.id),
+          ),
+        )
+        .limit(1);
+      if (soundUse) {
+        const [publicSoundUse] = await db
+          .select({ id: campaignSounds.id })
+          .from(campaignSounds)
+          .innerJoin(
+            campaignSoundPacks,
+            eq(campaignSoundPacks.id, campaignSounds.packId),
+          )
+          .where(
+            and(
+              eq(campaignSounds.campaignId, auth.campaignId),
+              eq(campaignSounds.assetId, asset.id),
+              eq(campaignSounds.audience, "ALL_MEMBERS"),
+              eq(campaignSoundPacks.published, true),
+              eq(campaignSoundPacks.audience, "ALL_MEMBERS"),
+            ),
+          )
+          .limit(1);
+        if (!publicSoundUse)
+          return null;
+      }
+      const snapshot = projection ?? await buildSnapshot(db, auth);
+      if (!snapshot.assets.some((visible) => visible.id === asset.id))
+        return null;
+    }
+    return {asset,storageKey};
+}
+
 export function registerAssetRoutes(
   app: FastifyInstance,
   db: Database,
@@ -571,59 +626,12 @@ export function registerAssetRoutes(
       .object({ variant: z.literal("poster").optional() })
       .passthrough()
       .parse(request.query);
-    const [asset] = await db
-      .select()
-      .from(assets)
-      .where(and(eq(assets.id, id), eq(assets.campaignId, auth.campaignId)))
-      .limit(1);
-    if (!asset) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
-    // UIX-457: постер есть только у рамки броска; остальным — честный 404.
-    const storageKey =
-      variant === "poster" ? asset.posterStorageKey : asset.storageKey;
-    if (!storageKey) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
-    if (auth.role !== "GM") {
-      const [soundUse] = await db
-        .select({ id: campaignSounds.id })
-        .from(campaignSounds)
-        .innerJoin(
-          campaignSoundPacks,
-          eq(campaignSoundPacks.id, campaignSounds.packId),
-        )
-        .where(
-          and(
-            eq(campaignSounds.campaignId, auth.campaignId),
-            eq(campaignSounds.assetId, asset.id),
-          ),
-        )
-        .limit(1);
-      if (soundUse) {
-        const [publicSoundUse] = await db
-          .select({ id: campaignSounds.id })
-          .from(campaignSounds)
-          .innerJoin(
-            campaignSoundPacks,
-            eq(campaignSoundPacks.id, campaignSounds.packId),
-          )
-          .where(
-            and(
-              eq(campaignSounds.campaignId, auth.campaignId),
-              eq(campaignSounds.assetId, asset.id),
-              eq(campaignSounds.audience, "ALL_MEMBERS"),
-              eq(campaignSoundPacks.published, true),
-              eq(campaignSoundPacks.audience, "ALL_MEMBERS"),
-            ),
-          )
-          .limit(1);
-        if (!publicSoundUse)
-          return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
-      }
-      const snapshot = await buildSnapshot(db, auth);
-      if (!snapshot.assets.some((visible) => visible.id === asset.id))
-        return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
-    }
+    const readable=await resolveReadableAsset(db,auth,id,variant);
+    if(!readable)return reply.code(404).send({error:"ASSET_NOT_FOUND"});
+    const {asset,storageKey}=readable;
     try {
       const file = await openStoredFile(storageKey, request.headers.range);
-      const etag = assetContentVersion(storageKey);
+      const etag = assetContentVersion(storageKey.startsWith("import-media/") ? storageKey+"\0"+file.cacheRevision : storageKey);
       reply.header("ETag", etag);
       reply.header("Cache-Control", "private, no-cache");
       if (request.headers["if-none-match"] === etag) {

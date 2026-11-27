@@ -24,7 +24,12 @@ import { Empty } from "./MediaPanel";
 import { canPlaceTokenDefinition } from "../token-placement";
 import { TokenSpriteEditor } from "./TokenSpriteEditor";
 
-export function PalettePanel(props: Props) {
+export function PalettePanel(
+  props: Props & {
+    onSpriteUploadRiskChange?: (risky: boolean) => void;
+    onSpriteDirtyChange?: (dirty: boolean) => void;
+  },
+) {
   const {
     token: tokenActions,
     asset: assetActions,
@@ -36,9 +41,38 @@ export function PalettePanel(props: Props) {
   >(null);
   const [editorNotice, setEditorNotice] = useState("");
   const [spriteEditorId, setSpriteEditorId] = useState<string | null>(null);
-  const spriteDefinition = definitions.find(
-    (item) => item.id === spriteEditorId,
+  const [spriteUploadRisk, setSpriteUploadRisk] = useState(false);
+  const [spriteDirty, setSpriteDirty] = useState(false);
+  const [spriteFallback, setSpriteFallback] = useState<
+    (typeof definitions)[number] | null
+  >(null);
+  useEffect(() => {
+    props.onSpriteUploadRiskChange?.(spriteUploadRisk);
+  }, [spriteUploadRisk, props.onSpriteUploadRiskChange]);
+  useEffect(
+    () => () => props.onSpriteUploadRiskChange?.(false),
+    [props.onSpriteUploadRiskChange],
   );
+  useEffect(() => {
+    props.onSpriteDirtyChange?.(spriteDirty);
+  }, [spriteDirty, props.onSpriteDirtyChange]);
+  useEffect(
+    () => () => props.onSpriteDirtyChange?.(false),
+    [props.onSpriteDirtyChange],
+  );
+  const mayDiscardSprite = () =>
+    !spriteDirty ||
+    window.confirm(
+      "Несохранённый набор фигурки будет потерян. Загруженные файлы останутся в медиатеке. Продолжить?",
+    );
+  const spriteDefinition =
+    definitions.find((item) => item.id === spriteEditorId) ??
+    ((spriteUploadRisk || spriteDirty) && spriteFallback?.id === spriteEditorId
+      ? spriteFallback
+      : undefined);
+  const spriteDefinitionRemoved =
+    !!spriteDefinition &&
+    !definitions.some((item) => item.id === spriteEditorId);
   const [deleteDefinition, setDeleteDefinition] = useState<
     (typeof definitions)[number] | null
   >(null);
@@ -151,6 +185,7 @@ export function PalettePanel(props: Props) {
                       <Button
                         size="s"
                         view="flat"
+                        disabled={spriteUploadRisk}
                         title="Токен станет зваться как персонаж и будет переименовываться вместе с ним"
                         onClick={() =>
                           void tokenActions.onPatchTokenDefinition(
@@ -167,6 +202,7 @@ export function PalettePanel(props: Props) {
                 })()}
                 <FormSelect
                   aria-label={`Изображение токена ${definition.name}`}
+                  disabled={spriteUploadRisk}
                   value={definition.defaultAssetId ?? ""}
                   onChange={(event) =>
                     void tokenActions.onPatchTokenDefinition(
@@ -194,10 +230,22 @@ export function PalettePanel(props: Props) {
                 )}
                 {props.snapshot.me.role === "GM" && (
                   <div className="inline-fields">
-                    <Button onClick={() => setSpriteEditorId(definition.id)}>
+                    <Button
+                      disabled={spriteUploadRisk}
+                      onClick={() => {
+                        if (
+                          spriteEditorId !== definition.id &&
+                          !mayDiscardSprite()
+                        )
+                          return;
+                        setSpriteFallback(definition);
+                        setSpriteEditorId(definition.id);
+                      }}
+                    >
                       Фигурка
                     </Button>
                     <Button
+                      disabled={spriteUploadRisk}
                       onClick={() => {
                         setEditorNotice("");
                         setEditor(definition);
@@ -207,6 +255,7 @@ export function PalettePanel(props: Props) {
                     </Button>
                     <Button
                       className="danger-link"
+                      disabled={spriteUploadRisk}
                       view="flat-danger"
                       size="s"
                       onClick={() => setDeleteDefinition(definition)}
@@ -221,12 +270,29 @@ export function PalettePanel(props: Props) {
         })}
       </div>
       {spriteDefinition && props.snapshot.me.role === "GM" && (
-        <TokenSpriteEditor
-          key={`${props.snapshot.campaign.id}:${props.snapshot.me.id}:${spriteDefinition.id}`}
-          definition={spriteDefinition}
-          refresh={assetActions.refreshAssets}
-          onClose={() => setSpriteEditorId(null)}
-        />
+        <>
+          {spriteDefinitionRemoved && (
+            <p role="alert">
+              Определение токена больше недоступно. Завершите или отмените
+              повтор загрузки; сохранить набор к удалённому определению нельзя.
+              Загруженные файлы останутся в медиатеке.
+            </p>
+          )}
+          <TokenSpriteEditor
+            key={`${props.snapshot.campaign.id}:${props.snapshot.me.id}:${spriteDefinition.id}`}
+            definition={spriteDefinition}
+            onUploadRiskChange={setSpriteUploadRisk}
+            onDirtyChange={setSpriteDirty}
+            definitionUnavailable={spriteDefinitionRemoved}
+            refresh={assetActions.refreshAssets}
+            onClose={(saved) => {
+              if (saved || mayDiscardSprite()) {
+                setSpriteDirty(false);
+                setSpriteEditorId(null);
+              }
+            }}
+          />
+        </>
       )}
       {editor && (
         <TokenDefinitionEditor

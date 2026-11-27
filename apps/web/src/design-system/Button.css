@@ -110,7 +110,7 @@
 .arken-button--action {
   background-color: var(--color-accent, #c46f49);
   border-color: var(--color-accent, #c46f49);
-  color: #ffffff;
+  color: var(--button-primary-ink, #ffffff);
   font-weight: 600;
 }
 .arken-button--view-action:hover:not(:disabled):not(.arken-button--disabled),

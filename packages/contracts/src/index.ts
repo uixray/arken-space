@@ -5,8 +5,14 @@ export * from "./creation-lifecycle.js";
 export * from "./creation-store.js";
 export * from "./creation-commands.js";
 export * from "./token-sprites.js";
+export * from "./isometric-geometry.js";
+export * from "./three-d-map.js";
+export * from "./local-session.js";
+import { localPeerBindingSchema } from "./local-session.js";
 export * from "./bug-intake.js";
 import { z } from "zod";
+import { isometricSceneGeometrySchema } from "./isometric-geometry.js";
+import { map3dSpecSchema } from "./three-d-map.js";
 import {
   cartographicLabelSchema,
   type CartographicLabelConfig,
@@ -1200,6 +1206,9 @@ export interface PlayerAccessSecretDto {
 }
 
 export const gridSchema = z.object({
+  /** Optional explicit calibration; legacy scenes retain their original pixel plane. */
+  isometric: isometricSceneGeometrySchema.optional(),
+  threeD: map3dSpecSchema.optional(),
   /** GM-authored scale; absent/null means metres cannot be inferred. */
   metersPerCell: z
     .number()
@@ -1321,12 +1330,43 @@ export const moveTokenSchema = z.object({
   levelId: z.string().uuid().nullable().default(null),
   revision: z.number().int().nonnegative(),
 });
+export const localChatHistorySchema=z.object({threadId:z.string().uuid(),before:z.coerce.number().int().positive().optional(),limit:z.coerce.number().int().min(1).max(100).default(50)}).strict();
+export const localAttachmentUploadChunkSchema=z.object({kind:z.literal("CHAT_UPLOAD_CHUNK"),uploadId:z.string().uuid(),fileName:z.string().min(1).max(255),total:z.number().int().min(1).max(100*1024*1024),sha256:z.string().regex(/^[a-f0-9]{64}$/),offset:z.number().int().min(0).max(100*1024*1024),base64:z.string().min(4).max(21848).regex(/^[A-Za-z0-9+/]*={0,2}$/)}).strict();
+export const undoApplicationCommandSchema=z.object({actionId:z.string().uuid(),messageId:z.string().uuid()}).strict();
+export const localCommandErrorSchema=z.object({status:z.union([z.literal(400),z.literal(403),z.literal(404),z.literal(409)]),code:z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/),notApplied:z.literal(true).optional()}).strict();
+export const localPeerRequestSchema = z.object({
+  peer: localPeerBindingSchema,
+  command: z.discriminatedUnion("kind", [
+    localAttachmentUploadChunkSchema,
+    z.object({kind:z.literal("AREA_APPLY"),payload:z.lazy(()=>abilityAreaApplySchema)}).strict(),
+    z.object({kind:z.literal("AREA_CANCEL"),payload:z.lazy(()=>abilityAreaApplySchema)}).strict(),
+    z.object({kind:z.literal("APPLICATION_UNDO"),payload:undoApplicationCommandSchema}).strict(),
+    z.object({kind:z.literal("CHARACTER_COUNTERS"),characterId:z.string().uuid(),payload:z.lazy(()=>characterCountersCommandSchema)}).strict(),
+    z.object({kind:z.literal("ENTRY_ROLL"),characterId:z.string().uuid(),entryId:z.string().uuid(),payload:z.lazy(()=>entryRollRequestSchema)}).strict(),
+    z.object({kind:z.literal("ENTRY_RECHARGE"),characterId:z.string().uuid(),entryId:z.string().uuid(),payload:z.lazy(()=>rechargeEntryCommandSchema.strict())}).strict(),
+    z.object({kind:z.literal("TOKEN_MOVE"),payload:moveTokenSchema.strict()}).strict(),
+    z.object({kind:z.literal("SNAPSHOT")}).strict(),
+    z.object({kind:z.literal("DIRECT_OPEN"),payload:z.lazy(()=>createOrGetDirectChatThreadSchema)}).strict(),
+    z.object({kind:z.literal("DIRECT_SEND"),payload:z.lazy(()=>createDirectChatMessageSchema)}).strict(),
+    z.object({kind:z.literal("CHAT_HISTORY"),payload:localChatHistorySchema}).strict(),
+    z.object({kind:z.literal("CHAT_READ"),payload:z.lazy(()=>markChatThreadReadSchema)}).strict(),
+    z.object({kind:z.literal("DICE_ROLL"),payload:z.lazy(()=>diceRequestSchema)}).strict(),
+    z.object({kind:z.literal("CHAT_SEND"),payload:z.lazy(()=>createChatMessageSchema)}).strict(),
+    z.object({kind:z.literal("CHAT_ATTACHMENT_CHUNK"),contentId:z.string().uuid(),offset:z.number().int().min(0).max(2147483647),version:z.string().regex(/^[a-f0-9]{64}$/).optional()}).strict(),
+    z.object({kind:z.literal("STORY_MEDIA_CHUNK"),contentId:z.string().uuid(),offset:z.number().int().min(0).max(2147483647),version:z.string().regex(/^[a-f0-9]{64}$/).optional()}).strict(),
+    z.object({kind:z.literal("ASSET_CHUNK"),assetId:z.string().uuid(),variant:z.literal("poster").optional(),offset:z.number().int().min(0).max(2147483647),version:z.string().regex(/^[a-f0-9]{64}$/).optional()}).strict(),
+    z.object({kind:z.literal("SOUNDPAD_READ")}).strict(),
+    z.object({kind:z.literal("CANVAS_HISTORY"),sceneId:z.string().uuid()}).strict(),
+    z.object({kind:z.literal("STORY_PAGE"),query:z.record(z.string(),z.unknown())}).strict(),
+  ]),
+}).strict();
 export const tokenMovingSchema = moveTokenSchema.extend({
   sceneId: z.string().uuid().optional(),
   snapshotVersion: z.number().int().nonnegative().optional(),
   previewEpoch: z.string().uuid().optional(),
   hold: z.boolean().optional(),
 });
+export const localPreviewSubmitSchema=z.object({kind:z.literal("PREVIEW_SEND"),peer:localPeerBindingSchema,movement:tokenMovingSchema.strict()}).strict();
 export const deleteTokenSchema = z.object({
   actionId: actionIdSchema,
   revision: z.number().int().nonnegative(),
@@ -1342,6 +1382,7 @@ export const replaceCharacterControllersSchema = z.object({
   controllerMembershipIds: z.array(z.string().uuid()).max(50),
 });
 export const placeTokenDefinitionSchema = z.object({
+  levelId: z.string().uuid().nullable().optional(),
   actionId: actionIdSchema,
   placementId: z.string().uuid().optional(),
   definitionId: z.string().uuid(),
@@ -1433,6 +1474,7 @@ export const renameCommandSchema = revisionCommandSchema.extend({
 
 export const createFogRevealSchema = z
   .object({
+    levelId: z.string().uuid().nullable().optional(),
     actionId: actionIdSchema,
     sceneId: z.string().uuid(),
     x: z.number().finite().optional(),
@@ -1499,6 +1541,7 @@ const isValidDrawingSource = (source: {
     : STAMP_TEMPLATE_KEY_PATTERN.test(source.assetKey);
 export const createDrawingSchema = z
   .object({
+    levelId: z.string().uuid().nullable().optional(),
     actionId: actionIdSchema,
     sceneId: z.string().uuid(),
     kind: z.literal("FREEHAND").optional(),
@@ -1514,6 +1557,7 @@ export const createDrawingSchema = z
         actionId: actionIdSchema,
         sceneId: z.string().uuid(),
         kind: z.literal("STAMP"),
+        levelId: z.string().uuid().nullable().optional(),
         /**
          * UIX-706: a built-in template key from the server catalog manifest,
          * or — for `campaign-image` — the id of a campaign IMAGE asset. The
@@ -1538,6 +1582,7 @@ export const createDrawingSchema = z
         actionId: actionIdSchema,
         sceneId: z.string().uuid(),
         kind: z.literal("TEXTURE"),
+        levelId: z.string().uuid().nullable().optional(),
         /** Brush polyline, relative to x/y like a freehand drawing. */
         points: drawingPointsSchema,
         brushWidth: z
@@ -2018,6 +2063,7 @@ export const chatAttachmentContentIdSchema = z.string().uuid();
 export const chatAttachmentMetadataSchema = z
   .object({
     contentId: chatAttachmentContentIdSchema,
+    url:z.string().startsWith("blob:").optional(),
     fileName: z.string().trim().min(1).max(255),
     mimeType: z.string().trim().min(1).max(127),
     sizeBytes: z.number().int().positive(),
@@ -2774,6 +2820,7 @@ export interface TokenDto {
 }
 
 export interface FogRevealDto {
+  levelId?: string | null;
   id: string;
   sceneId: string;
   x: number;
@@ -2788,6 +2835,7 @@ export interface FogRevealDto {
 }
 
 export interface DrawingDto {
+  levelId?: string | null;
   id: string;
   sceneId: string;
   authorMembershipId: string;
@@ -3330,8 +3378,12 @@ export interface GameSnapshot {
   /** UIX-382: full multi-track mixer state, ordered by slotOrder. */
   audioTracks: AudioTrackDto[];
   snapshotVersion: number;
+  /** Exact PostgreSQL event sequence; optional only for legacy snapshots. */
+  snapshotSequence?: string;
   schemaVersion: number;
   buildVersion: string;
+  /** Local owner control plane capability; never a connectivity guarantee. */
+  localSessionBridge?: boolean;
   buildRevision: string;
   serverTime: string;
 }
@@ -3341,6 +3393,11 @@ export interface EventEnvelope<T> {
   actionId: string;
   emittedAt: string;
   data: T;
+}
+
+export interface ChatCreatedEvent extends EventEnvelope<ChatMessageDto> {
+  /** Terminal marker for a previously visible application in the same thread. */
+  cancelledApplicationMessageId?: string;
 }
 
 export interface CommandAck<T = unknown> {
@@ -3370,8 +3427,17 @@ export interface StoryChangedEvent {
   postId: string | null;
 }
 
+/** Replacements of top-level fields in a previously delivered canonical image. */
+export interface SnapshotDelta {
+  baseId: string;
+  id: string;
+  changes: Partial<GameSnapshot>;
+  removed: Array<keyof GameSnapshot>;
+}
+
 export interface ServerToClientEvents {
-  "game:snapshot": (snapshot: GameSnapshot) => void;
+  "game:snapshot": (snapshot: GameSnapshot, deliveryId?: string) => void;
+  "game:delta": (delta: SnapshotDelta) => void;
   "presence:updated": (
     members: Array<{ membershipId: string; online: boolean }>,
   ) => void;
@@ -3398,7 +3464,7 @@ export interface ServerToClientEvents {
   "drawing:removed": (
     event: EventEnvelope<{ drawingId: string; sceneId: string }>,
   ) => void;
-  "chat:created": (event: EventEnvelope<ChatMessageDto>) => void;
+  "chat:created": (event: ChatCreatedEvent) => void;
   "story:changed": (event: StoryChangedEvent) => void;
   "player-request:changed": (request: PlayerRequestDto) => void;
   "chat:thread_created": (event: {
@@ -3922,3 +3988,5 @@ export const deleteWorldContentInstanceSchema = z
 export type DeleteWorldContentInstance = z.infer<
   typeof deleteWorldContentInstanceSchema
 >;
+
+export {parseSnapshotSequence,exactSnapshotSequence,compareSnapshotSequence,advanceSnapshotVersion} from "./snapshot-sequence.js";

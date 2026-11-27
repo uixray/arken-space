@@ -1,3 +1,5 @@
+import {env} from "./env.js";
+import {registerCloudSyncRoutes} from "./cloud-sync-routes.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import {
@@ -399,6 +401,12 @@ export function registerAccountAuthRoutes(
     return true;
   };
 
+  registerCloudSyncRoutes(app,db,async(request,reply)=>{
+    if(!requireEnabled()){unavailable(reply);return null;}
+    if(!(await requireWriteOrigin(request,reply)))return null;
+    return requireAccountCsrf(request,reply,db,options);
+  });
+
   app.get("/api/account/capabilities", async (_request, reply) => {
     return reply.send(
       accountCapabilitiesSchema.parse({
@@ -410,6 +418,9 @@ export function registerAccountAuthRoutes(
         campaignCreationEnabled:
           options.enabled && options.campaignCreationEnabled,
         ...(options.localInstanceId ? { localAccounts: true } : {}),
+        ...(options.enabled&&env.DEPLOYMENT_MODE==="LOCAL_HOST"&&env.CAMPAIGN_TRANSFER_IMPORT_ENABLED ? {campaignTransferImportEnabled:true} : {}),
+        ...(options.enabled&&(env.DEPLOYMENT_MODE==="HOSTED"||env.DEPLOYMENT_MODE==="LOCAL_HOST")&&env.CAMPAIGN_TRANSFER_ENABLED ? {campaignTransferEnabled:true} : {}),
+        ...(env.DEPLOYMENT_MODE==="HOSTED"&&env.CLOUD_SYNC_STAGING_ENABLED ? {cloudSyncStagingEnabled:true} : {}),
       }),
     );
   });

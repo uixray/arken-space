@@ -1,3 +1,6 @@
+import {stageChatAttachment} from "./chat-attachment-upload.js";
+import {readChatHistory,markChatRead,ChatReadError} from "./chat-read-command.js";
+import {openDirectChat,submitDirectChat,DirectChatError} from "./direct-chat-command.js";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
 import { and, desc, eq, gt, inArray, lt, or, sql, sum } from "drizzle-orm";
@@ -24,6 +27,7 @@ import {
   gameEvents,
   memberships,
 } from "@arken/db";
+import {submitStreamChat,StreamChatError} from "./stream-chat-command.js";
 import { requireAuth } from "./auth.js";
 import { env } from "./env.js";
 import { fullChatVisibilityFilter, loadThreadHistory } from "./chat-history.js";
@@ -346,104 +350,20 @@ export function registerChatRoutes(
     const buffer = await file.toBuffer();
     if (file.file.truncated)
       return reply.code(400).send({ error: "IMAGE_TOO_LARGE" });
-    const [assetUsage, feedbackUsage, chatUsage] = await Promise.all([
-      db.select({ used: sum(assets.sizeBytes) }).from(assets),
-      db
-        .select({ used: sum(feedbackAttachments.sizeBytes) })
-        .from(feedbackAttachments),
-      db
-        .select({ used: sum(chatAttachmentUploads.sizeBytes) })
-        .from(chatAttachmentUploads),
-    ]);
-    const usedBytes =
-      Number(assetUsage[0]?.used ?? 0) +
-      Number(feedbackUsage[0]?.used ?? 0) +
-      Number(chatUsage[0]?.used ?? 0);
-    await assertStorageCapacity(usedBytes, buffer.length);
-    let stored: Awaited<ReturnType<typeof storeUpload>> | undefined;
     try {
-      stored = await storeUpload(buffer, "image");
-      const [upload] = await db
-        .insert(chatAttachmentUploads)
-        .values({
-          campaignId: auth.campaignId,
-          uploadedByMembershipId: auth.membershipId,
-          fileName: file.filename.slice(0, 255),
-          storageKey: stored.storageKey,
-          mimeType: stored.mimeType,
-          sizeBytes: stored.sizeBytes,
-          width: stored.width,
-          height: stored.height,
-          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-        })
-        .returning();
-      if (!upload) throw new Error("UPLOAD_FAILED");
-      return reply.code(201).send({
-        contentId: upload.contentId,
-        fileName: upload.fileName,
-        mimeType: upload.mimeType,
-        sizeBytes: upload.sizeBytes,
-        width: upload.width,
-        height: upload.height,
-        createdAt: upload.createdAt.toISOString(),
-      });
-    } catch (error) {
-      if (stored) await removeStoredUpload(stored.storageKey);
-      return reply.code(400).send({ error: publicUploadError(error) });
+      return reply.code(201).send(await stageChatAttachment(db,auth,buffer,file.filename));
+    } catch(error) {
+      return reply.code(400).send({error:publicUploadError(error)});
     }
   });
 
   app.post("/api/chat/direct", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    const body = createOrGetDirectChatThreadSchema.parse(request.body);
-    const [participant] = await db
-      .select({ id: memberships.id })
-      .from(memberships)
-      .where(
-        and(
-          eq(memberships.campaignId, auth.campaignId),
-          eq(memberships.id, body.participantMembershipId),
-        ),
-      )
-      .limit(1);
-    if (!participant || participant.id === auth.membershipId)
-      return reply.code(404).send({ error: "CHAT_THREAD_NOT_FOUND" });
-    const { thread, created } = await createOrGetDirectThread(
-      db,
-      auth,
-      participant.id,
-    );
-    const participantIds = directThreadMemberIds(thread);
-    const participantRows = await db
-      .select({
-        membershipId: memberships.id,
-        displayName: memberships.displayName,
-      })
-      .from(memberships)
-      .where(
-        and(
-          eq(memberships.campaignId, auth.campaignId),
-          inArray(memberships.id, participantIds),
-        ),
-      );
-    const byId = new Map(
-      participantRows.map((item) => [item.membershipId, item]),
-    );
-    const dto = {
-      id: thread.id,
-      campaignId: thread.campaignId,
-      type: "DIRECT" as const,
-      stream: null,
-      participants: participantIds
-        .map((id) => byId.get(id)!)
-        .filter(Boolean) as [
-        { membershipId: string; displayName: string },
-        { membershipId: string; displayName: string },
-      ],
-      createdAt: thread.createdAt.toISOString(),
-      updatedAt: thread.updatedAt.toISOString(),
-    };
+    let saved;
+    try{saved=await openDirectChat(db,auth,request.body);}catch(error){if(error instanceof DirectChatError)return reply.code(error.status).send({error:error.message});throw error;}
+    const {dto,created,participantIds}=saved;
+    const thread=dto;
     if (created) {
       const event = {
         thread: dto,
@@ -464,158 +384,17 @@ export function registerChatRoutes(
   app.post("/api/chat/direct/messages", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    const body = createDirectChatMessageSchema.parse(request.body);
-    let thread;
-    try {
-      thread = await resolveChatThread(
-        db,
-        auth,
-        { threadId: body.threadId },
-        [],
-        { allowDirect: true },
-      );
-    } catch {
-      return reply.code(404).send({ error: "CHAT_THREAD_NOT_FOUND" });
-    }
-    if (thread.type !== "DIRECT")
-      return reply.code(404).send({ error: "CHAT_THREAD_NOT_FOUND" });
-    const duplicate = await findAction(db, auth.campaignId, body.actionId);
-    if (duplicate) {
-      if (
-        duplicate.membershipId === auth.membershipId &&
-        duplicate.type === "chat.created" &&
-        duplicate.payload &&
-        typeof duplicate.payload === "object" &&
-        "threadId" in duplicate.payload &&
-        duplicate.payload.threadId === thread.id
-      )
-        return reply.code(200).send(duplicate.payload);
-      return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
-    }
+    const body=createDirectChatMessageSchema.parse(request.body);
     let saved;
-    try {
-      saved = await db.transaction(async (tx) => {
-        const attachmentIds = body.attachmentContentIds;
-        const claimNow = new Date();
-        const staged = attachmentIds.length
-          ? await tx
-              .select()
-              .from(chatAttachmentUploads)
-              .where(
-                and(
-                  eq(chatAttachmentUploads.campaignId, auth.campaignId),
-                  eq(
-                    chatAttachmentUploads.uploadedByMembershipId,
-                    auth.membershipId,
-                  ),
-                  eq(chatAttachmentUploads.status, "STAGED"),
-                  gt(chatAttachmentUploads.expiresAt, claimNow),
-                  inArray(chatAttachmentUploads.contentId, attachmentIds),
-                ),
-              )
-              .for("update")
-          : [];
-        if (staged.length !== attachmentIds.length)
-          throw new Error("CHAT_ATTACHMENT_NOT_FOUND");
-        if (staged.length) {
-          // Serialize claims against lifecycle deletion. The lock prevents a
-          // DELETE from expiring/removing the blob between validation and ref
-          // insertion; the guarded update also rejects stale/non-owned rows.
-          const claimed = await tx
-            .update(chatAttachmentUploads)
-            .set({ status: "CLAIMED" })
-            .where(
-              and(
-                eq(chatAttachmentUploads.campaignId, auth.campaignId),
-                eq(
-                  chatAttachmentUploads.uploadedByMembershipId,
-                  auth.membershipId,
-                ),
-                eq(chatAttachmentUploads.status, "STAGED"),
-                gt(chatAttachmentUploads.expiresAt, claimNow),
-                inArray(chatAttachmentUploads.contentId, attachmentIds),
-              ),
-            )
-            .returning({ contentId: chatAttachmentUploads.contentId });
-          if (claimed.length !== attachmentIds.length)
-            throw new Error("CHAT_ATTACHMENT_NOT_FOUND");
-        }
-        const [row] = await tx
-          .insert(chatMessages)
-          .values({
-            campaignId: auth.campaignId,
-            membershipId: auth.membershipId,
-            characterId: null,
-            threadId: thread.id,
-            body: body.body,
-            visibility: "PUBLIC",
-          })
-          .returning();
-        if (!row) throw new Error("MESSAGE_CREATE_FAILED");
-        if (staged.length) {
-          await tx.insert(chatAttachments).values(
-            staged.map((upload) => ({
-              contentId: upload.contentId,
-              campaignId: auth.campaignId,
-              threadId: thread.id,
-              messageId: row.id,
-            })),
-          );
-        }
-        const dto = {
-          ...chatMessageDto(row, auth.displayName, null),
-          attachments: staged.map((upload) => ({
-            contentId: upload.contentId,
-            fileName: upload.fileName,
-            mimeType: upload.mimeType,
-            sizeBytes: upload.sizeBytes,
-            width: upload.width,
-            height: upload.height,
-            createdAt: upload.createdAt.toISOString(),
-          })),
-        };
-        const [event] = await tx
-          .insert(gameEvents)
-          .values({
-            campaignId: auth.campaignId,
-            actionId: body.actionId,
-            membershipId: auth.membershipId,
-            type: "chat.created",
-            entityType: "chat",
-            entityId: row.id,
-            payload: dto,
-          })
-          .returning();
-        if (!event) throw new Error("EVENT_RECORD_FAILED");
-        return { dto, event };
-      });
-    } catch (error) {
-      const replay = await findAction(db, auth.campaignId, body.actionId);
-      if (
-        replay?.membershipId === auth.membershipId &&
-        replay.type === "chat.created" &&
-        replay.payload &&
-        typeof replay.payload === "object" &&
-        "threadId" in replay.payload &&
-        replay.payload.threadId === thread.id
-      )
-        return reply.code(200).send(replay.payload);
-      if (replay) return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
-      if (
-        error instanceof Error &&
-        error.message === "CHAT_ATTACHMENT_NOT_FOUND"
-      )
-        return reply.code(404).send({ error: "CHAT_ATTACHMENT_NOT_FOUND" });
-      throw error;
-    }
-
+    try{saved=await submitDirectChat(db,auth,body);}catch(error){if(error instanceof DirectChatError)return reply.code(error.status).send({error:error.message});throw error;}
+    if(saved.duplicate)return reply.code(200).send(saved.dto);
     const envelope = {
       sequence: Number(saved.event.sequence),
       actionId: body.actionId,
       emittedAt: saved.event.createdAt.toISOString(),
       data: saved.dto,
     };
-    for (const membershipId of directThreadMemberIds(thread))
+    for (const membershipId of saved.participantIds)
       io.to(memberRoom(membershipId)).emit("chat:created", envelope);
     return reply.code(201).send(saved.dto);
   });
@@ -634,102 +413,23 @@ export function registerChatRoutes(
   app.get("/api/chat/threads/:threadId/messages", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    const params = z
-      .object({ threadId: z.string().uuid() })
-      .parse(request.params);
-    const query = z
-      .object({
-        before: z.coerce.number().int().positive().optional(),
-        limit: z.coerce.number().int().min(1).max(100).default(50),
-      })
-      .parse(request.query);
-
-    const memberRows = await db
-      .select()
-      .from(memberships)
-      .where(eq(memberships.campaignId, auth.campaignId));
-    const visibleRequests = await listVisiblePlayerRequests(db, auth);
-
-    reply.header("Cache-Control", "private, no-store");
-    return loadThreadHistory(db, auth, {
-      threadId: params.threadId,
-      before: query.before,
-      limit: query.limit,
-      memberNameById: new Map(
-        memberRows.map((member) => [member.id, member.displayName]),
-      ),
-      visiblePlayerRequestIds: new Set(
-        visibleRequests.map((item: { id: string }) => item.id),
-      ),
-    });
+    const params=z.object({threadId:z.string().uuid()}).parse(request.params);
+    reply.header("Cache-Control","private, no-store");
+    const query=z.object({before:z.coerce.number().int().positive().optional(),limit:z.coerce.number().int().min(1).max(100).default(50)}).parse(request.query);
+    return readChatHistory(db,auth,{...query,threadId:params.threadId});
   });
 
   app.post("/api/chat", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    const body = createChatMessageSchema.parse(request.body);
-    let thread;
-    try {
-      thread = await resolveChatThread(db, auth, body, ["TABLE", "STORY"]);
-      if (thread.type !== "STREAM" || !thread.stream)
-        throw new Error("CHAT_THREAD_NOT_FOUND");
-      if (!canPostToStream(auth, thread.stream))
-        throw new Error("CHAT_THREAD_FORBIDDEN");
-    } catch (error) {
-      const code =
-        error instanceof Error ? error.message : "CHAT_THREAD_FORBIDDEN";
-      return reply
-        .code(code === "CHAT_THREAD_NOT_FOUND" ? 404 : 403)
-        .send({ error: code });
+    let saved;
+    try{saved=await submitStreamChat(db,auth,request.body);}catch(error){
+      if(error instanceof StreamChatError)return reply.code(error.status).send({error:error.message});
+      throw error;
     }
-    const duplicate = await findAction(db, auth.campaignId, body.actionId);
-    if (duplicate) return reply.code(200).send({ duplicate: true });
-    let characterId: string | null = null;
-    if (body.characterId) {
-      const [character] = await db
-        .select()
-        .from(characters)
-        .where(
-          and(
-            eq(characters.id, body.characterId),
-            eq(characters.campaignId, auth.campaignId),
-          ),
-        )
-        .limit(1);
-      if (!character || !(await canAccessCharacter(db, auth, character)))
-        return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
-      characterId = character.id;
-    }
-    const saved = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .insert(chatMessages)
-        .values({
-          campaignId: auth.campaignId,
-          membershipId: auth.membershipId,
-          characterId,
-          threadId: thread.id,
-          body: body.body,
-          visibility: body.visibility,
-        })
-        .returning();
-      if (!row) throw new Error("MESSAGE_CREATE_FAILED");
-      const dto = chatMessageDto(row, auth.displayName, thread.stream);
-      const [event] = await tx
-        .insert(gameEvents)
-        .values({
-          campaignId: auth.campaignId,
-          actionId: body.actionId,
-          membershipId: auth.membershipId,
-          type: "chat.created",
-          entityType: "chat",
-          entityId: row.id,
-          payload: dto,
-        })
-        .returning();
-      if (!event) throw new Error("EVENT_RECORD_FAILED");
-      return { row, dto, event };
-    });
-    const { row, dto, event } = saved;
+    if(saved.duplicate)return reply.code(200).send({duplicate:true});
+    const {row,dto,event}=saved;
+    const body=createChatMessageSchema.parse(request.body);
     const envelope = {
       sequence: Number(event.sequence),
       actionId: body.actionId,
@@ -748,76 +448,6 @@ export function registerChatRoutes(
   app.post("/api/chat/read", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    const body = markChatThreadReadSchema.parse(request.body);
-    let thread;
-    try {
-      thread = await resolveChatThread(
-        db,
-        auth,
-        { threadId: body.threadId },
-        ["ROLLS", "STORY", "TABLE"],
-        { allowDirect: true },
-      );
-    } catch (error) {
-      const code =
-        error instanceof Error ? error.message : "CHAT_THREAD_FORBIDDEN";
-      return reply
-        .code(code === "CHAT_THREAD_NOT_FOUND" ? 404 : 403)
-        .send({ error: code });
-    }
-    const visiblePlayerRequestIds = new Set(
-      (await listVisiblePlayerRequests(db, auth)).map((item) => item.id),
-    );
-    const [latest] = await db
-      .select({ sequence: chatMessages.sequence })
-      .from(chatMessages)
-      .where(
-        and(
-          eq(chatMessages.campaignId, auth.campaignId),
-          eq(chatMessages.threadId, thread.id),
-          fullChatVisibilityFilter(auth, visiblePlayerRequestIds),
-        ),
-      )
-      .orderBy(desc(chatMessages.sequence))
-      .limit(1);
-    const [previousCursor] = await db
-      .select({ lastReadSequence: chatReadCursors.lastReadSequence })
-      .from(chatReadCursors)
-      .where(
-        and(
-          eq(chatReadCursors.membershipId, auth.membershipId),
-          eq(chatReadCursors.threadId, thread.id),
-        ),
-      )
-      .limit(1);
-    const nextSequence = clampReadSequence(
-      previousCursor?.lastReadSequence ?? 0,
-      body.sequence,
-      latest?.sequence ?? 0,
-    );
-    const [cursor] = await db
-      .insert(chatReadCursors)
-      .values({
-        campaignId: auth.campaignId,
-        membershipId: auth.membershipId,
-        threadId: thread.id,
-        lastReadSequence: nextSequence,
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [chatReadCursors.membershipId, chatReadCursors.threadId],
-        set: {
-          lastReadSequence: sql`greatest(${chatReadCursors.lastReadSequence}, ${nextSequence})`,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
-    if (!cursor) throw new Error("CHAT_CURSOR_UPDATE_FAILED");
-    return {
-      campaignId: cursor.campaignId,
-      threadId: cursor.threadId,
-      lastReadSequence: cursor.lastReadSequence,
-      updatedAt: cursor.updatedAt.toISOString(),
-    };
+    try{return await markChatRead(db,auth,request.body);}catch(error){if(error instanceof ChatReadError)return reply.code(error.status).send({error:error.message});throw error;}
   });
 }

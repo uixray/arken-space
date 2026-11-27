@@ -1,5 +1,6 @@
+import {ApiError} from "../api";
 // @vitest-environment jsdom
-import type { ReactElement } from "react";
+import type { ReactElement,ComponentProps } from "react";
 import { installMatchMediaMock } from "../test-support/dom-mocks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
@@ -59,6 +60,7 @@ function renderDirect(
     accepted: false,
     messageIds: [],
   })),
+  uploader:ComponentProps<typeof DirectChatPanel>["onUploadAttachment"]=noop as never,
 ) {
   const current = snapshot();
   window.localStorage.setItem(
@@ -76,7 +78,7 @@ function renderDirect(
         onCreateThread={noop as never}
         onDirectChat={noop as never}
         onSticker={noop as never}
-        onUploadAttachment={noop as never}
+        onUploadAttachment={uploader}
         onMarkChatRead={noop as never}
       />
     </CampaignActionsContext.Provider>,
@@ -93,6 +95,18 @@ describe("DirectChatPanel history", () => {
       writable: true,
       value: vi.fn(),
     });
+  });
+
+  it.each([
+    [new ApiError(400,"IMAGE_TOO_LARGE","Изображение превышает допустимый размер."),"Изображение превышает допустимый размер."],
+    [Error("PRIVATE internal failure"),"Не удалось загрузить изображение."],
+  ] as const)("показывает безопасную ошибку загрузки и сохраняет текст (%s)",async(error,message)=>{
+    const OriginalURL=URL;vi.stubGlobal("URL",class extends OriginalURL{static createObjectURL(){return "blob:upload-preview";}static revokeObjectURL=vi.fn();});
+    renderDirect(threadId,undefined,vi.fn(async()=>{throw error;}));
+    const composer=screen.getByRole("textbox",{name:"Личное сообщение: Собеседник"});await userEvent.type(composer,"Сохранённый черновик");
+    const input=document.querySelector<HTMLInputElement>(".direct-compose input[type=file]");expect(input).not.toBeNull();
+    fireEvent.change(input!,{target:{files:[new File(["bytes"],"large.png",{type:"image/png"})]}});
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);expect(composer).toHaveValue("Сохранённый черновик");expect(input).not.toBeDisabled();expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:upload-preview");
   });
 
   it("показывает явную подгрузку даже в пустом выбранном диалоге", async () => {

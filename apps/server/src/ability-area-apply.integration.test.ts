@@ -1,3 +1,4 @@
+import {validateTransferApplicationEvent} from "./campaign-transfer-application-events.js";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
@@ -262,6 +263,8 @@ it("applies one shared area roll to player targets once without revealing a hidd
     expect(payload.sharedRoll).toBeGreaterThanOrEqual(1);
     expect(payload.sharedRoll).toBeLessThanOrEqual(6);
     expect(payload.effects).toHaveLength(2);
+    const transferRefs=validateTransferApplicationEvent({type:events[0]!.type,entity_type:events[0]!.entityType,entity_id:events[0]!.entityId,membership_id:events[0]!.membershipId,payload:events[0]!.payload});
+    expect(transferRefs.sceneIds).toEqual([sceneId]);expect(transferRefs.characterIds).toEqual(expect.arrayContaining([caster,ally]));
     expect(payload.effects.map((e) => e.characterId).sort()).toEqual(
       [caster, ally].sort(),
     );

@@ -224,6 +224,14 @@ async function installMockedApp(
       body: JSON.stringify({ error: "FORBIDDEN" }),
     });
   });
+  if (role === "GM")
+    await page.route(
+      `**/api/characters/${ids.character}/private-notebook`,
+      (route) => {
+        expect(route.request().method()).toBe("GET");
+        return route.fulfill({ json: { text: "", revision: 0 } });
+      },
+    );
   await page.route(`**/api/characters/${ids.character}/media`, (route) => {
     expect(route.request().method()).toBe("GET");
     return route.fulfill({

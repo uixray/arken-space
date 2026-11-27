@@ -1,0 +1,17 @@
+import {CloudSourceConnectionPanel} from "../local-first/CloudSourceConnectionPanel";
+import {LocalPlayerWorkspace} from "../local-first/LocalPlayerWorkspace";
+import {createRoot} from "react-dom/client";
+import {LocalSessionPanel} from "../local-first/LocalSessionPanel";
+import {PlayerThemeRoot} from "../design-system/player-theme-runtime";
+import "../ui/legacy-button.css";
+import "../design-system/tokens.generated.css";
+import "../ui/theme-root.css";
+import "../design-system/foundations.css";
+import "../ui/gravity-foundation.css";
+import "../styles.css";
+import "../mobile-foundation.css";
+const campaignId="10000000-0000-4000-8000-000000000001",gm="10000000-0000-4000-8000-000000000002",player="10000000-0000-4000-8000-000000000003";
+const isCloud=new URLSearchParams(location.search).has("cloud");
+const isPlayer=new URLSearchParams(location.search).has("player");
+history.replaceState({},"",isPlayer?"/local-session":`/campaign/${campaignId}`);
+createRoot(document.getElementById("root")!).render(<PlayerThemeRoot>{isPlayer?<LocalPlayerWorkspace/>:<main style={{padding:32,color:"var(--text-primary)",height:"100dvh",overflow:"auto"}}><h1>Синтетическая проверка локального мастера</h1>{isCloud?<CloudSourceConnectionPanel campaignId={campaignId} csrfToken="synthetic-csrf"/>:<LocalSessionPanel campaignId={campaignId} membershipId={gm} members={[{id:gm,role:"GM",displayName:"Мастер",revision:0,characterId:null},{id:player,role:"PLAYER",displayName:"Игрок",revision:0,characterId:null},{id:"10000000-0000-4000-8000-000000000006",role:"PLAYER",displayName:"Наблюдатель",revision:0,characterId:null}]}/>}</main>}</PlayerThemeRoot>);

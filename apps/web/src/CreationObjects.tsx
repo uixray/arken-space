@@ -180,7 +180,10 @@ export function CreationObjects({
         {!characterId && <p>Сначала выберите доступного персонажа.</p>}
         <QueryState loading={objects.loading} error={objects.error} />
         {objects.data?.items.length === 0 && (
-          <p>Созданных объектов пока нет. Выберите рецепт изготовления.</p>
+          <p>
+            Созданных объектов пока нет. Выберите рецепт изготовления или купите
+            копию на витрине.
+          </p>
         )}
         <ul className="creation-record-list">
           {objects.data?.items.map((o) => {
@@ -255,6 +258,19 @@ export function CreationObjects({
                   <button type="button" onClick={() => setLineage(o.id)}>
                     Вся история происхождения
                   </button>
+                  {gm && (
+                    <button
+                      type="button"
+                      disabled={s.locked}
+                      onClick={() => {
+                        setTransfer(o);
+                        setTarget("");
+                        setReason("");
+                      }}
+                    >
+                      Передать персонажу
+                    </button>
+                  )}
                 </div>
               </li>
             );
@@ -300,7 +316,10 @@ export function CreationObjects({
             </select>
           </label>
           {recipes.data?.recipes.length === 0 && (
-            <p>Нет доступных опубликованных рецептов.</p>
+            <p>
+              Нет доступных опубликованных рецептов. Для изготовления чужого
+              шаблона нужна лицензия; для развития — подходящие объекты.
+            </p>
           )}
           {recipe && (
             <>

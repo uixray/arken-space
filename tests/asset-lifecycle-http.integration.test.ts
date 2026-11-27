@@ -1,8 +1,9 @@
+import {validateTransferMediaEvent,transferMediaEventTypes} from "../apps/server/src/campaign-transfer-media-events.js";
 import { createMigratedPglite } from "./helpers/pglite-template.js";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join,resolve,relative,isAbsolute,basename } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
@@ -206,12 +207,17 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await app?.close();
-  await database?.close();
-  await rm(mediaRoot, { recursive: true, force: true });
-  env.MEDIA_ROOT = originalMediaRoot;
-  env.MIN_FREE_DISK_BYTES = originalMinFreeDiskBytes;
-  env.MEDIA_QUOTA_BYTES = originalMediaQuotaBytes;
+  try {
+    await app?.close();
+    if(database){const events=await database.query<{row_json:string}>(`SELECT to_jsonb(e)::text AS row_json FROM game_events e`);for(const event of events.rows){const row=JSON.parse(event.row_json);if((transferMediaEventTypes as readonly string[]).includes(row.type))validateTransferMediaEvent(row);}}
+  } finally {
+    try { await database?.close(); }
+    finally {
+      try {
+        if(mediaRoot){const target=resolve(mediaRoot),part=relative(resolve(tmpdir()),target);if(!part||part.startsWith('..')||isAbsolute(part)||!basename(target).startsWith('arken-asset-lifecycle-'))throw Error('ASSET_QA_CLEANUP_SCOPE_INVALID');await rm(target,{recursive:true,force:true});}
+      } finally { env.MEDIA_ROOT=originalMediaRoot;env.MIN_FREE_DISK_BYTES=originalMinFreeDiskBytes;env.MEDIA_QUOTA_BYTES=originalMediaQuotaBytes; }
+    }
+  }
 });
 
 describe("UIX-293 asset lifecycle HTTP", () => {
@@ -677,24 +683,6 @@ describe("UIX-293 asset lifecycle HTTP", () => {
             "Галерея персонажа",
           ),
           usage(
-            "WORLD_CONTENT_COVER",
-            content!.id,
-            "Waterdeep",
-            "Обложка материала мира",
-          ),
-          usage(
-            "WORLD_CONTENT_MEDIA",
-            captionedContentMedia!.id,
-            "The Yawning Portal",
-            "Файлы материала мира",
-          ),
-          usage(
-            "WORLD_CONTENT_MEDIA",
-            inheritedContentMedia!.id,
-            "Neverwinter Chronicle",
-            "Файлы материала мира",
-          ),
-          usage(
             "GENERATED_TOKEN_SOURCE",
             String(provenance!.sequence),
             "Источник созданного токена",
@@ -705,6 +693,13 @@ describe("UIX-293 asset lifecycle HTTP", () => {
         ],
       },
     ];
+    // Canonical illustrations are retained independent library records, not
+    // mutable campaign-asset usages with DETACH deletion semantics.
+    const [libraryImage]=await db.select().from(schema.worldContentImages).where(eq(schema.worldContentImages.id,ids.unused));
+    expect(libraryImage?.storageKey).toBe((await assetRow(ids.unused)).storageKey);
+    expect((await db.select().from(schema.worldContent).where(eq(schema.worldContent.id,content!.id)))[0]?.coverAssetId).toBe(ids.unused);
+    const gallery=await db.select().from(schema.worldContentMedia).where(eq(schema.worldContentMedia.assetId,ids.unused));
+    expect(gallery.map(row=>row.id).sort()).toEqual([captionedContentMedia!.id,inheritedContentMedia!.id].sort());
     for (const expected of cases) {
       const resolved = await app.inject({
         method: "GET",
@@ -829,7 +824,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     expect(denied.statusCode).toBe(403);
   });
 
-  it("authorizes only same-campaign published world cover and media content for players", async () => {
+  it("authorizes published independent world images through their canonical articles, not campaign asset URLs", async () => {
     const assetIds = {
       publishedCover: crypto.randomUUID(),
       publishedMedia: crypto.randomUUID(),
@@ -851,7 +846,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
         sizeBytes: name.length,
       });
     }
-    const [published, draft, archived] = await db
+    const [published, draft, archived, foreignPublished] = await db
       .insert(schema.worldContent)
       .values([
         {
@@ -901,28 +896,22 @@ describe("UIX-293 asset lifecycle HTTP", () => {
     const visibleIds = new Set(
       bootstrap.json().assets.map((asset: { id: string }) => asset.id),
     );
-    expect(visibleIds.has(assetIds.publishedCover)).toBe(true);
-    expect(visibleIds.has(assetIds.publishedMedia)).toBe(true);
-    expect(visibleIds.has(assetIds.draft)).toBe(false);
-    expect(visibleIds.has(assetIds.archived)).toBe(false);
-    expect(visibleIds.has(assetIds.foreign)).toBe(false);
-
-    for (const id of [assetIds.publishedCover, assetIds.publishedMedia]) {
-      const response = await app.inject({
-        method: "GET",
-        url: `/api/assets/${id}/content`,
-        headers: headers(secrets.player),
-      });
-      expect(response.statusCode, response.body).toBe(200);
+    // Independent world images are absent from the player's campaign assets.
+    for(const id of Object.values(assetIds)){
+      expect(visibleIds.has(id)).toBe(false);
+      const response=await app.inject({method:"GET",url:`/api/assets/${id}/content`,headers:headers(secrets.player)});
+      expect(response.statusCode,response.body).toBe(404);
     }
-    for (const id of [assetIds.draft, assetIds.archived, assetIds.foreign]) {
-      const response = await app.inject({
-        method: "GET",
-        url: `/api/assets/${id}/content`,
-        headers: headers(secrets.player),
-      });
-      expect(response.statusCode, response.body).toBe(404);
+    for(const [article,image,name] of [[published!.id,assetIds.publishedCover,"publishedCover"],[published!.id,assetIds.publishedMedia,"publishedMedia"],[foreignPublished!.id,assetIds.foreign,"foreign"]]){
+      const response=await app.inject({method:"GET",url:`/api/world-content/${article}/images/${image}/content`,headers:headers(secrets.player)});
+      expect(response.statusCode,response.body).toBe(200);expect(response.rawPayload).toEqual(Buffer.from(name!));
     }
+    for(const [article,image] of [[draft!.id,assetIds.draft],[archived!.id,assetIds.archived],[published!.id,assetIds.foreign]]){
+      const response=await app.inject({method:"GET",url:`/api/world-content/${article}/images/${image}/content`,headers:headers(secrets.player)});
+      expect(response.statusCode,response.body).toBe(404);
+    }
+    const directLibrary=await app.inject({method:"GET",url:`/api/world-content-images/${assetIds.publishedCover}/content?campaignId=${ids.campaign}`,headers:headers(secrets.player)});
+    expect(directLibrary.statusCode).toBe(403);
   });
 
   it("replaces resource artwork without losing the link and detaches it on authorized deletion", async () => {
@@ -1185,6 +1174,7 @@ describe("UIX-293 asset lifecycle HTTP", () => {
         .select()
         .from(schema.worldContentMedia)
         .orderBy(schema.worldContentMedia.id),
+      worldContentImages:await db.select().from(schema.worldContentImages).orderBy(schema.worldContentImages.id),
       audioTracks: await db
         .select()
         .from(schema.campaignAudioTracks)
@@ -1261,9 +1251,15 @@ describe("UIX-293 asset lifecycle HTTP", () => {
           durationSeconds: null,
         });
       }
-      await expect(
-        readFile(join(mediaRoot, beforeRow.storageKey)),
-      ).rejects.toMatchObject({ code: "ENOENT" });
+      if(kind==="IMAGE"){
+        const retained=await db.select().from(schema.worldContentImages).where(eq(schema.worldContentImages.storageKey,beforeRow.storageKey));
+        expect(retained).toHaveLength(1);expect(retained[0]!.id).toBe(assetIds.IMAGE);
+        expect(await readFile(join(mediaRoot,beforeRow.storageKey))).toEqual(before.rawPayload);
+        const canonical=await app.inject({method:"GET",url:`/api/world-content-images/${retained[0]!.id}/content?campaignId=${ids.campaign}`,headers:headers(secrets.gm)});
+        expect(canonical.statusCode,canonical.body).toBe(200);expect(canonical.rawPayload).toEqual(before.rawPayload);
+      }else{
+        await expect(readFile(join(mediaRoot,beforeRow.storageKey))).rejects.toMatchObject({code:"ENOENT"});
+      }
       expect(await actionReceipts(actionId)).toHaveLength(1);
       expect(await referenceRows()).toEqual(relationsBefore);
     }

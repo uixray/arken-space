@@ -17,6 +17,7 @@ let database: PGlite;
 let app: FastifyInstance;
 let db: ReturnType<typeof drizzle<typeof schema>>;
 let fakeSockets: Array<{
+  id: string;
   data: {
     auth: {
       campaignId: string;
@@ -505,6 +506,7 @@ describe("PLAYER-owned character stat layout", () => {
     const reordered = structuredClone(ownLayout);
     reordered.find((group) => group.id === "characteristics")!.rows.reverse();
     const makeSocket = (membershipId: string, displayName: string) => ({
+      id: id(),
       data: {
         auth: {
           campaignId: ids.campaign,
@@ -530,16 +532,19 @@ describe("PLAYER-owned character stat layout", () => {
     );
     expect(result.statusCode, result.body).toBe(200);
     expect(result.json()).toEqual({ characterId: ids.character, revision: 2 });
-    const ownerEvent = snapshotEmissions.find(
-      (item) =>
-        item.membershipId === ids.owner && item.event === "game:snapshot",
-    );
-    const siblingEvent = snapshotEmissions.find(
-      (item) =>
-        item.membershipId === ids.siblingOwner &&
-        item.event === "game:snapshot",
-    );
-    expect(ownerEvent?.event).toBe("game:snapshot");
+    // Other realtime frames (including the token preview epoch) can precede
+    // the snapshot. Check the actual projected snapshot for each recipient.
+    const snapshotsFor = (membershipId: string) =>
+      snapshotEmissions.filter(
+        (item) =>
+          item.membershipId === membershipId && item.event === "game:snapshot",
+      );
+    const ownerSnapshots = snapshotsFor(ids.owner);
+    const siblingSnapshots = snapshotsFor(ids.siblingOwner);
+    expect(ownerSnapshots).toHaveLength(1);
+    expect(siblingSnapshots).toHaveLength(1);
+    const [ownerEvent] = ownerSnapshots;
+    const [siblingEvent] = siblingSnapshots;
     expect(
       (
         ownerEvent?.payload as {
@@ -547,7 +552,6 @@ describe("PLAYER-owned character stat layout", () => {
         }
       ).characters.find((row) => row.id === ids.character)?.statLayout,
     ).toEqual(reordered);
-    expect(siblingEvent?.event).toBe("game:snapshot");
     expect(
       (
         siblingEvent?.payload as {

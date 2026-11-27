@@ -1,3 +1,4 @@
+import {isIP} from "node:net";
 import { z } from "zod";
 import { isAbsolute } from "node:path";
 
@@ -24,6 +25,12 @@ export const env = z
     LOCAL_INSTANCE_ID: z.string().default(""),
     LOCAL_DATA_ROOT: z.string().default(""),
     LOCAL_WEB_ROOT: z.string().default(""),
+    LOCAL_SESSION_BRIDGE_ENABLED: z.enum(["true","false"]).default("false").transform(value=>value==="true"),
+    LOCAL_CLOUD_SYNC_ORIGIN: z.string().trim().default("").refine(value=>{if(!value)return true;try{const url=new URL(value);return url.protocol==="https:"&&!url.username&&!url.password&&url.pathname==="/"&&!url.search&&!url.hash;}catch{return false;}},"Use a fixed HTTPS origin without path, credentials, query or fragment"),
+    CLOUD_SYNC_TRUSTED_PROXY_IPS: z.string().default("").transform(value=>value.split(",").map(ip=>ip.trim()).filter(Boolean)).refine(ips=>ips.length<=16&&ips.every(ip=>isIP(ip)!==0),"Use at most16 explicit proxy IP addresses"),
+    CAMPAIGN_TRANSFER_IMPORT_ENABLED: z.enum(["true","false"]).default("false").transform(value=>value==="true"),
+    CAMPAIGN_TRANSFER_ENABLED: z.enum(["true","false"]).default("false").transform(value=>value==="true"),
+    CLOUD_SYNC_STAGING_ENABLED: z.enum(["true","false"]).default("false").transform(value=>value==="true"),
     PORT: z.coerce.number().int().min(1).max(65535).default(4100),
     WEB_ORIGIN: z.string().url().default("http://localhost:5173"),
     PUBLIC_URL: z.string().url().default("http://localhost:5173"),
@@ -98,6 +105,12 @@ export const env = z
     MEDIA_ROOT: z.string().default("./media"),
     // Local review UI/API only; never starts a Telegram adapter or sender.
     BUG_INTAKE_ENABLED: z.enum(["true", "false"]).default("false"),
+    TELEGRAM_CAMPAIGN_ENABLED: z.enum(["true", "false"]).default("false"),
+    TELEGRAM_CAMPAIGN_RECEIVER_ID: z.string().default(""),
+    TELEGRAM_CAMPAIGN_USERNAME: z.string().default(""),
+    TELEGRAM_CAMPAIGN_TOKEN: z.string().default(""),
+    TELEGRAM_CAMPAIGN_SECRET: z.string().default(""),
+    TELEGRAM_CAMPAIGN_BUG_CHAT_ID: z.string().default(""),
     BUG_INTAKE_ROOT: z.string().trim().default(""),
     BUG_INTAKE_ASSET_ORIGINS: z.string().trim().max(4096).default(""),
     BUG_INTAKE_MAX_FILE_BYTES: z.coerce
@@ -135,6 +148,14 @@ export const env = z
    * конфигурации, а не повод угадывать.
    */
   .superRefine((value, ctx) => {
+      if(value.LOCAL_SESSION_BRIDGE_ENABLED&&value.DEPLOYMENT_MODE!=="LOCAL_HOST")
+        ctx.addIssue({code:"custom",path:["LOCAL_SESSION_BRIDGE_ENABLED"],message:"Local session bridge requires LOCAL_HOST"});
+    if(value.CAMPAIGN_TRANSFER_IMPORT_ENABLED&&(!value.ACCOUNT_AUTH_ENABLED||value.DEPLOYMENT_MODE!=="LOCAL_HOST"))
+      ctx.addIssue({code:"custom",path:["CAMPAIGN_TRANSFER_IMPORT_ENABLED"],message:"Campaign import requires LOCAL_HOST account auth"});
+    if(value.CAMPAIGN_TRANSFER_ENABLED&&(!value.ACCOUNT_AUTH_ENABLED||value.DEPLOYMENT_MODE!=="HOSTED"||(value.NODE_ENV==="production"&&!value.PUBLIC_URL.startsWith("https://"))))
+      ctx.addIssue({code:"custom",path:["CAMPAIGN_TRANSFER_ENABLED"],message:"Campaign transfer requires HOSTED account auth and production HTTPS"});
+    if(value.CLOUD_SYNC_STAGING_ENABLED&&(value.DEPLOYMENT_MODE!=="HOSTED"||(value.NODE_ENV==="production"&&!value.PUBLIC_URL.startsWith("https://"))))
+      ctx.addIssue({code:"custom",path:["CLOUD_SYNC_STAGING_ENABLED"],message:"Cloud staging requires HOSTED and production HTTPS public URL"});
     if (value.DEPLOYMENT_MODE === "LOCAL_HOST") {
       const issue = (path: string, message: string) =>
         ctx.addIssue({ code: "custom", path: [path], message });

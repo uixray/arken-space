@@ -40,6 +40,13 @@ for (const mode of ["close", "revoked"] as const) {
     });
     await page.route("**/api/**", (route) => {
       const path = new URL(route.request().url()).pathname;
+      if (
+        path === "/api/operator/feedback/report/export" &&
+        route.request().method() === "POST"
+      ) {
+        pending = route;
+        return;
+      }
       if (!["GET", "HEAD"].includes(route.request().method())) {
         if (path === "/api/chat/read")
           return route.fulfill({ json: { ok: true } });
@@ -58,10 +65,6 @@ for (const mode of ["close", "revoked"] as const) {
             ? { ...detail, contact: "PRIVATE-TEST-CONTACT" }
             : detail,
         });
-      if (path === "/api/operator/feedback/report/export") {
-        pending = route;
-        return;
-      }
       if (path === "/api/story/posts")
         return route.fulfill({ json: { posts: [], nextCursor: null } });
       return fulfillUnmocked(route, path);
@@ -92,12 +95,22 @@ for (const mode of ["close", "revoked"] as const) {
       dialog.getByText("PRIVATE-TEST-CONTACT", { exact: true }),
     ).toBeVisible();
     await dialog
-      .getByRole("button", {
-        name: "Копировать обезличенную версию",
-        exact: true,
-      })
+      .getByRole("button", { name: "Подготовить копию", exact: true })
       .click();
+    const copy = dialog.getByRole("button", {
+      name: "Копировать проверенный текст",
+      exact: true,
+    });
+    await expect(copy).toBeDisabled();
+    await dialog.getByRole("checkbox", { name: /Я просмотрел текст/ }).check();
+    await copy.click();
     await expect.poll(() => Boolean(pending)).toBe(true);
+    expect(pending!.request().postDataJSON()).toEqual({
+      reviewed: true,
+      expectedUpdatedAt: detail.updatedAt,
+      title: detail.title,
+      description: detail.description,
+    });
     if (mode === "close") {
       await dialog
         .getByRole("button", { name: "Закрыть окно", exact: true })
@@ -123,7 +136,9 @@ for (const mode of ["close", "revoked"] as const) {
       0,
     );
     await expect(
-      dialog.getByText("Обезличенная копия скопирована.", { exact: true }),
+      dialog.getByText("Проверенная оператором копия скопирована.", {
+        exact: true,
+      }),
     ).toHaveCount(0);
     expect(
       await page.evaluate(() => Reflect.get(window, "testClipboardWrites")),

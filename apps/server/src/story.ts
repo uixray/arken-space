@@ -1,3 +1,4 @@
+import { resolveReadableStoryMedia } from "./story-media-content.js";
 import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
@@ -491,6 +492,83 @@ function emitStory(io: RealtimeServer, post: Post) {
   else io.to(gmRoom(post.campaignId)).emit("story:changed", event);
 }
 
+/** Same role-filtered story query for HTTP and the local peer gateway. */
+export async function readStoryPage(
+  db: Database,
+  auth: AuthContext,
+  input: unknown,
+) {
+  const query = listStoryPostsSchema.parse(input);
+  const cursor = query.cursor ? decodeStoryCursor(query.cursor) : undefined;
+  const clauses = [eq(storyPosts.campaignId, auth.campaignId)];
+  if (auth.role !== "GM") {
+    clauses.push(eq(storyPosts.visibility, "PUBLIC"));
+    clauses.push(
+      or(
+        eq(storyPosts.lifecycle, "PUBLISHED"),
+        eq(storyPosts.lifecycle, "CORRECTED"),
+      )!,
+    );
+  }
+  // Эпохи считаются по всем видимым записям, до фильтра и курсора.
+  const eraRows = await db
+    .selectDistinct({ era: storyPosts.era })
+    .from(storyPosts)
+    .where(and(...clauses, isNotNull(storyPosts.era)))
+    .orderBy(storyPosts.era);
+  if (query.era) clauses.push(eq(storyPosts.era, query.era));
+  if (cursor) clauses.push(afterStoryCursor(cursor));
+  const posts = await db
+    .select()
+    .from(storyPosts)
+    .where(and(...clauses))
+    .orderBy(
+      sql`${storyPosts.worldDay} DESC NULLS LAST`,
+      desc(storyPosts.updatedAt),
+      desc(storyPosts.id),
+    )
+    .limit(query.limit + 1);
+  const page = posts.slice(0, query.limit);
+  const sources =
+    auth.role === "GM" && page.length
+      ? await db
+          .select()
+          .from(storyImportSources)
+          .where(
+            and(
+              eq(storyImportSources.campaignId, auth.campaignId),
+              inArray(
+                storyImportSources.postId,
+                page.map((post) => post.id),
+              ),
+            ),
+          )
+      : [];
+  const sourceByPost = new Map(
+    sources.map((source) => [source.postId, source]),
+  );
+  const targetsByPost = await storyLinkTargetsFor(db, auth, page);
+  const entries = await Promise.all(
+    page.map(async (post) =>
+      dto(
+        post,
+        await mediaForRevision(db, auth.campaignId, post.id, post.revision),
+        auth.role === "GM",
+        sourceByPost.get(post.id),
+        targetsByPost.get(post.id),
+      ),
+    ),
+  );
+  return {
+    posts: entries,
+    nextCursor:
+      posts.length > query.limit && page.at(-1)
+        ? encodeStoryCursor(page.at(-1)!)
+        : null,
+    eras: eraRows.flatMap((row) => (row.era ? [row.era] : [])),
+  };
+}
+
 export async function persistStoryEdit(
   tx: StoryDatabase,
   auth: AuthContext,
@@ -639,83 +717,13 @@ export function registerStoryRoutes(
   app.get("/api/story/posts", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    const query = listStoryPostsSchema.parse(request.query);
-    let cursor: ReturnType<typeof decodeStoryCursor> | undefined;
     try {
-      cursor = query.cursor ? decodeStoryCursor(query.cursor) : undefined;
+      return await readStoryPage(db, auth, request.query);
     } catch (error) {
-      return storyError(
-        reply,
-        error instanceof Error ? error.message : "STORY_CURSOR_INVALID",
-      );
+      if (error instanceof Error && error.message === "STORY_CURSOR_INVALID")
+        return storyError(reply, error.message);
+      throw error;
     }
-    const clauses = [eq(storyPosts.campaignId, auth.campaignId)];
-    if (auth.role !== "GM") {
-      clauses.push(eq(storyPosts.visibility, "PUBLIC"));
-      clauses.push(
-        or(
-          eq(storyPosts.lifecycle, "PUBLISHED"),
-          eq(storyPosts.lifecycle, "CORRECTED"),
-        )!,
-      );
-    }
-    // Эпохи считаются по всем видимым записям, до фильтра и курсора.
-    const eraRows = await db
-      .selectDistinct({ era: storyPosts.era })
-      .from(storyPosts)
-      .where(and(...clauses, isNotNull(storyPosts.era)))
-      .orderBy(storyPosts.era);
-    if (query.era) clauses.push(eq(storyPosts.era, query.era));
-    if (cursor) clauses.push(afterStoryCursor(cursor));
-    const posts = await db
-      .select()
-      .from(storyPosts)
-      .where(and(...clauses))
-      .orderBy(
-        sql`${storyPosts.worldDay} DESC NULLS LAST`,
-        desc(storyPosts.updatedAt),
-        desc(storyPosts.id),
-      )
-      .limit(query.limit + 1);
-    const page = posts.slice(0, query.limit);
-    const sources =
-      auth.role === "GM" && page.length
-        ? await db
-            .select()
-            .from(storyImportSources)
-            .where(
-              and(
-                eq(storyImportSources.campaignId, auth.campaignId),
-                inArray(
-                  storyImportSources.postId,
-                  page.map((post) => post.id),
-                ),
-              ),
-            )
-        : [];
-    const sourceByPost = new Map(
-      sources.map((source) => [source.postId, source]),
-    );
-    const targetsByPost = await storyLinkTargetsFor(db, auth, page);
-    const entries = await Promise.all(
-      page.map(async (post) =>
-        dto(
-          post,
-          await mediaForRevision(db, auth.campaignId, post.id, post.revision),
-          auth.role === "GM",
-          sourceByPost.get(post.id),
-          targetsByPost.get(post.id),
-        ),
-      ),
-    );
-    return {
-      posts: entries,
-      nextCursor:
-        posts.length > query.limit && page.at(-1)
-          ? encodeStoryCursor(page.at(-1)!)
-          : null,
-      eras: eraRows.flatMap((row) => (row.era ? [row.era] : [])),
-    };
   });
 
   app.post("/api/story/posts", async (request, reply) => {
@@ -1178,10 +1186,7 @@ export function registerStoryRoutes(
             campaignId: auth.campaignId,
             postId: saved.post.id,
           });
-        else if (
-          auth.campaignId === "eb6a55c4-a821-4739-8d4a-a1028e9d9092" &&
-          saved.result.media.length > 0
-        ) {
+        else if (saved.result.media.length > 0) {
           io.to(campaignRoom(auth.campaignId)).emit("story:changed", {
             campaignId: auth.campaignId,
             postId: saved.post.id,
@@ -1225,51 +1230,11 @@ export function registerStoryRoutes(
     if (!auth) return;
     const contentId = (request.params as { contentId?: string }).contentId;
     if (!contentId) return storyError(reply, "NOT_FOUND", 404);
-    const playerVisibility =
-      auth.role === "GM"
-        ? undefined
-        : and(
-            eq(storyPostMedia.revision, storyPosts.revision),
-            eq(storyPosts.visibility, "PUBLIC"),
-            or(
-              eq(storyPosts.lifecycle, "PUBLISHED"),
-              eq(storyPosts.lifecycle, "CORRECTED"),
-            ),
-          );
-    const rows = await db
-      .select({
-        media: storyPostMedia,
-        post: storyPosts,
-        upload: chatAttachmentUploads,
-      })
-      .from(storyPostMedia)
-      .innerJoin(
-        storyPosts,
-        and(
-          eq(storyPosts.campaignId, storyPostMedia.campaignId),
-          eq(storyPosts.id, storyPostMedia.postId),
-        ),
-      )
-      .innerJoin(
-        chatAttachmentUploads,
-        and(
-          eq(chatAttachmentUploads.campaignId, storyPostMedia.campaignId),
-          eq(chatAttachmentUploads.contentId, storyPostMedia.contentId),
-        ),
-      )
-      .where(
-        and(
-          eq(storyPostMedia.campaignId, auth.campaignId),
-          eq(storyPostMedia.contentId, contentId),
-          playerVisibility,
-        ),
-      )
-      .limit(1);
-    const item = rows[0];
-    if (!item) return storyError(reply, "NOT_FOUND", 404);
+    const upload = await resolveReadableStoryMedia(db, auth, contentId);
+    if (!upload) return storyError(reply, "NOT_FOUND", 404);
     try {
-      const opened = await openStoredFile(item.upload.storageKey, undefined);
-      reply.header("Content-Type", item.upload.mimeType);
+      const opened = await openStoredFile(upload.storageKey, undefined);
+      reply.header("Content-Type", upload.mimeType);
       reply.header("Content-Length", String(opened.size));
       reply.header("Cache-Control", "private, no-store");
       return reply.send(opened.stream);

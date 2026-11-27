@@ -1,8 +1,18 @@
+import { localTokenPreviews } from "./local-token-preview-buffer.js";
 import type { FastifyBaseLogger } from "fastify";
 import type { Server } from "socket.io";
 import { randomUUID } from "node:crypto";
 import { tokenPreviewEpochs } from "./token-preview-epochs.js";
+import {
+  canvasIsometricMoveAllowed,
+  isIsometricPolicyError,
+} from "./isometric-movement.js";
+import {
+  isometricRowIsPublished,
+  isometricFogFootprint,
+} from "./isometric-layers.js";
 import { emitPreviewSnapshot } from "./preview-snapshot.js";
+import { forgetSnapshotBaseline } from "./snapshot-delta.js";
 import { and, asc, count, eq, inArray, max } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -186,6 +196,7 @@ export async function projectedToken(
   const [row] = await db
     .select({
       token: tokens,
+      layerScene: scenes,
       campaignId: scenes.campaignId,
       activeSceneId: campaigns.activeSceneId,
       definition: tokenDefinitions,
@@ -226,6 +237,7 @@ export async function projectedToken(
       definitionRevision: row.definition.revision,
     } satisfies EditableToken,
     activeSceneId: row.activeSceneId,
+    layerScene: row.layerScene,
   };
 }
 
@@ -241,6 +253,7 @@ function canEditProjectedToken(
       !token.locked &&
       token.visible &&
       token.layer !== "GM" &&
+      isometricRowIsPublished(projection.layerScene, token.levelId) &&
       token.sceneId === activeSceneId)
   );
 }
@@ -254,7 +267,9 @@ function tokenIsCampaignVisible(
   );
 }
 
-type FogRowsByScene = Map<string, (typeof fogReveals.$inferSelect)[]>;
+type FogRowsByScene = Map<string, (typeof fogReveals.$inferSelect)[]> & {
+  layerScenes?: Map<string, typeof scenes.$inferSelect>;
+};
 
 /**
  * Fog is ordered event state: later COVER/REVEAL operations override earlier
@@ -267,6 +282,11 @@ async function fogRowsForTokens(
   const sceneIds = [...new Set(tokenRows.map((token) => token.sceneId))];
   const byScene: FogRowsByScene = new Map();
   if (sceneIds.length === 0) return byScene;
+  const layerScenes = await db
+    .select()
+    .from(scenes)
+    .where(inArray(scenes.id, sceneIds));
+  byScene.layerScenes = new Map(layerScenes.map((scene) => [scene.id, scene]));
   const rows = await db
     .select()
     .from(fogReveals)
@@ -288,8 +308,18 @@ function tokensAreFogVisibleTo(
   return tokenRows.every(
     (token) =>
       !fogHiddenTokenIds(
-        [token],
-        fogByScene.get(token.sceneId) ?? [],
+        [
+          isometricFogFootprint(
+            fogByScene.layerScenes?.get(token.sceneId),
+            token,
+          ),
+        ],
+        (fogByScene.get(token.sceneId) ?? []).filter((fog) =>
+          isometricRowIsPublished(
+            fogByScene.layerScenes?.get(token.sceneId),
+            fog.levelId,
+          ),
+        ),
         viewer,
       ).has(token.id),
   );
@@ -307,6 +337,11 @@ function wasPublicInTokenProjection(
 ) {
   return (
     tokenIsCampaignVisible(token, activeSceneId) &&
+    fogByScene.layerScenes?.has(token.sceneId) === true &&
+    isometricRowIsPublished(
+      fogByScene.layerScenes?.get(token.sceneId),
+      token.levelId,
+    ) &&
     tokensAreFogVisibleTo([token], fogByScene, {
       role: "PLAYER",
       membershipId: "__campaign-fog-viewer__",
@@ -333,6 +368,17 @@ async function tokenDelivery(
     return { rooms: [gmRoom(campaignId)], fogByScene: new Map() };
 
   const fogByScene = await fogRowsForTokens(db, tokenRows);
+  if (
+    !tokenRows.every(
+      (token) =>
+        fogByScene.layerScenes?.has(token.sceneId) &&
+        isometricRowIsPublished(
+          fogByScene.layerScenes?.get(token.sceneId),
+          token.levelId,
+        ),
+    )
+  )
+    return { rooms: [gmRoom(campaignId)], fogByScene };
   const campaignVisible = tokensAreFogVisibleTo(tokenRows, fogByScene, {
     role: "PLAYER",
     membershipId: "__campaign-fog-viewer__",
@@ -348,8 +394,151 @@ async function tokenDelivery(
   };
 }
 
+/** Shared preview ACL/projection for Socket.IO and local peer receivers. */
+export async function prepareTokenPreview(
+  db: CampaignCanvasDb,
+  auth: AuthContext,
+  movement: Parameters<ServerToClientEvents["token:moving"]>[0],
+) {
+  if (movement.previewEpoch !== tokenPreviewEpochs.current(auth.campaignId))
+    return null;
+  const projection = await projectedToken(
+    db,
+    auth.campaignId,
+    movement.tokenId,
+  );
+  if (!canEditProjectedToken(auth, projection) || !projection) return null;
+  if (
+    movement.revision !== projection.token.revision ||
+    (movement.sceneId && movement.sceneId !== projection.token.sceneId)
+  )
+    return null;
+  if (
+    !(await canvasIsometricMoveAllowed(
+      db,
+      auth.campaignId,
+      projection.token,
+      movement,
+      auth.role,
+    ))
+  )
+    return null;
+  const previewToken = {
+    ...projection.token,
+    x: movement.x,
+    y: movement.y,
+    z: movement.z,
+    levelId: movement.levelId,
+  } satisfies EditableToken;
+  // Check both current and preview coordinates. Either side being covered
+  // makes a campaign-wide preview an information leak.
+  const delivery = await tokenDelivery(
+    db,
+    auth.campaignId,
+    [projection.token, previewToken],
+    projection.activeSceneId,
+    projection.token.controllerMembershipIds,
+  );
+  if (movement.previewEpoch !== tokenPreviewEpochs.current(auth.campaignId))
+    return null;
+  return { projection, previewToken, delivery };
+}
+
+export type PreparedTokenPreview = NonNullable<
+  Awaited<ReturnType<typeof prepareTokenPreview>>
+>;
+/** A peer sender is outside Socket.IO; use the same canonical delivery/fog rules. */
+export function sendAcceptedLocalTokenPreview(
+  io: RealtimeServer,
+  campaignId: string,
+  prepared: PreparedTokenPreview,
+  movement: Parameters<ServerToClientEvents["token:moving"]>[0],
+) {
+  if (movement.previewEpoch !== tokenPreviewEpochs.current(campaignId)) return;
+  const { projection, delivery } = prepared;
+  if (!movement.hold) io.to(delivery.rooms).emit("token:moving", movement);
+  if (
+    !delivery.rooms.includes(campaignRoom(campaignId)) &&
+    wasPublicInTokenProjection(
+      projection.token,
+      delivery.fogByScene,
+      projection.activeSceneId,
+    )
+  )
+    io.to(campaignRoom(campaignId))
+      .except(delivery.rooms)
+      .emit("token:preview-hidden", {
+        tokenId: projection.token.id,
+        sceneId: projection.token.sceneId,
+        revision: projection.token.revision,
+        previewEpoch: movement.previewEpoch!,
+        snapshotVersion: movement.snapshotVersion,
+      });
+}
+
+/** Re-evaluate current fog/layers/revision for each recipient; never forward GM rooms. */
+export async function tokenPreviewForRecipient(
+  db: CampaignCanvasDb,
+  auth: AuthContext,
+  movement: Parameters<ServerToClientEvents["token:moving"]>[0],
+) {
+  if (movement.previewEpoch !== tokenPreviewEpochs.current(auth.campaignId))
+    return null;
+  const projection = await projectedToken(
+    db,
+    auth.campaignId,
+    movement.tokenId,
+  );
+  if (
+    !projection ||
+    projection.token.revision !== movement.revision ||
+    (movement.sceneId && projection.token.sceneId !== movement.sceneId)
+  )
+    return null;
+  const candidate = {
+    ...projection.token,
+    x: movement.x,
+    y: movement.y,
+    z: movement.z,
+    levelId: movement.levelId,
+  };
+  const delivery = await tokenDelivery(
+    db,
+    auth.campaignId,
+    [projection.token, candidate],
+    projection.activeSceneId,
+    projection.token.controllerMembershipIds,
+  );
+  if (movement.previewEpoch !== tokenPreviewEpochs.current(auth.campaignId))
+    return null;
+  if (
+    delivery.rooms.includes(campaignRoom(auth.campaignId)) ||
+    delivery.rooms.includes(memberRoom(auth.membershipId)) ||
+    (auth.role === "GM" && delivery.rooms.includes(gmRoom(auth.campaignId)))
+  )
+    return movement.hold ? null : { kind: "MOVING" as const, movement };
+  if (
+    !wasPublicInTokenProjection(
+      projection.token,
+      delivery.fogByScene,
+      projection.activeSceneId,
+    )
+  )
+    return null;
+  return {
+    kind: "HIDDEN" as const,
+    event: {
+      tokenId: projection.token.id,
+      sceneId: projection.token.sceneId,
+      revision: projection.token.revision,
+      previewEpoch: movement.previewEpoch!,
+      snapshotVersion: movement.snapshotVersion,
+    },
+  };
+}
+
 export async function editableToken(
-  db: Database,
+  db: CampaignCanvasDb,
   auth: AuthContext,
   tokenId: string,
 ) {
@@ -382,6 +571,85 @@ async function emitPresence(
   );
 }
 
+/** Shared durable move: caller authenticates, locks campaign and validates revision. */
+export async function commitTokenMove(
+  tx: import("./campaign-pause-guard.js").CampaignCanvasTransaction,
+  auth: AuthContext,
+  current: NonNullable<Awaited<ReturnType<typeof editableToken>>>,
+  command: import("zod").infer<typeof moveTokenSchema>,
+) {
+  if (
+    !(await canvasIsometricMoveAllowed(
+      tx,
+      auth.campaignId,
+      current,
+      command,
+      auth.role,
+    ))
+  )
+    return { movementBlocked: true } as const;
+  await invalidateRedoBranch(tx, auth, current.sceneId);
+  const [updated] = await tx
+    .update(tokens)
+    .set({
+      x: command.x,
+      y: command.y,
+      z: command.z,
+      levelId: command.levelId,
+      revision: current.revision + 1,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(eq(tokens.id, current.id), eq(tokens.revision, current.revision)),
+    )
+    .returning();
+  if (!updated) return null;
+  const [event] = await tx
+    .insert(gameEvents)
+    .values({
+      campaignId: auth.campaignId,
+      actionId: command.actionId,
+      membershipId: auth.membershipId,
+      type: "TOKEN_MOVED",
+      entityType: "TOKEN",
+      entityId: updated.id,
+      entityRevision: updated.revision,
+      payload: {
+        x: updated.x,
+        y: updated.y,
+        z: updated.z,
+        levelId: updated.levelId,
+      },
+    })
+    .returning();
+  await tx.insert(actionJournal).values({
+    campaignId: auth.campaignId,
+    sceneId: current.sceneId,
+    actorMembershipId: auth.membershipId,
+    actionId: command.actionId,
+    scope: current.layer === "GM" ? "GM" : "PUBLIC",
+    type: "TOKEN_MOVE",
+    targetType: "TOKEN",
+    targetId: current.id,
+    before: {
+      x: current.x,
+      y: current.y,
+      z: current.z,
+      levelId: current.levelId,
+    },
+    after: {
+      x: updated.x,
+      y: updated.y,
+      z: updated.z,
+      levelId: updated.levelId,
+    },
+    beforeRevision: current.revision,
+    afterRevision: updated.revision,
+    currentRevision: updated.revision,
+  });
+  return event ? { event, updated } : null;
+}
+
 export function registerRealtime(
   io: RealtimeServer,
   db: Database,
@@ -412,6 +680,8 @@ export function registerRealtime(
       if (expectedCampaign != null && expectedCampaign !== auth.campaignId)
         return next(new Error("CAMPAIGN_SESSION_CHANGED"));
       socket.data.auth = auth;
+      socket.data.snapshotDeltaV1 =
+        socket.handshake.auth?.snapshotDeltaV1 === true;
       next();
     } catch (error) {
       next(error as Error);
@@ -419,6 +689,9 @@ export function registerRealtime(
   });
 
   io.on("connection", async (socket) => {
+    // Recovery, scene changes and the initial connection always establish a full image.
+    forgetSnapshotBaseline(io, socket.id);
+    socket.on("disconnect", () => forgetSnapshotBaseline(io, socket.id));
     const auth = socket.data.auth;
     const canvasEphemera = (socket.data.canvasEphemera ??= {});
     // Room-based disconnects handle normal logout. This guard also rejects an
@@ -664,40 +937,20 @@ export function registerRealtime(
       )
         return;
       await runCampaignCanvasRelay(db, auth.campaignId, async (tx) => {
-        const projection = await projectedToken(
-          tx,
-          auth.campaignId,
-          parsed.data.tokenId,
-        );
-        if (!canEditProjectedToken(auth, projection) || !projection) return;
-        if (
-          parsed.data.revision !== projection.token.revision ||
-          (parsed.data.sceneId &&
-            parsed.data.sceneId !== projection.token.sceneId)
-        )
-          return;
-        const previewToken = {
-          ...projection.token,
-          x: parsed.data.x,
-          y: parsed.data.y,
-          z: parsed.data.z,
-          levelId: parsed.data.levelId,
-        } satisfies EditableToken;
-        // Check both current and preview coordinates. Either side being covered
-        // makes a campaign-wide preview an information leak.
-        const delivery = await tokenDelivery(
-          tx,
-          auth.campaignId,
-          [projection.token, previewToken],
-          projection.activeSceneId,
-          projection.token.controllerMembershipIds,
-        );
+        const prepared = await prepareTokenPreview(tx, auth, parsed.data);
+        if (!prepared) return;
+        const { projection, previewToken, delivery } = prepared;
         if (
           !socket.connected ||
           parsed.data.previewEpoch !==
             tokenPreviewEpochs.current(auth.campaignId)
         )
           return;
+        if (
+          env.DEPLOYMENT_MODE === "LOCAL_HOST" &&
+          env.LOCAL_SESSION_BRIDGE_ENABLED
+        )
+          localTokenPreviews.publish(auth.campaignId, parsed.data);
         if (!parsed.data.hold)
           socket.to(delivery.rooms).emit("token:moving", parsed.data);
         const key = `${previewToken.id}:${previewToken.revision}:${parsed.data.previewEpoch}`;
@@ -797,71 +1050,11 @@ export function registerRealtime(
         db,
         auth.campaignId,
         async (tx) => {
-          await invalidateRedoBranch(tx, auth, current.sceneId);
-          const [updated] = await tx
-            .update(tokens)
-            .set({
-              x: command.x,
-              y: command.y,
-              z: command.z,
-              levelId: command.levelId,
-              revision: current.revision + 1,
-              updatedAt: new Date(),
-            })
-            .where(
-              and(
-                eq(tokens.id, current.id),
-                eq(tokens.revision, current.revision),
-              ),
-            )
-            .returning();
-          if (!updated) return null;
-          const [event] = await tx
-            .insert(gameEvents)
-            .values({
-              campaignId: auth.campaignId,
-              actionId: command.actionId,
-              membershipId: auth.membershipId,
-              type: "TOKEN_MOVED",
-              entityType: "TOKEN",
-              entityId: updated.id,
-              entityRevision: updated.revision,
-              payload: {
-                x: updated.x,
-                y: updated.y,
-                z: updated.z,
-                levelId: updated.levelId,
-              },
-            })
-            .returning();
-          await tx.insert(actionJournal).values({
-            campaignId: auth.campaignId,
-            sceneId: current.sceneId,
-            actorMembershipId: auth.membershipId,
-            actionId: command.actionId,
-            scope: current.layer === "GM" ? "GM" : "PUBLIC",
-            type: "TOKEN_MOVE",
-            targetType: "TOKEN",
-            targetId: current.id,
-            before: {
-              x: current.x,
-              y: current.y,
-              z: current.z,
-              levelId: current.levelId,
-            },
-            after: {
-              x: updated.x,
-              y: updated.y,
-              z: updated.z,
-              levelId: updated.levelId,
-            },
-            beforeRevision: current.revision,
-            afterRevision: updated.revision,
-            currentRevision: updated.revision,
-          });
-          return event ? { event, updated } : null;
+          return commitTokenMove(tx, auth, current, command);
         },
       ).catch((error: unknown) => {
+        if (isIsometricPolicyError(error))
+          return { movementBlocked: true } as const;
         if (isCampaignCanvasGuardError(error))
           return { guardError: error.code } as const;
         return Promise.reject(error);
@@ -875,6 +1068,13 @@ export function registerRealtime(
           reason: result.guardError,
         });
       }
+
+      if (result && "movementBlocked" in result)
+        return ack?.({
+          ok: false,
+          status: "FORBIDDEN",
+          reason: "MOVEMENT_FORBIDDEN",
+        });
 
       if (!result) {
         const latest = await editableToken(db, auth, command.tokenId);
@@ -1787,6 +1987,7 @@ export function registerRealtime(
           )
           .limit(1);
         if (!scene || !socket.connected) return;
+        if (scene.grid.isometric) return; // Legacy ruler packets have no floor context.
         if (intent.kind === "update") {
           const [member] = await tx
             .select({ rulerColor: memberships.rulerColor })
@@ -1911,6 +2112,7 @@ export function registerRealtime(
           const [scene] = await tx
             .select({
               sceneId: scenes.id,
+              grid: scenes.grid,
               activeSceneId: campaigns.activeSceneId,
             })
             .from(scenes)
@@ -1923,6 +2125,8 @@ export function registerRealtime(
             )
             .limit(1);
           if (!scene) return ack?.({ ok: false, reason: "SCENE_NOT_FOUND" });
+          if (scene.grid.isometric)
+            return ack?.({ ok: false, reason: "LAYER_CONTEXT_REQUIRED" });
           const isPlayerScene = scene.sceneId === scene.activeSceneId;
           if (auth.role === "PLAYER" && !isPlayerScene)
             return ack?.({ ok: false, reason: "SCENE_NOT_ACTIVE" });
@@ -1988,7 +2192,7 @@ export function registerRealtime(
       lastCursorMoveAt = now;
       await runCampaignCanvasRelay(db, auth.campaignId, async (tx) => {
         const [scene] = await tx
-          .select({ id: scenes.id })
+          .select({ id: scenes.id, grid: scenes.grid })
           .from(scenes)
           .where(
             and(
@@ -1998,6 +2202,7 @@ export function registerRealtime(
           )
           .limit(1);
         if (!scene) return;
+        if (scene.grid.isometric) return; // Do not relay coordinates of an unspecified floor.
         if (!socket.connected) return;
         const shared = parsed.data.shared === true;
         // Moving from shared to private has to retract the old position from
@@ -2092,6 +2297,8 @@ export function registerRealtime(
 declare module "socket.io" {
   interface SocketData {
     auth: SessionAuthContext;
+    /** Negotiated wire optimization, never an authorization capability. */
+    snapshotDeltaV1?: boolean;
     /** UIX-583: only enough metadata to retract already relayed ephemera. */
     canvasEphemera?: {
       rulerSceneId?: string;

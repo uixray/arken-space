@@ -12,10 +12,12 @@ export class FogGeometryError extends Error {
 }
 export function canonicalizeFogGeometry(
   input: FogGeometry,
-  scene: { width: number; height: number },
+  scene: { width: number; height: number; x?: number; y?: number },
   legacy = false,
 ): { geometry: FogGeometry; bbox: FogBounds } {
   let geometry = input;
+  const left = scene.x ?? 0, top = scene.y ?? 0;
+  const right = left + scene.width, bottom = top + scene.height;
   if (input.type === "BRUSH")
     geometry = {
       ...input,
@@ -30,28 +32,28 @@ export function canonicalizeFogGeometry(
     if (
       geometry.points.some(
         (point) =>
-          point.x < 0 ||
-          point.y < 0 ||
-          point.x > scene.width ||
-          point.y > scene.height,
+          point.x < left ||
+          point.y < top ||
+          point.x > right ||
+          point.y > bottom,
       )
     )
       throw new FogGeometryError("FOG_OUTSIDE_SCENE");
     return { geometry, bbox };
   }
   if (legacy && geometry.type === "RECT") {
-    const l = Math.max(0, bbox.x),
-      t = Math.max(0, bbox.y),
-      r = Math.min(scene.width, bbox.x + bbox.width),
-      b = Math.min(scene.height, bbox.y + bbox.height);
+    const l = Math.max(left, bbox.x),
+      t = Math.max(top, bbox.y),
+      r = Math.min(right, bbox.x + bbox.width),
+      b = Math.min(bottom, bbox.y + bbox.height);
     if (r <= l || b <= t) throw new FogGeometryError("FOG_OUTSIDE_SCENE");
     geometry = { type: "RECT", x: l, y: t, width: r - l, height: b - t };
     bbox = fogGeometryBounds(geometry);
   } else if (
-    bbox.x < 0 ||
-    bbox.y < 0 ||
-    bbox.x + bbox.width > scene.width ||
-    bbox.y + bbox.height > scene.height
+    bbox.x < left ||
+    bbox.y < top ||
+    bbox.x + bbox.width > right ||
+    bbox.y + bbox.height > bottom
   )
     throw new FogGeometryError("FOG_OUTSIDE_SCENE");
   return { geometry, bbox };

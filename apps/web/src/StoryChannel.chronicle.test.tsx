@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { StoryPostAdminDto } from "@arken/contracts";
 import { renderComponent, screen, userEvent } from "./test-support/render";
-import { StoryChannel } from "./StoryChannel";
+import { StoryChannel, StoryPost } from "./StoryChannel";
 import {
   parseStoryWorldDay,
   storyWorldTimeLabel,
@@ -170,5 +170,15 @@ describe("legacy story payloads", () => {
     expect(storyWorldTimeLabel(legacy)).toBe("");
     renderComponent(<StoryChannel posts={[legacy]} isGm={false} />);
     expect(screen.queryByText(/undefined/)).toBeNull();
+  });
+});
+
+
+describe("published illustration fullscreen controls", () => {
+  it.each(["DRAFT", "ARCHIVED", "PUBLISHED", "CORRECTED"] as const)("offers fullscreen only for a public lifecycle: %s", (lifecycle) => {
+    renderComponent(<StoryPost isGm post={post({lifecycle, era:"Обычная кампания", media:[{contentId:crypto.randomUUID(),order:0,altText:"Иллюстрация",caption:"Подпись",fileName:"art.png",mimeType:"image/png",sizeBytes:100,width:1200,height:800,createdAt:"2026-11-27T00:00:00.000Z"}]})}/>);
+    const button = screen.queryByRole("button", {name:/^На весь экран$/});
+    if (lifecycle === "PUBLISHED" || lifecycle === "CORRECTED") expect(button).toBeInTheDocument();
+    else expect(button).not.toBeInTheDocument();
   });
 });

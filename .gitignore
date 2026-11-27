@@ -46,3 +46,8 @@ docs/stickers/
 
 *storybook.log
 storybook-static
+
+# Private tavern reference and isolated R&D state.
+/.qa-temp/tavern-real-20261121/
+
+/.qa-temp/

@@ -12,6 +12,7 @@ import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js"
 
 let database: PGlite;
 let app: FastifyInstance;
+const undoNotices: Array<{ room: string; payload: unknown }> = [];
 let db: ReturnType<typeof drizzle<typeof schema>>;
 
 const id = () => crypto.randomUUID();
@@ -106,9 +107,15 @@ beforeEach(async () => {
 
   app = Fastify();
   await app.register(cookie);
+  undoNotices.length = 0;
   const io = {
     in: () => ({ fetchSockets: async () => [] }),
-    to: () => ({ emit() {} }),
+    to: (room: string) => ({
+      emit(event: string, payload: { cancelledApplicationMessageId?: string }) {
+        if (event === "chat:created" && payload.cancelledApplicationMessageId)
+          undoNotices.push({ room, payload });
+      },
+    }),
   };
   registerRoutes(app, db as never, io as never);
   await app.ready();
@@ -120,6 +127,50 @@ afterEach(async () => {
 });
 
 describe("Character catalog ACL and player ability management", () => {
+  it.each(["PUBLIC", "GM_ONLY"] as const)(
+    "delivers the undo marker for %s through the existing audience once",
+    async (visibility) => {
+      const entryId = id();
+      await db.insert(schema.characterCatalogEntries).values({
+        id: entryId,
+        characterId: ids.character,
+        kind: "ABILITY",
+        name: "Free action",
+        data: { activation: { consumeUse: false } },
+      });
+      const applied = await app.inject({
+        method: "POST",
+        url: `/api/characters/${ids.character}/catalog/${entryId}/roll`,
+        headers: headers(visibility === "PUBLIC" ? secrets.owner : secrets.gm),
+        payload: { actionId: id(), entryRevision: 0, visibility },
+      });
+      expect(applied.statusCode, applied.body).toBe(201);
+      const { messageId } = applied.json();
+      const actionId = id();
+      const undo = () => app.inject({
+        method: "POST",
+        url: "/api/chat/application-undo",
+        headers: headers(secrets.gm),
+        payload: { actionId, messageId },
+      });
+      const first = await undo();
+      expect(first.statusCode, first.body).toBe(200);
+      expect((await undo()).json()).toEqual({ duplicate: true });
+      const { campaignRoom, gmRoom, memberRoom } = await import("./rooms.js");
+      expect(undoNotices.map(({ room }) => room)).toEqual(
+        visibility === "PUBLIC" ? [campaignRoom(ids.campaign)] :
+          [gmRoom(ids.campaign), memberRoom(ids.gm)],
+      );
+      for (const { payload } of undoNotices) {
+        expect(payload).toMatchObject({
+          actionId,
+          cancelledApplicationMessageId: messageId,
+          data: { visibility },
+        });
+        expect(payload).not.toHaveProperty("originalMessage");
+      }
+    },
+  );
   it.each(["SKILL", "ABILITY"] as const)(
     "creates a personal %s without changing the shared catalog and replays it",
     async (kind) => {

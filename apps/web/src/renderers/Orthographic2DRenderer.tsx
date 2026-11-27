@@ -2984,6 +2984,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
       ? { ...sourceToken, ...resizeDrafts[sourceToken.id] }
       : sourceToken;
     const canMove =
+      !props.readOnly &&
       !token.id.startsWith("pending:") &&
       canMoveMapToken({
         tool: props.tool,
@@ -3711,6 +3712,7 @@ function Orthographic2DRendererComponent(props: SceneRendererProps) {
         token &&
         token.revision === origin.revision &&
         !props.paused &&
+        !props.readOnly &&
         props.socket?.connected &&
         props.onBulkMove &&
         !touchPending.current.has(token.id) &&

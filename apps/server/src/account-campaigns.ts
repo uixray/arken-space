@@ -1,3 +1,5 @@
+import { registerCampaignTransferUpload } from "./campaign-transfer-upload.js";
+import { registerCampaignTransferRoutes } from "./campaign-transfer-routes.js";
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { and, count, eq, gt, isNull, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -34,6 +36,8 @@ type RealtimeSessions = {
   in: (room: string) => { disconnectSockets: (close?: boolean) => unknown };
 };
 export type AccountCampaignOptions = {
+  transfer?: { root: string; migrations: readonly string[] };
+  transferImport?: { root: string; migrations: readonly string[] };
   localInstanceId?: string;
   // Opt-in via CAMPAIGN_ARCHIVE_ENABLED; default routes retain their prior behavior.
   archivePreviewEnabled?: boolean;
@@ -63,6 +67,7 @@ async function accountForRequest(
     .select({
       id: accountSessions.id,
       userId: users.id,
+      passwordHash: users.passwordHash,
       identityKind: users.identityKind,
       verifiedAt: users.verifiedAt,
       csrfHash: accountSessions.csrfHash,
@@ -263,6 +268,31 @@ export function registerAccountCampaignRoutes(
   io: RealtimeSessions,
   options: AccountCampaignOptions,
 ) {
+  if (options.enabled && options.localInstanceId && options.transferImport) {
+    const { transferImport, localInstanceId } = options;
+    app.register(async (scope) =>
+      registerCampaignTransferUpload(scope, db, {
+        ...transferImport,
+        instanceId: localInstanceId,
+        account: (request, reply, mutation) =>
+          requireAccount(request, reply, db, options, mutation),
+      }),
+    );
+  }
+  if (options.enabled && options.transfer) {
+    const transfer = options.transfer;
+    app.register(async (scope) =>
+      registerCampaignTransferRoutes(scope, db, {
+        ...transfer,
+        account: (request, reply, mutation) =>
+          requireAccount(request, reply, db, options, mutation),
+        owner: async (userId, campaignId) =>
+          (await campaignArchiveAllowsGameAccess(db, campaignId))
+            ? ownedMembership(db, userId, campaignId, "GM")
+            : null,
+      }),
+    );
+  }
   if (options.archivePreviewEnabled) {
     const command = z
       .object({

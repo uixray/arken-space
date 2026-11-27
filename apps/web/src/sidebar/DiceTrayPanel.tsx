@@ -1,3 +1,4 @@
+import {useGameReadOnly} from "../game-read-only";
 import { useRef, useState } from "react";
 import type { MessageVisibility } from "@arken/contracts";
 import { RollModeControl, type RollMode } from "../RollModeControl";
@@ -61,6 +62,7 @@ export function DiceTrayPanel({
     rollMode?: RollMode,
   ) => Promise<void>;
 }) {
+  const readOnly=useGameReadOnly();
   const [rollMode, setRollMode] = useState<RollMode>("NORMAL");
   const rollModeRef = useRef<RollMode>("NORMAL");
   const selectRollMode = (next: RollMode) => {
@@ -74,6 +76,7 @@ export function DiceTrayPanel({
     count: number,
     ...args: Parameters<typeof onRoll>
   ) => {
+    if(readOnly)return;
     setPendingRolls((count) => count + 1);
     setRollError("");
     try {
@@ -100,6 +103,7 @@ export function DiceTrayPanel({
         >
           {[2, 4, 6, 8, 10, 12, 20, 100].map((sides) => (
             <button
+              disabled={readOnly}
               key={sides}
               type="button"
               title={`Бросить ${personalDiceNames === "GEOMETRIC" && geometricNames[sides] ? `${geometricNames[sides].name} (d${sides})` : `d${sides}`} · ${ROLL_MODIFIER_HINT}`}

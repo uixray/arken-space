@@ -106,6 +106,7 @@ export interface CampaignActions {
         | "world-encyclopedia"
         | "spell-schools"
         | "shops"
+        | "creations"
         | "world-codex"
         | "creations"
         | null,

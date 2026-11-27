@@ -65,6 +65,15 @@ export function AbilityAreaPanel({
       <h2 id="ability-area-heading" tabIndex={-1} ref={heading}>
         {draft.name} · радиус {draft.radiusMeters} м
       </h2>
+      {draft.consumesItem && (
+        <p role="note">
+          <strong>
+            Одноразовый предмет будет израсходован целиком при применении
+            области.
+          </strong>{" "}
+          Повторное применение и разбор станут недоступны.
+        </p>
+      )}
       <p>
         Круг от центра фигурки. Все персонажи игроков внутри, включая
         применяющего персонажа игрока, получают один общий бросок 1к6 маны.
@@ -125,7 +134,9 @@ export function AbilityAreaPanel({
                 ? "Восстановить отмену"
                 : draft.request
                   ? "Повторить тот же запрос"
-                  : "Бросить 1к6 и применить"}
+                  : draft.consumesItem
+                    ? "Израсходовать предмет и применить"
+                    : "Бросить 1к6 и применить"}
           </button>
         )}
         <button type="button" disabled={!area.canCancel} onClick={area.cancel}>

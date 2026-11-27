@@ -3,6 +3,7 @@ import { useLayoutEffect, type ReactNode } from "react";
 import { PLAYER_THEMES, type PlayerThemeColorScheme } from "./player-themes";
 import "./player-themes.generated.css";
 import "./player-theme-gravity.css";
+import "./classic-readability.css";
 
 export interface PlayerThemeProviderProps {
   themeId: string | null;

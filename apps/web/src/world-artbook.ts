@@ -10,6 +10,8 @@ export type ArtbookRecord = {
   gallery: string[];
   sourceUrl: string;
   rawContentHash: string;
+  /** Owner-reviewed editorial overlay; raw source and its checksum stay intact. */
+  sourceNameBeforeReview?: string;
 };
 export type ArtbookSource = {
   источник: { получено: string; атрибуция: string };
@@ -35,9 +37,37 @@ export type ArtbookMediaProposal = {
 };
 
 /** Loaded on demand: only the GM import needs it. */
-export const loadArtbook = async () =>
-  (await import("../../../docs/content/world-artbook.json"))
+export const loadArtbook = async (): Promise<ArtbookSource> => {
+  const source = (await import("../../../docs/content/world-artbook.json"))
     .default as unknown as ArtbookSource;
+  return {
+    ...source,
+    записи: source.записи.map((record) => {
+      if (record.slug !== "artbook-kaizer-aster") return record;
+      // Bind the owner's decision to the reviewed observation, never to a name
+      // search. A later source revision needs review rather than a silent override.
+      if (
+        record.name !== "Кайзер Астер" ||
+        record.rawContentHash !==
+          "sha256:5131015704789f16459e77bcf12af038ef59081bd5db9f6b272ea93029eb3dda"
+      )
+        throw new Error(
+          "Источник Кая Астера изменился: требуется повторная сверка имени.",
+        );
+      return {
+        ...record,
+        name: "Кай Астер",
+        sourceNameBeforeReview: record.name,
+      };
+    }),
+  };
+};
+
+const artbookAttribution = (source: ArtbookSource, record: ArtbookRecord) =>
+  source.источник.атрибуция +
+  (record.sourceNameBeforeReview
+    ? ` Имя источника: «${record.sourceNameBeforeReview}». Каноническое имя «${record.name}» утверждено владельцем 02.11.2026; checksum относится к исходному тексту.`
+    : "");
 
 /** Path of a picked file inside the chosen artbook folder, without the folder itself. */
 export const artbookRelativePath = (file: File) =>
@@ -52,7 +82,7 @@ export const artbookProvenance = (
   sourceExternalId: record.slug,
   retrievedAt: `${source.источник.получено}T00:00:00.000Z`,
   rawContentHash: record.rawContentHash,
-  attribution: source.источник.атрибуция,
+  attribution: artbookAttribution(source, record),
   rightsReviewStatus: "APPROVED" as const,
   editorialApprovalStatus: "PENDING" as const,
 });
@@ -97,7 +127,7 @@ export function planArtbookTextImport(
         record,
         sourceId,
         retrievedAt,
-        attribution: source.источник.атрибуция,
+        attribution: provenance.attribution,
         status: "blocked",
         reason: "Повтор slug или source identity во входном источнике.",
       };
@@ -107,7 +137,7 @@ export function planArtbookTextImport(
         record,
         sourceId,
         retrievedAt,
-        attribution: source.источник.атрибуция,
+        attribution: provenance.attribution,
         status: "conflict",
         reason: "В каноне найдено несколько записей с этим slug.",
         targetIds: matches.map((entity) => entity.id),
@@ -119,7 +149,7 @@ export function planArtbookTextImport(
         record,
         sourceId,
         retrievedAt,
-        attribution: source.источник.атрибуция,
+        attribution: provenance.attribution,
         status: "conflict",
         reason: "Несколько канонических записей имеют этот source identity.",
         targetIds: sourceMatches.map((entity) => entity.id),
@@ -129,7 +159,7 @@ export function planArtbookTextImport(
         record,
         sourceId,
         retrievedAt,
-        attribution: source.источник.атрибуция,
+        attribution: provenance.attribution,
         status: "conflict",
         reason: `Источник уже привязан к slug ${sourceMatches[0]!.slug}; автоматическое переименование запрещено.`,
         targetIds: [sourceMatches[0]!.id],
@@ -139,7 +169,7 @@ export function planArtbookTextImport(
         record,
         sourceId,
         retrievedAt,
-        attribution: source.источник.атрибуция,
+        attribution: provenance.attribution,
         status: "create",
       };
     if (sourceMatches.length === 1 && sourceMatches[0]!.id !== current!.id)
@@ -147,7 +177,7 @@ export function planArtbookTextImport(
         record,
         sourceId,
         retrievedAt,
-        attribution: source.источник.атрибуция,
+        attribution: provenance.attribution,
         status: "conflict",
         reason:
           "Slug и source identity указывают на разные канонические записи.",
@@ -172,7 +202,7 @@ export function planArtbookTextImport(
         record,
         sourceId,
         retrievedAt,
-        attribution: source.источник.атрибуция,
+        attribution: provenance.attribution,
         status: "matched",
       };
     const reason =
@@ -185,7 +215,7 @@ export function planArtbookTextImport(
       record,
       sourceId,
       retrievedAt,
-      attribution: source.источник.атрибуция,
+      attribution: provenance.attribution,
       status: "conflict",
       reason,
     };

@@ -1,3 +1,4 @@
+import {useGameReadOnly} from "./game-read-only";
 import { useEffect, useRef, useState } from "react";
 import type {
   CharacterDto,
@@ -30,6 +31,7 @@ const terminal = (error: unknown) =>
   ![408, 429].includes(error.status);
 
 export function PrivateNpcNotebook({ character }: { character: CharacterDto }) {
+  const readOnly=useGameReadOnly();
   const [open, setOpen] = useState(false),
     [loaded, setLoaded] = useState(false);
   const [text, setText] = useState(""),
@@ -140,7 +142,7 @@ export function PrivateNpcNotebook({ character }: { character: CharacterDto }) {
             rows={14}
             maxLength={20000}
             value={text}
-            disabled={!loaded || busy || retry}
+            disabled={readOnly||!loaded || busy || retry}
             onChange={(event) => setText(event.target.value)}
           />
         </label>
@@ -153,7 +155,7 @@ export function PrivateNpcNotebook({ character }: { character: CharacterDto }) {
         </p>
         {error && <p role="alert">{error}</p>}
         <Button
-          disabled={!loaded || busy || (!retry && text === savedText)}
+          disabled={readOnly||!loaded || busy || (!retry && text === savedText)}
           onClick={() => void save()}
         >
           {retry ? "Повторить сохранение" : "Сохранить"}
@@ -237,6 +239,7 @@ export function InspirationResource({
   snapshot: GameSnapshot;
   compact?: boolean;
 }) {
+  const readOnly=useGameReadOnly();
   const state = character.resources.inspiration ?? { current: 0, maximum: 1 };
   const [open, setOpen] = useState(false),
     [current, setCurrent] = useState(String(state.current)),
@@ -247,7 +250,7 @@ export function InspirationResource({
     `${snapshot.campaign.id}:${snapshot.me.id}:${character.id}:adjust`,
     character.id,
   );
-  const editable = snapshot.me.role === "GM";
+  const editable = !readOnly&&snapshot.me.role === "GM";
   return (
     <div
       className={
@@ -364,6 +367,7 @@ export function InspirationRollAction({
   snapshot: GameSnapshot;
   message: ChatMessageDto;
 }) {
+  const readOnly=useGameReadOnly();
   const character = snapshot.characters.find(
     (c) => c.id === message.characterId,
   );
@@ -411,7 +415,7 @@ export function InspirationRollAction({
   return (
     <div>
       <Button
-        disabled={command.busy || spent || (!command.retry && balance < 1)}
+        disabled={readOnly||command.busy || spent || (!command.retry && balance < 1)}
         onClick={() => {
           if (
             command.retry ||

@@ -9,6 +9,13 @@ import type {
   WorldContentType,
 } from "@arken/contracts";
 import { api } from "./api";
+import { routeCampaignId } from "./campaign-route";
+
+export function worldContentImageUrl(entityId: string, imageId: string) {
+  const campaign = routeCampaignId();
+  const path = `/api/world-content/${encodeURIComponent(entityId)}/images/${encodeURIComponent(imageId)}/content`;
+  return campaign ? `${path}?campaignId=${encodeURIComponent(campaign)}` : path;
+}
 
 /**
  * GM entity manager client slice (UIX-245 Stage 3). Pairs with the HTTP API

@@ -1,0 +1,19 @@
+.telegram-campaign {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.telegram-campaign summary { cursor: pointer; padding-block: 0.75rem; }
+.telegram-campaign form,
+.telegram-campaign label,
+.telegram-campaign section { display: grid; gap: 0.5rem; }
+.telegram-campaign label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: flex-start;
+}
+.telegram-campaign textarea { width: 100%; box-sizing: border-box; font-size: 16px; }
+.telegram-campaign ul { padding-inline-start: 1.25rem; }
+.telegram-campaign li { margin-block: 0.75rem; }
+.telegram-campaign .arken-button { white-space: normal; height: auto; min-height: 32px; }
+@media (max-width: 1023px) {
+  .telegram-campaign :is(summary, .arken-button, label:has(input[type="checkbox"])) { min-height: 44px; }
+}

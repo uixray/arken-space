@@ -1,0 +1,48 @@
+.local-session-panel { display:grid; gap:16px; max-width:680px; min-width:0; }
+.local-session-panel p { margin:0; overflow-wrap:anywhere; }
+.local-session-panel label { display:grid; gap:6px; min-width:0; }
+.local-session-panel fieldset { display:grid; gap:12px; min-width:0; padding:12px; border:1px solid var(--border, #777); }
+.local-session-panel__actions { display:flex; flex-wrap:wrap; gap:8px; }
+.local-session-panel button,.local-session-panel select { min-height:44px; }
+.local-session-panel textarea { box-sizing:border-box; width:100%; max-width:100%; font:inherit; overflow-wrap:anywhere; resize:vertical; }
+
+.local-player-workspace { height:100dvh; display:grid; grid-template-rows:auto minmax(0,1fr); }
+.local-player-workspace__status { position:relative; z-index:2; display:flex; flex-wrap:wrap; min-height:44px; max-height:35dvh; gap:4px 12px; align-items:center; padding:0 12px; overflow:auto; background:var(--surface-primary,#211f22); }
+.local-player-workspace__status button { min-height:44px; flex-shrink:0; }
+.local-player-workspace__table { position:relative; min-height:0; min-width:0; }
+.local-player-workspace__table > .app-shell { height:100%; min-height:0; }
+.local-player-workspace__status > span { min-width:0; overflow-wrap:anywhere; }
+@media(max-width:1023px) {
+  .local-player-workspace__status { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 8px; padding:4px 12px; }
+  .local-player-workspace__status > span:not(:first-child) { grid-column:1 / -1; }
+  .local-player-workspace__status > button { max-width:100%; }
+
+  .local-player-workspace__table > .app-shell--compact { top:0; height:100%; }
+  /* The local status row shifts the app below the viewport origin. Anchor its
+     session popup to the actual summary, not the global compact top offset. */
+  .local-player-workspace .app-shell--compact .account-menu { position:relative; }
+  .local-player-workspace .app-shell--compact .account-menu__content {
+    position:absolute; top:calc(100% + 4px); right:0;
+    max-height:calc(65dvh - var(--compact-header-height,64px) - 12px);
+  }
+}
+
+.local-session-panel .local-copy-choice { height:auto; padding:12px; white-space:normal; text-align:left; line-height:1.4; }
+.local-copy-choice .arken-button__text { display:block; white-space:normal; overflow-wrap:anywhere; text-align:left; }
+
+.read-only-composer { border:0; margin:0; padding:0; min-width:0; }
+
+/* Keep the off-screen skip target from painting over the copy status row;
+   clipping, unlike visibility:hidden, retains its keyboard focus stop. */
+.local-player-workspace .skip-link:not(:focus-visible) { clip-path:inset(50%); }
+
+/* Character sheets are portalled into the local table so its status strip is
+   outside their coordinate system. Hosted sessions retain the body portal. */
+.local-player-workspace__table > .character-workspace { position:absolute; }
+@media (max-width:1023px) {
+  .local-player-workspace__table > .character-workspace[data-compact="true"] {
+    top:calc(var(--compact-header-height) + var(--connection-notice-height,0px));
+    bottom:var(--compact-nav-height);
+    height:auto;
+  }
+}

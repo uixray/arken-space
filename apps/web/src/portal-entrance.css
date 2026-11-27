@@ -1,0 +1,69 @@
+.account-auth-shell--portal {
+  position: relative;
+  isolation: isolate;
+}
+.account-auth-shell--portal > .account-auth-card {
+  position: relative;
+  z-index: 1;
+}
+.portal-entrance {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 28% 47%, #24433b 0, #182722 16%, transparent 39%),
+    radial-gradient(ellipse at 27% 50%, #5a3824 0, #171a17 47%, #151513 74%);
+}
+.portal-entrance__canvas,
+.portal-entrance__shade {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.portal-entrance__canvas {
+  opacity: 0;
+}
+.portal-entrance__canvas[data-ready="true"] {
+  opacity: 1;
+}
+.portal-entrance__shade {
+  background: linear-gradient(90deg, transparent 32%, #151513cc 60%, #151513 100%);
+}
+.portal-entrance__caption {
+  display: none;
+}
+@media (min-width: 900px) {
+  .account-auth-shell--portal > .account-auth-card {
+    margin-right: max(1rem, calc((100vw - 1280px) / 2));
+    margin-left: auto;
+  }
+  .portal-entrance__caption {
+    display: block;
+    position: absolute;
+    bottom: 8%;
+    left: max(2rem, calc((100vw - 1280px) / 2));
+    max-width: 38%;
+    color: #eee9df;
+    text-shadow: 0 2px 20px #151513;
+  }
+  .portal-entrance__caption p {
+    color: #d8b28d;
+    font-size: 0.8rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+  .portal-entrance__caption h2 {
+    font-family: var(--font-family-serif, Georgia, serif);
+    font-size: clamp(1.7rem, 3vw, 3rem);
+    font-weight: 500;
+    line-height: 1.15;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .portal-entrance__canvas {
+    display: none;
+  }
+}

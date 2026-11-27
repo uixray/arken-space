@@ -13,8 +13,7 @@ import type {
   Role,
   SoundpadPackDto,
 } from "@arken/contracts";
-import { ApiError, formatApiError } from "./api";
-import { campaignHeaders } from "./campaign-route";
+import { api, ApiError, formatApiError } from "./api";
 import type { GameSocket } from "./realtime.js";
 import { SoundEffectsPlayback } from "./sound-effects-playback.js";
 import { SoundClipEditor } from "./SoundClipEditor.js";
@@ -24,6 +23,7 @@ import { FavoriteIcon } from "./ui/icons";
 import "./SoundpadWorkspace.css";
 
 type Props = {
+  localOnly?: boolean;
   campaignId: string;
   membershipId: string;
   role: Role;
@@ -85,23 +85,14 @@ async function request<T>(
   method = "GET",
   body?: unknown,
 ): Promise<T> {
-  const response = await fetch(path, {
+  return api<T>(path,{
     method,
-    credentials: "same-origin",
-    headers: campaignHeaders(
-      body === undefined ? undefined : { "content-type": "application/json" },
-    ),
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body:body===undefined?undefined:JSON.stringify(body),
   });
-  const value = await response.json().catch(() => ({}));
-  if (!response.ok)
-    throw new Error(
-      typeof value?.error === "string" ? value.error : "REQUEST_FAILED",
-    );
-  return value as T;
 }
 
 export function SoundpadWorkspace({
+  localOnly=false,
   campaignId,
   membershipId,
   role,
@@ -242,8 +233,10 @@ export function SoundpadWorkspace({
       }
     };
     const task = fetchUntilFresh()
-      .catch(() => {
-        setError("Не удалось загрузить саундпад.");
+      .catch((error) => {
+        setError(error instanceof ApiError&&error.code==="LOCAL_COPY_DATA_NOT_SAVED"
+          ?"Каталог саундпада не сохранён в этой копии. Подключитесь к мастеру для его загрузки."
+          :"Не удалось загрузить саундпад.");
         return null;
       })
       .finally(() => {
@@ -266,6 +259,7 @@ export function SoundpadWorkspace({
     setClipSourceAssetId("");
   }, [campaignId]);
   useEffect(() => {
+    if(localOnly){bus.setConnected();return ()=>bus.disposeAll();}
     if (!socket) return;
     const session = ++catalogueSession.current;
     const connect = () => {
@@ -341,7 +335,7 @@ export function SoundpadWorkspace({
       socket.off("soundpad:catalog:changed", onCatalogueChanged);
       bus.disposeAll();
     };
-  }, [socket, bus, onRefreshSnapshot]);
+  }, [socket, bus, onRefreshSnapshot,localOnly]);
   useEffect(() => {
     localStorage.setItem(
       `arken.effects.volume.${campaignId}.${membershipId}`,
@@ -579,6 +573,12 @@ export function SoundpadWorkspace({
   }, [enableEffects]);
   const trigger = (soundId: string) => {
     if (!unlocked) enableEffects();
+    if(localOnly){
+      const sound=data.packs.flatMap(pack=>pack.sounds).find(sound=>sound.id===soundId),asset=sound?assetsById.get(sound.assetId):undefined;
+      if(!sound||!asset?.url.startsWith("blob:")){setError("Этот звук отсутствует в сохранённой копии.");return;}
+      bus.play({eventId:crypto.randomUUID(),soundId,serverTime:new Date().toISOString(),defaultGain:sound.defaultGain},asset.url,volume,muted);
+      return;
+    }
     socket?.emit("soundpad:trigger", {
       soundId,
       actionId: crypto.randomUUID(),
@@ -658,6 +658,8 @@ export function SoundpadWorkspace({
               </button>
             )}
           </header>
+          {localOnly&&<p role="status">Прослушивание только на этом устройстве. Звуки открываются из сохранённой копии.</p>}
+          {localOnly&&<button type="button" onClick={()=>bus.stop()}>Остановить прослушивание</button>}
           {error && (
             <p className="soundpad__error" role="alert">
               {error}
@@ -920,7 +922,7 @@ export function SoundpadWorkspace({
                         <button
                           type="button"
                           className="soundpad__sound"
-                          aria-label={`Запустить звук: ${sound.label}`}
+                          aria-label={`${localOnly?"Прослушать сохранённый звук":"Запустить звук"}: ${sound.label}`}
                           disabled={
                             !data.playerPlaybackEnabled && role !== "GM"
                           }

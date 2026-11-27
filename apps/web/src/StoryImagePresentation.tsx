@@ -1,3 +1,4 @@
+import { useStoryMediaUrl } from "./story-media-url";
 import { useEffect, useRef, useState } from "react";
 import type { StoryChangedEvent } from "@arken/contracts";
 import type { GameSocket } from "./realtime";
@@ -18,13 +19,13 @@ export function StoryImagePresentation({
   campaignId: string;
   enabled: boolean;
 }) {
+  const mediaUrl = useStoryMediaUrl();
   const [presentation, setPresentation] = useState<Presentation | null>(null);
   const [index, setIndex] = useState(0);
   const [failed, setFailed] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const seen = useRef(new Set<string>());
-  const allowed =
-    enabled && campaignId === "eb6a55c4-a821-4739-8d4a-a1028e9d9092";
+  const allowed = enabled;
   useEffect(() => {
     seen.current.clear();
     setPresentation(null);
@@ -91,7 +92,7 @@ export function StoryImagePresentation({
         {media && !failed && (
           <img
             key={media.contentId}
-            src={`/api/story/media/${media.contentId}`}
+            src={mediaUrl(media.contentId) || undefined}
             alt={media.altText}
             onError={() => setFailed(true)}
           />

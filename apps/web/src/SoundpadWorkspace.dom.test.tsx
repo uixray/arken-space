@@ -62,6 +62,14 @@ beforeEach(() => {
 });
 
 function renderInTheme(element: ReactElement) {
+  // Legacy catalogue fixtures used json-only objects; the shared API transport
+  // consumes real Response.text(). Preserve their deferred timing and assertions.
+  const original=globalThis.fetch;
+  vi.stubGlobal("fetch",async(...args:Parameters<typeof fetch>)=>{
+    const response=await original(...args);
+    if(typeof response.text==="function"||typeof response.json!=="function")return response;
+    return {...response,status:response.status??200,headers:response.headers??new Headers(),text:async()=>JSON.stringify(await response.json())} as Response;
+  });
   return render(element, {
     wrapper: ({ children }) => <>{children}</>,
   });
@@ -1062,4 +1070,33 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   localStorage.clear();
+});
+
+it('distinguishes an absent saved soundpad catalogue from a network failure',async()=>{
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:false,status:404,json:async()=>({error:'LOCAL_COPY_DATA_NOT_SAVED'})}));
+ renderInTheme(<SoundpadWorkspace campaignId={pack.campaignId} membershipId={"55555555-5555-4555-8555-555555555555"} role="PLAYER" assets={[]} socket={null} onUpload={vi.fn()}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Саундпад'}));
+ expect(await screen.findByRole('alert')).toHaveTextContent('Каталог саундпада не сохранён в этой копии');
+});
+
+it('plays saved Blob audio locally without emitting a campaign trigger',async()=>{
+ const voices:any[]=[];class LocalAudio{src='';volume=1;currentTime=0;onended=null;onerror=null;pause=vi.fn();play=vi.fn(async()=>{});constructor(src=''){this.src=src;voices.push(this);}}
+ vi.stubGlobal('Audio',LocalAudio);vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({packs:[pack],playerPlaybackEnabled:true})}));
+ const socket={connected:true,on:vi.fn(),off:vi.fn(),emit:vi.fn()} as any;
+ renderInTheme(<SoundpadWorkspace localOnly campaignId={pack.campaignId} membershipId="55555555-5555-4555-8555-555555555555" role="PLAYER" assets={[{...asset,url:'blob:saved-audio'}]} socket={socket} onUpload={vi.fn()}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Саундпад'}));
+ fireEvent.click(await screen.findByRole('button',{name:'Прослушать сохранённый звук: '+sound.label}));
+ await waitFor(()=>expect(voices.some(voice=>voice.src==='blob:saved-audio'&&voice.play.mock.calls.length>0)).toBe(true));
+ expect(socket.emit).not.toHaveBeenCalled();expect(socket.on).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'Остановить прослушивание'}));expect(voices.some(voice=>voice.pause.mock.calls.length>0)).toBe(true);
+});
+
+it('refuses an origin URL in local-only mode rather than fetching a missing saved sound',async()=>{
+ const voices:any[]=[];class LocalAudio{src='';volume=1;currentTime=0;onended=null;onerror=null;pause=vi.fn();play=vi.fn(async()=>{});constructor(src=''){this.src=src;voices.push(this);}}
+ vi.stubGlobal('Audio',LocalAudio);vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({packs:[pack],playerPlaybackEnabled:true})}));
+ const socket={connected:true,on:vi.fn(),off:vi.fn(),emit:vi.fn()} as any;
+ renderInTheme(<SoundpadWorkspace localOnly campaignId={pack.campaignId} membershipId="55555555-5555-4555-8555-555555555555" role="PLAYER" assets={[asset]} socket={socket} onUpload={vi.fn()}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Саундпад'}));fireEvent.click(await screen.findByRole('button',{name:'Прослушать сохранённый звук: '+sound.label}));
+ expect(await screen.findByRole('alert')).toHaveTextContent('Этот звук отсутствует в сохранённой копии');
+ expect(voices.some(voice=>voice.src===asset.url)).toBe(false);expect(socket.emit).not.toHaveBeenCalled();
 });

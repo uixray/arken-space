@@ -94,15 +94,7 @@ export function registerSoundpadRoutes(
       return reply.sent
         ? undefined
         : reply.code(401).send({ error: "AUTH_REQUIRED" });
-    const [settings] = await db
-      .select()
-      .from(campaignSoundpadSettings)
-      .where(eq(campaignSoundpadSettings.campaignId, auth.campaignId))
-      .limit(1);
-    return {
-      packs: await projectPacks(db, auth.campaignId, auth.role),
-      playerPlaybackEnabled: settings?.playerPlaybackEnabled ?? true,
-    };
+    return readSoundpadCatalogue(db,auth);
   });
 
   app.post("/api/soundpad/packs", async (request, reply) => {
@@ -414,4 +406,16 @@ export function registerSoundpadRoutes(
     });
     return { playerPlaybackEnabled: body.playerPlaybackEnabled };
   });
+}
+
+export async function readSoundpadCatalogue(db:Database,auth:AuthContext){
+    const [settings] = await db
+      .select()
+      .from(campaignSoundpadSettings)
+      .where(eq(campaignSoundpadSettings.campaignId, auth.campaignId))
+      .limit(1);
+    return {
+      packs: await projectPacks(db, auth.campaignId, auth.role),
+      playerPlaybackEnabled: settings?.playerPlaybackEnabled ?? true,
+    };
 }

@@ -2,11 +2,12 @@ import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { FastifyInstance } from "fastify";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { STAMP_TEMPLATE_KEY_PATTERN } from "@arken/contracts";
-import { campaigns, drawings, scenes } from "@arken/db";
+import { campaigns, drawings, scenes, fogReveals } from "@arken/db";
 import { requireAuth, type AuthContext } from "./auth.js";
+import { isometricDrawingIsVisible } from "./isometric-layers.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
 
@@ -86,8 +87,8 @@ async function mayReadStampAsset(
   kind: "STAMP" | "TEXTURE" = "STAMP",
 ) {
   if (auth.role === "GM") return true;
-  const [visibleInstance] = await db
-    .select({ id: drawings.id })
+  const instances = await db
+    .select({ drawing: drawings, scene: scenes })
     .from(drawings)
     .innerJoin(scenes, eq(drawings.sceneId, scenes.id))
     .innerJoin(campaigns, eq(scenes.campaignId, campaigns.id))
@@ -103,9 +104,10 @@ async function mayReadStampAsset(
         eq(drawings.stampAssetKey, assetKey),
         eq(drawings.stampLayer, "PUBLIC"),
       ),
-    )
-    .limit(1);
-  return Boolean(visibleInstance);
+    );
+  const ids = [...new Set(instances.map(instance => instance.scene.id))];
+  const fog = ids.length ? await db.select().from(fogReveals).where(inArray(fogReveals.sceneId, ids)).orderBy(asc(fogReveals.sequence)) : [];
+  return instances.some(instance => isometricDrawingIsVisible(instance.scene, instance.drawing, fog.filter(row => row.sceneId === instance.scene.id)));
 }
 
 /** Built-in pixels are private content: only a GM or a campaign-visible public

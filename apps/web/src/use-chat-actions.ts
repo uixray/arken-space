@@ -1,5 +1,6 @@
 import {
   useMemo,
+  useRef,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
@@ -77,23 +78,50 @@ export function useChatActions(dependencies: {
     knownChatMessageIdsRef,
     activeChatThreadIdRef,
   } = dependencies;
+  // An ambiguous response must not mint a new ID for the same retry. The
+  // entry is scoped to campaign/member and retained only in this mounted app.
+  const pendingMessages = useRef(new Map<string, string[]>());
+  const takeMessageAction = (key: string) => {
+    const queue = pendingMessages.current.get(key);
+    const actionId = queue?.shift() ?? crypto.randomUUID();
+    if (queue && !queue.length) pendingMessages.current.delete(key);
+    return actionId;
+  };
+  const keepMessageAction = (key: string, actionId: string) => {
+    const queue = pendingMessages.current.get(key) ?? [];
+    if (!queue.includes(actionId)) queue.push(actionId);
+    pendingMessages.current.set(key, queue);
+  };
 
   return useMemo<ChatActions>(
     () => ({
-      onChat: (body, visibility, stream, characterId) =>
-        run(() =>
-          api("/api/chat", {
-            method: "POST",
-            body: JSON.stringify({
-              actionId: crypto.randomUUID(),
-              body,
-              visibility,
-              stream,
-              characterId:
-                characterId ?? snapshotRef.current?.me.characterId ?? null,
+      onChat: async (body, visibility, stream, characterId) => {
+        const snapshot = snapshotRef.current;
+        if (!snapshot) throw new Error("Нет активной игровой сессии.");
+        const values = {
+          body,
+          visibility,
+          stream,
+          characterId: characterId ?? snapshot.me.characterId ?? null,
+        };
+        const key = JSON.stringify([
+          snapshot.campaign.id,
+          snapshot.me.id,
+          values,
+        ]);
+        const actionId = takeMessageAction(key);
+        try {
+          await run(() =>
+            api("/api/chat", {
+              method: "POST",
+              body: JSON.stringify({ actionId, ...values }),
             }),
-          }),
-        ),
+          );
+        } catch (error) {
+          keepMessageAction(key, actionId);
+          throw error;
+        }
+      },
 
       onSticker: async (target, stickerId, scope) => {
         const message = await api<ChatMessageDto>("/api/chat/stickers", {
@@ -135,16 +163,31 @@ export function useChatActions(dependencies: {
       },
 
       onDirectChat: async (threadId, body, attachmentContentIds) => {
-        const message = await api<ChatMessageDto>("/api/chat/direct/messages", {
-          method: "POST",
-          body: JSON.stringify({
-            actionId: crypto.randomUUID(),
-            threadId,
-            body,
-            characterId: snapshotRef.current?.me.characterId ?? null,
-            attachmentContentIds,
-          }),
-        });
+        const snapshot = snapshotRef.current;
+        if (!snapshot) throw new Error("Нет активной игровой сессии.");
+        const values = {
+          threadId,
+          body,
+          characterId: snapshot.me.characterId ?? null,
+          attachmentContentIds,
+        };
+        const key = JSON.stringify([
+          snapshot.campaign.id,
+          snapshot.me.id,
+          "DIRECT",
+          values,
+        ]);
+        const actionId = takeMessageAction(key);
+        let message: ChatMessageDto;
+        try {
+          message = await api<ChatMessageDto>("/api/chat/direct/messages", {
+            method: "POST",
+            body: JSON.stringify({ actionId, ...values }),
+          });
+        } catch (error) {
+          keepMessageAction(key, actionId);
+          throw error;
+        }
         knownChatMessageIdsRef.current.add(message.id);
         setSnapshot((current) =>
           current

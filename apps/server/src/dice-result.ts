@@ -12,7 +12,7 @@ const diceTermSchema = z.object({
   subtotal: z.number().finite(),
 });
 
-const diceResultSchema = z.object({
+export const diceResultSchema = z.object({
   inspiration: inspirationLinkSchema.optional(),
   formula: z.string().max(160),
   resolvedFormula: z.string().max(512),
@@ -74,7 +74,7 @@ const skillCardActionSchema = z.object({
   consumeUse: z.boolean(),
 });
 
-const skillCardSchema = z.object({
+export const skillCardSchema = z.object({
   version: z.literal(1),
   execution: z.enum(["EXECUTED", "SHARED"]),
   entry: z.object({

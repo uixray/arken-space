@@ -1,8 +1,8 @@
+import { useGameReadOnly } from "../game-read-only";
 import { AbilityAccordion } from "../AbilityAccordion";
 import { CharacterActionCard } from "../SkillCards";
 import {
   groupAbilities,
-  usesAmberionAbilityGroups,
 } from "../ability-presentation";
 import "./roll-controls.css";
 import "./bugpool-ui2.css";
@@ -169,6 +169,9 @@ export function QuickRollPanel({
     executeAll?: true,
   ) => Promise<void>;
 }) {
+  const readOnly = useGameReadOnly();
+  quickRollPending = quickRollPending || readOnly;
+  canControlCharacter = canControlCharacter && !readOnly;
   /**
    * UIX-455: ручка высоты живёт здесь, а не у костей. Кнопок тут столько,
    * сколько строк в раскладке кампании плюс навыки персонажа, — список растёт
@@ -334,7 +337,7 @@ export function QuickRollPanel({
           trigger={
             <Button
               className={`quick-roll-button quick-roll-button--${variant}`}
-              disabled={quickRollPending}
+              disabled={readOnly || quickRollPending}
               onClick={(event) => {
                 const mode = rollModeFromEvent(event.nativeEvent);
                 onRollClick(event, (count) =>
@@ -382,7 +385,10 @@ export function QuickRollPanel({
       )}
       <Button
         disabled={
-          !preparedIsCurrent || !canControlCharacter || entryPending !== null
+          readOnly ||
+          !preparedIsCurrent ||
+          !canControlCharacter ||
+          entryPending !== null
         }
         onClick={() => void executePreparedAction()}
       >
@@ -390,7 +396,7 @@ export function QuickRollPanel({
       </Button>
       <Button
         type="button"
-        disabled={entryPending !== null}
+        disabled={readOnly || entryPending !== null}
         onClick={() => setPreparedAction(null)}
       >
         Очистить
@@ -502,7 +508,7 @@ export function QuickRollPanel({
                   trigger={
                     <Button
                       className="quick-roll-button quick-roll-button--skill"
-                      disabled={quickRollPending}
+                      disabled={readOnly || quickRollPending}
                       onClick={(event) =>
                         onQuickRoll(
                           skill.formula,
@@ -529,6 +535,7 @@ export function QuickRollPanel({
                     <Button
                       className="quick-roll-button quick-roll-button--skill"
                       disabled={
+                        readOnly ||
                         !canControlCharacter ||
                         entryPending !== null ||
                         !onEntryAction
@@ -547,7 +554,11 @@ export function QuickRollPanel({
                       type="button"
                       aria-label={`Подготовить навык: ${entry.name}`}
                       title="Подготовить навык"
-                      disabled={!canControlCharacter || entryPending !== null}
+                      disabled={
+                        readOnly ||
+                        !canControlCharacter ||
+                        entryPending !== null
+                      }
                       onClick={() =>
                         prepareEntryAction(
                           entry,
@@ -565,6 +576,7 @@ export function QuickRollPanel({
                       <Button
                         key={action.id}
                         disabled={
+                          readOnly ||
                           !canControlCharacter ||
                           entryPending !== null ||
                           !onEntryAction
@@ -583,7 +595,11 @@ export function QuickRollPanel({
                         type="button"
                         aria-label={`Подготовить действие: ${entry.name} · ${action.label}`}
                         title="Подготовить действие"
-                        disabled={!canControlCharacter || entryPending !== null}
+                        disabled={
+                          readOnly ||
+                          !canControlCharacter ||
+                          entryPending !== null
+                        }
                         onClick={() =>
                           prepareEntryAction(
                             entry,
@@ -605,7 +621,9 @@ export function QuickRollPanel({
                     )}
                   <button
                     type="button"
-                    disabled={entryPending !== null || !onEntryAction}
+                    disabled={
+                      readOnly || entryPending !== null || !onEntryAction
+                    }
                     aria-label={`Показать без выполнения: ${entry.name}`}
                     title="Показать описание без выполнения и расхода"
                     onClick={() => void submitEntry(entry, "SHARE")}
@@ -632,15 +650,16 @@ export function QuickRollPanel({
           aria-labelledby={`${tabsId}-abilities`}
           hidden={!stacked && activeTab !== "abilities"}
         >
-          {usesAmberionAbilityGroups(campaignId, characterOwnerRole) ? (
-            groupAbilities(abilityEntries).map((group) => (
+          {            groupAbilities(abilityEntries).map((group) => (
               <section className="quick-ability-group" key={group.id}>
                 <h4>{group.label}</h4>
                 {group.entries.map((entry) => (
                   <AbilityAccordion entry={entry} key={entry.id}>
                     <CharacterActionCard
                       entry={entry}
-                      disabled={!canControlCharacter || !onEntryAction}
+                      disabled={
+                        readOnly || !canControlCharacter || !onEntryAction
+                      }
                       draftScopeKey={draftScope}
                       characterStats={rollCharacter.stats}
                       onAction={async (input) => {
@@ -656,117 +675,7 @@ export function QuickRollPanel({
                 ))}
               </section>
             ))
-          ) : abilityEntries.length > 0 ? (
-            <div
-              className="activity-quick-rolls quick-roll-panel__ability-group"
-              aria-busy={entryPending !== null}
-            >
-              {abilityEntries.map((entry) => (
-                <div className="quick-roll-panel__entry" key={entry.id}>
-                  {entry.data.areaEffect ? (
-                    <Button
-                      title={`Показать область: радиус ${entry.data.areaEffect.radiusMeters} м, общий 1к6 маны`}
-                      disabled={
-                        !canControlCharacter ||
-                        entryPending !== null ||
-                        !onEntryAction
-                      }
-                      onClick={() => void submitEntry(entry, "EXECUTE")}
-                    >
-                      <CatalogActionIcon
-                        kind="CUSTOM"
-                        semanticText={entry.name}
-                      />
-                      {entry.name} · {entry.data.areaEffect.radiusMeters} м ·
-                      область
-                    </Button>
-                  ) : (entry.data.rollActions?.length ?? 0) > 0 ? (
-                    <>
-                      <Button
-                        disabled={
-                          !canControlCharacter ||
-                          entryPending !== null ||
-                          !onEntryAction ||
-                          (entry.data.rollActions?.some(
-                            (action) => action.consumeUse,
-                          ) === true &&
-                            entry.data.uses?.current === 0)
-                        }
-                        onClick={() =>
-                          void submitEntry(entry, "EXECUTE", undefined, true)
-                        }
-                      >
-                        <CatalogActionIcon
-                          kind="CUSTOM"
-                          semanticText={entry.name}
-                        />
-                        {entry.name}
-                      </Button>
-                      <Button
-                        type="button"
-                        aria-label={`Подготовить способность: ${entry.name}`}
-                        title="Подготовить способность"
-                        disabled={!canControlCharacter || entryPending !== null}
-                        onClick={() =>
-                          prepareEntryAction(
-                            entry,
-                            "ABILITY_EXECUTE_ALL",
-                            undefined,
-                            entry.name,
-                          )
-                        }
-                      >
-                        <AppIcon icon={PreparedActionIcon} />
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        title="Активировать способность"
-                        disabled={
-                          !canControlCharacter ||
-                          entryPending !== null ||
-                          !onEntryAction
-                        }
-                        onClick={() => void submitEntry(entry, "EXECUTE")}
-                      >
-                        <CatalogActionIcon
-                          kind="CUSTOM"
-                          semanticText={entry.name}
-                        />
-                        {entry.name}
-                      </Button>
-                      <Button
-                        type="button"
-                        aria-label={`Подготовить активацию: ${entry.name}`}
-                        title="Подготовить активацию"
-                        disabled={!canControlCharacter || entryPending !== null}
-                        onClick={() =>
-                          prepareEntryAction(
-                            entry,
-                            "ABILITY_ACTIVATION",
-                            undefined,
-                            entry.name,
-                          )
-                        }
-                      >
-                        <AppIcon icon={PreparedActionIcon} />
-                      </Button>
-                    </>
-                  )}
-                  <button
-                    type="button"
-                    disabled={entryPending !== null || !onEntryAction}
-                    aria-label={`Показать без выполнения: ${entry.name}`}
-                    title="Показать описание без выполнения и расхода"
-                    onClick={() => void submitEntry(entry, "SHARE")}
-                  >
-                    i
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
+          }
           {abilityEntries.length === 0 && (
             <p className="muted">Нет способностей.</p>
           )}

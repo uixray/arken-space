@@ -8,7 +8,7 @@ import {
   lockBoundCreationEntry,
 } from "./creation-runtime-state.js";
 import { consumeCreationApplication } from "./creation-consumption.js";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import {
   abilityAreaApplySchema,
   entryDataSchema,
@@ -51,6 +51,7 @@ export async function applyAbilityArea(
   const requestHash = areaApplicationHash(command);
   return db.transaction(
     async (tx) => {
+      await tx.execute(sql`SELECT id FROM campaigns WHERE id=${auth.campaignId} FOR UPDATE`);
       await lockEntryApplication(tx, auth.campaignId, command.actionId);
       const [actor] = await tx
         .select()

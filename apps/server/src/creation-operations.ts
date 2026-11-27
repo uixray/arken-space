@@ -118,7 +118,7 @@ export function commitCreationOperation(
         .where(eq(creationOperations.quoteId, quote.id))
         .limit(1);
       if (used) throw new Error("CREATION_QUOTE_USED");
-      if (quote.expiresAt.getTime() <= Date.now())
+      if (quote.transferInvalidated || quote.expiresAt.getTime() <= Date.now())
         throw new Error("CREATION_QUOTE_EXPIRED");
       const parsed = creationOperationQuoteSchema.safeParse(quote.request);
       if (
@@ -131,7 +131,7 @@ export function commitCreationOperation(
       const state = await loadCreationOperationState(tx, auth, parsed.data);
       if (state.inputHash !== quote.inputHash)
         throw new Error("CREATION_QUOTE_STALE");
-      if (quote.expiresAt.getTime() <= Date.now())
+      if (quote.transferInvalidated || quote.expiresAt.getTime() <= Date.now())
         throw new Error("CREATION_QUOTE_EXPIRED");
       return { ...(await applyCreationOperation(tx, auth, command, state)) };
     },

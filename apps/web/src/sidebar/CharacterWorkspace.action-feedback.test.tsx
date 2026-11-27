@@ -1,3 +1,4 @@
+import { GameReadOnlyProvider } from "../game-read-only";
 // @vitest-environment jsdom
 import type { ComponentProps } from "react";
 import type { AssetDto, CharacterDto, GameSnapshot } from "@arken/contracts";
@@ -1231,6 +1232,42 @@ describe("character action feedback", () => {
     expect(add).toHaveAccessibleDescription("Ресурс «Запас» уже существует.");
   });
 
+  it("guides a new player with no characters to the creation action", () => {
+    const state = snapshot([]);
+    state.me.role = "PLAYER";
+    renderComponent(
+      <CampaignActionsContext.Provider value={actions()}>
+        <CharacterWorkspace
+          snapshot={state}
+          onClose={unexpectedAction}
+          socket={null}
+          presence={[]}
+          storyPosts={[]}
+          storyNextCursor={null}
+          viewedSceneId={null}
+          sceneDialogRequest={0}
+          selectedTokenIds={[]}
+          canRecruitFromBattleZone={false}
+          requestedChatMessageId={null}
+          collapsed={false}
+          workspace="characters"
+          operatorFeedbackAllowed={false}
+        />
+      </CampaignActionsContext.Provider>,
+    );
+    expect(
+      screen.getByText("Нажмите «Создать персонажа», чтобы открыть его лист."),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(
+        "Выберите персонажа в списке, чтобы открыть его лист.",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Создать персонажа" }),
+    ).toBeVisible();
+  });
+
   it("explains the sheet limit in the rail and removes it after a sheet closes", async () => {
     const state = snapshot([
       character({ id: "character-a", name: "Персонаж A" }),
@@ -1356,4 +1393,26 @@ describe("character action feedback", () => {
       ),
     ).not.toBeInTheDocument();
   });
+});
+
+it("keeps an owned character sheet readable but blocks edits inside a saved-copy context", async () => {
+  const state = snapshot();
+  state.me = { ...state.me, id: "player-owner", role: "PLAYER" };
+  const patch = vi.fn(),
+    roll = vi.fn();
+  renderComponent(
+    <GameReadOnlyProvider value={true}>
+      {view(state, { onPatch: patch, onRoll: roll })}
+    </GameReadOnlyProvider>,
+  );
+  await galleryLoaded();
+  expect(
+    screen.getByRole("button", { name: "Изменить портрет: Персонаж A" }),
+  ).toBeDisabled();
+  expect(screen.getByRole("textbox", { name: "Предыстория" })).toBeDisabled();
+  expect(
+    screen.getByText("Сохранённая копия доступна только для просмотра."),
+  ).toBeInTheDocument();
+  expect(patch).not.toHaveBeenCalled();
+  expect(roll).not.toHaveBeenCalled();
 });

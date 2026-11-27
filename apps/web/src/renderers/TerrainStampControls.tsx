@@ -28,6 +28,7 @@ export type TerrainStampSettings = {
 export type StampCreatePayload =
   | {
       kind: "STAMP";
+      levelId?: string | null;
       packId: StampPackId;
       assetKey: string;
       size: number;
@@ -38,6 +39,7 @@ export type StampCreatePayload =
     }
   | {
       kind: "TEXTURE";
+      levelId?: string | null;
       packId: TexturePackId;
       assetKey: string;
       points: number[];

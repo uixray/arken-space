@@ -1,3 +1,4 @@
+import {GameReadOnlyProvider} from "../game-read-only";
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -95,4 +96,10 @@ describe("UIX645 dice controls", () => {
       "ADVANTAGE",
     );
   });
+});
+
+it("keeps die rolls unavailable in a saved-copy context",()=>{
+ const onRoll=vi.fn();renderComponent(<GameReadOnlyProvider value={true}><DiceTrayPanel characterId={null} visibility="PUBLIC" onVisibilityChange={vi.fn()} onRoll={onRoll}/></GameReadOnlyProvider>);
+ for(const sides of [2,4,6,8,10,12,20,100])expect(screen.getByRole('button',{name:'d'+sides})).toBeDisabled();
+ expect(onRoll).not.toHaveBeenCalled();
 });

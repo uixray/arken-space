@@ -1,0 +1,48 @@
+.entry-application-recovery {
+  position: fixed;
+  z-index: 90;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  left: max(1rem, env(safe-area-inset-left));
+  width: min(25rem, calc(100vw - 2rem));
+  max-height: 50dvh;
+  overflow: auto;
+  padding: 1rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 0.5rem;
+  box-shadow: 0 0.3rem 1.5rem #0005;
+}
+.entry-application-recovery h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+.entry-application-recovery small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.entry-application-recovery button {
+  margin-top: 0.75rem;
+  min-height: 2.75rem;
+}
+
+.application-recovery-stack {
+  position: fixed;
+  z-index: 90;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  width: min(25rem, calc(100vw - 24px));
+  max-height: 72dvh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.application-recovery-stack > .entry-application-recovery,
+.application-recovery-stack > .ability-area-panel--recovery {
+  position: static;
+  width: 100%;
+  max-height: none;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+}

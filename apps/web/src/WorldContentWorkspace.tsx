@@ -1,5 +1,6 @@
 import { WorldArtbookImport } from "./WorldArtbookImport";
 import { WorldRegionPicker } from "./WorldRegionPicker";
+import { WorldImageLibrary } from "./WorldImageLibrary";
 import {
   memo,
   useCallback,
@@ -44,6 +45,7 @@ import {
   fetchWorldContentList,
   fetchWorldContentMedia,
   fetchWorldContentRelations,
+  worldContentImageUrl,
   isValidWorldContentSlug,
   legalWorldContentTransitions,
   parseTagList,
@@ -1116,6 +1118,8 @@ function EntityDetail({
           assets={assets.filter((asset) => asset.mimeType.startsWith("image/"))}
           onChange={(assetId) => changeDraft("coverAssetId", assetId ?? "")}
         />
+        <WorldImageLibrary disabled={editorLocked} value={draft.coverAssetId || null}
+          onSelect={(id) => changeDraft("coverAssetId", id)} />
       </div>
       <label className="field">
         Краткое описание
@@ -1408,10 +1412,7 @@ function MediaSection({
           {sorted.map((item, index) => (
             <li key={item.id}>
               <img
-                src={
-                  assets.find((asset) => asset.id === item.assetId)?.url ??
-                  `/api/assets/${item.assetId}/content`
-                }
+                src={worldContentImageUrl(entity.id, item.assetId)}
                 alt={item.caption ?? ""}
               />
               {item.caption && <p>{item.caption}</p>}
@@ -1459,6 +1460,7 @@ function MediaSection({
           assets={assets.filter((asset) => asset.mimeType.startsWith("image/"))}
           onChange={(nextAssetId) => setAssetId(nextAssetId ?? "")}
         />
+        <WorldImageLibrary disabled={busy} value={assetId || null} onSelect={setAssetId} />
         <FormInput
           value={caption}
           placeholder="Подпись (необязательно)"

@@ -1,4 +1,5 @@
 import type {
+  ChatCreatedEvent,
   ChatMessageDto,
   ChatReadCursorDto,
   ChatStream,
@@ -132,6 +133,52 @@ export function appendChatMessage(
     messages,
     chatThreadStates,
   };
+}
+
+/** Add the notice normally, but update only an existing original in its thread. */
+export function applyChatCreated(
+  snapshot: GameSnapshot,
+  event: ChatCreatedEvent,
+  context: Parameters<typeof appendChatMessage>[3],
+): GameSnapshot {
+  const next = appendChatMessage(snapshot, event.data, event.sequence, context);
+  const id = event.cancelledApplicationMessageId;
+  if (!id) return next;
+  const original = next.messages.find(
+    (row) => row.id === id && row.threadId === event.data.threadId,
+  );
+  if (original?.applicationUndo?.cancelled !== false) return next;
+  return {
+    ...next,
+    messages: next.messages.map((row) =>
+      row === original ? { ...row, applicationUndo: { cancelled: true } } : row,
+    ),
+  };
+}
+
+/** Cancellation is terminal, but visibility still comes entirely from incoming. */
+export function retainChatApplicationCancellations(
+  current: readonly ChatMessageDto[],
+  incoming: ChatMessageDto[],
+): ChatMessageDto[] {
+  let cancelled: Map<string, string> | undefined;
+  for (const row of current) {
+    if (row.applicationUndo?.cancelled === true) {
+      cancelled ??= new Map();
+      cancelled.set(row.id, row.threadId);
+    }
+  }
+  if (!cancelled) return incoming;
+  let updated: ChatMessageDto[] | undefined;
+  incoming.forEach((row, index) => {
+    if (
+      row.applicationUndo?.cancelled !== false ||
+      cancelled?.get(row.id) !== row.threadId
+    ) return;
+    updated ??= incoming.slice();
+    updated[index] = { ...row, applicationUndo: { cancelled: true } };
+  });
+  return updated ?? incoming;
 }
 
 export function reconcileChatRead(

@@ -1,9 +1,10 @@
+import { validateTransferApplicationEvent } from "./campaign-transfer-application-events.js";
 import { CREATION_HISTORY_PROBE_KEYS } from "../../../tests/helpers/campaign-isolation-routes.js";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq, inArray } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as schema from "@arken/db";
 import { createMigratedPglite } from "../../../tests/helpers/pglite-template.js";
 import { rehearseCreationMigration } from "../../../tests/helpers/uix461-migration-rehearsal.js";
@@ -267,6 +268,46 @@ describe("UIX-461 creation lifecycle", () => {
         sinkCopper: 2,
         beneficiaryMembershipId: buyer,
       });
+      const [beforeBlockedPurchase] = await db
+        .select()
+        .from(schema.characters)
+        .where(eq(schema.characters.id, buyerCharacter));
+      const [sourceShopQuote] = await db
+        .select()
+        .from(schema.creationStoreQuotes)
+        .where(eq(schema.creationStoreQuotes.id, shopQuote.id));
+      const importedShopQuote = id();
+      await db
+        .insert(schema.creationStoreQuotes)
+        .values({
+          ...sourceShopQuote!,
+          id: importedShopQuote,
+          transferInvalidated: true,
+        });
+      const oldClock = vi
+        .spyOn(Date, "now")
+        .mockReturnValue(Date.UTC(1960, 0, 1));
+      try {
+        const denied = await app.inject({
+          method: "POST",
+          url: "/api/creation/store/commit",
+          headers: {
+            cookie: `${env.SESSION_COOKIE_NAME}=${secrets.buyer}`,
+            "x-creation-campaign": campaignId,
+            "x-creation-membership": buyer,
+          },
+          payload: { actionId: id(), quoteId: importedShopQuote },
+        });
+        expect(denied.statusCode, denied.body).toBe(409);
+        expect(denied.json().error).toBe("CREATION_QUOTE_EXPIRED");
+      } finally {
+        oldClock.mockRestore();
+      }
+      const [afterBlockedPurchase] = await db
+        .select()
+        .from(schema.characters)
+        .where(eq(schema.characters.id, buyerCharacter));
+      expect(afterBlockedPurchase).toEqual(beforeBlockedPurchase);
       const shopCommand = { actionId: id(), quoteId: shopQuote.id };
       const shopReceipt = await request("buyer", "store/commit", shopCommand);
       expect(await request("buyer", "store/commit", shopCommand)).toMatchObject(
@@ -1157,16 +1198,47 @@ describe("UIX-461 creation lifecycle", () => {
       });
       const useAction = id(),
         usePayload = { actionId: useAction, visibility: "PUBLIC" };
-      const useCreation = () =>
+      const useCreation = (payload = usePayload) =>
         app.inject({
           method: "POST",
           url: `/api/characters/${characterId}/catalog/${consumable.entryId}/roll`,
           headers: { cookie: `${env.SESSION_COOKIE_NAME}=${secrets.player}` },
-          payload: usePayload,
+          payload,
         });
-      const used = await useCreation();
-      expect(used.statusCode, used.body).toBe(201);
-      const retried = await useCreation();
+      let winningUse = usePayload;
+      if (real) {
+        const competingUse = { ...usePayload, actionId: id() };
+        const [first, second] = await Promise.all([
+          useCreation(usePayload),
+          useCreation(competingUse),
+        ]);
+        expect(
+          [first.statusCode, second.statusCode].filter(
+            (status) => status === 201,
+          ),
+        ).toHaveLength(1);
+        const rejected = first.statusCode === 201 ? second : first;
+        expect([403, 409], rejected.body).toContain(rejected.statusCode);
+        console.info(
+          "PostgreSQL consumable race",
+          [first.statusCode, second.statusCode].sort(),
+        );
+        winningUse = first.statusCode === 201 ? usePayload : competingUse;
+        const losingActionId =
+          first.statusCode === 201
+            ? competingUse.actionId
+            : usePayload.actionId;
+        expect(
+          await db
+            .select()
+            .from(schema.gameEvents)
+            .where(eq(schema.gameEvents.actionId, losingActionId)),
+        ).toHaveLength(0);
+      } else {
+        const used = await useCreation();
+        expect(used.statusCode, used.body).toBe(201);
+      }
+      const retried = await useCreation(winningUse);
       expect(retried.statusCode, retried.body).toBe(200);
       // The published character-roll replay contract returns only duplicate;
       // the durable event below independently verifies the original action ID.
@@ -1194,8 +1266,22 @@ describe("UIX-461 creation lifecycle", () => {
         await db
           .select()
           .from(schema.gameEvents)
-          .where(eq(schema.gameEvents.actionId, useAction)),
+          .where(eq(schema.gameEvents.actionId, winningUse.actionId)),
       ).toHaveLength(1);
+      const [applicationEvent] = await db
+        .select()
+        .from(schema.gameEvents)
+        .where(eq(schema.gameEvents.actionId, winningUse.actionId));
+      const transferRefs = validateTransferApplicationEvent({
+        type: applicationEvent!.type,
+        entity_type: applicationEvent!.entityType,
+        entity_id: applicationEvent!.entityId,
+        membership_id: applicationEvent!.membershipId,
+        payload: applicationEvent!.payload,
+      });
+      expect(transferRefs.objectIds).toEqual([consumable.outputObjectId]);
+      expect(transferRefs.entryIds).toContain(consumable.entryId);
+      expect(transferRefs.instanceIds).toEqual([consumable.instanceId]);
       const newAction = id();
       const attemptedAgain = await app.inject({
         method: "POST",

@@ -1,5 +1,12 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { WorldRegionPicker } from "./WorldRegionPicker";
+import {
+  articleHref,
+  invalidArticle,
+  setCampaignArticle,
+  useCampaignArticle,
+} from "./world-article-route";
+import { routeCampaignId } from "./campaign-route";
 import type {
   AssetDto,
   WorldContentInstancePlayerDto,
@@ -20,6 +27,7 @@ import {
   fetchWorldContentPlayerDetail,
   fetchWorldContentPlayerList,
   fetchWorldContentRelations,
+  worldContentImageUrl,
   parseTagList,
 } from "./world-content-client";
 import { fetchWorldContentInstances } from "./world-content-instances-client";
@@ -66,9 +74,11 @@ export const WorldEncyclopediaWorkspace = memo(
   function WorldEncyclopediaWorkspace({
     open,
     assets = [],
+    campaignId,
     onClose,
   }: {
     open: boolean;
+    campaignId?: string;
     assets?: readonly Pick<AssetDto, "id" | "url">[];
     onClose: () => void;
   }) {
@@ -84,7 +94,14 @@ export const WorldEncyclopediaWorkspace = memo(
       id: string;
       name: string;
     } | null>(null);
-    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [localId, setLocalId] = useState<string | null>(null);
+    const scoped =
+      campaignId && routeCampaignId() === campaignId ? campaignId : undefined;
+    const articleRoute = useCampaignArticle(scoped);
+    const selectedId = scoped ? articleRoute : localId;
+    const selectArticle = (id: string) => {
+      if (!scoped || !setCampaignArticle(scoped, id)) setLocalId(id);
+    };
     const latestRequest = useRef(0);
     const [detailEpoch, setDetailEpoch] = useState(0);
 
@@ -109,7 +126,7 @@ export const WorldEncyclopediaWorkspace = memo(
       } catch (reason) {
         if (requestId !== latestRequest.current) return;
         setItems([]);
-        setSelectedId(null);
+        setLocalId(null);
         setListError(formatApiError(reason, safeError));
       } finally {
         if (requestId === latestRequest.current) setLoading(false);
@@ -251,7 +268,7 @@ export const WorldEncyclopediaWorkspace = memo(
                           ? "world-encyclopedia-workspace__row is-selected"
                           : "world-encyclopedia-workspace__row"
                       }
-                      onClick={() => setSelectedId(item.id)}
+                      onClick={() => selectArticle(item.id)}
                     >
                       <span className="world-encyclopedia-workspace__row-name">
                         {item.name}
@@ -275,17 +292,22 @@ export const WorldEncyclopediaWorkspace = memo(
             )}
           </section>
           <section className="world-encyclopedia-workspace__detail-pane">
-            {selectedId ? (
+            {selectedId === invalidArticle ? (
+              <p role="alert">{notFoundError}</p>
+            ) : selectedId ? (
               <EntityPage
                 key={`${selectedId}:${detailEpoch}`}
                 id={selectedId}
                 assets={assets}
-                onNavigate={setSelectedId}
+                campaignId={scoped}
+                onNavigate={selectArticle}
                 onFilterRelated={(subject) => {
                   setActiveRelation(subject);
                   void load(subject.id);
                 }}
-                onMissing={() => setSelectedId(null)}
+                onMissing={() => {
+                  if (!scoped) setLocalId(null);
+                }}
               />
             ) : (
               <p className="muted">
@@ -301,12 +323,14 @@ export const WorldEncyclopediaWorkspace = memo(
 
 function EntityPage({
   id,
+  campaignId,
   assets,
   onNavigate,
   onFilterRelated,
   onMissing,
 }: {
   id: string;
+  campaignId?: string;
   assets: readonly Pick<AssetDto, "id" | "url">[];
   onNavigate: (id: string) => void;
   onFilterRelated: (subject: { id: string; name: string }) => void;
@@ -381,6 +405,25 @@ function EntityPage({
     <article className="world-encyclopedia-workspace__article">
       <header>
         <h2>{entity.name}</h2>
+        {campaignId && (
+          <a
+            href={articleHref(campaignId, entity.id)}
+            onClick={(event) => {
+              if (
+                event.button !== 0 ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.altKey
+              )
+                return;
+              event.preventDefault();
+              onNavigate(entity.id);
+            }}
+          >
+            Ссылка на статью
+          </a>
+        )}
         <p className="muted">
           {WORLD_CONTENT_TYPE_LABELS[entity.type]}
           {entity.subtype ? ` · ${entity.subtype}` : ""}
@@ -401,10 +444,7 @@ function EntityPage({
       {entity.coverAssetId && (
         <img
           className="world-encyclopedia-workspace__cover"
-          src={
-            assets.find((asset) => asset.id === entity.coverAssetId)?.url ??
-            `/api/assets/${entity.coverAssetId}/content`
-          }
+          src={worldContentImageUrl(entity.id, entity.coverAssetId)}
           alt=""
         />
       )}
@@ -442,10 +482,7 @@ function EntityPage({
             {media.map((item) => (
               <li key={item.id}>
                 <img
-                  src={
-                    assets.find((asset) => asset.id === item.assetId)?.url ??
-                    `/api/assets/${item.assetId}/content`
-                  }
+                  src={worldContentImageUrl(entity.id, item.assetId)}
                   alt={item.caption ?? ""}
                 />
                 {item.caption && <p>{item.caption}</p>}
@@ -492,15 +529,37 @@ function EntityPage({
           <ul className="world-encyclopedia-workspace__relations">
             {relations.map((edge) => (
               <li key={edge.id}>
-                <Button
-                  size="s"
-                  view="flat"
-                  className="world-encyclopedia-workspace__relation-link"
-                  onClick={() => onNavigate(edge.entity.id)}
-                >
-                  {WORLD_CONTENT_TYPE_LABELS[edge.entity.type]}:{" "}
-                  {edge.entity.name}
-                </Button>
+                {campaignId ? (
+                  <a
+                    className="world-encyclopedia-workspace__relation-link"
+                    href={articleHref(campaignId, edge.entity.id)}
+                    onClick={(event) => {
+                      if (
+                        event.button !== 0 ||
+                        event.metaKey ||
+                        event.ctrlKey ||
+                        event.shiftKey ||
+                        event.altKey
+                      )
+                        return;
+                      event.preventDefault();
+                      onNavigate(edge.entity.id);
+                    }}
+                  >
+                    {WORLD_CONTENT_TYPE_LABELS[edge.entity.type]}:{" "}
+                    {edge.entity.name}
+                  </a>
+                ) : (
+                  <Button
+                    size="s"
+                    view="flat"
+                    className="world-encyclopedia-workspace__relation-link"
+                    onClick={() => onNavigate(edge.entity.id)}
+                  >
+                    {WORLD_CONTENT_TYPE_LABELS[edge.entity.type]}:{" "}
+                    {edge.entity.name}
+                  </Button>
+                )}
                 <span className="muted"> ({edge.relationType})</span>
               </li>
             ))}

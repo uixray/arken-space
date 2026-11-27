@@ -1,3 +1,5 @@
+import {undoApplicationCommandSchema} from "@arken/contracts";
+export {undoApplicationCommandSchema} from "@arken/contracts";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -36,10 +38,6 @@ const receiptSchema = z.object({
     )
     .max(10000),
 });
-export const undoApplicationCommandSchema = z
-  .object({ actionId: z.string().uuid(), messageId: z.string().uuid() })
-  .strict();
-
 /** Restore only untouched revisions, atomically. Legacy events without a
  * complete preimage fail closed rather than guessing the player's resources. */
 export async function undoApplication(
@@ -50,6 +48,7 @@ export async function undoApplication(
   const command = undoApplicationCommandSchema.parse(input);
   return db.transaction(
     async (tx) => {
+      await tx.execute(sql`SELECT id FROM campaigns WHERE id=${auth.campaignId} FOR UPDATE`);
       // Serialize both retries and different undo attempts for the same message.
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${auth.campaignId + ":undo:" + command.messageId}, 0))`,

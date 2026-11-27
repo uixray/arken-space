@@ -1,0 +1,20 @@
+import {afterEach,expect,it,vi} from "vitest";
+import {playerSnapshot} from "../test-support/game-snapshot-fixtures";
+import {api} from "../api";
+import {storyMediaUrl} from "../story-media-url";
+import {encodePlayerCacheBundle,decodePlayerCacheBundle} from "./player-cache-media";
+import {installPlayerCopyRuntime} from "./player-copy-runtime";
+let runtime:ReturnType<typeof installPlayerCopyRuntime>|undefined;
+afterEach(()=>{runtime?.dispose();runtime=undefined;vi.unstubAllGlobals();});
+it("roundtrips exact saved story pages and verified media with no network fallback",async()=>{
+ const snapshot=playerSnapshot({assets:[],worldMaps:{maps:[],locations:[],partyPosition:null}}),id=crypto.randomUUID(),contentId=crypto.randomUUID();
+ const story={fingerprint:"a".repeat(64),pages:[{key:JSON.stringify([50,null,null]),page:{posts:[{id,threadId:id,authorMembershipId:crypto.randomUUID(),title:"Saved story",body:"Synthetic",lifecycle:"PUBLISHED" as const,revision:1,entityLinks:[],media:[{contentId,order:0,altText:"Image",caption:"",fileName:"image.png",mimeType:"image/png",sizeBytes:3,width:1,height:1,createdAt:""}],publishedAt:"",correctedAt:null,worldDay:null,era:null,linkTargets:[],createdAt:"",updatedAt:""}],nextCursor:"not-saved-next",eras:[]}}]};
+ const url=`/api/story/media/${contentId}`,encoded=await encodePlayerCacheBundle(snapshot,new Map([[url,new Blob(["abc"],{type:"image/png"})]]),story);
+ expect(encoded.format).toBe(3);const decoded=decodePlayerCacheBundle(encoded);expect(await decoded.media.get(url)?.text()).toBe("abc");
+ const fetch=vi.fn();vi.stubGlobal("fetch",fetch);
+ runtime=installPlayerCopyRuntime({authority:{campaignId:snapshot.campaign.id,hostId:crypto.randomUUID(),sessionId:crypto.randomUUID(),epoch:1},membershipId:snapshot.me.id,deviceId:crypto.randomUUID()},decoded);
+ const page=await api<any>("/api/story/posts?limit=50");expect(page.posts[0].title).toBe("Saved story");expect(page.nextCursor).toBe("not-saved-next");expect(storyMediaUrl(contentId)).toMatch(/^blob:/);
+ await expect(api("/api/story/posts?limit=50&cursor=not-saved-next")).rejects.toMatchObject({code:"LOCAL_COPY_DATA_NOT_SAVED"});expect(fetch).not.toHaveBeenCalled();
+ expect(()=>decodePlayerCacheBundle({...encoded,story:{...story,pages:[{...story.pages[0],page:{...story.pages[0]!.page,posts:[{...story.pages[0]!.page.posts[0],gmNotes:"secret"}]}}]}})).toThrow();
+ expect(()=>decodePlayerCacheBundle({...encoded,media:[{...encoded.media[0],url:"/api/story/media/foreign"}]})).toThrow("SCOPE_MISMATCH");
+});

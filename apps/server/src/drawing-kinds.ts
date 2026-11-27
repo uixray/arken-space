@@ -12,6 +12,7 @@ export function drawingDto(drawing: typeof drawings.$inferSelect) {
   const common = {
     id: drawing.id,
     sceneId: drawing.sceneId,
+    levelId: drawing.levelId,
     authorMembershipId: drawing.authorMembershipId,
     points: drawing.points,
     color: drawing.color,

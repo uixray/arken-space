@@ -1,3 +1,5 @@
+import {commitDrawingUpdate,commitDrawingCopy,commitDrawingDelete} from "./drawing-state-command.js";
+import {commitDrawingCreate} from "./drawing-create-command.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
@@ -8,6 +10,7 @@ import {
 } from "@arken/contracts";
 import { actionJournal, assets, drawings, gameEvents, scenes } from "@arken/db";
 import { requireAuth } from "./auth.js";
+import { canvasLayerLevel } from "./isometric-layers.js";
 import { findAction } from "./action-lookup.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
 import { drawingDto, isHiddenStamp, isStampDrawing } from "./drawing-kinds.js";
@@ -128,82 +131,8 @@ export function registerDrawingRoutes(
       (await findAction(db, auth.campaignId, body.actionId))
     )
       return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
-    const { actionId, ...input } = body;
-    const drawingInput =
-      input.kind === "STAMP"
-        ? {
-            sceneId: input.sceneId,
-            authorMembershipId: auth.membershipId,
-            points: [] as number[],
-            color: "#ffffff",
-            strokeWidth: 3,
-            x: input.x,
-            y: input.y,
-            kind: "STAMP",
-            stampAssetKey: input.assetKey,
-            stampPackId: input.packId,
-            stampSize: input.size,
-            stampRotation: input.rotation,
-            stampLayer: input.layer,
-          }
-        : input.kind === "TEXTURE"
-          ? {
-              sceneId: input.sceneId,
-              authorMembershipId: auth.membershipId,
-              points: input.points,
-              color: "#ffffff",
-              strokeWidth: input.brushWidth,
-              x: input.x,
-              y: input.y,
-              kind: "TEXTURE",
-              stampAssetKey: input.assetKey,
-              stampPackId: input.packId,
-              stampSize: input.size,
-              stampRotation: 0,
-              stampLayer: input.layer,
-            }
-          : {
-              ...input,
-              authorMembershipId: auth.membershipId,
-              kind: "FREEHAND" as const,
-            };
-    const saved = await canvasTx(auth.campaignId).transaction(async (tx) => {
-      await invalidateRedoBranch(tx, auth, scene.id);
-      const [drawing] = await tx
-        .insert(drawings)
-        .values(drawingInput)
-        .returning();
-      if (!drawing) throw new Error("DRAWING_CREATE_FAILED");
-      const [event] = await tx
-        .insert(gameEvents)
-        .values({
-          campaignId: auth.campaignId,
-          actionId,
-          membershipId: auth.membershipId,
-          type: "drawing.created",
-          entityType: "drawing",
-          entityId: drawing.id,
-          entityRevision: 0,
-          payload: drawing,
-        })
-        .returning();
-      if (!event) throw new Error("EVENT_RECORD_FAILED");
-      await tx.insert(actionJournal).values({
-        campaignId: auth.campaignId,
-        sceneId: scene.id,
-        actorMembershipId: auth.membershipId,
-        actionId,
-        type: "DRAWING_CREATE",
-        targetType: "DRAWING",
-        targetId: drawing.id,
-        scope: isHiddenStamp(drawing) ? "GM" : "PUBLIC",
-        before: null,
-        after: drawing,
-        afterRevision: 0,
-        currentRevision: 0,
-      });
-      return { drawing, event };
-    });
+    const actionId=body.actionId;
+    const saved=await canvasTx(auth.campaignId).transaction(tx=>commitDrawingCreate(tx,auth,body));
     await publish(auth.campaignId, {
       before: null,
       after: saved.drawing,
@@ -260,70 +189,8 @@ export function registerDrawingRoutes(
       return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
     if (row.drawing.revision !== body.revision)
       return reply.code(409).send({ error: "DRAWING_CONFLICT" });
-    const {
-      actionId,
-      revision: _revision,
-      size,
-      rotation,
-      layer,
-      ...changes
-    } = body;
-    const changesToSave = isStampDrawing(row.drawing)
-      ? {
-          ...changes,
-          ...(size === undefined ? {} : { stampSize: size }),
-          ...(rotation === undefined ? {} : { stampRotation: rotation }),
-          ...(layer === undefined ? {} : { stampLayer: layer }),
-        }
-      : changes;
-    const saved = await canvasTx(auth.campaignId).transaction(async (tx) => {
-      await invalidateRedoBranch(tx, auth, row.drawing.sceneId);
-      const [updated] = await tx
-        .update(drawings)
-        .set({
-          ...changesToSave,
-          revision: row.drawing.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(eq(drawings.id, id), eq(drawings.revision, row.drawing.revision)),
-        )
-        .returning();
-      if (!updated) return null;
-      const [event] = await tx
-        .insert(gameEvents)
-        .values({
-          campaignId: auth.campaignId,
-          actionId,
-          membershipId: auth.membershipId,
-          type: "drawing.updated",
-          entityType: "drawing",
-          entityId: id,
-          entityRevision: updated.revision,
-          payload: updated,
-        })
-        .returning();
-      if (!event) throw new Error("EVENT_RECORD_FAILED");
-      await tx.insert(actionJournal).values({
-        campaignId: auth.campaignId,
-        sceneId: updated.sceneId,
-        actorMembershipId: auth.membershipId,
-        actionId,
-        type: "DRAWING_UPDATE",
-        targetType: "DRAWING",
-        targetId: id,
-        scope:
-          isHiddenStamp(row.drawing) || isHiddenStamp(updated)
-            ? "GM"
-            : "PUBLIC",
-        before: row.drawing,
-        after: updated,
-        beforeRevision: row.drawing.revision,
-        afterRevision: updated.revision,
-        currentRevision: updated.revision,
-      });
-      return { updated, event };
-    });
+    const actionId=body.actionId;
+    const saved = await canvasTx(auth.campaignId).transaction(tx=>commitDrawingUpdate(tx,auth,id,body));
     if (!saved) return reply.code(409).send({ error: "DRAWING_CONFLICT" });
     await publish(auth.campaignId, {
       before: row.drawing,
@@ -369,66 +236,8 @@ export function registerDrawingRoutes(
     }
     if (row.drawing.revision !== body.revision)
       return reply.code(409).send({ error: "DRAWING_CONFLICT" });
-    const saved = await canvasTx(auth.campaignId).transaction(async (tx) => {
-      await invalidateRedoBranch(tx, auth, row.drawing.sceneId);
-      const copyValues = isStampDrawing(row.drawing)
-        ? {
-            sceneId: row.drawing.sceneId,
-            authorMembershipId: auth.membershipId,
-            points: row.drawing.points,
-            color: row.drawing.color,
-            strokeWidth: row.drawing.strokeWidth,
-            x: row.drawing.x + 16,
-            y: row.drawing.y + 16,
-            kind: row.drawing.kind,
-            stampAssetKey: row.drawing.stampAssetKey,
-            stampPackId: row.drawing.stampPackId,
-            stampSize: row.drawing.stampSize,
-            stampRotation: row.drawing.stampRotation,
-            stampLayer: row.drawing.stampLayer,
-          }
-        : {
-            sceneId: row.drawing.sceneId,
-            authorMembershipId: auth.membershipId,
-            points: row.drawing.points,
-            color: row.drawing.color,
-            strokeWidth: row.drawing.strokeWidth,
-            x: row.drawing.x + 16,
-            y: row.drawing.y + 16,
-            kind: "FREEHAND" as const,
-          };
-      const [copy] = await tx.insert(drawings).values(copyValues).returning();
-      if (!copy) throw new Error("DRAWING_COPY_FAILED");
-      const [event] = await tx
-        .insert(gameEvents)
-        .values({
-          campaignId: auth.campaignId,
-          actionId: body.actionId,
-          membershipId: auth.membershipId,
-          type: "drawing.copied",
-          entityType: "drawing",
-          entityId: copy.id,
-          entityRevision: 0,
-          payload: { copy, sourceDrawingId: id },
-        })
-        .returning();
-      if (!event) throw new Error("EVENT_RECORD_FAILED");
-      await tx.insert(actionJournal).values({
-        campaignId: auth.campaignId,
-        sceneId: copy.sceneId,
-        actorMembershipId: auth.membershipId,
-        actionId: body.actionId,
-        type: "DRAWING_CREATE",
-        targetType: "DRAWING",
-        targetId: copy.id,
-        scope: isHiddenStamp(copy) ? "GM" : "PUBLIC",
-        before: null,
-        after: copy,
-        afterRevision: 0,
-        currentRevision: 0,
-      });
-      return { copy, event };
-    });
+    const saved = await canvasTx(auth.campaignId).transaction(tx=>commitDrawingCopy(tx,auth,id,body));
+    if(!saved)return reply.code(409).send({error:"DRAWING_CONFLICT"});
     await publish(auth.campaignId, {
       before: null,
       after: saved.copy,
@@ -492,44 +301,8 @@ export function registerDrawingRoutes(
       return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
     if (row.drawing.revision !== body.revision)
       return reply.code(409).send({ error: "DRAWING_CONFLICT" });
-    const event = await canvasTx(auth.campaignId).transaction(async (tx) => {
-      await invalidateRedoBranch(tx, auth, row.drawing.sceneId);
-      const [deleted] = await tx
-        .delete(drawings)
-        .where(
-          and(eq(drawings.id, id), eq(drawings.revision, row.drawing.revision)),
-        )
-        .returning();
-      if (!deleted) throw new Error("DRAWING_CONFLICT");
-      const [event] = await tx
-        .insert(gameEvents)
-        .values({
-          campaignId: auth.campaignId,
-          actionId: body.actionId,
-          membershipId: auth.membershipId,
-          type: "drawing.deleted",
-          entityType: "drawing",
-          entityId: id,
-          entityRevision: row.drawing.revision,
-        })
-        .returning();
-      if (!event) throw new Error("EVENT_RECORD_FAILED");
-      await tx.insert(actionJournal).values({
-        campaignId: auth.campaignId,
-        sceneId: row.drawing.sceneId,
-        actorMembershipId: auth.membershipId,
-        actionId: body.actionId,
-        type: "DRAWING_DELETE",
-        targetType: "DRAWING",
-        targetId: id,
-        scope: isHiddenStamp(row.drawing) ? "GM" : "PUBLIC",
-        before: row.drawing,
-        after: null,
-        beforeRevision: row.drawing.revision,
-        currentRevision: row.drawing.revision,
-      });
-      return event;
-    });
+    const event = await canvasTx(auth.campaignId).transaction(tx=>commitDrawingDelete(tx,auth,id,body));
+    if(!event)return reply.code(409).send({error:"DRAWING_CONFLICT"});
     await publish(auth.campaignId, {
       before: row.drawing,
       after: null,

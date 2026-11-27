@@ -45,6 +45,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  sessionStorage.clear();
   window.history.replaceState({}, "", "/");
 });
 describe("AccountAuthWorkspace", () => {
@@ -443,14 +444,11 @@ describe("AccountAuthWorkspace", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Создать ссылку-приглашение" }),
     );
-    const invite = await screen.findByRole("link", {
-      name: /synthetic-campaign-invite-token/,
-    });
-    expect(invite).toHaveAttribute(
-      "href",
-      expect.stringContaining(
-        "/account/join#token=synthetic-campaign-invite-token",
-      ),
+    const invite = await screen.findByLabelText(
+      "Личная ссылка (действует до 72 часов)",
+    );
+    expect((invite as HTMLInputElement).value).toContain(
+      "/account/join#token=synthetic-campaign-invite-token",
     );
     const createCall = apiMock.mock.calls.find(
       (call) =>
@@ -615,6 +613,91 @@ describe("AccountAuthWorkspace", () => {
     expect(submitted).toHaveLength(2);
     expect(submitted[0]).toEqual(submitted[1]);
   });
+  it("retains the original campaign key when session selection returns 401 after a possible commit", async () => {
+    const submitted: Array<Record<string, unknown>> = [];
+    apiMock.mockImplementation((path: string, options?: RequestInit) => {
+      if (path === "/api/account/session") return Promise.resolve(session);
+      if (path === "/api/account/campaigns" && options?.method === "POST") {
+        submitted.push(JSON.parse(String(options.body)));
+        if (submitted.length === 1)
+          return Promise.reject(
+            new ApiError(401, "ACCOUNT_AUTH_REQUIRED", "Войдите снова"),
+          );
+        return Promise.resolve({
+          campaignId: "22222222-2222-4222-8222-222222222222",
+          membershipId: "33333333-3333-4333-8333-333333333333",
+          name: "Retry 401",
+          role: "GM",
+        });
+      }
+      return Promise.resolve({ campaigns: [] });
+    });
+    const view = renderComponent(
+      <AccountAuthWorkspace
+        onAuthenticated={vi.fn()}
+        capabilities={{ ...capabilities, campaignCreationEnabled: true }}
+      />,
+    );
+    await screen.findByRole("heading", { name: "Мои кампании" });
+    fireEvent.change(screen.getByLabelText("Новая кампания"), {
+      target: { value: "Retry 401" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Создать кампанию" }));
+    await screen.findByRole("button", { name: "Повторить создание" });
+    expect(screen.getByLabelText("Новая кампания")).toBeDisabled();
+    const stored = JSON.parse(
+      sessionStorage.getItem(
+        `arken.account.campaign-create.v1.${session.account.id}`,
+      )!,
+    );
+    expect(Object.keys(stored).sort()).toEqual([
+      "accountId",
+      "key",
+      "name",
+      "uncertain",
+    ]);
+    expect(JSON.stringify(stored)).not.toContain(session.csrfToken);
+    view.unmount();
+    renderComponent(
+      <AccountAuthWorkspace
+        onAuthenticated={vi.fn()}
+        capabilities={{ ...capabilities, campaignCreationEnabled: true }}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Повторить создание" }),
+    );
+    await screen.findByText("Кампания «Retry 401» создана.");
+    expect(submitted).toHaveLength(2);
+    expect(submitted[1]).toEqual(submitted[0]);
+    expect(
+      sessionStorage.getItem(
+        `arken.account.campaign-create.v1.${session.account.id}`,
+      ),
+    ).toBeNull();
+  });
+  it("preserves corrupt campaign creation state and blocks new creation", async () => {
+    const key = `arken.account.campaign-create.v1.${session.account.id}`;
+    sessionStorage.setItem(key, "{");
+    apiMock.mockImplementation((path: string) =>
+      path === "/api/account/session"
+        ? Promise.resolve(session)
+        : Promise.resolve({ campaigns: [] }),
+    );
+    renderComponent(
+      <AccountAuthWorkspace
+        onAuthenticated={vi.fn()}
+        capabilities={{ ...capabilities, campaignCreationEnabled: true }}
+      />,
+    );
+    expect(
+      await screen.findByText(/запрос создания кампании повреждён/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Создать кампанию" }),
+    ).toBeDisabled();
+    expect(sessionStorage.getItem(key)).toBe("{");
+  });
   it("permits a second intentional invite after the first invite is confirmed", async () => {
     let inviteCount = 0;
     apiMock.mockImplementation((path: string) => {
@@ -653,17 +736,25 @@ describe("AccountAuthWorkspace", () => {
       name: "Создать ссылку-приглашение",
     });
     fireEvent.click(inviteButton);
-    expect(
-      await screen.findByRole("link", {
-        name: /synthetic-player-invite-token-1/,
-      }),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByLabelText(
+            "Личная ссылка (действует до 72 часов)",
+          ) as HTMLInputElement
+        ).value,
+      ).toContain("synthetic-player-invite-token-1"),
+    );
     fireEvent.click(inviteButton);
-    expect(
-      await screen.findByRole("link", {
-        name: /synthetic-player-invite-token-2/,
-      }),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByLabelText(
+            "Личная ссылка (действует до 72 часов)",
+          ) as HTMLInputElement
+        ).value,
+      ).toContain("synthetic-player-invite-token-2"),
+    );
     expect(inviteCount).toBe(2);
   });
   it("blocks a second invite after an uncertain result until reload", async () => {
@@ -703,4 +794,256 @@ describe("AccountAuthWorkspace", () => {
     expect(inviteButton).toBeDisabled();
     expect(inviteCount).toBe(1);
   });
+});
+it("creates a local account from an invitation and signs in without persisting the secret", async () => {
+  const invite = "i".repeat(48),
+    password = "a secure player password";
+  window.history.replaceState({}, "", `/account/join#token=${invite}`);
+  const localSession = {
+    authenticated: true,
+    account: {
+      id: "11111111-1111-4111-8111-111111111111",
+      identityKind: "LOCAL",
+      login: "local-player",
+      verified: false,
+    },
+    csrfToken: "synthetic-csrf",
+  };
+  apiMock.mockImplementation((path: string) =>
+    path === "/api/account/session"
+      ? Promise.resolve({ authenticated: false })
+      : path === "/api/account/local/enroll"
+        ? Promise.resolve({
+            login: "local-player",
+            campaignId: "00000000-0000-4000-8000-000000000009",
+            role: "PLAYER",
+          })
+        : path === "/api/account/login"
+          ? Promise.resolve(localSession)
+          : path === "/api/account/campaigns"
+            ? Promise.resolve({ campaigns: [] })
+            : Promise.resolve({ ok: true }),
+  );
+  const firstRender = renderComponent(
+    <AccountAuthWorkspace
+      onAuthenticated={vi.fn()}
+      capabilities={{
+        ...capabilities,
+        localAccounts: true,
+        localTransport: "HTTPS_LAN",
+      }}
+    />,
+  );
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: "Нет аккаунта — создать по приглашению",
+    }),
+  );
+  fireEvent.change(screen.getByLabelText("Локальный логин"), {
+    target: { value: "local-player" },
+  });
+  fireEvent.change(screen.getByLabelText("Пароль", { exact: true }), {
+    target: { value: password },
+  });
+  fireEvent.change(screen.getByLabelText("Повторите пароль"), {
+    target: { value: password },
+  });
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Создать аккаунт и принять приглашение",
+    }),
+  );
+  await screen.findByText(
+    "Локальный аккаунт создан, приглашение принято. Войдите с выбранным логином и паролем.",
+  );
+  expect(window.location.hash).toBe("");
+  expect(localStorage.length).toBe(0);
+  expect(window.location.pathname).toBe("/account");
+  const savedWelcome = sessionStorage.getItem("arken.local-first-run.v1");
+  expect(savedWelcome).not.toContain(password);
+  expect(savedWelcome).not.toContain(invite);
+  expect(apiMock).toHaveBeenCalledWith(
+    "/api/account/local/enroll",
+    expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ login: "local-player", password, token: invite }),
+    }),
+  );
+  expect(
+    (screen.getByLabelText("Пароль", { exact: true }) as HTMLInputElement)
+      .value,
+  ).toBe("");
+  firstRender.unmount();
+  renderComponent(
+    <AccountAuthWorkspace
+      onAuthenticated={vi.fn()}
+      capabilities={{
+        ...capabilities,
+        localAccounts: true,
+        localTransport: "HTTPS_LAN",
+      }}
+    />,
+  );
+  fireEvent.change(await screen.findByLabelText("Локальный логин"), {
+    target: { value: "local-player" },
+  });
+  fireEvent.change(screen.getByLabelText("Пароль", { exact: true }), {
+    target: { value: password },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Войти" }));
+  await screen.findByRole("heading", { name: "Мои кампании" });
+  expect(
+    screen.getByRole("heading", { name: "Локальный аккаунт" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/локальный аккаунт сервера мастера/),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "Вы в кампании" }),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/Создать персонажа/)).toBeInTheDocument();
+  expect(sessionStorage.getItem("arken.local-first-run.v1")).toBeNull();
+  expect(
+    screen.queryByRole("heading", { name: "Почта подтверждена" }),
+  ).not.toBeInTheDocument();
+  expect(apiMock).toHaveBeenCalledWith(
+    "/api/account/login",
+    expect.objectContaining({
+      body: JSON.stringify({ login: "local-player", password }),
+    }),
+  );
+  expect(localStorage.length).toBe(0);
+});
+it("does not show another local login's saved welcome", async () => {
+  window.history.replaceState({}, "", "/account");
+  sessionStorage.setItem(
+    "arken.local-first-run.v1",
+    JSON.stringify({
+      login: "local-first",
+      campaignId: "00000000-0000-4000-8000-000000000009",
+    }),
+  );
+  apiMock.mockImplementation((path: string) =>
+    path === "/api/account/session"
+      ? Promise.resolve({ authenticated: false })
+      : path === "/api/account/login"
+        ? Promise.resolve({
+            authenticated: true,
+            account: {
+              id: "other",
+              identityKind: "LOCAL",
+              login: "local-other",
+            },
+            csrfToken: "csrf",
+          })
+        : path === "/api/account/campaigns"
+          ? Promise.resolve({ campaigns: [] })
+          : Promise.resolve({ ok: true }),
+  );
+  renderComponent(
+    <AccountAuthWorkspace
+      onAuthenticated={vi.fn()}
+      capabilities={{
+        ...capabilities,
+        localAccounts: true,
+        localTransport: "HTTPS_LAN",
+      }}
+    />,
+  );
+  fireEvent.change(await screen.findByLabelText("Локальный логин"), {
+    target: { value: "local-other" },
+  });
+  fireEvent.change(screen.getByLabelText("Пароль", { exact: true }), {
+    target: { value: "a secure player password" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Войти" }));
+  await screen.findByRole("heading", { name: "Мои кампании" });
+  expect(
+    screen.queryByRole("heading", { name: "Вы в кампании" }),
+  ).not.toBeInTheDocument();
+  expect(sessionStorage.getItem("arken.local-first-run.v1")).toBeNull();
+});
+it("offers local sign-in rather than silently retrying uncertain enrollment", async () => {
+  const invite = "j".repeat(48),
+    password = "another secure password";
+  window.history.replaceState({}, "", `/account/join#token=${invite}`);
+  apiMock.mockImplementation((path: string) =>
+    path === "/api/account/session"
+      ? Promise.resolve({ authenticated: false })
+      : path === "/api/account/local/enroll"
+        ? Promise.reject(
+            new ApiError(503, "LOCAL_ENROLLMENT_UNAVAILABLE", "unknown"),
+          )
+        : path === "/api/account/login"
+          ? Promise.resolve({
+              authenticated: true,
+              account: {
+                id: "u",
+                identityKind: "LOCAL",
+                login: "uncertain-player",
+              },
+              csrfToken: "csrf",
+            })
+          : path === "/api/account/campaigns/invites/claim"
+            ? Promise.resolve({
+                campaignId: "c",
+                membershipId: "m",
+                role: "PLAYER",
+              })
+            : path === "/api/account/campaigns"
+              ? Promise.resolve({ campaigns: [] })
+              : Promise.resolve({ ok: true }),
+  );
+  renderComponent(
+    <AccountAuthWorkspace
+      onAuthenticated={vi.fn()}
+      capabilities={{
+        ...capabilities,
+        localAccounts: true,
+        localTransport: "HTTPS_LAN",
+      }}
+    />,
+  );
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: "Нет аккаунта — создать по приглашению",
+    }),
+  );
+  fireEvent.change(screen.getByLabelText("Локальный логин"), {
+    target: { value: "uncertain-player" },
+  });
+  fireEvent.change(screen.getByLabelText("Пароль", { exact: true }), {
+    target: { value: password },
+  });
+  fireEvent.change(screen.getByLabelText("Повторите пароль"), {
+    target: { value: password },
+  });
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Создать аккаунт и принять приглашение",
+    }),
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Попробуйте войти с выбранным логином и паролем",
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Уже есть аккаунт — войти" }),
+  );
+  expect(
+    screen.getByRole("button", { name: "Принять приглашение" }),
+  ).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Пароль", { exact: true }), {
+    target: { value: password },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Принять приглашение" }));
+  await screen.findByRole("heading", { name: "Мои кампании" });
+  expect(apiMock).toHaveBeenCalledWith(
+    "/api/account/campaigns/invites/claim",
+    expect.objectContaining({ body: JSON.stringify({ token: invite }) }),
+  );
+  expect(
+    apiMock.mock.calls.filter(([path]) => path === "/api/account/local/enroll"),
+  ).toHaveLength(1);
+  expect(window.location.hash).toBe("");
+  expect(localStorage.length).toBe(0);
 });

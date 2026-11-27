@@ -4900,6 +4900,15 @@ body:has(.landing-shell) {
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: end;
 }
+/* Direct messages have controls below the editor, not inside it. Keep the
+   editor full-width even when the desktop sidebar is only 360px wide. */
+.direct-compose > .chat-composer-input {
+  grid-column: 1 / -1;
+}
+.direct-compose .chat-composer-input textarea.arken-text-area__control {
+  padding-right: var(--space-sm);
+}
+
 .direct-attach-button {
   display: inline-flex;
   align-items: center;

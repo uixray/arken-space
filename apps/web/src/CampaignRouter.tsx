@@ -9,13 +9,14 @@ import {
 import { selectAccountCampaign } from "./account-campaign-client";
 import { campaignReturnPath } from "./campaign-route";
 
-const campaignPath =
-  /^\/campaign\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
+import { campaignIdFromPath } from "./campaign-route";
+import { Button } from "./design-system/Button";
+import { LocalPlayerWorkspace } from "./local-first/LocalPlayerWorkspace";
 
 /** Resolve an account campaign before mounting the game and its realtime clients. */
 export function CampaignRouter() {
   const path = window.location.pathname;
-  const campaignId = campaignPath.exec(path)?.[1];
+  const campaignId = campaignIdFromPath(path);
   const invalidCampaignPath =
     path === "/campaign" || (path.startsWith("/campaign/") && !campaignId);
   const isAccount = path === "/account" || path.startsWith("/account/");
@@ -25,6 +26,7 @@ export function CampaignRouter() {
     needsResolution ? "loading" : "game",
   );
   // StrictMode must not issue the session-changing selection twice.
+  const [attempt, setAttempt] = useState(0);
   const task = useRef<Promise<"game" | "redirect" | "archived"> | null>(null);
 
   useEffect(() => {
@@ -78,8 +80,9 @@ export function CampaignRouter() {
     return () => {
       active = false;
     };
-  }, [campaignId, invalidCampaignPath, needsResolution]);
+  }, [campaignId, invalidCampaignPath, needsResolution, attempt]);
 
+  if (path === "/local-session") return <LocalPlayerWorkspace />;
   if (isAccount)
     return (
       <AuthGate
@@ -101,15 +104,28 @@ export function CampaignRouter() {
       <main className="account-auth-shell">
         <section className="account-auth-card">
           <h1>
-            {state === "archived"
+            {invalidCampaignPath ? "Некорректная ссылка на кампанию" : state === "archived"
               ? "Кампания в архиве"
               : "Не удалось открыть кампанию"}
           </h1>
           <p role="alert">
-            {state === "archived"
+            {invalidCampaignPath ? "Попросите мастера прислать ссылку или выберите кампанию в своём кабинете." : state === "archived"
               ? "Вернитесь к выбору кампании."
               : "Проверьте подключение и доступ к кампании, затем попробуйте ещё раз."}
           </p>
+          {!invalidCampaignPath && (
+            <Button
+              type="button"
+              view="action"
+              onClick={() => {
+                task.current = null;
+                setState("loading");
+                setAttempt((value) => value + 1);
+              }}
+            >
+              Повторить открытие
+            </Button>
+          )}
           <a href="/account">Вернуться к выбору кампании</a>
         </section>
       </main>

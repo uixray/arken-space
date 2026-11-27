@@ -87,13 +87,3 @@ export function groupAbilities(entries: CharacterCatalogEntryDto[]) {
     },
   ].filter((g) => g.entries.length);
 }
-
-export function usesAmberionAbilityGroups(
-  campaignId: string,
-  ownerRole: "GM" | "PLAYER" | undefined,
-): boolean {
-  return (
-    campaignId === "eb6a55c4-a821-4739-8d4a-a1028e9d9092" &&
-    ownerRole === "PLAYER"
-  );
-}

@@ -1,0 +1,20 @@
+import Fastify from 'fastify';import cookie from '@fastify/cookie';import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';import {eq} from 'drizzle-orm';import * as schema from '@arken/db';
+import {registerWorldMapRoutes} from '../world-map-routes.js';import {env} from '../env.js';import {hashToken,randomToken} from '../security.js';
+type Database=Parameters<typeof registerWorldMapRoutes>[1];
+export async function seedTransferWorldMap(db:Database,campaignId:string,gm:string){
+ const [campaign]=await db.select().from(schema.campaigns).where(eq(schema.campaigns.id,campaignId)),[owner]=await db.select().from(schema.memberships).where(eq(schema.memberships.id,gm));if(!campaign?.name.startsWith('Synthetic')||owner?.campaignId!==campaignId||owner.role!=='GM'||!owner.userId)throw Error('SYNTHETIC_WORLD_MAP_SCOPE_REQUIRED');
+ const session=randomUUID(),token=randomToken(),asset=randomUUID(),scene=randomUUID();await db.insert(schema.accountSessions).values({id:session,userId:owner.userId,tokenHash:hashToken(randomToken()),csrfHash:hashToken(randomToken()),expiresAt:new Date(Date.now()+3600000)});await db.insert(schema.sessions).values({membershipId:gm,accountSessionId:session,authSource:'ACCOUNT',tokenHash:hashToken(token),expiresAt:new Date(Date.now()+3600000)});
+ // Metadata-only synthetic asset for event qualification; no claim of byte export.
+ await db.insert(schema.assets).values({id:asset,campaignId,uploadedByMembershipId:gm,kind:'MAP',name:'Synthetic world-map background',storageKey:'synthetic-map-'+asset+'.webp',mimeType:'image/webp',sizeBytes:1,width:16,height:16});await db.insert(schema.scenes).values({id:scene,campaignId,name:'Synthetic linked scene',grid:{enabled:true,size:64,offsetX:0,offsetY:0,color:'#777777',opacity:0.2}});
+ const app=Fastify();await app.register(cookie);registerWorldMapRoutes(app,db,async()=>{});
+ const request=async(url:string,payload:Record<string,unknown>,method:'POST'|'PATCH'|'DELETE'='POST')=>{const response=await app.inject({method,url,headers:{cookie:`${env.SESSION_COOKIE_NAME}=${token}`},payload});assert.ok([200,201,204].includes(response.statusCode),response.statusCode+': '+response.body);return response.statusCode===204?null:response.json();};
+ try{
+  const body={actionId:randomUUID(),name:'Synthetic world map'};let map=await request('/api/world-maps',body);assert.equal((await request('/api/world-maps',body)).id,map.id);const mapId=map.id;
+  map=await request('/api/world-maps/'+mapId,{actionId:randomUUID(),revision:map.revision,name:'Synthetic revised world map'},'PATCH');map=await request(`/api/world-maps/${mapId}/draft-background`,{actionId:randomUUID(),revision:map.revision,backgroundAssetId:asset});map=await request(`/api/world-maps/${mapId}/approve-background`,{actionId:randomUUID(),revision:map.revision});
+  let location=await request('/api/world-maps/locations',{actionId:randomUUID(),mapId,name:'Synthetic location',x:0.5,y:0.5});const locationId=location.id;
+  location=await request('/api/world-maps/locations/'+locationId,{actionId:randomUUID(),revision:location.revision,name:'Synthetic revised location'},'PATCH');await request(`/api/world-maps/locations/${locationId}/scenes/${scene}`,{actionId:randomUUID()});await request(`/api/world-maps/locations/${locationId}/scenes/${scene}`,{actionId:randomUUID()},'DELETE');
+  const removed=await request('/api/world-maps/locations',{actionId:randomUUID(),mapId,name:'Synthetic deleted location',x:0.2,y:0.2});await request('/api/world-maps/locations/'+removed.id,{actionId:randomUUID(),revision:removed.revision},'DELETE');
+  map=await request(`/api/world-maps/${mapId}/publish`,{actionId:randomUUID(),revision:map.revision});const position=await request('/api/world-maps/party-position',{actionId:randomUUID(),mapId,locationId,revision:null});await request('/api/world-maps/party-position',{actionId:randomUUID(),revision:position.revision},'DELETE');map=await request(`/api/world-maps/${mapId}/archive`,{actionId:randomUUID(),revision:map.revision});
+  return {mapId,locationId,deletedLocationId:removed.id,asset,scene};
+ }finally{await app.close();}
+}

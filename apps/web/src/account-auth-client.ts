@@ -25,6 +25,19 @@ export const loginAccount = (email: string, password: string, local = false) =>
     ),
   });
 
+export const enrollLocalAccount = (
+  login: string,
+  password: string,
+  token: string,
+) =>
+  api<{ login: string; campaignId: string; role: "PLAYER" }>(
+    "/api/account/local/enroll",
+    {
+      method: "POST",
+      body: JSON.stringify({ login, password, token }),
+    },
+  );
+
 export const requestVerification = (email: string) =>
   api<AccountActionResponse>("/api/account/verification/request", {
     method: "POST",

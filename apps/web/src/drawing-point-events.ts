@@ -1,3 +1,4 @@
+import {advanceSnapshotVersion} from "@arken/contracts";
 import type { DrawingDto, GameSnapshot } from "@arken/contracts";
 
 /**
@@ -17,7 +18,7 @@ export function applyDrawingUpserted(
   const index = drawings.findIndex((drawing) => drawing.id === event.data.id);
   return {
     ...current,
-    snapshotVersion: Math.max(current.snapshotVersion, event.sequence),
+    ...advanceSnapshotVersion(current,event.sequence),
     drawings:
       index === -1
         ? [...drawings, event.data]
@@ -31,7 +32,7 @@ export function applyDrawingRemoved(
 ): GameSnapshot {
   return {
     ...current,
-    snapshotVersion: Math.max(current.snapshotVersion, event.sequence),
+    ...advanceSnapshotVersion(current,event.sequence),
     drawings: (current.drawings ?? []).filter(
       (drawing) => drawing.id !== event.data.drawingId,
     ),

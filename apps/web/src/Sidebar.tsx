@@ -1,5 +1,13 @@
 import "./sidebar-character-tabs.css";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import type {
   ChatStream,
@@ -21,8 +29,10 @@ import { WorldMapsWorkspace } from "./WorldMapsWorkspace";
 import { OperatorFeedbackWorkspace } from "./OperatorFeedbackWorkspace";
 import { WorldContentWorkspace } from "./WorldContentWorkspace";
 import { EconomyWorkspace } from "./EconomyWorkspace";
-import { CreationWorkspace } from "./CreationWorkspace";
 import { SpellSchoolsWorkspace } from "./SpellSchoolsWorkspace";
+const CreationWorkspace = lazy(() =>
+  import("./CreationWorkspace").then((m) => ({ default: m.CreationWorkspace })),
+);
 import { WorldEncyclopediaWorkspace } from "./WorldEncyclopediaWorkspace";
 import { PlayerRequestsWorkspace } from "./PlayerRequestsWorkspace";
 import {
@@ -118,6 +128,7 @@ export type Props = {
     | "world-encyclopedia"
     | "spell-schools"
     | "shops"
+    | "creations"
     | "world-codex"
     | "creations"
     | null;
@@ -139,15 +150,45 @@ export const Sidebar = memo(SidebarComponent);
 
 function TokenPaletteWorkspacePortal({ props }: { props: Props }) {
   const { sidebar: sidebarActions } = useCampaignActions();
+  const [spriteUploadRisk, setSpriteUploadRisk] = useState(false);
+  const [spriteDirty, setSpriteDirty] = useState(false);
+  const [closeBlocked, setCloseBlocked] = useState(false);
+  const handleSpriteUploadRisk = useCallback((risky: boolean) => {
+    setSpriteUploadRisk(risky);
+    if (!risky) setCloseBlocked(false);
+  }, []);
   return createPortal(
     <ArkenDialog
       open
       footer={false}
       title="Токены"
       variant="workspace"
-      onClose={() => sidebarActions.onWorkspaceChange(null)}
+      onClose={() => {
+        if (spriteUploadRisk) {
+          setCloseBlocked(true);
+          return;
+        }
+        if (
+          spriteDirty &&
+          !window.confirm(
+            "Несохранённый набор фигурки будет потерян. Загруженные файлы останутся в медиатеке. Закрыть палитру?",
+          )
+        )
+          return;
+        sidebarActions.onWorkspaceChange(null);
+      }}
     >
-      <PalettePanel {...props} />
+      {closeBlocked && spriteUploadRisk && (
+        <p role="status">
+          Сначала дождитесь загрузки кадра, повторите её или откажитесь от
+          повтора.
+        </p>
+      )}
+      <PalettePanel
+        {...props}
+        onSpriteUploadRiskChange={handleSpriteUploadRisk}
+        onSpriteDirtyChange={setSpriteDirty}
+      />
     </ArkenDialog>,
     document.body,
   );
@@ -190,8 +231,7 @@ function SidebarContent(props: Props) {
   // «Событиям», и панель не может отрисоваться без своей вкладки.
   const activeFeed = allowedSidebarFeed(selectedFeed, isGm);
   const [directMode, setDirectMode] = useState(false);
-  const characterTabs =
-    props.snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092";
+  const characterTabs = true;
   const [characterMode, setCharacterMode] = useState(false);
   const chatVisible = props.chatVisible ?? !props.collapsed;
   const [activeDirectThreadId, setActiveDirectThreadId] = useState<
@@ -217,10 +257,7 @@ function SidebarContent(props: Props) {
     () => onWorkspaceChange(null),
     [onWorkspaceChange],
   );
-  const storyWorkspaceOpen =
-    props.workspace === "story" &&
-    (isGm ||
-      props.snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092");
+  const storyWorkspaceOpen = props.workspace === "story";
   const storyThreadId = threadForStream(props.snapshot, "STORY")?.id ?? null;
   const storyHistory = useThreadHistory(
     storyWorkspaceOpen ? props.snapshot : null,
@@ -378,20 +415,10 @@ function SidebarContent(props: Props) {
               )
                 return;
               event.preventDefault();
-              const next =
-                event.key === "Home"
-                  ? false
-                  : event.key === "End"
-                    ? true
-                    : !characterMode;
-              setCharacterMode(next);
-              requestAnimationFrame(() =>
-                document
-                  .getElementById(
-                    next ? "chat-tab-character" : "chat-tab-activity",
-                  )
-                  ?.focus(),
-              );
+              const current=directMode?2:characterMode?1:0;
+              const index=event.key==="Home"?0:event.key==="End"?2:(current+(event.key==="ArrowRight"?1:2))%3;
+              setCharacterMode(index===1);setDirectMode(index===2);setActiveFeed("ACTIVITY");
+              requestAnimationFrame(()=>document.getElementById(["chat-tab-activity","chat-tab-character","chat-tab-direct"][index]!)?.focus());
               return;
             }
             const nextFeed = nextChatFeed(
@@ -468,8 +495,8 @@ function SidebarContent(props: Props) {
               role="tab"
               id="chat-tab-character"
               aria-controls="chat-panel-character"
-              aria-selected={characterMode}
-              tabIndex={characterMode ? 0 : -1}
+              aria-selected={characterMode && !directMode}
+              tabIndex={characterMode && !directMode ? 0 : -1}
               onClick={() => {
                 setCharacterMode(true);
                 setDirectMode(false);
@@ -478,7 +505,8 @@ function SidebarContent(props: Props) {
             >
               Персонаж
             </Button>
-          ) : (
+          ) : null}
+          {(
             <Button
               view="flat"
               role="tab"
@@ -486,7 +514,7 @@ function SidebarContent(props: Props) {
               aria-controls="chat-panel-direct"
               aria-selected={directMode}
               tabIndex={directMode ? 0 : -1}
-              onClick={() => setDirectMode(true)}
+              onClick={() => {setCharacterMode(false);setDirectMode(true);}}
             >
               Личные
               {directThreads(props.snapshot).reduce(
@@ -512,8 +540,8 @@ function SidebarContent(props: Props) {
       <div className="panel-scroll chat-scroll">
         <div
           className="chat-feed-slot"
-          hidden={characterTabs || !directMode}
-          inert={characterTabs || !directMode}
+          hidden={!directMode}
+          inert={!directMode}
         >
           <DirectChatPanel
             focusedMessageId={
@@ -591,10 +619,7 @@ function SidebarContent(props: Props) {
             onClose={() => onWorkspaceChange(null)}
           />
         )}
-        {props.workspace === "story" &&
-          (isGm ||
-            props.snapshot.campaign.id ===
-              "eb6a55c4-a821-4739-8d4a-a1028e9d9092") && (
+        {props.workspace === "story" && (
             <ArkenDialog
               open
               footer={false}
@@ -755,28 +780,31 @@ function SidebarContent(props: Props) {
         )}
         {props.workspace === "world-codex" && (
           <WorldEncyclopediaWorkspace
+            campaignId={props.snapshot.campaign.id}
             open
             assets={props.snapshot.assets}
             onClose={closeWorkspace}
           />
         )}
         {props.workspace === "creations" && (
-          <CreationWorkspace
-            key={`${props.snapshot.campaign.id}:${props.snapshot.me.id}:${props.snapshot.me.role}`}
-            campaignId={props.snapshot.campaign.id}
-            membershipId={props.snapshot.me.id}
-            gm={isGm}
-            characters={props.snapshot.characters.filter(
-              (character) =>
-                character.lifecycle === "ACTIVE" &&
-                (isGm ||
-                  character.ownerMembershipId === props.snapshot.me.id ||
-                  character.controllerMembershipIds.includes(
-                    props.snapshot.me.id,
-                  )),
-            )}
-            onClose={closeWorkspace}
-          />
+          <Suspense fallback={<p role="status">Загружаем мастерскую…</p>}>
+            <CreationWorkspace
+              key={`${props.snapshot.campaign.id}:${props.snapshot.me.id}:${props.snapshot.me.role}`}
+              campaignId={props.snapshot.campaign.id}
+              membershipId={props.snapshot.me.id}
+              gm={isGm}
+              characters={props.snapshot.characters.filter(
+                (character) =>
+                  character.lifecycle === "ACTIVE" &&
+                  (isGm ||
+                    character.ownerMembershipId === props.snapshot.me.id ||
+                    character.controllerMembershipIds.includes(
+                      props.snapshot.me.id,
+                    )),
+              )}
+              onClose={closeWorkspace}
+            />
+          </Suspense>
         )}
         {props.workspace === "shops" && (
           <EconomyWorkspace
