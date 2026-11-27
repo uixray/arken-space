@@ -55,23 +55,16 @@ it("opens only publication payload, closes and reopens from the feed", () => {
   act(() => openStoryImage(presentation));
   expect(document.querySelector("dialog")?.hasAttribute("open")).toBe(true);
 });
-it("does not subscribe or render in other campaigns or GM preview", () => {
-  const socket = { on: vi.fn(), off: vi.fn() };
-  const v = render(
-    <StoryImagePresentation
-      socket={socket as unknown as GameSocket}
-      campaignId="other"
-      enabled
-    />,
-  );
-  expect(socket.on).not.toHaveBeenCalled();
+it("subscribes in ordinary campaigns, ignores foreign events and disables preview", () => {
+  let receive!: (event: StoryChangedEvent) => void;
+  const socket = { on: vi.fn((_:string, cb:(event:StoryChangedEvent)=>void)=>{receive=cb;}), off: vi.fn() };
+  const v = render(<StoryImagePresentation socket={socket as unknown as GameSocket} campaignId="ordinary" enabled />);
+  expect(socket.on).toHaveBeenCalledOnce();
+  act(()=>receive({campaignId,postId:"foreign",presentation}));
+  expect(document.querySelector("dialog")?.hasAttribute("open")).toBe(false);
+  act(()=>receive({campaignId:"ordinary",postId:"post",presentation}));
+  expect(document.querySelector("dialog")?.hasAttribute("open")).toBe(true);
+  v.rerender(<StoryImagePresentation socket={socket as unknown as GameSocket} campaignId="ordinary" enabled={false}/>);
+  expect(socket.off).toHaveBeenCalledOnce();
   expect(document.querySelector("dialog")).toBeNull();
-  v.rerender(
-    <StoryImagePresentation
-      socket={socket as unknown as GameSocket}
-      campaignId={campaignId}
-      enabled={false}
-    />,
-  );
-  expect(socket.on).not.toHaveBeenCalled();
 });

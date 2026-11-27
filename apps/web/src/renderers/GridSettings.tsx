@@ -41,6 +41,7 @@ export function GridSettings({ scene, onSave, onPreview }: GridSettingsProps) {
 
   const resetGrid = () => {
     const next = {
+      ...(draft.isometric ? { isometric: draft.isometric } : {}),
       // Reset visual calibration, not the master's metrical scene scale.
       metersPerCell: draft.metersPerCell ?? null,
       enabled: true,

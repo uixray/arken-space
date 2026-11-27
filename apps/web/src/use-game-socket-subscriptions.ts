@@ -1,5 +1,8 @@
+import { fenceUnsafePointEvents } from "./unsafe-point-fence";
+import { advanceSnapshotVersion } from "@arken/contracts";
 import { createPlayerFogResync } from "./player-fog-resync";
 import { shareStructure } from "./structural-sharing";
+import { createSnapshotDelivery } from "./snapshot-delivery";
 import {
   applyHiddenTokenPreview,
   applyTokenPointEvent,
@@ -27,7 +30,7 @@ import type {
 } from "@arken/contracts";
 import { reportClientEvent } from "./api";
 import { createGameSocket, type GameSocket } from "./realtime";
-import { appendChatMessage } from "./chat-state";
+import { applyChatCreated } from "./chat-state";
 import { upsertDirectThread } from "./direct-chat-state";
 import {
   addRollToast,
@@ -154,6 +157,9 @@ export function useGameSocketSubscriptions({
   useEffect(() => {
     if (!campaignId || authRequired) return;
     const next = createGameSocket();
+    fenceUnsafePointEvents(next);
+    const snapshotDelivery = createSnapshotDelivery(campaignId);
+    next.on("disconnect", () => snapshotDelivery.reset());
     // Scoped to this socket/campaign. Track events have a per-track cursor;
     // the global snapshot version is used only to seed canonical state and is
     // never a gate that can discard an interleaved track event.
@@ -182,7 +188,7 @@ export function useGameSocketSubscriptions({
     let canonicalAudioFloor = initialSnapshotVersionRef.current ?? 0;
     setSocket(next);
     next.on("connect", () => {
-      setConnection("ONLINE");
+      setConnection("RESYNCING");
       // UIX-682 C20: rulers have no server snapshot. Only a recovered session
       // gets missed ruler:cleared replayed; after a fresh one a kept ruler
       // could never be cleared. An active drag redraws on its next update.
@@ -207,10 +213,13 @@ export function useGameSocketSubscriptions({
     });
     next.io.on("reconnect_attempt", () => setConnection("RECONNECTING"));
     next.io.on("reconnect_failed", () => setConnection("OFFLINE"));
+    next.on("connect_error", () => {
+      setConnection(next.active ? "RECONNECTING" : "OFFLINE");
+    });
     next.on("token:preview-epoch", (epoch) => {
       next.previewEpoch = epoch;
     });
-    next.on("game:snapshot", (nextSnapshot) => {
+    const acceptCanonicalSnapshot = (nextSnapshot: GameSnapshot) => {
       if (nextSnapshot.snapshotVersion >= (next.previewSnapshotVersion ?? 0)) {
         const placements = new Map(
           nextSnapshot.tokens.map((token) => [token.id, token]),
@@ -227,7 +236,11 @@ export function useGameSocketSubscriptions({
           }
         }
       }
-      next.previewSnapshotVersion = nextSnapshot.snapshotVersion;
+      next.previewSnapshotVersion = Number.isSafeInteger(
+        nextSnapshot.snapshotVersion,
+      )
+        ? nextSnapshot.snapshotVersion
+        : undefined;
       // A chat action can send a canonical snapshot with the original token
       // position while a drag is still in flight. Preserve a redaction only
       // for the same placement revision, and never revive a missing row.
@@ -284,6 +297,22 @@ export function useGameSocketSubscriptions({
         );
       });
       setConnection("ONLINE");
+    };
+    next.on("game:snapshot", (snapshot, deliveryId) => {
+      const canonical = snapshotDelivery.full(snapshot, deliveryId);
+      if (canonical) acceptCanonicalSnapshot(canonical);
+    });
+    next.on("game:delta", (event) => {
+      const canonical = snapshotDelivery.delta(event);
+      if (canonical) {
+        acceptCanonicalSnapshot(canonical);
+      } else {
+        // Missing/evicted baseline or missed packet: bootstrap again rather
+        // than guess. The server's connection path supplies a full snapshot.
+        snapshotDelivery.reset();
+        next.disconnect();
+        next.connect();
+      }
     });
     next.on("scene:activated", (event) =>
       setSnapshot((current) => {
@@ -292,7 +321,7 @@ export function useGameSocketSubscriptions({
         playerFog.scope(event.data);
         return {
           ...current,
-          snapshotVersion: event.sequence,
+          ...advanceSnapshotVersion(current,event.sequence),
           scenes: current.scenes.map((scene) => ({
             ...scene,
             active: scene.id === event.data,
@@ -396,7 +425,7 @@ export function useGameSocketSubscriptions({
           playerFog.request(event.data.sceneId, event.sequence);
         return {
           ...current,
-          snapshotVersion: event.sequence,
+          ...advanceSnapshotVersion(current, event.sequence),
           fogReveals: exists
             ? current.fogReveals
             : [...current.fogReveals, event.data],
@@ -425,7 +454,7 @@ export function useGameSocketSubscriptions({
         if (playerScene) playerFog.request(previous.sceneId, event.sequence);
         return {
           ...current,
-          snapshotVersion: event.sequence,
+          ...advanceSnapshotVersion(current, event.sequence),
           fogReveals: current.fogReveals.filter(
             (fog) => fog.id !== event.data.fogRevealId,
           ),
@@ -505,7 +534,7 @@ export function useGameSocketSubscriptions({
       // before this envelope without containing this newly committed message.
       setSnapshot((current) =>
         current
-          ? appendChatMessage(current, event.data, event.sequence, {
+          ? applyChatCreated(current, event, {
               activeThreadId: activeChatThreadIdRef.current,
               ownMembershipId: current.me.id,
             })
@@ -537,10 +566,7 @@ export function useGameSocketSubscriptions({
         current
           ? {
               ...current,
-              snapshotVersion: Math.max(
-                current.snapshotVersion,
-                event.sequence,
-              ),
+              ...advanceSnapshotVersion(current, event.sequence),
               characters: current.characters.map((item) => {
                 if (item.id !== event.data.id) return item;
                 return mergeCharacterMutationResponse(item, event.data) ?? item;
@@ -552,7 +578,11 @@ export function useGameSocketSubscriptions({
     next.on("audio:state", (event) =>
       setSnapshot((current) =>
         current && event.sequence > current.snapshotVersion
-          ? { ...current, snapshotVersion: event.sequence, audio: event.data }
+          ? {
+              ...current,
+              ...advanceSnapshotVersion(current, event.sequence),
+              audio: event.data,
+            }
           : current,
       ),
     );
@@ -570,7 +600,7 @@ export function useGameSocketSubscriptions({
         return {
           ...current,
           audioTracks,
-          snapshotVersion: Math.max(current.snapshotVersion, event.sequence),
+          ...advanceSnapshotVersion(current, event.sequence),
         };
       }),
     );
@@ -588,7 +618,7 @@ export function useGameSocketSubscriptions({
         return {
           ...current,
           audioTracks,
-          snapshotVersion: Math.max(current.snapshotVersion, event.sequence),
+          ...advanceSnapshotVersion(current, event.sequence),
         };
       }),
     );

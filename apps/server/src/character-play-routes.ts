@@ -1,3 +1,14 @@
+import {cancelEntryApplication,EntryApplicationStateError} from "./entry-application-state.js";
+import {
+  updateCharacterCounters,
+  CharacterCountersError,
+} from "./character-counters-command.js";
+import { executeCharacterEntry, EntryRollError } from "./entry-roll-command.js";
+import {
+  rechargeCharacterEntry,
+  EntryRechargeError,
+} from "./entry-recharge-command.js";
+import { submitDiceRoll, DiceCommandError } from "./dice-command.js";
 import { sameInspiration } from "./character-extras-routes.js";
 import { postgresErrorCode } from "./database-errors.js";
 import { applyAbilityArea } from "./ability-area-apply.js";
@@ -140,6 +151,7 @@ export function registerCharacterPlayRoutes(
         actionId: parsed.data.actionId,
         emittedAt: result.event!.createdAt.toISOString(),
         data: dto,
+        cancelledApplicationMessageId: parsed.data.messageId,
       };
       if (chatBroadcastAudience(result.message!.visibility) === "CAMPAIGN")
         io.to(campaignRoom(auth.campaignId)).emit("chat:created", envelope);
@@ -359,296 +371,24 @@ export function registerCharacterPlayRoutes(
   app.patch("/api/characters/:id/counters", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
-    const body = characterCountersCommandSchema.parse(request.body);
-    const loadCharacter = async () => {
-      const [row] = await db
-        .select()
-        .from(characters)
-        .where(
-          and(
-            eq(characters.id, id),
-            eq(characters.campaignId, auth.campaignId),
-          ),
-        )
-        .limit(1);
-      return row;
-    };
-    const canEditCharacter = (
-      character: typeof characters.$inferSelect | undefined,
-    ) => canAccessCharacter(db, auth, character);
-    const sendReplay = async (
-      action: NonNullable<Awaited<ReturnType<typeof findAction>>>,
-    ) => {
-      if (action.type !== "character.counters" || action.entityId !== id)
-        return reply.code(409).send({ error: "ACTION_ID_CONFLICT" });
-      // The action may have committed after this request read the character.
-      // Reload after observing the receipt so replay always returns the
-      // canonical post-commit revision/wallet, never that stale pre-read row.
-      const canonical = await loadCharacter();
-      if (!(await canEditCharacter(canonical)))
-        return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
-      const assignedEntries = await loadCharacterEntries(db, id);
-      return reply
-        .code(200)
-        .send(
-          characterDto(
-            canonical!,
-            assignedEntries,
-            await characterControllerIds(db, id),
-            await campaignDefaultStatLayout(db, auth.campaignId),
-          ),
-        );
-    };
-
-    // Check the receipt before loading the entity. This ordering guarantees a
-    // normal replay reads its character after the original transaction commit.
-    const priorAction = await findAction(db, auth.campaignId, body.actionId);
-    const character = await loadCharacter();
-    if (!(await canEditCharacter(character)))
-      return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
-    if (priorAction) return sendReplay(priorAction);
-    if (character!.revision !== body.revision) {
-      const racedAction = await findAction(db, auth.campaignId, body.actionId);
-      if (racedAction) return sendReplay(racedAction);
-      return reply
-        .code(409)
-        .send({ error: "CHARACTER_CONFLICT", revision: character!.revision });
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    let saved;
+    try {
+      saved = await updateCharacterCounters(db, auth, id, request.body);
+    } catch (error) {
+      if (error instanceof CharacterCountersError)
+        return reply.code(error.status).send(error.details);
+      throw error;
     }
-    if (
-      body.wallet &&
-      body.wallet.sp !== normalizeCharacterWallet(character!.wallet).sp
-    )
-      return reply.code(409).send({ error: "USE_PROGRESSION_SP_LEDGER" });
-    if (
-      body.resources &&
-      !sameInspiration(character!.resources, body.resources)
-    )
-      return reply.code(409).send({ error: "USE_INSPIRATION_ADJUSTMENT" });
-    const nextResources = body.rest
-      ? applyCharacterRest(
-          (character!.resources ?? {}) as Resources,
-          body.rest,
-          normalizeLegacyStats(character!.stats),
-        )
-      : body.resources;
-    let resourceLabels: ReadonlyMap<string, string> = new Map();
-    if (nextResources) {
-      const [campaign] = await db
-        .select({ statLayout: campaigns.statLayout })
-        .from(campaigns)
-        .where(eq(campaigns.id, auth.campaignId))
-        .limit(1);
-      resourceLabels = resourceLabelsFromLayout(
-        resolveStatLayout(campaign?.statLayout),
-      );
+    if (!saved.duplicate) {
+      try {
+        if (saved.notification.full) await broadcast(auth.campaignId);
+        else await publishCharacter(auth.campaignId, saved.notification.change);
+      } catch {
+        request.log.warn("character.counters.broadcast_pending");
+      }
     }
-    const changes = [
-      body.wallet
-        ? formatWalletChanges(
-            normalizeCharacterWallet(character!.wallet),
-            body.wallet,
-          )
-        : "",
-      nextResources
-        ? formatResourceChanges(
-            (character!.resources ?? {}) as Resources,
-            nextResources,
-            resourceLabels,
-          )
-        : "",
-    ]
-      .filter(Boolean)
-      .join("; ");
-    if (!changes && !body.rest)
-      return reply.code(400).send({ error: "NO_COUNTER_CHANGES" });
-    const changeDescription =
-      changes || (body.rest === "SHORT" ? "короткий отдых" : "долгий отдых");
-    const tableThread = await ensureStreamThread(db, auth.campaignId, "TABLE");
-    const walletOnly = Boolean(body.wallet) && !nextResources && !body.rest;
-    const walletBefore = normalizeCharacterWallet(character!.wallet);
-    const result = await db
-      .transaction(async (tx) => {
-        const [updated] = await tx
-          .update(characters)
-          .set({
-            ...(body.wallet ? { wallet: body.wallet } : {}),
-            ...(nextResources ? { resources: nextResources } : {}),
-            revision: character!.revision + 1,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(characters.id, id),
-              eq(characters.revision, character!.revision),
-            ),
-          )
-          .returning();
-        if (!updated) return null;
-        if (body.rest) {
-          const [clock] = await tx
-            .select({
-              day: campaigns.day,
-              battleCounter: campaigns.battleCounter,
-            })
-            .from(campaigns)
-            .where(eq(campaigns.id, auth.campaignId))
-            .limit(1);
-          if (!clock) throw new Error("CAMPAIGN_NOT_FOUND");
-          const recharged = await rechargeCampaignCatalogEntries(
-            tx,
-            auth.campaignId,
-            {
-              trigger: body.rest === "SHORT" ? "SHORT_REST" : "LONG_REST",
-              day: clock.day,
-              battleCounter: clock.battleCounter,
-              characterId: id,
-            },
-          );
-          // A rest with neither resource recovery nor a recharged ability is a
-          // no-op. Abort the transaction so it cannot bump revision or journal it.
-          if (!changes && recharged === 0)
-            throw new Error("NO_COUNTER_CHANGES");
-        }
-        const now = new Date();
-        const walletData: WalletAuditSystemData | null =
-          walletOnly && body.wallet
-            ? {
-                type: "WALLET_AUDIT",
-                before: walletBefore,
-                after: body.wallet,
-                lastAt: now.toISOString(),
-                operationCount: 1,
-              }
-            : null;
-        const [latestMessage] = walletData
-          ? await tx
-              .select()
-              .from(chatMessages)
-              .where(eq(chatMessages.threadId, tableThread.id))
-              .orderBy(desc(chatMessages.sequence))
-              .limit(1)
-              .for("update")
-          : [];
-        const latestWalletData = latestMessage?.systemData;
-        const lastAt = isWalletAuditSystemData(latestWalletData)
-          ? Date.parse(latestWalletData.lastAt)
-          : Number.NaN;
-        const elapsed = now.getTime() - lastAt;
-        const canAggregate =
-          latestMessage?.kind === "SYSTEM" &&
-          latestMessage.visibility === "PUBLIC" &&
-          latestMessage.membershipId === auth.membershipId &&
-          latestMessage.characterId === id &&
-          isWalletAuditSystemData(latestWalletData) &&
-          elapsed >= 0 &&
-          elapsed <= WALLET_AUDIT_BURST_MS;
-        const aggregateData: WalletAuditSystemData | null =
-          canAggregate && body.wallet
-            ? {
-                ...latestWalletData,
-                after: body.wallet,
-                lastAt: now.toISOString(),
-                operationCount: latestWalletData.operationCount + 1,
-              }
-            : null;
-        const [message] =
-          aggregateData && latestMessage
-            ? await tx
-                .update(chatMessages)
-                .set({
-                  body: `${character!.name} \u2014 ${formatWalletChanges(
-                    aggregateData.before,
-                    aggregateData.after,
-                  )}`,
-                  systemData: aggregateData,
-                })
-                .where(eq(chatMessages.id, latestMessage.id))
-                .returning()
-            : await tx
-                .insert(chatMessages)
-                .values({
-                  campaignId: auth.campaignId,
-                  membershipId: auth.membershipId,
-                  characterId: id,
-                  kind: "SYSTEM",
-                  threadId: tableThread.id,
-                  visibility: "PUBLIC",
-                  body: `${character!.name} \u2014 ${changeDescription}`,
-                  systemData: walletData,
-                })
-                .returning();
-        const [event] = await tx
-          .insert(gameEvents)
-          .values({
-            campaignId: auth.campaignId,
-            actionId: body.actionId,
-            membershipId: auth.membershipId,
-            type: "character.counters",
-            entityType: "character",
-            entityId: id,
-            entityRevision: updated.revision,
-            payload: {
-              wallet: body.wallet,
-              resources: nextResources,
-              rest: body.rest,
-            },
-          })
-          .returning();
-        if (!event || !message) throw new Error("EVENT_RECORD_FAILED");
-        // An aggregated wallet line rewrites an existing message; there is
-        // no point event for that, so it keeps the full broadcast.
-        return { updated, message, event, aggregated: Boolean(aggregateData) };
-      })
-      .catch((error: unknown) => {
-        if (error instanceof Error && error.message === "NO_COUNTER_CHANGES")
-          return "NO_COUNTER_CHANGES" as const;
-        throw error;
-      });
-    if (result === "NO_COUNTER_CHANGES")
-      return reply.code(400).send({ error: "NO_COUNTER_CHANGES" });
-    if (!result) {
-      const racedAction = await findAction(db, auth.campaignId, body.actionId);
-      if (racedAction) return sendReplay(racedAction);
-      return reply.code(409).send({ error: "CHARACTER_CONFLICT" });
-    }
-    const assignedEntries = await loadCharacterEntries(db, id);
-    const controllerIds = await characterControllerIds(db, id);
-    const statLayout = await campaignDefaultStatLayout(db, auth.campaignId);
-    // A changed resource image must enter snapshot.assets: full broadcast.
-    if (
-      result.aggregated ||
-      !sameResourceImages(character!.resources, result.updated.resources)
-    )
-      await broadcast(auth.campaignId);
-    else
-      await publishCharacter(auth.campaignId, {
-        character: result.updated,
-        controllerIds,
-        project: (visibleControllerIds) =>
-          characterDto(
-            result.updated,
-            assignedEntries,
-            visibleControllerIds,
-            statLayout,
-          ),
-        message: chatMessageDto(
-          result.message,
-          auth.displayName,
-          tableThread.stream,
-        ),
-        envelope: {
-          sequence: Number(result.event.sequence),
-          actionId: body.actionId,
-          emittedAt: result.event.createdAt.toISOString(),
-        },
-      });
-    return characterDto(
-      result.updated,
-      assignedEntries,
-      controllerIds,
-      statLayout,
-    );
+    return saved.value;
   });
 
   app.post(
@@ -659,783 +399,95 @@ export function registerCharacterPlayRoutes(
       const params = z
         .object({ characterId: z.string().uuid(), entryId: z.string().uuid() })
         .parse(request.params);
-      const body = rechargeEntryCommandSchema.parse(request.body);
-      if (await findAction(db, auth.campaignId, body.actionId))
-        return reply.code(200).send({ duplicate: true });
-      const [row] = await db
-        .select({ character: characters, entry: characterCatalogEntries })
-        .from(characterCatalogEntries)
-        .innerJoin(
-          characters,
-          eq(characterCatalogEntries.characterId, characters.id),
-        )
-        .where(
-          and(
-            eq(characters.id, params.characterId),
-            eq(characterCatalogEntries.id, params.entryId),
-            eq(characters.campaignId, auth.campaignId),
-          ),
-        )
-        .limit(1);
-      if (!row || !(await canAccessCharacter(db, auth, row.character)))
-        return reply.code(403).send({ error: "CHARACTER_ENTRY_FORBIDDEN" });
-      if (row.entry.revision !== body.revision)
-        return reply
-          .code(409)
-          .send({ error: "ENTRY_CONFLICT", revision: row.entry.revision });
-      const parsed = entryDataSchema.safeParse(
-        normalizeLegacyEntryData(row.entry.data),
-      );
-      if (!parsed.success || !parsed.data.uses)
-        return reply.code(400).send({ error: "ENTRY_HAS_NO_USES" });
-      const tableThread = await ensureStreamThread(
-        db,
-        auth.campaignId,
-        "TABLE",
-      );
-      const result = await db.transaction(async (tx) => {
-        const bound = await lockBoundCreationEntry(tx, auth, row.entry.id);
-        if (bound && auth.role !== "GM")
-          return "CREATION_RECHARGE_REQUIRES_GM" as const;
-        const [clock] = await tx
-          .select({
-            day: campaigns.day,
-            battleCounter: campaigns.battleCounter,
-          })
-          .from(campaigns)
-          .where(eq(campaigns.id, auth.campaignId))
-          .limit(1);
-        if (!clock) throw new Error("CAMPAIGN_NOT_FOUND");
-        const anchoredUses = {
-          ...parsed.data.uses!,
-          current: parsed.data.uses!.max,
-          ...(parsed.data.uses!.recharge === "DAY" ||
-          parsed.data.uses!.recharge === "WEEK"
-            ? { lastRechargeDay: clock.day }
-            : {}),
-          ...(parsed.data.uses!.recharge === "BATTLE"
-            ? { lastBattleCounter: clock.battleCounter }
-            : {}),
-        };
-        const [updated] = await tx
-          .update(characterCatalogEntries)
-          .set({
-            data: {
-              ...parsed.data,
-              uses: anchoredUses,
-            },
-            revision: row.entry.revision + 1,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(characterCatalogEntries.id, row.entry.id),
-              eq(characterCatalogEntries.revision, row.entry.revision),
-            ),
-          )
-          .returning();
-        if (!updated) return null;
-        const [message] = await tx
-          .insert(chatMessages)
-          .values({
-            campaignId: auth.campaignId,
-            membershipId: auth.membershipId,
-            characterId: row.character.id,
-            kind: "SYSTEM",
-            threadId: tableThread.id,
-            visibility: "PUBLIC",
-            body: `${auth.displayName}: ${row.entry.name} перезаряжена (${parsed.data.uses!.max}/${parsed.data.uses!.max})`,
-          })
-          .returning();
-        await tx.insert(gameEvents).values({
-          campaignId: auth.campaignId,
-          actionId: body.actionId,
-          membershipId: auth.membershipId,
-          type: "entry.recharged",
-          entityType: "character_catalog_entry",
-          entityId: row.entry.id,
-          entityRevision: updated.revision,
-        });
-        return { updated, message };
-      });
-      if (result === "CREATION_RECHARGE_REQUIRES_GM")
-        return reply.code(409).send({ error: "CREATION_RECHARGE_REQUIRES_GM" });
-      if (!result) return reply.code(409).send({ error: "ENTRY_CONFLICT" });
-      await broadcast(auth.campaignId);
+      let result;
+      try {
+        result = await rechargeCharacterEntry(
+          db,
+          auth,
+          params.characterId,
+          params.entryId,
+          request.body,
+        );
+      } catch (error) {
+        if (error instanceof EntryRechargeError)
+          return reply
+            .code(error.status)
+            .send({
+              error: error.message,
+              ...(error.revision !== undefined
+                ? { revision: error.revision }
+                : {}),
+            });
+        throw error;
+      }
+      if (result.duplicate) return reply.code(200).send({ duplicate: true });
+      // The mutation has committed; a projection failure cannot invalidate it.
+      try {
+        await broadcast(auth.campaignId);
+      } catch {
+        request.log.warn("entry.recharge.broadcast_pending");
+      }
       return result.updated;
     },
   );
+
+  app.post("/api/characters/:characterId/catalog/:entryId/roll/cancel",async(request,reply)=>{
+    const auth=await requireAuth(request,reply,db);if(!auth)return;
+    if(request.headers["x-entry-campaign"]!==auth.campaignId||request.headers["x-entry-member"]!==auth.membershipId)return reply.code(409).send({error:"ENTRY_CONTEXT_CHANGED"});
+    const params=z.object({characterId:z.string().uuid(),entryId:z.string().uuid()}).safeParse(request.params),body=entryRollRequestSchema.safeParse(request.body);if(!params.success||!body.success)return reply.code(400).send({error:"INVALID_ENTRY_COMMAND"});
+    if(request.headers["x-action-id"]!==undefined&&request.headers["x-action-id"]!==body.data.actionId)return reply.code(409).send({error:"ACTION_ID_CONFLICT"});
+    try{return await cancelEntryApplication(db,auth,params.data.characterId,params.data.entryId,body.data);}catch(e){if(e instanceof EntryApplicationStateError)return reply.code(e.status).send({error:e.code});if(["40001","40P01"].includes(postgresErrorCode(e)??""))return reply.code(409).send({error:"ENTRY_RETRY"});if(postgresErrorCode(e)==="23505")return reply.code(409).send({error:"ACTION_ID_CONFLICT"});throw e;}
+  });
 
   app.post(
     "/api/characters/:characterId/catalog/:entryId/roll",
     async (request, reply) => {
       const auth = await requireAuth(request, reply, db);
       if (!auth) return;
+      const scoped=request.headers["x-entry-campaign"]!==undefined||request.headers["x-entry-member"]!==undefined;
+      if(scoped&&(request.headers["x-entry-campaign"]!==auth.campaignId||request.headers["x-entry-member"]!==auth.membershipId))return reply.code(409).send({error:"ENTRY_CONTEXT_CHANGED"});
+      const action=z.object({actionId:z.string().uuid()}).safeParse(request.body);
+      if(request.headers["x-action-id"]!==undefined&&(!action.success||request.headers["x-action-id"]!==action.data.actionId))return reply.code(409).send({error:"ACTION_ID_CONFLICT"});
       const params = z
         .object({ characterId: z.string().uuid(), entryId: z.string().uuid() })
         .parse(request.params);
-      const body = entryRollRequestSchema.parse(request.body);
-      const mode = body.mode ?? "EXECUTE";
-      const replay = await findAction(db, auth.campaignId, body.actionId);
-      if (replay) return reply.code(200).send({ duplicate: true });
-      if (auth.role !== "GM" && body.visibility === "GM_ONLY")
-        return reply.code(403).send({ error: "GM_ONLY_VISIBILITY_FORBIDDEN" });
-      const [row] = await db
-        .select({ character: characters, entry: characterCatalogEntries })
-        .from(characterCatalogEntries)
-        .innerJoin(
-          characters,
-          eq(characterCatalogEntries.characterId, characters.id),
-        )
-        .where(
-          and(
-            eq(characters.id, params.characterId),
-            eq(characterCatalogEntries.id, params.entryId),
-            eq(characters.campaignId, auth.campaignId),
-          ),
-        )
-        .limit(1);
-      if (!row || !(await canAccessCharacter(db, auth, row.character)))
-        return reply.code(403).send({ error: "CHARACTER_ENTRY_FORBIDDEN" });
-      if (
-        body.entryRevision !== undefined &&
-        body.entryRevision !== row.entry.revision
-      )
-        return reply
-          .code(409)
-          .send({ error: "ENTRY_CONFLICT", revision: row.entry.revision });
-      const parsedData = entryDataSchema.safeParse(
-        normalizeLegacyEntryData(row.entry.data),
-      );
-      if (!parsedData.success)
-        return reply.code(400).send({ error: "INVALID_ENTRY_DATA" });
-      // Area effects must never fall through to the legacy single-character
-      // execution path (which would spend a use without applying the area).
-      if (mode === "EXECUTE" && parsedData.data.areaEffect)
-        return reply
-          .code(409)
-          .send({ error: "AREA_EFFECT_REQUIRES_TARGETED_EXECUTION" });
-      const rollsThread = await ensureStreamThread(
-        db,
-        auth.campaignId,
-        "ROLLS",
-      );
-      let action:
-        NonNullable<typeof parsedData.data.rollActions>[number] | undefined;
-      const executeAll = mode === "EXECUTE" && body.executeAll === true;
-      const orderedActions = executeAll
-        ? (parsedData.data.rollActions ?? [])
-            .map((candidate, index) => ({ candidate, index }))
-            .sort(
-              (a, b) =>
-                a.candidate.order - b.candidate.order || a.index - b.index,
-            )
-            .map(({ candidate }) => candidate)
-        : [];
-      if (executeAll && row.entry.kind !== "ABILITY")
-        return reply.code(400).send({ error: "EXECUTE_ALL_REQUIRES_ABILITY" });
-      const noRollRequest =
-        mode === "EXECUTE" && !body.rollActionId && !executeAll;
-      const noRollActivation =
-        mode === "EXECUTE" &&
-        row.entry.kind === "ABILITY" &&
-        (noRollRequest || (executeAll && orderedActions.length === 0));
-      const activationConfig = parsedData.data.activation ?? {
-        // Existing use counters are an explicit structured limit. Legacy
-        // abilities without one remain free activations (never parse prose).
-        consumeUse: Boolean(parsedData.data.uses),
-      };
-      let formula: string | null = null;
-      let result: ReturnType<typeof rollFormulaWithMode> | null = null;
-      const referencedEntries = new Map<
-        string,
-        typeof characterCatalogEntries.$inferSelect
-      >();
-      const rolledActions: Array<{
-        action: NonNullable<typeof parsedData.data.rollActions>[number];
-        formula: string;
-        result: ReturnType<typeof rollFormulaWithMode>;
-      }> = [];
-      if (mode === "EXECUTE") {
-        if (noRollActivation) {
-          // No-roll ability activation remains a distinct path.
-        } else if (noRollRequest && row.entry.kind === "SKILL") {
-          const value = parsedData.data.skillValue;
-          if (typeof value !== "number" || !Number.isFinite(value))
-            return reply
-              .code(400)
-              .send({ error: "SKILL_VALUE_NOT_CONFIGURED" });
-          action = {
-            id: "simple-skill-roll",
-            kind: "CUSTOM",
-            label: row.entry.name,
-            dice: "1d20",
-            modifiers: [{ type: "CONSTANT", value }],
-            order: 0,
-            advantage: false,
-            consumeUse: false,
-          };
-        } else if (noRollRequest) {
-          return reply.code(400).send({ error: "ENTRY_ROLL_NOT_CONFIGURED" });
-        } else if (!executeAll) {
-          action = parsedData.data.rollActions?.find(
-            (candidate) => candidate.id === body.rollActionId,
-          );
-          if (!action)
-            return reply.code(404).send({ error: "ROLL_ACTION_NOT_FOUND" });
-        }
-        const consumesUse = noRollActivation
-          ? activationConfig.consumeUse
-          : executeAll
-            ? orderedActions.some((candidate) => candidate.consumeUse)
-            : Boolean(action?.consumeUse);
-        if (
-          consumesUse &&
-          (!parsedData.data.uses || parsedData.data.uses.current < 1)
-        )
-          return reply.code(409).send({ error: "NO_ABILITY_USES" });
-
-        const actionsToRoll = executeAll
-          ? orderedActions
-          : action
-            ? [action]
-            : [];
-        for (const currentAction of actionsToRoll) {
-          const values: Record<string, number> = {};
-          const formulaParts = [currentAction.dice];
-          const characterStats = currentAction.modifiers.some(
-            (source) => source.type === "CHARACTERISTIC",
-          )
-            ? characterRollStats(
-                row.character,
-                await campaignDefaultStatLayout(db, auth.campaignId),
-              )
-            : {};
-          for (const [index, source] of currentAction.modifiers.entries()) {
-            if (source.type === "CONSTANT") {
-              formulaParts.push(String(source.value));
-              continue;
-            }
-            if (source.type === "FORMULA") {
-              const terms = source.formula.match(/[+-]?\d+/g);
-              if (!terms)
-                return reply
-                  .code(400)
-                  .send({ error: "INVALID_MODIFIER_FORMULA" });
-              formulaParts.push(
-                String(terms.reduce((sum, term) => sum + Number(term), 0)),
-              );
-              continue;
-            }
-            const key = `modifier_${index}`;
-            let value: number | undefined;
-            if (source.type === "CHARACTERISTIC") {
-              value = characterStats[source.key];
-            } else if (source.type === "ENTRY_VALUE") {
-              value = parsedData.data.values?.[source.key];
-            } else if (source.type === "SKILL") {
-              if (source.scope === "LEGACY") {
-                const legacySkills = Array.isArray(row.character.skills)
-                  ? row.character.skills.filter((candidate): boolean => {
-                      if (!candidate || typeof candidate !== "object")
-                        return false;
-                      const skill = candidate as Record<string, unknown>;
-                      return (
-                        skill.key === source.key &&
-                        typeof skill.rank === "number" &&
-                        Number.isFinite(skill.rank)
-                      );
-                    })
-                  : [];
-                if (legacySkills.length === 1) value = legacySkills[0]!.rank;
-              } else if (source.scope === "CHARACTER_ENTRY") {
-                const [referenced] = await db
-                  .select({ entry: characterCatalogEntries })
-                  .from(characterCatalogEntries)
-                  .where(
-                    and(
-                      eq(characterCatalogEntries.id, source.key),
-                      eq(characterCatalogEntries.characterId, row.character.id),
-                      eq(characterCatalogEntries.kind, "SKILL"),
-                    ),
-                  )
-                  .limit(1);
-                if (referenced) {
-                  const previous = referencedEntries.get(referenced.entry.id);
-                  if (
-                    previous &&
-                    previous.revision !== referenced.entry.revision
-                  )
-                    return reply.code(409).send({ error: "ENTRY_CONFLICT" });
-                  referencedEntries.set(referenced.entry.id, referenced.entry);
-                }
-                value = numericSkillValue(referenced?.entry.data);
-              } else {
-                const [assigned] = await db
-                  .select({ entry: characterCatalogEntries })
-                  .from(characterCatalogEntries)
-                  .innerJoin(
-                    catalogEntries,
-                    eq(
-                      characterCatalogEntries.sourceCatalogEntryId,
-                      catalogEntries.id,
-                    ),
-                  )
-                  .where(
-                    and(
-                      eq(characterCatalogEntries.characterId, row.character.id),
-                      eq(
-                        characterCatalogEntries.sourceCatalogEntryId,
-                        source.key,
-                      ),
-                      eq(characterCatalogEntries.kind, "SKILL"),
-                      eq(catalogEntries.kind, "SKILL"),
-                      eq(catalogEntries.campaignId, auth.campaignId),
-                    ),
-                  )
-                  .limit(1);
-                if (assigned) {
-                  const previous = referencedEntries.get(assigned.entry.id);
-                  if (previous && previous.revision !== assigned.entry.revision)
-                    return reply.code(409).send({ error: "ENTRY_CONFLICT" });
-                  referencedEntries.set(assigned.entry.id, assigned.entry);
-                }
-                value = numericSkillValue(assigned?.entry.data);
-              }
-            }
-            if (value === undefined || !Number.isFinite(value))
-              return reply
-                .code(400)
-                .send({ error: "MISSING_MODIFIER_SOURCE", source });
-            values[key] = value;
-            formulaParts.push(key);
-          }
-          const currentFormula = formulaParts.join(" + ");
-          const currentResult = {
-            ...rollFormulaWithMode(
-              currentFormula,
-              values,
-              body.rollMode ??
-                (currentAction.advantage ? "ADVANTAGE" : "NORMAL"),
-              randomInt,
-              currentAction.label,
-            ),
-            styleFrame: await selectDiceFrame(db, {
-              campaignId: auth.campaignId,
-              membershipId: auth.membershipId,
-              sourceCatalogEntryId: row.entry.sourceCatalogEntryId,
-            }),
-          };
-          rolledActions.push({
-            action: currentAction,
-            formula: currentFormula,
-            result: currentResult,
-          });
-        }
-        if (!executeAll && rolledActions[0]) {
-          formula = rolledActions[0].formula;
-          result = rolledActions[0].result;
-        }
-      }
-      const entryUsageCost =
-        row.entry.kind === "ABILITY" ? parsedData.data.usageCost : undefined;
-      let cost = undefined as
-        NonNullable<typeof parsedData.data.usageCost> | undefined;
-      if (mode === "EXECUTE") {
-        if (entryUsageCost !== undefined) {
-          cost = entryUsageCost ?? undefined;
-        } else if (noRollActivation) {
-          cost = activationConfig.cost;
-        } else if (executeAll) {
-          const actionCosts: Array<
-            NonNullable<(typeof orderedActions)[number]["cost"]>
-          > = orderedActions.flatMap((candidate) =>
-            candidate.cost ? [candidate.cost] : [],
-          );
-          const distinctCosts = actionCosts.filter(
-            (candidate, index) =>
-              actionCosts.findIndex(
-                (other) =>
-                  other.type === candidate.type &&
-                  other.amount === candidate.amount,
-              ) === index,
-          );
-          if (distinctCosts.length > 1)
-            return reply.code(400).send({
-              error: "ABILITY_ACTION_COST_MISMATCH",
-              message: "Укажите общую стоимость способности",
-            });
-          cost = distinctCosts[0];
-        } else {
-          cost = action?.cost;
-        }
-      }
-      const resourceKey =
-        cost?.type === "physical"
-          ? "physicalPower"
-          : cost?.type === "magic"
-            ? "magicPower"
-            : null;
-      const resources = normalizeCharacterResources(row.character.resources);
-      const resourceBefore = resourceKey
-        ? (resources[resourceKey]?.current ?? 0)
-        : null;
-      if (cost && resourceBefore !== null && resourceBefore < cost.amount)
-        return reply.code(409).send({
-          error: "INSUFFICIENT_CHARACTER_RESOURCE",
-          resource: cost.type,
-          required: cost.amount,
-          available: resourceBefore,
-        });
-      const afterResources =
-        cost && resourceKey && resourceBefore !== null
-          ? {
-              ...resources,
-              [resourceKey]: {
-                ...resources[resourceKey],
-                current: resourceBefore - cost.amount,
-              },
-            }
-          : resources;
-      const uses = parsedData.data.uses;
-      const consumeUse =
-        mode === "EXECUTE" &&
-        (noRollActivation
-          ? activationConfig.consumeUse
-          : executeAll
-            ? orderedActions.some((candidate) => candidate.consumeUse)
-            : Boolean(action?.consumeUse));
-      const afterUses =
-        consumeUse && uses ? { ...uses, current: uses.current - 1 } : uses;
-      const skillCard = {
-        version: 1 as const,
-        execution:
-          mode === "EXECUTE" ? ("EXECUTED" as const) : ("SHARED" as const),
-        entry: {
-          id: row.entry.id,
-          revision: row.entry.revision,
-          sourceCatalogEntryId: row.entry.sourceCatalogEntryId,
-          kind: row.entry.kind,
-          name: row.entry.name,
-          description: row.entry.description,
-          notes: parsedData.data.notes ?? null,
-        },
-        actor: {
-          membershipId: auth.membershipId,
-          displayName: auth.displayName,
-          characterId: row.character.id,
-          characterName: row.character.name,
-        },
-        action: action
-          ? {
-              id: action.id,
-              kind: action.kind,
-              label: action.label,
-              dice: action.dice,
-              advantage: action.advantage,
-              consumeUse: action.consumeUse,
-              cost: action.cost,
-            }
-          : null,
-        formula,
-        result,
-        ...(executeAll && rolledActions.length > 0
-          ? {
-              rolls: rolledActions.map(
-                ({ action: rolledAction, formula, result }) => ({
-                  action: {
-                    id: rolledAction.id,
-                    kind: rolledAction.kind,
-                    label: rolledAction.label,
-                    dice: rolledAction.dice,
-                    advantage: rolledAction.advantage,
-                    consumeUse: rolledAction.consumeUse,
-                  },
-                  formula,
-                  result,
-                }),
-              ),
-            }
-          : {}),
-        uses: uses
-          ? {
-              before: uses.current,
-              after: afterUses!.current,
-              max: uses.max,
-              recharge: uses.recharge,
-            }
-          : null,
-        activationCost:
-          cost && resourceKey && resourceBefore !== null
-            ? {
-                type: cost.type,
-                amount: cost.amount,
-                before: resourceBefore,
-                after: resourceBefore - cost.amount,
-              }
-            : null,
-        visibility: body.visibility,
-      };
-      let saved: {
-        message: typeof chatMessages.$inferSelect;
-        event: typeof gameEvents.$inferSelect;
-      } | null;
+      let saved;
       try {
-        saved = await db.transaction(async (tx) => {
-          await lockEntryApplication(tx, auth.campaignId, body.actionId);
-          if (mode === "EXECUTE" && referencedEntries.size) {
-            await lockInventoryGraph(tx, auth.campaignId);
-            await requireCreationMember(tx, auth);
-          }
-          const bound =
-            mode === "EXECUTE" &&
-            (await lockBoundCreationEntry(tx, auth, row.entry.id));
-          let consumesCreation = false;
-          {
-            // Serialize all public dice with inspiration spending.
-            // Keep the shared lock order consistent with existing rolls:
-            // character resources first, then the catalog entry.
-            await tx
-              .select({ id: characters.id })
-              .from(characters)
-              .where(eq(characters.id, row.character.id))
-              .for("update")
-              .limit(1);
-          }
-          if (mode === "EXECUTE" && (bound || referencedEntries.size)) {
-            const expected = new Map(referencedEntries);
-            expected.set(row.entry.id, row.entry);
-            const entries = await tx
-              .select()
-              .from(characterCatalogEntries)
-              .where(inArray(characterCatalogEntries.id, [...expected.keys()]))
-              .orderBy(asc(characterCatalogEntries.id))
-              .for("update");
-            if (
-              entries.length !== expected.size ||
-              entries.some(
-                (entry) =>
-                  entry.characterId !== row.character.id ||
-                  entry.revision !== expected.get(entry.id)!.revision,
-              )
-            )
-              throw new Error("ENTRY_CONFLICT_TX");
-            for (const entry of entries) {
-              const created = await assertCreationEntryUsable(
-                tx,
-                auth,
-                entry,
-                row.character,
-              );
-              if (
-                created?.snapshot.entryData.creationConsumption ===
-                "BOUND_ITEM_ON_APPLICATION"
-              ) {
-                if (entry.id !== row.entry.id)
-                  throw new Error("CREATION_CONSUMPTION_UNAVAILABLE");
-                consumesCreation = true;
-              }
-            }
-          }
-          if (executeAll) {
-            const [currentEntry] = await tx
-              .select({ revision: characterCatalogEntries.revision })
-              .from(characterCatalogEntries)
-              .where(eq(characterCatalogEntries.id, row.entry.id))
-              .for("update")
-              .limit(1);
-            if (!currentEntry || currentEntry.revision !== row.entry.revision)
-              throw new Error("ENTRY_CONFLICT_TX");
-          }
-          if (cost && resourceKey) {
-            const [resourceUpdated] = await tx
-              .update(characters)
-              .set({
-                resources: afterResources,
-                revision: row.character.revision + 1,
-                updatedAt: new Date(),
-              })
-              .where(
-                and(
-                  eq(characters.id, row.character.id),
-                  eq(characters.revision, row.character.revision),
-                ),
-              )
-              .returning({ id: characters.id });
-            if (!resourceUpdated) throw new Error("ENTRY_CONFLICT_TX");
-          }
-          if (consumeUse && uses) {
-            const [updated] = await tx
-              .update(characterCatalogEntries)
-              .set({
-                data: { ...parsedData.data, uses: afterUses! },
-                revision: row.entry.revision + 1,
-                updatedAt: new Date(),
-              })
-              .where(
-                and(
-                  eq(characterCatalogEntries.id, row.entry.id),
-                  eq(characterCatalogEntries.revision, row.entry.revision),
-                ),
-              )
-              .returning({ id: characterCatalogEntries.id });
-            if (!updated) throw new Error("ENTRY_CONFLICT_TX");
-          }
-          if (mode === "EXECUTE" && cost && resourceKey && !consumeUse) {
-            const [updated] = await tx
-              .update(characterCatalogEntries)
-              .set({ revision: row.entry.revision + 1, updatedAt: new Date() })
-              .where(
-                and(
-                  eq(characterCatalogEntries.id, row.entry.id),
-                  eq(characterCatalogEntries.revision, row.entry.revision),
-                ),
-              )
-              .returning({ id: characterCatalogEntries.id });
-            if (!updated) throw new Error("ENTRY_CONFLICT_TX");
-          }
-          const consumption = consumesCreation
-            ? await consumeCreationApplication(
-                tx,
-                auth,
-                row.entry,
-                row.character,
-                new Date(),
-              )
-            : undefined;
-          const [message] = await tx
-            .insert(chatMessages)
-            .values({
-              campaignId: auth.campaignId,
-              membershipId: auth.membershipId,
-              characterId: row.character.id,
-              kind: "DICE",
-              threadId: rollsThread.id,
-              visibility: body.visibility,
-              body: [
-                action?.label ?? row.entry.name,
-                row.entry.description,
-                parsedData.data.notes,
-              ]
-                .filter(Boolean)
-                .join(" - "),
-              dice: result
-                ? {
-                    ...result,
-                    skillCard,
-                    applicationUndo:
-                      mode === "EXECUTE" ? { cancelled: false } : undefined,
-                  }
-                : {
-                    skillCard,
-                    applicationUndo:
-                      mode === "EXECUTE" ? { cancelled: false } : undefined,
-                  },
-            })
-            .returning();
-          if (!message) throw new Error("ROLL_SAVE_FAILED");
-          const [event] = await tx
-            .insert(gameEvents)
-            .values({
-              campaignId: auth.campaignId,
-              actionId: body.actionId,
-              membershipId: auth.membershipId,
-              type: mode === "EXECUTE" ? "entry.roll" : "entry.shared",
-              entityType: "chat",
-              entityId: message.id,
-              entityRevision:
-                mode === "EXECUTE" && (consumeUse || (cost && resourceKey))
-                  ? row.entry.revision + 1
-                  : row.entry.revision,
-              payload: {
-                skillCard,
-                messageId: message.id,
-                undoReceipt:
-                  mode === "EXECUTE"
-                    ? {
-                        version: 1,
-                        entry:
-                          !consumption && (consumeUse || (cost && resourceKey))
-                            ? {
-                                id: row.entry.id,
-                                beforeData: row.entry.data,
-                                afterRevision: row.entry.revision + 1,
-                              }
-                            : null,
-                        consumption,
-                        characters:
-                          cost && resourceKey
-                            ? [
-                                {
-                                  id: row.character.id,
-                                  beforeResources: row.character.resources,
-                                  afterRevision: row.character.revision + 1,
-                                },
-                              ]
-                            : [],
-                      }
-                    : null,
-                resourceCost: cost
-                  ? {
-                      type: cost.type,
-                      amount: cost.amount,
-                      before: resourceBefore,
-                      after: resourceBefore! - cost.amount,
-                    }
-                  : null,
-              },
-            })
-            .returning();
-          if (!event) throw new Error("EVENT_RECORD_FAILED");
-          return { message, event };
-        });
+        saved = await executeCharacterEntry(
+          db,
+          auth,
+          params.characterId,
+          params.entryId,
+          request.body,
+        );
       } catch (error) {
-        // A concurrent retry may lose only at the unique action receipt. The
-        // transaction rolls back its message/resource changes, then replay it.
-        if (
-          postgresErrorCode(error) === "23505" &&
-          (await findAction(db, auth.campaignId, body.actionId))
-        )
-          return reply.code(200).send({ duplicate: true });
-        if (error instanceof Error && error.message.startsWith("CREATION_"))
-          return reply.code(409).send({ error: error.message });
-        if (error instanceof Error && error.message === "ENTRY_CONFLICT_TX") {
-          if (await findAction(db, auth.campaignId, body.actionId))
-            return reply.code(200).send({ duplicate: true });
-          return reply.code(409).send({ error: "ENTRY_CONFLICT" });
-        }
+        if (error instanceof EntryRollError)
+          return reply.code(error.status).send(error.details);
         throw error;
       }
-      if (!saved) {
-        // A concurrent request with this same action can commit between our
-        // preflight receipt lookup and the entry CAS. Its receipt is the
-        // authoritative idempotent result; only a different stale action is
-        // an optimistic-concurrency conflict.
-        if (await findAction(db, auth.campaignId, body.actionId))
-          return reply.code(200).send({ duplicate: true });
-        return reply.code(409).send({ error: "ENTRY_CONFLICT" });
+      if(saved.duplicate){
+        if(scoped)return reply.code(200).send({...saved.receipt,duplicate:true});
+        if("cancelled" in saved.receipt)return reply.code(409).send({error:"ENTRY_APPLICATION_CANCELLED"});
+        return reply.code(200).send({duplicate:true});
       }
-      const dto = chatMessageDto(
-        saved.message,
-        auth.displayName,
-        rollsThread.stream,
-      );
       const envelope = {
         sequence: Number(saved.event.sequence),
-        actionId: body.actionId,
+        actionId: saved.event.actionId,
         emittedAt: saved.event.createdAt.toISOString(),
-        data: dto,
+        data: saved.dto,
       };
-      if (chatBroadcastAudience(saved.message.visibility) === "CAMPAIGN")
-        io.to(campaignRoom(auth.campaignId)).emit("chat:created", envelope);
-      else {
-        io.to(gmRoom(auth.campaignId)).emit("chat:created", envelope);
-        io.to(memberRoom(auth.membershipId)).emit("chat:created", envelope);
+      try {
+        if (chatBroadcastAudience(saved.dto.visibility) === "CAMPAIGN")
+          io.to(campaignRoom(auth.campaignId)).emit("chat:created", envelope);
+        else {
+          io.to(gmRoom(auth.campaignId)).emit("chat:created", envelope);
+          io.to(memberRoom(auth.membershipId)).emit("chat:created", envelope);
+        }
+        await broadcast(auth.campaignId);
+      } catch {
+        request.log.warn("entry.roll.broadcast_pending");
       }
-      await broadcast(auth.campaignId);
-      return reply
-        .code(201)
-        .send({ ...(result ?? {}), skillCard, messageId: saved.message.id });
+      return reply.code(201).send(scoped?{...saved.value,...saved.receipt}:saved.value);
     },
   );
 
@@ -1443,111 +495,9 @@ export function registerCharacterPlayRoutes(
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     const body = diceRequestSchema.parse(request.body);
-    const rollsThread = await ensureStreamThread(db, auth.campaignId, "ROLLS");
-    const duplicate = await findAction(db, auth.campaignId, body.actionId);
-    if (duplicate) return reply.code(200).send({ duplicate: true });
-    let character = null;
-    if (body.characterId) {
-      [character] = await db
-        .select()
-        .from(characters)
-        .where(
-          and(
-            eq(characters.id, body.characterId),
-            eq(characters.campaignId, auth.campaignId),
-          ),
-        )
-        .limit(1);
-      if (!character || !(await canAccessCharacter(db, auth, character)))
-        return reply.code(403).send({ error: "CHARACTER_FORBIDDEN" });
-    } else if (auth.role === "PLAYER") {
-      [character] = await db
-        .select({ character: characters })
-        .from(characters)
-        .leftJoin(
-          characterControllers,
-          eq(characterControllers.characterId, characters.id),
-        )
-        .where(
-          and(
-            eq(characters.campaignId, auth.campaignId),
-            or(
-              eq(characters.ownerMembershipId, auth.membershipId),
-              eq(characterControllers.membershipId, auth.membershipId),
-            ),
-          ),
-        )
-        .orderBy(
-          desc(sql`${characters.ownerMembershipId} = ${auth.membershipId}`),
-        )
-        .limit(1)
-        .then((rows) => rows.map((row) => row.character));
-    }
     try {
-      const normalizedFormula = normalizeLegacyFormula(body.formula);
-      const modeLabel =
-        body.rollMode === "ADVANTAGE"
-          ? "преимущество"
-          : body.rollMode === "DISADVANTAGE"
-            ? "помеха"
-            : null;
-      const rollLabel = `${body.label ?? body.formula}${modeLabel ? ` · ${modeLabel}` : ""}`;
-      const result = {
-        ...rollFormulaWithMode(
-          normalizedFormula,
-          character
-            ? characterRollStats(
-                character,
-                await campaignDefaultStatLayout(db, auth.campaignId),
-              )
-            : normalizeLegacyStats(undefined),
-          body.rollMode ?? "NORMAL",
-          randomInt,
-          rollLabel,
-        ),
-        // UIX-457: у чистого броска нет навыка — только рамка игрока.
-        styleFrame: await selectDiceFrame(db, {
-          campaignId: auth.campaignId,
-          membershipId: auth.membershipId,
-        }),
-      };
-      const saved = await db.transaction(async (tx) => {
-        if (character)
-          await tx
-            .select({ id: characters.id })
-            .from(characters)
-            .where(eq(characters.id, character.id))
-            .for("update");
-        const [row] = await tx
-          .insert(chatMessages)
-          .values({
-            campaignId: auth.campaignId,
-            membershipId: auth.membershipId,
-            characterId: character?.id ?? null,
-            kind: "DICE",
-            threadId: rollsThread.id,
-            visibility: body.visibility,
-            body: rollLabel,
-            dice: result,
-          })
-          .returning();
-        if (!row) throw new Error("ROLL_SAVE_FAILED");
-        const dto = chatMessageDto(row, auth.displayName, rollsThread.stream);
-        const [event] = await tx
-          .insert(gameEvents)
-          .values({
-            campaignId: auth.campaignId,
-            actionId: body.actionId,
-            membershipId: auth.membershipId,
-            type: "dice.created",
-            entityType: "chat",
-            entityId: row.id,
-            payload: dto,
-          })
-          .returning();
-        if (!event) throw new Error("EVENT_RECORD_FAILED");
-        return { row, dto, event };
-      });
+      const saved = await submitDiceRoll(db, auth, body);
+      if (saved.duplicate) return reply.code(200).send({ duplicate: true });
       const { row, dto, event } = saved;
       const envelope = {
         sequence: Number(event.sequence),
@@ -1563,6 +513,8 @@ export function registerCharacterPlayRoutes(
       }
       return reply.code(201).send(dto);
     } catch (error) {
+      if (error instanceof DiceCommandError)
+        return reply.code(error.status).send({ error: error.message });
       if (error instanceof DiceFormulaError)
         return reply
           .code(400)

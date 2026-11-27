@@ -1,8 +1,9 @@
+import {offlineShellPlugin} from "./build/offline-shell-plugin";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(),offlineShellPlugin()],
   define: {
     __ARKEN_CLIENT_REVISION__: JSON.stringify(
       /^[0-9a-f]{40}$/.test(process.env.BUILD_REVISION ?? "")

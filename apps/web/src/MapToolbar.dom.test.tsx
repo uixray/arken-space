@@ -1,3 +1,4 @@
+import {api} from "./api";
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameSnapshot } from "@arken/contracts";
@@ -487,4 +488,18 @@ describe("MapToolbar — панель инструментов карты (UIX-4
     expect(container.textContent).not.toContain("↶");
     expect(container.textContent).not.toContain("↷");
   });
+});
+
+it('keeps undo/redo disabled and never requests host history in a read-only saved copy',async()=>{
+ vi.mocked(api).mockClear();const props=createDefaultProps({readOnly:true});
+ renderComponent(<MapToolbar {...props}/>);
+ await Promise.resolve();expect(vi.mocked(api).mock.calls.filter(([path])=>String(path).includes('/api/canvas/history'))).toHaveLength(0);
+ const undo=document.querySelector('.toolbar-history button');expect(undo).not.toBeNull();expect(undo).toBeDisabled();
+});
+
+it('allows camera inspection but disables remote map tools in a saved copy',async()=>{
+ const props=createDefaultProps({readOnly:true,snapshot:createMockSnapshot('PLAYER'),viewSnapshot:createMockSnapshot('PLAYER')});
+ renderComponent(<MapToolbar {...props}/>);
+ for(const name of ['Рисование','Пинг','Линейка'])expect(screen.getByRole('button',{name})).toBeDisabled();
+ expect(screen.getByRole('button',{name:'Перемещение'})).toBeEnabled();
 });

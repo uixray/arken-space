@@ -44,6 +44,9 @@ const IN_FLOW_SECTIONS = new Set([
   "initiative-panel",
   "resource-counters",
   "character-hero__backstory",
+  // These actions expand the ability card in place; keeping it open allows
+  // the user to compare the controls with the rest of the character sheet.
+  "ability-management",
 ]);
 
 interface FoundDetails {

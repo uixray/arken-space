@@ -1,0 +1,3 @@
+import * as schema from '@arken/db';import {PgTable,getTableConfig} from 'drizzle-orm/pg-core';
+/** Test values satisfy primitive shape only, not domain or FK invariants. */
+export function transferPrimitiveFixture(table:string):Record<string,unknown>{const config=Object.values(schema).filter(v=>v instanceof PgTable).map(t=>getTableConfig(t as PgTable)).find(t=>t.name===table)!;return Object.fromEntries(config.columns.map(c=>{const type=c.getSQLType();return [c.name,!c.notNull?null:c.enumValues?.[0]??(type==='uuid'?crypto.randomUUID():type==='boolean'?false:type==='jsonb'?{}:type==='timestamp with time zone'?'2026-11-27T00:00:00.000Z':['integer','bigint','bigserial','double precision'].includes(type)?0:'Synthetic')];}));}

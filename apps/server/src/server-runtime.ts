@@ -1,3 +1,7 @@
+import { ChatUploadRecovery } from "./chat-upload-recovery.js";
+import { reconcileChatUploadFile } from "./chat-upload-reconcile.js";
+import { mediaRoot } from "./storage.js";
+import {sendAcceptedLocalTokenPreview} from "./realtime.js";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
@@ -16,14 +20,16 @@ import { broadcastSnapshots, registerRoutes } from "./routes.js";
 import { ensureSeed } from "./seed.js";
 import { requestActionId } from "./telemetry.js";
 import { isCampaignCanvasGuardError } from "./campaign-pause-guard.js";
+import { isIsometricPolicyError } from "./isometric-movement.js";
 import { accountErrorLogDetails } from "./account-error-logging.js";
 import { createAccountMailRuntime } from "./account-mail-runtime.js";
 import { createAccountMailContext } from "./account-mail-context.js";
 import { inspectLocalHost } from "./local-host-identity.js";
 import { assertLocalDatabaseRole } from "./local-host-maintenance.js";
 import { registerLocalHostWeb } from "./local-host-web.js";
+import { registerLocalSessionRoutes } from "./local-session-routes.js";
 
-export async function startServer() {
+export async function startServer(options: { listenHost?: "127.0.0.1" } = {}) {
   // Validate transport/key configuration before opening the database connection.
   const accountMailContext = createAccountMailContext(env);
 
@@ -139,8 +145,12 @@ export async function startServer() {
     logger: app.log,
   });
 
+  const chatUploadRecovery = new ChatUploadRecovery({root: mediaRoot(), reconcile: (campaignId, key) => reconcileChatUploadFile(db, campaignId, key)});
+  let stopTelegram: () => Promise<void> = async () => {};
   app.addHook("onClose", async () => {
+    await stopTelegram();
     await accountMailRuntime.stop();
+    await chatUploadRecovery.stop();
     await io.close();
     await client.end();
   });
@@ -150,11 +160,14 @@ export async function startServer() {
       refreshTokenProjection: (campaignId) =>
         broadcastSnapshots(io, db, campaignId, "token"),
     });
-    registerRoutes(app, db, io, accountMailContext);
+    stopTelegram = registerRoutes(app, db, io, accountMailContext);
+    registerLocalSessionRoutes(app,db,campaignId=>broadcastSnapshots(io,db,campaignId,"token"),(campaignId,prepared,movement)=>sendAcceptedLocalTokenPreview(io,campaignId,prepared,movement));
     if (env.DEPLOYMENT_MODE === "LOCAL_HOST")
       await registerLocalHostWeb(app, env.LOCAL_WEB_ROOT);
 
     app.setErrorHandler((error, request, reply) => {
+      if (isIsometricPolicyError(error))
+        return reply.code(403).send({ error: "MOVEMENT_FORBIDDEN" });
       const problem = error as Error & {
         validation?: unknown;
         statusCode?: number;
@@ -164,7 +177,8 @@ export async function startServer() {
       const statusCode = isValidationError ? 400 : (problem.statusCode ?? 500);
       const sensitiveAccountRoute =
         request.url.startsWith("/api/account/") ||
-        request.url.startsWith("/api/auth/");
+        request.url.startsWith("/api/auth/") ||
+        request.url.startsWith("/api/local-session/");
       const details = {
         ...(sensitiveAccountRoute
           ? accountErrorLogDetails({
@@ -203,11 +217,12 @@ export async function startServer() {
     });
 
     await app.listen({
-      host: env.DEPLOYMENT_MODE === "LOCAL_HOST" ? "127.0.0.1" : "0.0.0.0",
+      host: env.DEPLOYMENT_MODE === "LOCAL_HOST" ? "127.0.0.1" : (options.listenHost ?? "0.0.0.0"),
       port: env.PORT,
     });
     // Start only after the listener is live. Default runtime/SMTP config is off.
     accountMailRuntime.start();
+    chatUploadRecovery.start();
     return app;
   } catch (error) {
     await app.close().catch(() => undefined);

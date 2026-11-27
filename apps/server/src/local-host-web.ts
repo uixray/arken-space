@@ -3,6 +3,8 @@ import { realpath, stat } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { extname, isAbsolute, join, relative } from "node:path";
 const types: Record<string, string> = {
+  ".webmanifest": "application/manifest+json",
+  ".wasm": "application/wasm",
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -11,6 +13,7 @@ const types: Record<string, string> = {
   ".png": "image/png",
   ".webp": "image/webp",
   ".ico": "image/x-icon",
+  ".ttf": "font/ttf",
   ".woff2": "font/woff2",
   ".woff": "font/woff",
   ".ogg": "audio/ogg",
@@ -59,7 +62,7 @@ export async function registerLocalHostWeb(
         return reply.code(404).send({ error: "NOT_FOUND" });
       reply.header(
         "Cache-Control",
-        spa || extension === ".html" ? "no-store" : "public, max-age=3600",
+        spa || extension === ".html" || pathname === "/player-offline-sw.js" ? "no-store" : "public, max-age=3600",
       );
       reply.header("X-Content-Type-Options", "nosniff");
       return reply

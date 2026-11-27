@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import {
   economyConfigSchema,
   saveMerchantSchema,
@@ -12,6 +18,12 @@ import {
   economyRequest,
   type EconomyContext,
 } from "./economy-client";
+import {
+  clearManagerCommand,
+  readManagerCommand,
+  writeManagerCommand,
+  type ManagerCommand,
+} from "./economy-manager-pending";
 
 type Merchant = Omit<EconomyManagerDto["merchants"][number], "revision"> & {
   revision: number | null;
@@ -19,6 +31,30 @@ type Merchant = Omit<EconomyManagerDto["merchants"][number], "revision"> & {
 type Offer = Omit<EconomyManagerDto["offers"][number], "revision"> & {
   revision: number | null;
 };
+function confirmsManagerCommand(command: ManagerCommand, response: unknown) {
+  if (!response || typeof response !== "object" || Array.isArray(response))
+    return false;
+  const value = response as Record<string, unknown>;
+  if (command.path.startsWith("/api/world-content/")) {
+    const id = command.path.slice("/api/world-content/".length);
+    return (
+      value.id === id &&
+      typeof value.revision === "number" &&
+      Number.isInteger(value.revision) &&
+      typeof command.body.revision === "number" &&
+      value.revision === command.body.revision + 1
+    );
+  }
+  if (value.duplicate === true) return true; // Existing server replay contract.
+  const expected = command.body.revision;
+  return (
+    typeof value.revision === "number" &&
+    Number.isInteger(value.revision) &&
+    (expected === null
+      ? value.revision === 0
+      : typeof expected === "number" && value.revision === expected + 1)
+  );
+}
 const newMerchant = (): Merchant => ({
   id: crypto.randomUUID(),
   revision: null,
@@ -75,20 +111,27 @@ function NumberField({
     </label>
   );
 }
-export function EconomyManager({
-  context,
-  onSaved,
-}: {
-  context: EconomyContext;
-  onSaved: () => void;
-}) {
+export type EconomyManagerHandle = { allowExit: () => boolean };
+export const EconomyManager = forwardRef<
+  EconomyManagerHandle,
+  { context: EconomyContext; onSaved: () => void }
+>(function EconomyManager({ context, onSaved }, ref) {
   const [data, setData] = useState<EconomyManagerDto | null>(null);
   const [config, setConfig] = useState(emptyConfig);
+  const [configBaseline, setConfigBaseline] = useState(() =>
+    JSON.stringify(emptyConfig()),
+  );
   // A draft must keep the revision it was based on. Refreshing a different
   // form must not silently authorize overwriting another GM's newer rules.
   const [configRevision, setConfigRevision] = useState<number | null>(null);
   const [merchant, setMerchant] = useState(newMerchant);
   const [offer, setOffer] = useState(newOffer);
+  const [merchantBaseline, setMerchantBaseline] = useState(() =>
+    JSON.stringify(merchant),
+  );
+  const [offerBaseline, setOfferBaseline] = useState(() =>
+    JSON.stringify(offer),
+  );
   const [selectedPrice, setSelectedPrice] = useState<
     EconomyManagerDto["instances"][number] | null
   >(null);
@@ -96,26 +139,35 @@ export function EconomyManager({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [uncertain, setUncertain] = useState(false);
+  const [storageError, setStorageError] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const alive = useRef(false);
   const active = useRef(false);
-  const request = useRef<{
-    path: string;
-    method: string;
-    body: Record<string, unknown>;
-  } | null>(null);
+  const request = useRef<ManagerCommand | null>(null);
   useEffect(() => {
     alive.current = true;
     setLoading(true);
+    try {
+      const saved = readManagerCommand(context);
+      request.current = saved;
+      setUncertain(Boolean(saved));
+      setStorageError("");
+    } catch (e) {
+      request.current = null;
+      setUncertain(false);
+      setStorageError(formatApiError(e));
+    }
     const abort = new AbortController();
     void economyApi<EconomyManagerDto>(context, "/api/economy/manager", {
       signal: abort.signal,
     })
       .then((value) => {
         if (!abort.signal.aborted && alive.current) {
+          const saved = value.config ?? emptyConfig();
           setData(value);
-          setConfig(value.config ?? emptyConfig());
+          setConfig(saved);
+          setConfigBaseline(JSON.stringify(saved));
           setConfigRevision(value.revision);
         }
       })
@@ -138,10 +190,16 @@ export function EconomyManager({
     if (!alive.current) return next;
     setData(next);
     if (reset) {
-      setConfig(next.config ?? emptyConfig());
+      const saved = next.config ?? emptyConfig();
+      setConfig(saved);
+      setConfigBaseline(JSON.stringify(saved));
       setConfigRevision(next.revision);
-      setMerchant(newMerchant());
-      setOffer(newOffer());
+      const merchantDraft = newMerchant(),
+        offerDraft = newOffer();
+      setMerchant(merchantDraft);
+      setMerchantBaseline(JSON.stringify(merchantDraft));
+      setOffer(offerDraft);
+      setOfferBaseline(JSON.stringify(offerDraft));
       setSelectedPrice(null);
       setPrice("");
     }
@@ -169,7 +227,22 @@ export function EconomyManager({
     setNotice("");
     const command = request.current;
     try {
-      await economyRequest(context, command.path, command.body, command.method);
+      const saved = readManagerCommand(context);
+      if (!saved || JSON.stringify(saved) !== JSON.stringify(command))
+        throw new Error(
+          "Сохранённая команда настроек изменилась. Проверьте результат с мастером.",
+        );
+      const result = await economyRequest<unknown>(
+        context,
+        command.path,
+        command.body,
+        command.method,
+      );
+      if (!confirmsManagerCommand(command, result))
+        throw new Error(
+          "Ответ не подтверждает сохранение. Повторите тот же запрос или проверьте состояние с мастером.",
+        );
+      clearManagerCommand(context, command);
       request.current = null;
       if (!alive.current) return;
       setUncertain(false);
@@ -177,16 +250,24 @@ export function EconomyManager({
       const next = await reload(false);
       if (!alive.current) return;
       if (command.path.endsWith("/config")) {
-        setConfig(next.config ?? emptyConfig());
+        const saved = next.config ?? emptyConfig();
+        setConfig(saved);
+        setConfigBaseline(JSON.stringify(saved));
         setConfigRevision(next.revision);
       }
       if (command.path.endsWith("/merchants")) {
         const row = next.merchants.find((m) => m.id === command.body.id);
-        if (row) setMerchant(row);
+        if (row) {
+          setMerchant(row);
+          setMerchantBaseline(JSON.stringify(row));
+        }
       }
       if (command.path.endsWith("/offers")) {
         const row = next.offers.find((o) => o.id === command.body.id);
-        if (row) setOffer(row);
+        if (row) {
+          setOffer(row);
+          setOfferBaseline(JSON.stringify(row));
+        }
       }
       if (command.path.startsWith("/api/world-content/")) {
         const row = next.instances.find((i) => i.id === selectedPrice?.id);
@@ -199,8 +280,13 @@ export function EconomyManager({
         e instanceof ApiError &&
         (e.details?.notApplied === true || e.code === "WORLD_CONTENT_CONFLICT")
       ) {
-        request.current = null;
-        if (alive.current) setUncertain(false);
+        try {
+          clearManagerCommand(context, command);
+          request.current = null;
+          if (alive.current) setUncertain(false);
+        } catch (storageFailure) {
+          if (alive.current) setStorageError(formatApiError(storageFailure));
+        }
       }
       if (alive.current) setError(formatApiError(e));
     } finally {
@@ -213,12 +299,19 @@ export function EconomyManager({
     values: Record<string, unknown>,
     method = "PUT",
   ) => {
-    if (request.current || active.current) return;
-    request.current = {
+    if (request.current || active.current || storageError) return;
+    const next = {
       path,
       method,
       body: { ...values, actionId: crypto.randomUUID() },
     };
+    try {
+      writeManagerCommand(context, next);
+    } catch (e) {
+      setStorageError(formatApiError(e));
+      return;
+    }
+    request.current = next;
     setUncertain(true);
     void execute();
   };
@@ -244,6 +337,66 @@ export function EconomyManager({
           !data.offers.some((o) => o.instanceId === i.id && o.id !== offer.id),
       )
     : [];
+  const dirty =
+    JSON.stringify(config) !== configBaseline ||
+    JSON.stringify(merchant) !== merchantBaseline ||
+    JSON.stringify(offer) !== offerBaseline ||
+    price !== (selectedPrice?.basePriceCopper?.toString() ?? "");
+  useImperativeHandle(
+    ref,
+    () => ({
+      allowExit: () => {
+        if (storageError)
+          return window.confirm(
+            "Сохранённая команда недоступна или повреждена. Выйти, не удаляя её?",
+          );
+        if (active.current || request.current) {
+          setError(
+            "Дождитесь результата или повторите неподтверждённое сохранение перед выходом из настроек.",
+          );
+          return false;
+        }
+        return (
+          !dirty ||
+          window.confirm(
+            "Несохранённые настройки магазинов будут потеряны. Выйти?",
+          )
+        );
+      },
+    }),
+    [dirty, storageError],
+  );
+  useEffect(() => {
+    if (!dirty && !uncertain && !busy) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty, uncertain, busy]);
+  const replaceMerchant = (next: Merchant) => {
+    if (
+      JSON.stringify(merchant) !== merchantBaseline &&
+      !window.confirm(
+        "Несохранённые изменения магазина будут потеряны. Продолжить?",
+      )
+    )
+      return;
+    setMerchant(next);
+    setMerchantBaseline(JSON.stringify(next));
+  };
+  const replaceOffer = (next: Offer) => {
+    if (
+      JSON.stringify(offer) !== offerBaseline &&
+      !window.confirm(
+        "Несохранённые изменения предложения будут потеряны. Продолжить?",
+      )
+    )
+      return;
+    setOffer(next);
+    setOfferBaseline(JSON.stringify(next));
+  };
   return (
     <section
       className="economy-manager"
@@ -255,12 +408,13 @@ export function EconomyManager({
       </p>
       <button
         type="button"
-        disabled={loading || busy || uncertain}
+        disabled={loading || busy || uncertain || Boolean(storageError)}
         onClick={() => void resetDrafts()}
       >
         Загрузить сохранённые настройки и сбросить черновики
       </button>
       {notice && <p role="status">{notice}</p>}
+      {storageError && <p role="alert">{storageError}</p>}
       {error && <p role="alert">{error}</p>}
       {uncertain && !busy && (
         <p>
@@ -271,7 +425,7 @@ export function EconomyManager({
         </p>
       )}
       {data && (
-        <fieldset disabled={busy || uncertain}>
+        <fieldset disabled={busy || uncertain || Boolean(storageError)}>
           <legend>Правила кампании</legend>
           <details open={!data.config}>
             <summary>Календарь, сезоны, регионы и харизма</summary>
@@ -603,6 +757,14 @@ export function EconomyManager({
                   const row = data.instances.find(
                     (i) => i.id === e.target.value,
                   );
+                  if (
+                    price !==
+                      (selectedPrice?.basePriceCopper?.toString() ?? "") &&
+                    !window.confirm(
+                      "Несохранённая цена будет потеряна. Продолжить?",
+                    )
+                  )
+                    return;
                   setSelectedPrice(row ?? null);
                   setPrice(row?.basePriceCopper?.toString() ?? "");
                 }}
@@ -666,13 +828,16 @@ export function EconomyManager({
               {data.merchants.map((m) => (
                 <li key={m.id}>
                   {m.name} · {m.visible ? "видимый" : "скрытый"}{" "}
-                  <button type="button" onClick={() => setMerchant(m)}>
+                  <button type="button" onClick={() => replaceMerchant(m)}>
                     Изменить
                   </button>
                 </li>
               ))}
             </ul>
-            <button type="button" onClick={() => setMerchant(newMerchant())}>
+            <button
+              type="button"
+              onClick={() => replaceMerchant(newMerchant())}
+            >
               Новый магазин
             </button>
             <label>
@@ -748,13 +913,13 @@ export function EconomyManager({
                   {data.instances.find((i) => i.id === o.instanceId)?.name ??
                     "Экземпляр недоступен"}{" "}
                   · {o.visible ? "видимый" : "скрытый"}{" "}
-                  <button type="button" onClick={() => setOffer(o)}>
+                  <button type="button" onClick={() => replaceOffer(o)}>
                     Изменить
                   </button>
                 </li>
               ))}
             </ul>
-            <button type="button" onClick={() => setOffer(newOffer())}>
+            <button type="button" onClick={() => replaceOffer(newOffer())}>
               Новое предложение
             </button>
             <label>
@@ -869,4 +1034,4 @@ export function EconomyManager({
       )}
     </section>
   );
-}
+});

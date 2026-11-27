@@ -11,6 +11,11 @@ import "./CharacterProgression.css";
 type View = {
   balance: number;
   spentSp: number;
+  workshopSp?: {
+    spent: string;
+    returned: string;
+    scope: "CHARACTER_ALL" | "ACTOR_ONLY";
+  };
   grantedSp: number;
   targets: Array<ProgressionTarget & { label: string; value: number | null }>;
   records: PlayerRequestDto[];
@@ -414,7 +419,22 @@ export function CharacterProgression({
             <>
               <p>
                 <strong>
-                  Остаток: {view.balance} SP · Вложено: {view.spentSp} SP
+                  Остаток: {view.balance} SP · В обычную прокачку:{" "}
+                  {view.spentSp} SP
+                  {view.workshopSp && (
+                    <>
+                      <br />
+                      Мастерская (
+                      {view.workshopSp.scope === "ACTOR_ONLY"
+                        ? "мои действия с этим персонажем"
+                        : "все действия с этим персонажем"}
+                      ): потрачено {view.workshopSp.spent} SP · возвращено{" "}
+                      {view.workshopSp.returned} SP.
+                      <br />
+                      Возврат не является наградой. Эти суммы не пересчитывают
+                      текущий баланс; подробности — в мастерской.
+                    </>
+                  )}
                 </strong>
               </p>
               <p>

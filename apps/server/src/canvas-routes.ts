@@ -1,3 +1,6 @@
+import {commitCanvasObjectHistory} from "./canvas-object-history.js";
+import {playerCanReplayTokens,historyContainsStamp} from "./canvas-history-authority.js";
+import {commitTokenMoveHistory} from "./token-move-history.js";
 import type { FastifyInstance } from "fastify";
 import {
   actionJournal,
@@ -20,6 +23,7 @@ import {
   sceneCanvasConfigSchema,
 } from "@arken/contracts";
 import { requireAuth } from "./auth.js";
+import { assertLegacyCanvasLayerAccess } from "./isometric-layers.js";
 import { findAction } from "./action-lookup.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
 
@@ -30,120 +34,7 @@ type CanvasDatabase = ReturnType<
 type CanvasTransaction =
   import("./campaign-pause-guard.js").CampaignCanvasTransaction;
 
-/** History ownership is not a permanent grant of control over a token. */
-async function playerCanReplayTokens(
-  tx: CanvasTransaction,
-  command: typeof actionJournal.$inferSelect,
-  campaignId: string,
-  membershipId: string,
-) {
-  if (command.targetType !== "TOKEN" && command.targetType !== "CANVAS_BULK")
-    return true;
-  const record = (value: unknown): Record<string, unknown> | null =>
-    value && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null;
-  const historical = new Map<string, Record<string, unknown>>();
-  if (command.targetType === "TOKEN") {
-    for (const value of [command.before, command.after]) {
-      const row = record(value);
-      if (row && typeof row.definitionId === "string")
-        historical.set(command.targetId, row);
-    }
-  } else {
-    for (const value of [command.before, command.after]) {
-      const snapshot = record(value);
-      if (!snapshot || !Array.isArray(snapshot.tokens)) return false;
-      for (const value of snapshot.tokens) {
-        const row = record(value);
-        if (
-          !row ||
-          typeof row.id !== "string" ||
-          typeof row.definitionId !== "string"
-        )
-          return false;
-        historical.set(row.id, row);
-      }
-    }
-  }
-  const ids =
-    command.targetType === "TOKEN"
-      ? [command.targetId]
-      : [...historical.keys()];
-  if (!ids.length) return true;
-  const current = await tx.select().from(tokens).where(inArray(tokens.id, ids));
-  const currentById = new Map(current.map((row) => [row.id, row]));
-  const definitionIds = new Set<string>();
-  for (const id of ids) {
-    const row = currentById.get(id) ?? historical.get(id);
-    if (
-      !row ||
-      typeof row.definitionId !== "string" ||
-      row.sceneId !== command.sceneId ||
-      row.visible !== true ||
-      row.layer !== "PLAYER" ||
-      (row.locked !== false && command.type !== "TOKEN_CONDITIONS")
-    )
-      return false;
-    definitionIds.add(row.definitionId);
-  }
-  const ordered = [...definitionIds].sort();
-  const definitions = await tx
-    .select({ id: tokenDefinitions.id })
-    .from(tokenDefinitions)
-    .where(
-      and(
-        eq(tokenDefinitions.campaignId, campaignId),
-        inArray(tokenDefinitions.id, ordered),
-      ),
-    )
-    .orderBy(asc(tokenDefinitions.id))
-    .for("share");
-  if (definitions.length !== ordered.length) return false;
-  const controllers = await tx
-    .select({ id: tokenControllers.tokenDefinitionId })
-    .from(tokenControllers)
-    .where(
-      and(
-        inArray(tokenControllers.tokenDefinitionId, ordered),
-        eq(tokenControllers.membershipId, membershipId),
-      ),
-    );
-  const controlled = new Set(controllers.map((row) => row.id));
-  return ordered.every((id) => controlled.has(id));
-}
 
-function historyContainsStamp(command: typeof actionJournal.$inferSelect) {
-  const snapshots = [command.before, command.after];
-  if (command.targetType === "DRAWING")
-    return snapshots.some(
-      (snapshot) =>
-        typeof snapshot === "object" &&
-        snapshot !== null &&
-        "kind" in snapshot &&
-        LAYERED_DRAWING_KINDS.includes(snapshot.kind),
-    );
-  if (command.targetType !== "CANVAS_BULK") return false;
-  return snapshots.some((snapshot) => {
-    if (
-      typeof snapshot !== "object" ||
-      snapshot === null ||
-      !("drawings" in snapshot)
-    )
-      return false;
-    const rows = snapshot.drawings;
-    return (
-      Array.isArray(rows) &&
-      rows.some(
-        (row) =>
-          typeof row === "object" &&
-          row !== null &&
-          "kind" in row &&
-          LAYERED_DRAWING_KINDS.includes(row.kind),
-      )
-    );
-  });
-}
 
 type SceneTokenGeometrySnapshot = {
   tokens: Array<{
@@ -205,6 +96,7 @@ export function registerCanvasRoutes(
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     const body = canvasBulkCommandSchema.parse(request.body);
+    await assertLegacyCanvasLayerAccess(db, auth.campaignId, body.sceneId, auth.role);
     if (await findAction(db, auth.campaignId, body.actionId))
       return reply.code(200).send({ duplicate: true });
     if (
@@ -316,6 +208,7 @@ export function registerCanvasRoutes(
     const guardedDb = canvasTx(auth.campaignId);
     const result = await guardedDb
       .transaction(async (tx) => {
+        await assertLegacyCanvasLayerAccess(tx, auth.campaignId, body.sceneId, auth.role);
         if (auth.role !== "GM") {
           const [campaign] = await tx
             .select({ activeSceneId: campaigns.activeSceneId })
@@ -500,91 +393,8 @@ export function registerCanvasRoutes(
   app.get("/api/canvas/history", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
-    const query = z.object({ sceneId: z.string().uuid() }).parse(request.query);
-    const [scene] = await db
-      .select({ id: scenes.id })
-      .from(scenes)
-      .where(
-        and(
-          eq(scenes.id, query.sceneId),
-          eq(scenes.campaignId, auth.campaignId),
-        ),
-      )
-      .limit(1);
-    if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
-    if (auth.role !== "GM") {
-      const [campaign] = await db
-        .select({ activeSceneId: campaigns.activeSceneId })
-        .from(campaigns)
-        .where(eq(campaigns.id, auth.campaignId))
-        .limit(1);
-      if (campaign?.activeSceneId !== scene.id)
-        return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
-    }
-    const historyColumns = {
-      sequence: actionJournal.sequence,
-      actorMembershipId: actionJournal.actorMembershipId,
-      type: actionJournal.type,
-      targetType: actionJournal.targetType,
-      targetId: actionJournal.targetId,
-      status: actionJournal.status,
-      createdAt: actionJournal.createdAt,
-    };
-    const visibleHistory = and(
-      eq(actionJournal.campaignId, auth.campaignId),
-      eq(actionJournal.sceneId, scene.id),
-      auth.role === "GM"
-        ? undefined
-        : sql`exists (select 1 from campaigns where campaigns.id = ${auth.campaignId} and campaigns.active_scene_id = ${scene.id})`,
-      auth.role === "GM"
-        ? undefined
-        : and(
-            eq(actionJournal.actorMembershipId, auth.membershipId),
-            eq(actionJournal.scope, "PUBLIC"),
-          ),
-    );
-    const rows = await db
-      .select(historyColumns)
-      .from(actionJournal)
-      .where(visibleHistory)
-      // UIX-503: это не лента создания записей, а проекция текущего стека
-      // Undo/Redo. Команды ниже выбирают кандидата по transitionSequence;
-      // если здесь сортировать по исходному sequence, после двух Undo клиент
-      // назовёт одно действие, а сервер повторит другое.
-      .orderBy(desc(actionJournal.transitionSequence))
-      .limit(100);
-    const candidates = await db
-      .selectDistinctOn([actionJournal.status], historyColumns)
-      .from(actionJournal)
-      .where(
-        and(
-          visibleHistory,
-          inArray(actionJournal.status, ["APPLIED", "UNDONE"]),
-        ),
-      )
-      .orderBy(actionJournal.status, desc(actionJournal.transitionSequence));
-    const nextDirections = new Map(
-      candidates.map((candidate) => [
-        candidate.sequence,
-        candidate.status === "APPLIED" ? ("undo" as const) : ("redo" as const),
-      ]),
-    );
-    const recentSequences = new Set(rows.map((row) => row.sequence));
-    // После ста переходов кандидат противоположного статуса может оказаться за
-    // пределами обычной страницы. Добавляем его отдельно и маркируем, чтобы UI
-    // по-прежнему обещал ровно ту команду, которую выберет POST ниже.
-    return [
-      ...rows.map((row) => ({
-        ...row,
-        nextDirection: nextDirections.get(row.sequence) ?? null,
-      })),
-      ...candidates
-        .filter((candidate) => !recentSequences.has(candidate.sequence))
-        .map((candidate) => ({
-          ...candidate,
-          nextDirection: nextDirections.get(candidate.sequence) ?? null,
-        })),
-    ];
+    try{return await readCanvasHistory(db,auth,request.query);}
+    catch(error){if(error instanceof Error&&error.message==="SCENE_NOT_FOUND")return reply.code(404).send({error:"SCENE_NOT_FOUND"});throw error;}
   });
 
   for (const direction of ["undo", "redo"] as const) {
@@ -592,6 +402,7 @@ export function registerCanvasRoutes(
       const auth = await requireAuth(request, reply, db);
       if (!auth) return;
       const body = historyCommandSchema.parse(request.body);
+      await assertLegacyCanvasLayerAccess(db, auth.campaignId, body.sceneId, auth.role);
       if (await findAction(db, auth.campaignId, body.actionId))
         return reply.code(200).send({ duplicate: true });
       if (auth.role !== "GM") {
@@ -632,6 +443,7 @@ export function registerCanvasRoutes(
       const guardedDb = canvasTx(auth.campaignId);
       const saved = await guardedDb
         .transaction(async (tx) => {
+          await assertLegacyCanvasLayerAccess(tx, auth.campaignId, body.sceneId, auth.role);
           if (auth.role !== "GM") {
             const [campaign] = await tx
               .select({ activeSceneId: campaigns.activeSceneId })
@@ -647,6 +459,8 @@ export function registerCanvasRoutes(
           await tx.execute(
             sql`select id from scenes where id = ${body.sceneId} and campaign_id = ${auth.campaignId} for update`,
           );
+          if(["DRAWING","FOG"].includes(candidateCommand.targetType))return commitCanvasObjectHistory(tx,auth,{direction,sceneId:body.sceneId,journalActionId:candidateCommand.actionId,actionId:body.actionId});
+          if(["TOKEN_MOVE","TOKEN_RESIZE","TOKEN_APPEARANCE","TOKEN_CONDITIONS"].includes(candidateCommand.type)&&candidateCommand.targetType==="TOKEN")return commitTokenMoveHistory(tx,auth,{direction,sceneId:body.sceneId,journalActionId:candidateCommand.actionId,actionId:body.actionId},testHooks?.afterHistoryAuthorityLock);
           await tx.execute(
             sql`select sequence from action_journal where sequence = ${candidateCommand.sequence} for update`,
           );
@@ -904,6 +718,7 @@ export function registerCanvasRoutes(
                     stampSize: drawing.stampSize ?? null,
                     stampRotation: drawing.stampRotation ?? null,
                     stampLayer: drawing.stampLayer ?? null,
+                    levelId: drawing.levelId ?? null,
                     revision: nextRevision,
                     updatedAt: new Date(),
                   })
@@ -935,6 +750,7 @@ export function registerCanvasRoutes(
                     stampSize: drawing.stampSize ?? null,
                     stampRotation: drawing.stampRotation ?? null,
                     stampLayer: drawing.stampLayer ?? null,
+                    levelId: drawing.levelId ?? null,
                     revision: nextRevision,
                     createdAt: new Date(drawing.createdAt),
                     updatedAt: new Date(drawing.updatedAt),
@@ -997,6 +813,7 @@ export function registerCanvasRoutes(
                     stampSize: drawing.stampSize ?? null,
                     stampRotation: drawing.stampRotation ?? null,
                     stampLayer: drawing.stampLayer ?? null,
+                    levelId: drawing.levelId ?? null,
                     revision: existing.revision + 1,
                     updatedAt: new Date(),
                   })
@@ -1028,6 +845,7 @@ export function registerCanvasRoutes(
                     stampSize: drawing.stampSize ?? null,
                     stampRotation: drawing.stampRotation ?? null,
                     stampLayer: drawing.stampLayer ?? null,
+                    levelId: drawing.levelId ?? null,
                     revision: nextRevision,
                   })
                   .returning();
@@ -1161,6 +979,7 @@ export function registerCanvasRoutes(
                   height: fog.height,
                   operation: fog.operation,
                   shape: fog.shape,
+                  levelId: fog.levelId ?? null,
                   geometry: fog.geometry,
                   bbox: fog.bbox,
                   sequence: fog.sequence,
@@ -1416,6 +1235,15 @@ export function registerCanvasRoutes(
         if (current.revision !== body.revision)
           return { status: "conflict" as const };
 
+        if (current.projection === "THREE_D" &&
+            ((body.mapAssetId !== undefined && body.mapAssetId !== current.mapAssetId) || body.backgroundFrame || body.mapScale !== undefined))
+          return { status: "conflict" as const };
+
+        if (current.grid.isometric && body.grid &&
+            (body.grid.size !== current.grid.size || body.grid.offsetX !== current.grid.offsetX ||
+             body.grid.offsetY !== current.grid.offsetY || body.grid.metersPerCell !== current.grid.metersPerCell))
+          return { status: "conflict" as const };
+
         const shouldRescaleTokenGeometry = Boolean(
           body.grid &&
           current.grid.enabled &&
@@ -1481,7 +1309,7 @@ export function registerCanvasRoutes(
             ...(body.mapAssetId !== undefined
               ? { mapAssetId: body.mapAssetId }
               : {}),
-            ...(body.grid ? { grid: body.grid } : {}),
+            ...(body.grid ? { grid: { ...body.grid, isometric: current.grid.isometric, threeD: current.grid.threeD } } : {}),
             ...(body.mapScale !== undefined ? { mapScale: body.mapScale } : {}),
             ...(body.world
               ? { width: body.world.width, height: body.world.height }
@@ -1671,4 +1499,93 @@ export function registerCanvasRoutes(
     await broadcast(auth.campaignId);
     return result.scene;
   });
+}
+
+export async function readCanvasHistory(db:Database,auth:import("./auth.js").AuthContext,input:unknown){
+    const query = z.object({ sceneId: z.string().uuid() }).parse(input);
+    await assertLegacyCanvasLayerAccess(db, auth.campaignId, query.sceneId, auth.role);
+    const [scene] = await db
+      .select({ id: scenes.id })
+      .from(scenes)
+      .where(
+        and(
+          eq(scenes.id, query.sceneId),
+          eq(scenes.campaignId, auth.campaignId),
+        ),
+      )
+      .limit(1);
+    if (!scene) throw Object.assign(Error("SCENE_NOT_FOUND"),{statusCode:404});
+    if (auth.role !== "GM") {
+      const [campaign] = await db
+        .select({ activeSceneId: campaigns.activeSceneId })
+        .from(campaigns)
+        .where(eq(campaigns.id, auth.campaignId))
+        .limit(1);
+      if (campaign?.activeSceneId !== scene.id)
+        throw Object.assign(Error("SCENE_NOT_FOUND"),{statusCode:404});
+    }
+    const historyColumns = {
+      sequence: actionJournal.sequence,
+      actorMembershipId: actionJournal.actorMembershipId,
+      type: actionJournal.type,
+      targetType: actionJournal.targetType,
+      targetId: actionJournal.targetId,
+      status: actionJournal.status,
+      createdAt: actionJournal.createdAt,
+    };
+    const visibleHistory = and(
+      eq(actionJournal.campaignId, auth.campaignId),
+      eq(actionJournal.sceneId, scene.id),
+      auth.role === "GM"
+        ? undefined
+        : sql`exists (select 1 from campaigns where campaigns.id = ${auth.campaignId} and campaigns.active_scene_id = ${scene.id})`,
+      auth.role === "GM"
+        ? undefined
+        : and(
+            eq(actionJournal.actorMembershipId, auth.membershipId),
+            eq(actionJournal.scope, "PUBLIC"),
+          ),
+    );
+    const rows = await db
+      .select(historyColumns)
+      .from(actionJournal)
+      .where(visibleHistory)
+      // UIX-503: это не лента создания записей, а проекция текущего стека
+      // Undo/Redo. Команды ниже выбирают кандидата по transitionSequence;
+      // если здесь сортировать по исходному sequence, после двух Undo клиент
+      // назовёт одно действие, а сервер повторит другое.
+      .orderBy(desc(actionJournal.transitionSequence))
+      .limit(100);
+    const candidates = await db
+      .selectDistinctOn([actionJournal.status], historyColumns)
+      .from(actionJournal)
+      .where(
+        and(
+          visibleHistory,
+          inArray(actionJournal.status, ["APPLIED", "UNDONE"]),
+        ),
+      )
+      .orderBy(actionJournal.status, desc(actionJournal.transitionSequence));
+    const nextDirections = new Map(
+      candidates.map((candidate) => [
+        candidate.sequence,
+        candidate.status === "APPLIED" ? ("undo" as const) : ("redo" as const),
+      ]),
+    );
+    const recentSequences = new Set(rows.map((row) => row.sequence));
+    // После ста переходов кандидат противоположного статуса может оказаться за
+    // пределами обычной страницы. Добавляем его отдельно и маркируем, чтобы UI
+    // по-прежнему обещал ровно ту команду, которую выберет POST ниже.
+    return [
+      ...rows.map((row) => ({
+        ...row,
+        nextDirection: nextDirections.get(row.sequence) ?? null,
+      })),
+      ...candidates
+        .filter((candidate) => !recentSequences.has(candidate.sequence))
+        .map((candidate) => ({
+          ...candidate,
+          nextDirection: nextDirections.get(candidate.sequence) ?? null,
+        })),
+    ];
 }

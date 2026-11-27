@@ -1,3 +1,5 @@
+import { useGameReadOnly } from "../game-read-only";
+import { uploadCommandErrorMessage } from "../command-error-messages";
 import { GmHealthCounter } from "../GmHealthCounter";
 import { InspirationRollAction, InspirationResource } from "../CharacterExtras";
 import { api } from "../api";
@@ -106,6 +108,17 @@ import { ResourceCounters } from "./ResourceCounters";
 import { ActivityInitiativePanel } from "./ActivityInitiativePanel";
 import type { ResourceCounterIntent } from "../resource-counter-intent";
 import { useSubmissionDraft } from "../ui/useSubmissionDraft";
+
+function chatDeliveryError(reason: unknown) {
+  if (
+    reason instanceof ApiError &&
+    reason.status >= 400 &&
+    reason.status < 500 &&
+    reason.status !== 408
+  )
+    return reason.message || "Сервер отклонил сообщение.";
+  return "Ответ не получен: сообщение могло сохраниться. Повторите без изменений, не перезагружая страницу и не выходя из игры, или проверьте историю.";
+}
 
 /**
  * UIX-388: shared tooltip/label text for the composer's send icon so
@@ -264,6 +277,7 @@ export function ApplicationUndoControl({
   message: GameSnapshot["messages"][number];
   snapshot: GameSnapshot;
 }) {
+  const readOnly = useGameReadOnly();
   const [done, setDone] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -274,7 +288,7 @@ export function ApplicationUndoControl({
   if (snapshot.me.role !== "GM" && snapshot.me.id !== message.membershipId)
     return null;
   const undo = async () => {
-    if (inFlight.current) return;
+    if (readOnly || inFlight.current) return;
     inFlight.current = true;
     setPending(true);
     setError("");
@@ -303,7 +317,7 @@ export function ApplicationUndoControl({
       <Button
         type="button"
         view="flat-secondary"
-        disabled={pending}
+        disabled={pending || readOnly}
         onClick={() => void undo()}
       >
         Отменить применение
@@ -474,7 +488,10 @@ function ChatMessageBodyComponent({
         {message.attachments?.map((attachment) => (
           <figure className="chat-attachment" key={attachment.contentId}>
             <img
-              src={`/api/chat/attachments/${attachment.contentId}/content`}
+              src={
+                attachment.url ??
+                `/api/chat/attachments/${attachment.contentId}/content`
+              }
               alt={`Вложение ${attachment.fileName}`}
               loading="lazy"
             />
@@ -601,6 +618,7 @@ export function ActivityPanel({
   ) => Promise<void>;
   onRecruitFromBattleZone?: () => void;
 }) {
+  const readOnly = useGameReadOnly();
   const { catalog: catalogActions } = useCampaignActions();
   const avatarFor = useMemo(() => createRollAvatarSource(snapshot), [snapshot]);
   const characterNameFor = useMemo(
@@ -709,6 +727,7 @@ export function ActivityPanel({
   // below call this with an explicit visibility rather than reading it from
   // component state.
   const submitComposer = async (visibility: MessageVisibility) => {
+    if (readOnly) return;
     const intent = parseComposerInput(composer, characterStats, statLabels);
     if (intent.kind === "INVALID") {
       setComposerError(intent.message);
@@ -732,17 +751,19 @@ export function ActivityPanel({
       activityDraft.restore(consumed.token, consumed.value);
       if (!activityDraft.isCurrentScope(consumed.token)) return;
       setComposerError(
-        reason instanceof Error &&
-          reason.message &&
-          !(
-            reason instanceof ApiError &&
-            reason.code === "REQUEST_FAILED" &&
-            !reason.details?.message
-          )
-          ? reason.message
-          : intent.kind === "ROLL"
-            ? "Не удалось выполнить бросок. Проверьте характеристику и повторите попытку."
-            : "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
+        intent.kind === "TEXT"
+          ? chatDeliveryError(reason)
+          : reason instanceof Error &&
+              reason.message &&
+              !(
+                reason instanceof ApiError &&
+                reason.code === "REQUEST_FAILED" &&
+                !reason.details?.message
+              )
+            ? reason.message
+            : intent.kind === "ROLL"
+              ? "Не удалось выполнить бросок. Проверьте характеристику и повторите попытку."
+              : "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
       );
     }
   };
@@ -1221,107 +1242,109 @@ export function ActivityPanel({
         ref={setPreparedActionTarget}
         aria-label="Подготовленные действия"
       />
-      <form className="chat-compose chat-compose--single" onSubmit={submit}>
-        <div
-          className="chat-composer-input"
-          ref={suggestionsRootRef}
-          onKeyDown={onSuggestionsKeyDown}
-          onCompositionStart={onSuggestionsCompositionStart}
-          onCompositionEnd={onSuggestionsCompositionEnd}
-        >
-          <FormTextArea
-            controlRef={suggestionsTextareaRef}
-            aria-label="Сообщение или бросок"
-            aria-invalid={composerInvalid || undefined}
-            aria-describedby={
-              composerError
-                ? "activity-composer-hint activity-composer-error"
-                : "activity-composer-hint"
-            }
-            aria-controls={
-              slashSuggestions.length > 0
-                ? "activity-slash-suggestions"
-                : undefined
-            }
-            placeholder={"Сообщение? Введите / для быстрых команд"}
-            value={composer}
-            onChange={(event) => {
-              onSuggestionsEdited();
-              setComposer(event.target.value);
-              setComposerError("");
-              setComposerInvalid(false);
-            }}
-            onKeyDown={onComposerKeyDown}
-            rows={3}
-          />
-          <div className="chat-composer-actions">
-            {!composer.trim() && (
-              <StickerPicker
-                iconOnly
-                onSelect={(stickerId, scope) =>
-                  onSticker({ stream: "TABLE" }, stickerId, scope)
-                }
-              />
-            )}
-            <Button
-              className="composer-icon composer-slash-action"
-              type="button"
-              view="flat"
-              aria-label="Быстрые команды"
-              title="Быстрые команды"
-              aria-expanded={slashSuggestions.length > 0}
+      <fieldset className="read-only-composer" disabled={readOnly}>
+        <form className="chat-compose chat-compose--single" onSubmit={submit}>
+          <div
+            className="chat-composer-input"
+            ref={suggestionsRootRef}
+            onKeyDown={onSuggestionsKeyDown}
+            onCompositionStart={onSuggestionsCompositionStart}
+            onCompositionEnd={onSuggestionsCompositionEnd}
+          >
+            <FormTextArea
+              controlRef={suggestionsTextareaRef}
+              aria-label="Сообщение или бросок"
+              aria-invalid={composerInvalid || undefined}
+              aria-describedby={
+                composerError
+                  ? "activity-composer-hint activity-composer-error"
+                  : "activity-composer-hint"
+              }
               aria-controls={
                 slashSuggestions.length > 0
                   ? "activity-slash-suggestions"
                   : undefined
               }
-              onClick={toggleSuggestions}
-            >
-              <span aria-hidden="true">/</span>
-            </Button>
-            <Button
-              className="composer-icon composer-send-action"
-              type="submit"
-              view="flat"
-              aria-label={`Отправить. ${SEND_TOOLTIP}`}
-              title={SEND_TOOLTIP}
-            >
-              <AppIcon icon={SendIcon} />
-            </Button>
-          </div>
-          {slashSuggestions.length > 0 && (
-            <div
-              className="slash-command-suggestions"
-              id="activity-slash-suggestions"
-              role="listbox"
-              aria-label="Команды чата"
-            >
-              {slashSuggestions.map((suggestion) => (
-                <button
-                  key={suggestion.command}
-                  type="button"
-                  role="option"
-                  tabIndex={-1}
-                  aria-selected="false"
-                  onClick={() =>
-                    executeActivitySuggestion(suggestion.insertion)
+              placeholder={"Сообщение? Введите / для быстрых команд"}
+              value={composer}
+              onChange={(event) => {
+                onSuggestionsEdited();
+                setComposer(event.target.value);
+                setComposerError("");
+                setComposerInvalid(false);
+              }}
+              onKeyDown={onComposerKeyDown}
+              rows={3}
+            />
+            <div className="chat-composer-actions">
+              {!composer.trim() && (
+                <StickerPicker
+                  iconOnly
+                  onSelect={(stickerId, scope) =>
+                    onSticker({ stream: "TABLE" }, stickerId, scope)
                   }
-                >
-                  <strong>{suggestion.command}</strong>
-                  <span>{suggestion.description}</span>
-                  <code>{suggestion.example}</code>
-                </button>
-              ))}
+                />
+              )}
+              <Button
+                className="composer-icon composer-slash-action"
+                type="button"
+                view="flat"
+                aria-label="Быстрые команды"
+                title="Быстрые команды"
+                aria-expanded={slashSuggestions.length > 0}
+                aria-controls={
+                  slashSuggestions.length > 0
+                    ? "activity-slash-suggestions"
+                    : undefined
+                }
+                onClick={toggleSuggestions}
+              >
+                <span aria-hidden="true">/</span>
+              </Button>
+              <Button
+                className="composer-icon composer-send-action"
+                type="submit"
+                view="flat"
+                aria-label={`Отправить. ${SEND_TOOLTIP}`}
+                title={SEND_TOOLTIP}
+              >
+                <AppIcon icon={SendIcon} />
+              </Button>
             </div>
-          )}
-        </div>
-        <p
-          className="composer-hint visually-hidden"
-          id="activity-composer-hint"
-        >
-          {SEND_HINT}
-        </p>
-      </form>
+            {slashSuggestions.length > 0 && (
+              <div
+                className="slash-command-suggestions"
+                id="activity-slash-suggestions"
+                role="listbox"
+                aria-label="Команды чата"
+              >
+                {slashSuggestions.map((suggestion) => (
+                  <button
+                    key={suggestion.command}
+                    type="button"
+                    role="option"
+                    tabIndex={-1}
+                    aria-selected="false"
+                    onClick={() =>
+                      executeActivitySuggestion(suggestion.insertion)
+                    }
+                  >
+                    <strong>{suggestion.command}</strong>
+                    <span>{suggestion.description}</span>
+                    <code>{suggestion.example}</code>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <p
+            className="composer-hint visually-hidden"
+            id="activity-composer-hint"
+          >
+            {SEND_HINT}
+          </p>
+        </form>
+      </fieldset>
       {composerError && (
         <p className="composer-error" role="alert" id="activity-composer-error">
           {composerError}
@@ -1356,6 +1379,7 @@ export function DirectChatPanel({
   onUploadAttachment: ChatActions["onUploadChatAttachment"];
   onMarkChatRead: ChatActions["onMarkChatRead"];
 }) {
+  const readOnly = useGameReadOnly();
   const threads = directThreads(snapshot);
   const contacts = directChatContacts(snapshot);
   const activeThread =
@@ -1504,8 +1528,12 @@ export function DirectChatPanel({
         URL.revokeObjectURL(previewUrl);
         throw error;
       }
-    } catch {
-      setError("Не удалось загрузить изображение.");
+    } catch (error) {
+      setError(
+        error instanceof ApiError
+          ? uploadCommandErrorMessage(error.code)
+          : "Не удалось загрузить изображение.",
+      );
     } finally {
       setUploading(false);
     }
@@ -1543,6 +1571,10 @@ export function DirectChatPanel({
       });
       return;
     }
+    if (readOnly) {
+      setError("В копии доступны только сохранённые переписки.");
+      return;
+    }
     setSelectingPeer(true);
     try {
       const thread = await onCreateThread(peerMembershipId);
@@ -1563,6 +1595,10 @@ export function DirectChatPanel({
   }
 
   async function submit(event: FormEvent) {
+    if (readOnly) {
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
     const body = composer.trim();
     if (
@@ -1591,10 +1627,10 @@ export function DirectChatPanel({
       ) {
         replaceAttachment(null, "");
       }
-    } catch {
+    } catch (reason) {
       directDraft.restore(consumed.token, consumed.value);
       if (directDraft.isCurrentScope(consumed.token))
-        setError("Не удалось отправить личное сообщение.");
+        setError(chatDeliveryError(reason));
     } finally {
       sendingRef.current = false;
       if (mountedRef.current) setSending(false);
@@ -1645,7 +1681,11 @@ export function DirectChatPanel({
             const thread = directThreadForPeer(snapshot, contact.membershipId);
             const unread = thread ? directUnreadCount(snapshot, thread.id) : 0;
             return (
-              <option key={contact.membershipId} value={contact.membershipId}>
+              <option
+                key={contact.membershipId}
+                value={contact.membershipId}
+                disabled={readOnly && !thread}
+              >
                 {contact.displayName}
                 {unread ? ` • ${unread}` : ""}
               </option>
@@ -1728,69 +1768,71 @@ export function DirectChatPanel({
         </Button>
       )}
       {activeThread && (
-        <form className="chat-compose direct-compose" onSubmit={submit}>
-          <div className="chat-composer-input">
-            <FormTextArea
-              aria-label={`Личное сообщение: ${directThreadLabel(activeThread, snapshot.me.id)}`}
-              placeholder={`Сообщение для ${directThreadLabel(activeThread, snapshot.me.id)}…`}
-              value={composer}
-              onChange={(event) => setComposer(event.target.value)}
-              onPaste={pasteImageFromClipboard}
-              rows={3}
-            />
-            {attachment && (
-              <div className="direct-attachment-preview">
-                <img
-                  src={attachmentPreviewUrl}
-                  alt={`Вложение ${attachment.fileName}`}
-                />
-                <span>{attachment.fileName}</span>
-                <Button
-                  view="flat"
-                  type="button"
-                  onClick={() => {
-                    directDraft.touch();
-                    replaceAttachment(null, "");
-                  }}
-                >
-                  Убрать
-                </Button>
-              </div>
-            )}
-          </div>
-          <StickerPicker
-            disabled={uploading}
-            onSelect={(stickerId, scope) =>
-              onSticker({ threadId: activeThread.id }, stickerId, scope)
-            }
-          />
-          <label className="direct-attach-button">
-            <span>{uploading ? "Загрузка…" : "Изображение"}</span>
-            <input
-              type="file"
-              accept="image/*"
+        <fieldset className="read-only-composer" disabled={readOnly}>
+          <form className="chat-compose direct-compose" onSubmit={submit}>
+            <div className="chat-composer-input">
+              <FormTextArea
+                aria-label={`Личное сообщение: ${directThreadLabel(activeThread, snapshot.me.id)}`}
+                placeholder={`Сообщение для ${directThreadLabel(activeThread, snapshot.me.id)}…`}
+                value={composer}
+                onChange={(event) => setComposer(event.target.value)}
+                onPaste={pasteImageFromClipboard}
+                rows={3}
+              />
+              {attachment && (
+                <div className="direct-attachment-preview">
+                  <img
+                    src={attachmentPreviewUrl}
+                    alt={`Вложение ${attachment.fileName}`}
+                  />
+                  <span>{attachment.fileName}</span>
+                  <Button
+                    view="flat"
+                    type="button"
+                    onClick={() => {
+                      directDraft.touch();
+                      replaceAttachment(null, "");
+                    }}
+                  >
+                    Убрать
+                  </Button>
+                </div>
+              )}
+            </div>
+            <StickerPicker
               disabled={uploading}
-              onChange={async (event) => {
-                const file = event.target.files?.[0];
-                event.currentTarget.value = "";
-                if (!file) return;
-                await attachFile(file);
-              }}
+              onSelect={(stickerId, scope) =>
+                onSticker({ threadId: activeThread.id }, stickerId, scope)
+              }
             />
-          </label>
-          <Button
-            className="primary"
-            type="submit"
-            disabled={
-              selectingPeer ||
-              sending ||
-              uploading ||
-              (!composer.trim() && !attachment)
-            }
-          >
-            Отправить
-          </Button>
-        </form>
+            <label className="direct-attach-button">
+              <span>{uploading ? "Загрузка…" : "Изображение"}</span>
+              <input
+                type="file"
+                accept="image/*"
+                disabled={uploading}
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  event.currentTarget.value = "";
+                  if (!file) return;
+                  await attachFile(file);
+                }}
+              />
+            </label>
+            <Button
+              className="primary"
+              type="submit"
+              disabled={
+                selectingPeer ||
+                sending ||
+                uploading ||
+                (!composer.trim() && !attachment)
+              }
+            >
+              Отправить
+            </Button>
+          </form>
+        </fieldset>
       )}
       {error && (
         <p className="composer-error" role="alert">
@@ -1824,6 +1866,7 @@ export function ChatPanel({
   onMessageFocused: () => void;
   onOpenPlayerRequests: () => void;
 }) {
+  const readOnly = useGameReadOnly();
   const chatDraft = useSubmissionDraft(
     `${snapshot.campaign.id}:${snapshot.me.id}:${activeStream}`,
   );
@@ -1867,8 +1910,9 @@ export function ChatPanel({
     loadOlder,
   });
   const canCompose =
-    activeStream === "TABLE" ||
-    (activeStream === "STORY" && snapshot.me.role === "GM");
+    !readOnly &&
+    (activeStream === "TABLE" ||
+      (activeStream === "STORY" && snapshot.me.role === "GM"));
   const {
     rootRef: suggestionsRootRef,
     textareaRef: suggestionsTextareaRef,
@@ -1937,6 +1981,7 @@ export function ChatPanel({
   // UIX-388: direct submit with the chosen visibility -- see
   // composer-keyboard-intent.ts for why this isn't a persistent mode toggle.
   const submitComposer = async (visibility: MessageVisibility) => {
+    if (readOnly) return;
     if (!canCompose) return;
     const intent = parseComposerInput(composer);
     if (intent.kind === "INVALID") {
@@ -1956,13 +2001,13 @@ export function ChatPanel({
         );
       else if (intent.kind === "TEXT")
         await onChat(intent.body, visibility, activeStream);
-    } catch {
+    } catch (reason) {
       chatDraft.restore(consumed.token, consumed.value);
       if (chatDraft.isCurrentScope(consumed.token))
         setComposerError(
           intent.kind === "ROLL"
             ? "Не удалось выполнить бросок. Проверьте характеристику и повторите попытку."
-            : "Не удалось отправить сообщение. Проверьте соединение и повторите попытку.",
+            : chatDeliveryError(reason),
         );
     }
   };
@@ -2106,112 +2151,117 @@ export function ChatPanel({
       )}
       {canCompose && (
         <>
-          <form className="chat-compose chat-compose--single" onSubmit={submit}>
-            <div
-              className="chat-composer-input"
-              ref={suggestionsRootRef}
-              onKeyDown={onSuggestionsKeyDown}
-              onCompositionStart={onSuggestionsCompositionStart}
-              onCompositionEnd={onSuggestionsCompositionEnd}
+          <fieldset className="read-only-composer" disabled={readOnly}>
+            <form
+              className="chat-compose chat-compose--single"
+              onSubmit={submit}
             >
-              <FormTextArea
-                controlRef={suggestionsTextareaRef}
-                aria-label={
-                  activeStream === "STORY"
-                    ? "Сообщение сюжета"
-                    : "Сообщение или бросок"
-                }
-                aria-describedby="chat-composer-hint"
-                aria-controls={
-                  slashSuggestions.length > 0
-                    ? "chat-slash-suggestions"
-                    : undefined
-                }
-                placeholder={
-                  activeStream === "STORY"
-                    ? "Продолжить историю…"
-                    : "Сообщение … или /roll 1d20 + agility"
-                }
-                value={composer}
-                onChange={(event) => {
-                  onSuggestionsEdited();
-                  setComposer(event.target.value);
-                }}
-                onKeyDown={onComposerKeyDown}
-                rows={3}
-              />
-              <div className="chat-composer-actions">
-                {!composer.trim() && (
-                  <StickerPicker
-                    iconOnly
-                    onSelect={(stickerId, scope) =>
-                      onSticker(
-                        { stream: activeStream as "TABLE" | "STORY" },
-                        stickerId,
-                        scope,
-                      )
-                    }
-                  />
-                )}
-                <Button
-                  className="composer-icon composer-slash-action"
-                  type="button"
-                  view="flat"
-                  aria-label="Быстрые команды"
-                  title="Быстрые команды"
-                  aria-expanded={slashSuggestions.length > 0}
+              <div
+                className="chat-composer-input"
+                ref={suggestionsRootRef}
+                onKeyDown={onSuggestionsKeyDown}
+                onCompositionStart={onSuggestionsCompositionStart}
+                onCompositionEnd={onSuggestionsCompositionEnd}
+              >
+                <FormTextArea
+                  controlRef={suggestionsTextareaRef}
+                  aria-label={
+                    activeStream === "STORY"
+                      ? "Сообщение сюжета"
+                      : "Сообщение или бросок"
+                  }
+                  aria-describedby="chat-composer-hint"
                   aria-controls={
                     slashSuggestions.length > 0
                       ? "chat-slash-suggestions"
                       : undefined
                   }
-                  onClick={toggleSuggestions}
-                >
-                  <span aria-hidden="true">/</span>
-                </Button>
-                <Button
-                  className="composer-icon composer-send-action"
-                  type="submit"
-                  view="flat"
-                  aria-label={`Отправить. ${SEND_TOOLTIP}`}
-                  title={SEND_TOOLTIP}
-                >
-                  <AppIcon icon={SendIcon} />
-                </Button>
-              </div>
-              {slashSuggestions.length > 0 && (
-                <div
-                  className="slash-command-suggestions"
-                  id="chat-slash-suggestions"
-                  role="listbox"
-                  aria-label={"Команды чата"}
-                >
-                  {slashSuggestions.map((suggestion) => (
-                    <button
-                      key={suggestion.command}
-                      type="button"
-                      role="option"
-                      tabIndex={-1}
-                      aria-selected="false"
-                      onClick={() =>
-                        executeChatSuggestion(suggestion.insertion)
+                  placeholder={
+                    activeStream === "STORY"
+                      ? "Продолжить историю…"
+                      : "Сообщение … или /roll 1d20 + agility"
+                  }
+                  value={composer}
+                  onChange={(event) => {
+                    onSuggestionsEdited();
+                    setComposer(event.target.value);
+                  }}
+                  onKeyDown={onComposerKeyDown}
+                  rows={3}
+                />
+                <div className="chat-composer-actions">
+                  {!composer.trim() && (
+                    <StickerPicker
+                      iconOnly
+                      onSelect={(stickerId, scope) =>
+                        onSticker(
+                          { stream: activeStream as "TABLE" | "STORY" },
+                          stickerId,
+                          scope,
+                        )
                       }
-                    >
-                      <strong>{suggestion.command}</strong>
-                      <span>{suggestion.description}</span>
-                      <code>{suggestion.example}</code>
-                    </button>
-                  ))}
+                    />
+                  )}
+                  <Button
+                    className="composer-icon composer-slash-action"
+                    type="button"
+                    view="flat"
+                    aria-label="Быстрые команды"
+                    title="Быстрые команды"
+                    aria-expanded={slashSuggestions.length > 0}
+                    aria-controls={
+                      slashSuggestions.length > 0
+                        ? "chat-slash-suggestions"
+                        : undefined
+                    }
+                    onClick={toggleSuggestions}
+                  >
+                    <span aria-hidden="true">/</span>
+                  </Button>
+                  <Button
+                    className="composer-icon composer-send-action"
+                    type="submit"
+                    view="flat"
+                    aria-label={`Отправить. ${SEND_TOOLTIP}`}
+                    title={SEND_TOOLTIP}
+                  >
+                    <AppIcon icon={SendIcon} />
+                  </Button>
                 </div>
-              )}
-            </div>
-            <p
-              className="composer-hint visually-hidden"
-              id="chat-composer-hint"
-            >
-              {SEND_HINT}
-            </p>
-          </form>
+                {slashSuggestions.length > 0 && (
+                  <div
+                    className="slash-command-suggestions"
+                    id="chat-slash-suggestions"
+                    role="listbox"
+                    aria-label={"Команды чата"}
+                  >
+                    {slashSuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion.command}
+                        type="button"
+                        role="option"
+                        tabIndex={-1}
+                        aria-selected="false"
+                        onClick={() =>
+                          executeChatSuggestion(suggestion.insertion)
+                        }
+                      >
+                        <strong>{suggestion.command}</strong>
+                        <span>{suggestion.description}</span>
+                        <code>{suggestion.example}</code>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <p
+                className="composer-hint visually-hidden"
+                id="chat-composer-hint"
+              >
+                {SEND_HINT}
+              </p>
+            </form>
+          </fieldset>
           {composerError && (
             <p className="composer-error" role="alert">
               {composerError}

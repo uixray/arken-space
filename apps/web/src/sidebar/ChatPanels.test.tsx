@@ -71,7 +71,7 @@ describe("ChatPanel composer (UIX-388 layout repair)", () => {
     expect(html).toContain('aria-label="Быстрые команды"');
     expect(html).toContain('title="Быстрые команды"');
     // Send is an icon button immediately after the slash icon, and its
-    // label/tooltip explain both Enter and Ctrl+Enter up front.
+    // label/tooltip explain both Enter and Ctrl/⌘+Enter up front.
     expect(html).toContain("Enter — отправить всем");
     expect(html).toContain("Ctrl/⌘+Enter — отправить только мастеру");
     const slashIndex = html.indexOf('aria-label="Быстрые команды"');
@@ -90,7 +90,7 @@ describe("ChatPanel composer (UIX-388 layout repair)", () => {
     expect(slashIndex).toBeLessThan(sendIndex);
   });
 
-  it("shows a persistent (not hover-only) hint explaining Enter vs Ctrl+Enter", () => {
+  it("shows a persistent (not hover-only) hint explaining Enter vs Ctrl/⌘+Enter", () => {
     const html = renderTablePanel();
     expect(html).toContain("composer-hint");
     expect(html).toContain("Enter — всем · Ctrl/⌘+Enter — только мастеру");

@@ -23,13 +23,11 @@ import {
   scenes,
   tokenDefinitions,
   tokens,
-  worldContent,
-  worldContentActions,
   worldContentInstances,
-  worldContentMedia,
   worldMaps,
 } from "@arken/db";
 import { z } from "zod";
+import { removeCampaignBlob } from "./world-content-images.js";
 import { requireAuth } from "./auth.js";
 import { env } from "./env.js";
 import { buildSnapshot } from "./snapshot.js";
@@ -112,10 +110,10 @@ export async function resolveAssetUsages(
     skillFrameRows,
   ] = await Promise.all([
     db
-      .select({ id: scenes.id, name: scenes.name })
+      .select({ id: scenes.id, name: scenes.name, source3d:sql<boolean>`EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(${scenes.grid}->'threeD'->'sources','[]'::jsonb)) source WHERE source->>'assetId'=${assetId})` })
       .from(scenes)
       .where(
-        and(eq(scenes.campaignId, campaignId), eq(scenes.mapAssetId, assetId)),
+        and(eq(scenes.campaignId, campaignId), or(eq(scenes.mapAssetId, assetId),sql`EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(${scenes.grid}->'threeD'->'sources','[]'::jsonb)) source WHERE source->>'assetId'=${assetId})`)),
       ),
     db
       .select({
@@ -222,22 +220,9 @@ export async function resolveAssetUsages(
           eq(campaignSounds.assetId, assetId),
         ),
       ),
-    db
-      .select({ id: worldContent.id, name: worldContent.name })
-      .from(worldContent)
-      .where(eq(worldContent.coverAssetId, assetId)),
-    db
-      .select({
-        id: worldContentMedia.id,
-        label: worldContentMedia.caption,
-        worldContentName: worldContent.name,
-      })
-      .from(worldContentMedia)
-      .innerJoin(
-        worldContent,
-        eq(worldContentMedia.worldContentId, worldContent.id),
-      )
-      .where(eq(worldContentMedia.assetId, assetId)),
+    // Canonical library images are independent, not detachable campaign usages.
+    Promise.resolve([] as Array<{ id: string; name: string }>),
+    Promise.resolve([] as Array<{ id: string; label: string | null; worldContentName: string }>),
     db
       .select({
         id: worldContentInstances.id,
@@ -315,7 +300,7 @@ export async function resolveAssetUsages(
       label: row.name,
       location: "Сцена",
       visibility: "GM_ONLY" as const,
-      deletionPolicy: "DETACH" as const,
+      deletionPolicy: row.source3d ? ("BLOCK" as const) : ("DETACH" as const),
     })),
     ...definitionRows.map((row) => ({
       kind: "TOKEN_DEFINITION" as const,
@@ -609,6 +594,11 @@ export function registerAssetLifecycleRoutes(
           .for("update")
           .limit(1);
         if (!asset) return null;
+        const [source3d] = await tx.select({id:scenes.id}).from(scenes).where(and(
+          eq(scenes.campaignId,auth.campaignId),
+          sql`EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(${scenes.grid}->'threeD'->'sources','[]'::jsonb)) source WHERE source->>'assetId'=${id})`,
+        )).limit(1);
+        if (source3d) throw new Error("ASSET_IN_USE");
         const usages = await resolveAssetUsages(
           tx as unknown as Database,
           auth.campaignId,
@@ -788,39 +778,8 @@ export function registerAssetLifecycleRoutes(
               eq(catalogEntries.diceFrameAssetId, id),
             ),
           );
-        const detachedWorldMedia = await tx
-          .delete(worldContentMedia)
-          .where(eq(worldContentMedia.assetId, id))
-          .returning({ worldContentId: worldContentMedia.worldContentId });
-        const detachedWorldCovers = await tx
-          .update(worldContent)
-          .set({
-            coverAssetId: null,
-          })
-          .where(eq(worldContent.coverAssetId, id))
-          .returning({ id: worldContent.id });
-        const affectedWorldContentIds = new Set([
-          ...detachedWorldMedia.map((row) => row.worldContentId),
-          ...detachedWorldCovers.map((row) => row.id),
-        ]);
-        if (affectedWorldContentIds.size > 0)
-          await tx
-            .update(worldContent)
-            .set({
-              revision: sql`${worldContent.revision} + 1`,
-              updatedAt: new Date(),
-            })
-            .where(inArray(worldContent.id, [...affectedWorldContentIds]));
-        for (const worldContentId of affectedWorldContentIds) {
-          await tx.insert(worldContentActions).values({
-            actionId: randomUUID(),
-            type: "world_content.asset_detached",
-            entityType: "world_content",
-            entityId: worldContentId,
-            actorMembershipId: auth.membershipId,
-            payload: { assetId: id },
-          });
-        }
+        // Deleting a campaign asset never detaches its retained canonical image.
+        const affectedWorldContentIds = new Set<string>();
         const remainingUsages = await resolveAssetUsages(
           tx as unknown as Database,
           auth.campaignId,
@@ -857,7 +816,7 @@ export function registerAssetLifecycleRoutes(
       if (!result) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
       let blobCleanupPending = false;
       try {
-        await removeStoredUpload(storageKey);
+        await removeCampaignBlob(db, storageKey);
         if (posterStorageKey) await removeStoredUpload(posterStorageKey);
       } catch {
         blobCleanupPending = true;
@@ -1029,7 +988,7 @@ export function registerAssetLifecycleRoutes(
       committed = true;
       let oldBlobCleanupPending = false;
       try {
-        await removeStoredUpload(result.oldStorageKey);
+        await removeCampaignBlob(db, result.oldStorageKey);
       } catch {
         oldBlobCleanupPending = true;
         request.log.error(

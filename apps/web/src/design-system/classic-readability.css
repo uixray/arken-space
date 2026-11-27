@@ -1,0 +1,19 @@
+/* Owner-approved text-only accessibility treatment, 2026-11-21.
+ * Keep the immutable classic-v1 palette and all surface colors unchanged.
+ * Explicit state selectors also beat the retained legacy hover text rule.
+ */
+html[data-player-theme="classic-v1"] .arken-button--view-action:not(.arken-button--selected),
+html[data-player-theme="classic-v1"] .arken-button--view-action:not(.arken-button--selected):hover,
+html[data-player-theme="classic-v1"] .arken-button--view-action:not(.arken-button--selected):active,
+html[data-player-theme="classic-v1"] .arken-button--action:not(.arken-button--selected),
+html[data-player-theme="classic-v1"] .arken-button--action:not(.arken-button--selected):hover,
+html[data-player-theme="classic-v1"] .arken-button--action:not(.arken-button--selected):active {
+  color: var(--color-canvas, #181816);
+}
+
+html[data-player-theme="classic-v1"] input::placeholder,
+html[data-player-theme="classic-v1"] textarea::placeholder,
+html[data-player-theme="classic-v1"] .arken-select__value--placeholder {
+  color: var(--color-text-muted, #aaa598);
+  opacity: 1;
+}

@@ -1,11 +1,26 @@
+import { CampaignImportPanel } from "./local-first/CampaignImportPanel";
+import { CampaignTransferPanel } from "./local-first/CampaignTransferPanel";
+import { CloudSourceConnectionPanel } from "./local-first/CloudSourceConnectionPanel";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { AccountCapabilities, AccountSession } from "@arken/contracts";
+import { localAccountEnrollmentSchema } from "@arken/contracts";
+import { z } from "zod";
 import { Button } from "./design-system/Button";
 import { FormInput } from "./ui/GravityFormControls";
 import { ApiError } from "./api";
+import {
+  clearPendingCampaignCreate,
+  readPendingCampaignCreate,
+  writePendingCampaignCreate,
+  type PendingCampaignCreate,
+} from "./account-campaign-pending";
 import { Brand } from "./Brand";
+import { LocalCampaignPlayers } from "./LocalCampaignPlayers";
+import { AccountQuickStart } from "./AccountQuickStart";
+import { AccountInviteLink } from "./AccountInviteLink";
 import { AppIcon } from "./ui/AppIcon";
-import { CustomActionIcon } from "./ui/icons";
+import { MapSurfaceIcon } from "./ui/icons";
+import { PortalEntrance } from "./PortalEntrance";
 import { campaignReturnPath } from "./campaign-route";
 import {
   changeAccountPassword,
@@ -14,6 +29,7 @@ import {
   consumeActionToken,
   getAccountSession,
   loginAccount,
+  enrollLocalAccount,
   logoutAccount,
   registerAccount,
   requestPasswordReset,
@@ -39,6 +55,24 @@ type View =
   | "account"
   | "join";
 const MIN_PASSWORD = 12;
+const localWelcomeKey = "arken.local-first-run.v1";
+const localWelcomeSchema = z
+  .object({ login: z.string().min(3).max(40), campaignId: z.string().uuid() })
+  .strict();
+function readLocalWelcome() {
+  try {
+    const raw = sessionStorage.getItem(localWelcomeKey);
+    return raw ? localWelcomeSchema.safeParse(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+const campaignCreateReceipt = z.object({
+  campaignId: z.string().uuid(),
+  membershipId: z.string().uuid(),
+  name: z.string().min(1).max(80),
+  role: z.literal("GM"),
+});
 class LocalValidationError extends Error {}
 
 function friendlyError(reason: unknown, localAccounts = false) {
@@ -56,6 +90,10 @@ function friendlyError(reason: unknown, localAccounts = false) {
       return "Письма сейчас недоступны. Попробуйте позже.";
     case "ACCOUNT_REGISTRATION_DISABLED":
       return "Регистрация аккаунтов временно выключена.";
+    case "LOCAL_LOGIN_UNAVAILABLE":
+      return "Этот локальный логин занят. Выберите другой или войдите в существующий аккаунт.";
+    case "LOCAL_ENROLLMENT_UNAVAILABLE":
+      return "Не удалось подтвердить создание аккаунта. Попробуйте войти с выбранным логином и паролем, прежде чем повторять регистрацию.";
     case "ACCOUNT_RATE_LIMITED":
       return "Слишком много попыток. Подождите и повторите.";
     case "INVALID_OR_EXPIRED_ACCOUNT_TOKEN":
@@ -126,6 +164,8 @@ export function AccountAuthWorkspace({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordAgain, setPasswordAgain] = useState("");
+  const [localEnrollment, setLocalEnrollment] = useState(false);
+  const joinSubmitPending = useRef(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [session, setSession] = useState<AccountSession | null>(null);
   const [busy, setBusy] = useState(false);
@@ -157,16 +197,33 @@ export function AccountAuthWorkspace({
   } | null>(null);
   const [inviteLabel, setInviteLabel] = useState("");
   const [inviteUrl, setInviteUrl] = useState("");
+  const [inviteContext, setInviteContext] = useState<{
+    campaignName: string;
+    recipient: string;
+    focusResult: boolean;
+  } | null>(null);
   const [pendingCreateSnapshot, setPendingCreateSnapshot] = useState<{
     name: string;
     key: string;
+    accountId: string;
   } | null>(null);
   const [inviteAttemptsSnapshot, setInviteAttemptsSnapshot] = useState<
     Set<string>
   >(() => new Set());
   const [claimPendingSnapshot, setClaimPendingSnapshot] = useState(false);
   const [inviteTokenInput, setInviteTokenInput] = useState("");
-  const pendingCreate = useRef<{ name: string; key: string } | null>(null);
+  const pendingCreate = useRef<PendingCampaignCreate | null>(null);
+  const savedLocalWelcome = capabilities.localAccounts
+    ? readLocalWelcome()
+    : null;
+  const localFirstRun = useRef<{ login: string; campaignId: string } | null>(
+    savedLocalWelcome?.success ? savedLocalWelcome.data : null,
+  );
+  const [pendingCreateReady, setPendingCreateReady] = useState<string | null>(
+    null,
+  );
+  const [pendingCreateStorageError, setPendingCreateStorageError] =
+    useState("");
   const claimPending = useRef(false);
   const inviteAttempts = useRef(new Set<string>());
 
@@ -241,14 +298,66 @@ export function AccountAuthWorkspace({
     }
   };
   const acceptJoinInvite = async () => {
-    if (busy || claimPending.current) return;
+    if (busy || claimPending.current || joinSubmitPending.current) return;
     if (session) {
       await claimInvite(session);
       return;
     }
+    joinSubmitPending.current = true;
     setBusy(true);
     setError("");
     try {
+      if (capabilities.localAccounts && localEnrollment) {
+        if (password !== passwordAgain)
+          throw new LocalValidationError("Пароли не совпадают.");
+        if ([...password].length < MIN_PASSWORD || [...password].length > 128)
+          throw new LocalValidationError(
+            "Пароль должен содержать от 12 до 128 символов.",
+          );
+        const input = localAccountEnrollmentSchema.safeParse({
+          login: email,
+          password,
+          token: readInviteToken(),
+        });
+        if (!input.success)
+          throw new LocalValidationError(
+            "Укажите действительное приглашение и логин из 3–40 латинских букв, цифр, точек, дефисов или подчёркиваний; первый символ — буква или цифра.",
+          );
+        const enrolled = await enrollLocalAccount(
+          input.data.login,
+          input.data.password,
+          input.data.token,
+        );
+        const welcome = localWelcomeSchema.safeParse({
+          campaignId: enrolled?.campaignId,
+          login:
+            typeof enrolled?.login === "string"
+              ? enrolled.login.toLowerCase()
+              : null,
+        });
+        localFirstRun.current = welcome.success ? welcome.data : null;
+        try {
+          if (localFirstRun.current)
+            sessionStorage.setItem(
+              localWelcomeKey,
+              JSON.stringify(localFirstRun.current),
+            );
+        } catch {
+          /* Hint is optional; enrollment already succeeded. */
+        }
+        setEmail(input.data.login);
+        setPassword("");
+        setPasswordAgain("");
+        setToken("");
+        setInviteTokenInput("");
+        setLocalEnrollment(false);
+        window.history.replaceState({}, "", "/account");
+        setView("login");
+        setNotice(
+          "Локальный аккаунт создан, приглашение принято. Войдите с выбранным логином и паролем.",
+        );
+        return;
+      }
       const next = await loginAccount(
         email,
         password,
@@ -261,6 +370,7 @@ export function AccountAuthWorkspace({
     } catch (reason) {
       setError(friendlyError(reason, capabilities.localAccounts));
     } finally {
+      joinSubmitPending.current = false;
       setBusy(false);
     }
   };
@@ -312,6 +422,26 @@ export function AccountAuthWorkspace({
       campaignsRequest.current += 1;
     };
   }, [session?.account.id, session?.account.passwordChangeRequired]);
+  useEffect(() => {
+    const id = session?.account.id;
+    pendingCreate.current = null;
+    setPendingCreateSnapshot(null);
+    setPendingCreateReady(null);
+    setPendingCreateStorageError("");
+    if (!id) return;
+    try {
+      const saved = readPendingCampaignCreate(id);
+      pendingCreate.current = saved;
+      setPendingCreateSnapshot(saved);
+      setPendingCreateReady(id);
+    } catch (reason) {
+      setPendingCreateStorageError(
+        reason instanceof Error
+          ? reason.message
+          : "Хранилище запросов недоступно; создание кампании заблокировано.",
+      );
+    }
+  }, [session?.account.id]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -344,6 +474,19 @@ export function AccountAuthWorkspace({
         );
         setSession(next);
         setPassword("");
+        const localWelcome = localFirstRun.current;
+        localFirstRun.current = null;
+        try {
+          sessionStorage.removeItem(localWelcomeKey);
+        } catch {
+          /* A hint must never prevent login. */
+        }
+        if (
+          localWelcome &&
+          next.account.identityKind === "LOCAL" &&
+          next.account.login?.toLowerCase() === localWelcome.login
+        )
+          setFirstRun({ campaignId: localWelcome.campaignId, role: "PLAYER" });
         if (
           !next.account.passwordChangeRequired &&
           path === "/account/join" &&
@@ -415,24 +558,80 @@ export function AccountAuthWorkspace({
   };
 
   const createCampaign = async () => {
-    if (!session || busy) return;
+    if (
+      !session ||
+      busy ||
+      pendingCreateReady !== session.account.id ||
+      pendingCreateStorageError
+    )
+      return;
+    if (
+      pendingCreate.current &&
+      pendingCreate.current.accountId !== session.account.id
+    ) {
+      setError(
+        "Незавершённое создание относится к другому аккаунту. Войдите в него и проверьте список кампаний.",
+      );
+      return;
+    }
     setBusy(true);
     setError("");
     setNotice("");
+    const hadPriorAttempt = Boolean(pendingCreate.current);
     try {
       if (!pendingCreate.current) {
-        pendingCreate.current = {
+        const command: PendingCampaignCreate = {
+          accountId: session.account.id,
           name: campaignName.trim(),
           key: crypto.randomUUID(),
+          uncertain: true,
         };
-        setPendingCreateSnapshot(pendingCreate.current);
+        try {
+          writePendingCampaignCreate(command);
+        } catch (storageFailure) {
+          setPendingCreateStorageError(
+            storageFailure instanceof Error
+              ? storageFailure.message
+              : "Хранилище запросов недоступно.",
+          );
+          throw storageFailure;
+        }
+        pendingCreate.current = command;
+        setPendingCreateSnapshot(command);
       }
       const pending = pendingCreate.current;
-      const result = await createAccountCampaign(
+      try {
+        if (
+          JSON.stringify(readPendingCampaignCreate(session.account.id)) !==
+          JSON.stringify(pending)
+        )
+          throw new Error(
+            "Сохранённый запрос создания изменился. Проверьте список кампаний.",
+          );
+      } catch (storageFailure) {
+        setPendingCreateStorageError(
+          storageFailure instanceof Error
+            ? storageFailure.message
+            : "Хранилище запросов недоступно.",
+        );
+        throw storageFailure;
+      }
+      const response = await createAccountCampaign(
         pending.name,
         pending.key,
         session.csrfToken,
       );
+      const result = campaignCreateReceipt.parse(response);
+      try {
+        clearPendingCampaignCreate(pending);
+      } catch (storageFailure) {
+        setPendingCreateStorageError(
+          storageFailure instanceof Error
+            ? storageFailure.message
+            : "Хранилище запросов недоступно.",
+        );
+        throw storageFailure;
+      }
       pendingCreate.current = null;
       setPendingCreateSnapshot(null);
       setCampaignName("");
@@ -452,15 +651,37 @@ export function AccountAuthWorkspace({
         setError(friendlyError(reason, capabilities.localAccounts)),
       );
     } catch (reason) {
+      // A 401 can occur *after* creation committed while selecting the game
+      // session. Once any response is ambiguous, a later rejection also cannot
+      // prove the earlier attempt did not create the campaign.
       if (
         reason instanceof ApiError &&
-        reason.status >= 400 &&
-        reason.status < 500
+        !hadPriorAttempt &&
+        pendingCreate.current &&
+        [
+          "INVALID_CAMPAIGN_INPUT",
+          "CAMPAIGN_CREATION_DISABLED",
+          "CAMPAIGN_CREATION_LIMIT_REACHED",
+        ].includes(reason.code)
       ) {
-        pendingCreate.current = null;
-        setPendingCreateSnapshot(null);
+        try {
+          clearPendingCampaignCreate(pendingCreate.current);
+          pendingCreate.current = null;
+          setPendingCreateSnapshot(null);
+        } catch (storageFailure) {
+          setPendingCreateStorageError(
+            storageFailure instanceof Error
+              ? storageFailure.message
+              : "Не удалось проверить сохранённый запрос.",
+          );
+        }
       }
-      setError(friendlyError(reason, capabilities.localAccounts));
+      const message = friendlyError(reason, capabilities.localAccounts);
+      setError(
+        pendingCreate.current
+          ? `${message} Кампания могла быть создана. Проверьте список или повторите запрос в том же аккаунте, не закрывая вкладку.`
+          : message,
+      );
     } finally {
       setBusy(false);
     }
@@ -540,6 +761,14 @@ export function AccountAuthWorkspace({
     setBusy(true);
     setError("");
     setInviteUrl("");
+    setInviteContext(null);
+    const context = {
+      campaignName:
+        campaigns.find((campaign) => campaign.id === campaignId)?.name ??
+        "Кампания",
+      recipient: inviteLabel.trim() || "Игрок",
+    };
+    const opener = document.activeElement;
     inviteAttempts.current.add(campaignId);
     setInviteAttemptsSnapshot(new Set(inviteAttempts.current));
     try {
@@ -549,6 +778,12 @@ export function AccountAuthWorkspace({
         session.csrfToken,
       );
       setInviteLabel("");
+      setInviteContext({
+        ...context,
+        focusResult:
+          document.activeElement === opener ||
+          document.activeElement === document.body,
+      });
       setInviteUrl(
         `${window.location.origin}/account/join#token=${encodeURIComponent(invite.token)}`,
       );
@@ -691,9 +926,9 @@ export function AccountAuthWorkspace({
           </header>
           <div className="account-home-intro">
             <p className="account-auth-kicker">ВАШЕ ПРОСТРАНСТВО ДЛЯ ИГРЫ</p>
-            <h1 id="account-title">Добро пожаловать</h1>
+            <h1 id="account-title">{session.account.identityKind === "LOCAL" ? "Локальный аккаунт" : "Добро пожаловать"}</h1>
             <p className="account-home-lead">
-              Выберите кампанию, чтобы вернуться к игре.
+              {session.account.identityKind === "LOCAL" ? "Это локальный аккаунт сервера мастера. Выберите кампанию, чтобы вернуться к игре." : "Выберите кампанию, чтобы вернуться к игре."}
             </p>
           </div>
           {requestedCampaign && (
@@ -703,8 +938,9 @@ export function AccountAuthWorkspace({
           )}
           {capabilities.localAccounts && (
             <p className="muted">
-              Сервер доступен только на этом компьютере. Подключение из
-              локальной сети пока не включено.
+              {capabilities.localTransport === "HTTPS_LAN"
+                ? "Локальная сеть: HTTPS. На каждом устройстве нужно настроить доверие сертификату мастера; предупреждения браузера обходить не следует."
+                : "Сервер доступен только на этом компьютере. Подключение из локальной сети не включено."}
             </p>
           )}
           {error && (
@@ -713,6 +949,10 @@ export function AccountAuthWorkspace({
             </p>
           )}
           {notice && <p role="status">{notice}</p>}
+          <AccountQuickStart
+            localAccounts={capabilities.localAccounts === true}
+            campaignCreationEnabled={capabilities.campaignCreationEnabled}
+          />
           {firstRun && (
             <section aria-labelledby="first-run-title">
               <h2 id="first-run-title">
@@ -766,6 +1006,14 @@ export function AccountAuthWorkspace({
               </Button>
             </section>
           )}
+          {capabilities.localAccounts &&
+            capabilities.campaignTransferImportEnabled && (
+              <CampaignImportPanel
+                csrfToken={session.csrfToken}
+                onRefresh={refreshCampaigns}
+                onOpen={(id) => void selectCampaign(id)}
+              />
+            )}
           <section
             className="account-campaigns"
             aria-labelledby="campaigns-title"
@@ -812,7 +1060,7 @@ export function AccountAuthWorkspace({
                       className="account-campaign-symbol"
                       aria-hidden="true"
                     >
-                      <AppIcon icon={CustomActionIcon} />
+                      <AppIcon icon={MapSurfaceIcon} size={24} />
                     </span>
                     <div>
                       <span className="account-campaign-role">
@@ -821,6 +1069,7 @@ export function AccountAuthWorkspace({
                       <strong>{campaign.name}</strong>
                     </div>
                   </div>
+                  {capabilities.localAccounts && campaign.role === "GM" && <LocalCampaignPlayers campaignId={campaign.id} campaignName={campaign.name} csrfToken={session.csrfToken}/>}
                   <Button
                     type="button"
                     view="action"
@@ -862,6 +1111,20 @@ export function AccountAuthWorkspace({
                       </form>
                     </details>
                   )}
+                  {campaign.role === "GM" &&
+                    capabilities.campaignTransferEnabled && (
+                      <CampaignTransferPanel
+                        campaignId={campaign.id}
+                        csrfToken={session.csrfToken}
+                      />
+                    )}
+                  {campaign.role === "GM" &&
+                    capabilities.cloudSyncStagingEnabled && (
+                      <CloudSourceConnectionPanel
+                        campaignId={campaign.id}
+                        csrfToken={session.csrfToken}
+                      />
+                    )}
                   {campaign.role === "GM" && campaign.archive && (
                     <details className="account-campaign-invite">
                       <summary>Архивировать кампанию</summary>
@@ -919,7 +1182,7 @@ export function AccountAuthWorkspace({
                   <label>
                     Новая кампания
                     <FormInput
-                      value={pendingCreateSnapshot?.name ?? campaignName}
+                      value={pendingCreateSnapshot && pendingCreateSnapshot.accountId!==session.account.id ? "" : pendingCreateSnapshot?.name ?? campaignName}
                       onChange={(event) => setCampaignName(event.target.value)}
                       disabled={Boolean(pendingCreateSnapshot)}
                       required
@@ -930,10 +1193,12 @@ export function AccountAuthWorkspace({
                     Аркен-Хар. Вы станете мастером; первая пустая сцена появится
                     автоматически. Игроков можно пригласить после создания.
                   </p>
+                  {pendingCreateStorageError && <p role="alert">{pendingCreateStorageError}</p>}
+                  {pendingCreateSnapshot && pendingCreateSnapshot.accountId!==session.account.id && <p role="alert">Незавершённое создание относится к другому аккаунту. Войдите в него и проверьте список кампаний.</p>}
                   <Button
                     type="submit"
                     disabled={
-                      busy || (!campaignName.trim() && !pendingCreateSnapshot)
+                      busy || pendingCreateReady!==session.account.id || Boolean(pendingCreateStorageError) || Boolean(pendingCreateSnapshot && pendingCreateSnapshot.accountId!==session.account.id) || (!campaignName.trim() && !pendingCreateSnapshot)
                     }
                   >
                     {pendingCreateSnapshot
@@ -948,11 +1213,12 @@ export function AccountAuthWorkspace({
                 Создание кампаний сейчас недоступно.
               </p>
             )}
-            {inviteUrl && (
-              <p role="status" className="account-invite-link">
-                Ссылка для игрока (действует до 72 часов):{" "}
-                <a href={inviteUrl}>{inviteUrl}</a>
-              </p>
+            {inviteUrl && inviteContext && (
+              <AccountInviteLink
+                key={inviteUrl}
+                url={inviteUrl}
+                {...inviteContext}
+              />
             )}
             <details className="account-home-disclosure">
               <summary>Присоединиться по приглашению</summary>
@@ -1045,6 +1311,144 @@ export function AccountAuthWorkspace({
       </main>
     );
 
+  if (view === "join" && capabilities.localAccounts) {
+    return (
+      <main className="account-auth-shell">
+        <section className="account-auth-card">
+          <p className="account-auth-kicker">Приглашение в кампанию</p>
+          <h1>Присоединиться</h1>
+          {session ? (
+            <p>
+              {session.account.email ?? session.account.login} ·{" "}
+              {session.account.identityKind === "LOCAL"
+                ? "локальный аккаунт"
+                : "подтверждённый аккаунт"}
+            </p>
+          ) : (
+            <p>
+              {capabilities.localAccounts
+                ? localEnrollment
+                  ? "Придумайте локальный логин и пароль. Одноразовое приглашение мастера создаст аккаунт игрока без email."
+                  : "Войдите в локальный аккаунт или создайте новый по приглашению мастера."
+                : "Войдите в подтверждённый аккаунт, чтобы принять приглашение."}
+            </p>
+          )}
+          {!session && (
+            <>
+              <label>
+                {capabilities.localAccounts ? "Локальный логин" : "Email"}
+                <FormInput
+                  type={capabilities.localAccounts ? "text" : "email"}
+                  autoComplete={
+                    capabilities.localAccounts ? "username" : "email"
+                  }
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                Пароль
+                <FormInput
+                  type="password"
+                  autoComplete={
+                    localEnrollment ? "new-password" : "current-password"
+                  }
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+              </label>
+              {capabilities.localAccounts && localEnrollment && (
+                <label>
+                  Повторите пароль
+                  <FormInput
+                    type="password"
+                    autoComplete="new-password"
+                    value={passwordAgain}
+                    onChange={(event) => setPasswordAgain(event.target.value)}
+                    required
+                  />
+                </label>
+              )}
+            </>
+          )}
+          {!token && (
+            <label>
+              Код приглашения
+              <FormInput
+                value={inviteTokenInput}
+                onChange={(event) => setInviteTokenInput(event.target.value)}
+                required
+              />
+            </label>
+          )}
+          {error && (
+            <p role="alert" className="account-auth-error">
+              {error}
+            </p>
+          )}
+          {notice && <p role="status">{notice}</p>}
+          <Button
+            type="button"
+            disabled={
+              busy ||
+              claimPendingSnapshot ||
+              (!token && !inviteTokenInput.trim())
+            }
+            onClick={() => void acceptJoinInvite()}
+          >
+            {capabilities.localAccounts && localEnrollment && !session
+              ? "Создать аккаунт и принять приглашение"
+              : "Принять приглашение"}
+          </Button>
+          {!session && capabilities.localAccounts && (
+            <>
+              <Button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setLocalEnrollment((value) => !value);
+                  setPassword("");
+                  setPasswordAgain("");
+                  setError("");
+                  setNotice("");
+                }}
+              >
+                {localEnrollment
+                  ? "Уже есть аккаунт — войти"
+                  : "Нет аккаунта — создать по приглашению"}
+              </Button>
+              {localEnrollment && (
+                <p className="muted">
+                  Если ответ после создания потерялся, сначала попробуйте вход с
+                  выбранными данными. Пароль и приглашение здесь не сохраняются.
+                </p>
+              )}
+            </>
+          )}
+          {!session && capabilities.registrationEnabled && (
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setError("");
+                setPassword("");
+                setView("register");
+                setNotice(
+                  "После регистрации подтвердите почту. Затем вернитесь в эту вкладку или снова откройте исходное приглашение мастера. Ссылка не сохраняется в браузере.",
+                );
+              }}
+            >
+              Нет аккаунта? Зарегистрироваться
+            </Button>
+          )}
+          <a href="/">Вернуться ко входу</a>
+        </section>
+      </main>
+    );
+  }
+
   if (view === "join") {
     return (
       <main className="account-auth-shell">
@@ -1059,7 +1463,13 @@ export function AccountAuthWorkspace({
                 : "подтверждённый аккаунт"}
             </p>
           ) : (
-            <p>Войдите в подтверждённый аккаунт, чтобы принять приглашение.</p>
+            <p>
+              {capabilities.localAccounts
+                ? localEnrollment
+                  ? "Придумайте локальный логин и пароль. Одноразовое приглашение мастера создаст аккаунт игрока без email."
+                  : "Войдите в локальный аккаунт или создайте новый по приглашению мастера."
+                : "Войдите в подтверждённый аккаунт, чтобы принять приглашение."}
+            </p>
           )}
           <form
             aria-label="Принять приглашение"
@@ -1160,8 +1570,13 @@ export function AccountAuthWorkspace({
           : view === "reset-confirm"
             ? "Задать новый пароль"
             : "Войти в аккаунт";
+  const showPortal =
+    !capabilities.localAccounts && (view === "login" || view === "register");
   return (
-    <main className="account-auth-shell">
+    <main
+      className={`account-auth-shell${showPortal ? " account-auth-shell--portal" : ""}`}
+    >
+      {showPortal && <PortalEntrance />}
       <section className="account-auth-card" aria-labelledby="account-title">
         <a
           className="account-auth-brand"
@@ -1174,8 +1589,11 @@ export function AccountAuthWorkspace({
         <h1 id="account-title">{title}</h1>
         {capabilities.localAccounts && (
           <p className="muted">
-            Локальный вход на этом компьютере, без email. Первый аккаунт мастера
-            создаётся в окне «Arken Space — локальный сервер».
+            {capabilities.localTransport === "HTTPS_LAN"
+              ? "Вход на локальный HTTPS-сервер мастера, без email."
+              : "Локальный вход на этом компьютере, без email."}
+            Первый аккаунт мастера создаётся в окне «Arken Space — локальный
+            сервер».
           </p>
         )}
         <form onSubmit={submit} aria-label={title} aria-busy={busy}>

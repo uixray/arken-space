@@ -858,6 +858,9 @@ export function WorldArtbookImport({
                 {item.record.sourceUrl}; source ID {item.sourceId}; дата{" "}
                 {item.retrievedAt.slice(0, 10)}; нормализованный text SHA{" "}
                 {item.record.rawContentHash}
+                {item.record.sourceNameBeforeReview
+                  ? `; имя в источнике: «${item.record.sourceNameBeforeReview}»; новое имя утверждено владельцем, checksum исходного текста сохранён`
+                  : ""}
                 {item.reason ? `; ${item.reason}` : ""}
                 {item.targetIds?.length
                   ? `; target IDs ${item.targetIds.join(", ")}`

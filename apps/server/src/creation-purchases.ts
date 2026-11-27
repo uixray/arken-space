@@ -113,7 +113,7 @@ export function commitCreationPurchase(
         .where(eq(creationPurchases.quoteId, quote.id))
         .limit(1);
       if (used) throw new Error("CREATION_QUOTE_USED");
-      if (quote.expiresAt.getTime() <= Date.now())
+      if (quote.transferInvalidated || quote.expiresAt.getTime() <= Date.now())
         throw new Error("CREATION_QUOTE_EXPIRED");
       const parsed = creationStoreQuoteSchema.safeParse(quote.request);
       if (
@@ -130,7 +130,7 @@ export function commitCreationPurchase(
         state.lot.source,
         state.lot.listing.soldCount,
       );
-      if (quote.expiresAt.getTime() <= Date.now())
+      if (quote.transferInvalidated || quote.expiresAt.getTime() <= Date.now())
         throw new Error("CREATION_QUOTE_EXPIRED");
       if (!state.affordable || !state.walletAfter)
         throw new Error("CREATION_INSUFFICIENT_FUNDS");

@@ -101,7 +101,16 @@ function mutationOperation(path: string, method: string): string | undefined {
   return undefined;
 }
 
+type ApiTransport=(path:string,init?:RequestInit)=>Promise<unknown>;
+let activeTransport:ApiTransport|null=null;
+const closedTransport:ApiTransport=async()=>{throw Error("Игровой канал закрыт. Подключитесь заново.");};
+/** One active game authority per tab. Unhandled peer requests must fail closed. */
+export function installApiTransport(next:ApiTransport){
+  if(activeTransport&&activeTransport!==closedTransport)throw Error("API_TRANSPORT_ALREADY_INSTALLED");activeTransport=next;
+  return ()=>{if(activeTransport===next)activeTransport=closedTransport;};
+}
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  if(activeTransport)return await activeTransport(path,init) as T;
   const headers = campaignHeaders(init?.headers);
   const method = (init?.method ?? "GET").toUpperCase();
   if (init?.body && !(init.body instanceof FormData))
@@ -248,6 +257,8 @@ export async function sendClientEventNow(payload: {
   event: string;
   context?: ReportContext;
 }): Promise<boolean> {
+  // Peer sessions and their closed fence must never leak diagnostics to cloud.
+  if(activeTransport)return false;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
@@ -281,6 +292,7 @@ export function resetClientEventBufferForTest(): void {
 let flushing = false;
 
 async function sendReport(report: BufferedErrorReport): Promise<boolean> {
+  if(activeTransport)return false;
   try {
     const response = await fetch("/api/client-logs", {
       method: "POST",

@@ -1,0 +1,14 @@
+import * as schema from '@arken/db';import {PgTable,getTableConfig} from 'drizzle-orm/pg-core';import {sql} from 'drizzle-orm';import {campaignTransferCatalog} from './campaign-transfer-policy.js';
+type Database=ReturnType<typeof schema.createDatabase>['db'];type Transaction=Parameters<Parameters<Database['transaction']>[0]>[0];
+/** Live columns/types/nullability/enums and ordered migration ledger. Does not
+ * claim a complete trigger/check/index-definition fingerprint. */
+export async function assertCampaignTransferTargetSchema(tx:Transaction,expectedMigrations:readonly string[]){
+ const catalog=campaignTransferCatalog(),actual=await tx.execute<{table_name:string;column_name:string;type_name:string;type_kind:string;nullable:boolean;enum_values:string[]}>(sql`SELECT c.relname AS table_name,a.attname AS column_name,t.typname AS type_name,t.typtype AS type_kind,NOT a.attnotnull AS nullable,ARRAY(SELECT e.enumlabel::text FROM pg_enum e WHERE e.enumtypid=t.oid ORDER BY e.enumsortorder) AS enum_values FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped JOIN pg_type t ON t.oid=a.atttypid WHERE n.nspname='public' AND c.relkind IN ('r','p') ORDER BY c.relname,a.attnum`);
+ const expected=new Map(catalog.flatMap(table=>table.columns.map(c=>[table.name+':'+c.name,c] as const))),enumLabels=new Map<string,readonly string[]>();
+ for(const table of Object.values(schema).filter(t=>t instanceof PgTable)){const config=getTableConfig(table as PgTable);for(const column of config.columns)if(column.enumValues?.length&&column.getSQLType()!=='text')enumLabels.set(config.name+':'+column.name,column.enumValues);}
+ const types:Record<string,string>={'bigserial':'int8','bigint':'int8','integer':'int4','double precision':'float8','boolean':'bool','timestamp with time zone':'timestamptz','text':'text','uuid':'uuid','jsonb':'jsonb'};
+ if(actual.length!==expected.size)throw Error('CAMPAIGN_TRANSFER_TARGET_SCHEMA_MISMATCH');
+ for(const row of actual){const id=row.table_name+':'+row.column_name,column=expected.get(id),labels=enumLabels.get(id);if(!column||row.nullable!==column.nullable||row.type_name!==(types[column.sqlType]??column.sqlType)||(labels?(row.type_kind!=='e'||labels.length!==row.enum_values.length||labels.some((v,i)=>v!==row.enum_values[i])):row.type_kind==='e'))throw Error('CAMPAIGN_TRANSFER_TARGET_SCHEMA_MISMATCH:'+id+':'+JSON.stringify({actualType:row.type_name,expectedType:column?.sqlType,actualNullable:row.nullable,expectedNullable:column?.nullable,actualEnum:row.enum_values,expectedEnum:labels}));}
+ const migrations=await tx.execute<{hash:string}>(sql`SELECT hash FROM drizzle.__drizzle_migrations ORDER BY created_at,id`);
+ if(migrations.length!==expectedMigrations.length||migrations.some((m,i)=>m.hash!==expectedMigrations[i]))throw Error('CAMPAIGN_TRANSFER_TARGET_MIGRATION_MISMATCH');
+}

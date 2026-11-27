@@ -1,11 +1,15 @@
 /** Campaign identity of this tab; never infer it from the shared cookie. */
+const uuidSource =
+  "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+export const uuidPattern = new RegExp(`^${uuidSource}$`, "i");
+const campaignPath = new RegExp(`^/campaign/(${uuidSource})/?$`, "i");
+export function campaignIdFromPath(path: string): string | null {
+  return campaignPath.exec(path)?.[1]?.toLowerCase() ?? null;
+}
 export function routeCampaignId(): string | null {
-  if (typeof window === "undefined") return null;
-  return (
-    /^\/campaign\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i
-      .exec(window.location.pathname)?.[1]
-      ?.toLowerCase() ?? null
-  );
+  return typeof window === "undefined"
+    ? null
+    : campaignIdFromPath(window.location.pathname);
 }
 
 export function campaignHeaders(init?: HeadersInit): Headers {
@@ -14,16 +18,17 @@ export function campaignHeaders(init?: HeadersInit): Headers {
   if (campaign) headers.set("x-arken-campaign-id", campaign);
   return headers;
 }
-const idPattern =
-  "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const campaignReturnPattern = new RegExp(
-  `^/campaign/(${idPattern})/?(?:\\?editor-pilot=(${idPattern}))?$`,
-  "i",
-);
-
-/** Preserve a specific editor draft through account login, using only an internal campaign URL. */
+/** Keep only reviewed in-app destinations: encyclopedia selection and Bionic draft. */
 export function campaignReturnPath(candidate: string | null): string | null {
-  const match = candidate?.match(campaignReturnPattern);
-  if (!match) return null;
-  return `/campaign/${match[1]!.toLowerCase()}${match[2] ? `?editor-pilot=${match[2].toLowerCase()}` : ""}`;
+  if (!candidate || candidate.includes("#")) return null;
+  const [path, search, extra] = candidate.split("?");
+  const campaign = campaignIdFromPath(path ?? "");
+  if (!campaign || extra !== undefined) return null;
+  const params = new URLSearchParams(search ?? "");
+  for (const key of params.keys())
+    if (!["article", "editor-pilot"].includes(key) || params.getAll(key).length !== 1 || !uuidPattern.test(params.get(key)!)) return null;
+  const selected = ["article", "editor-pilot"].flatMap(key => {
+    const value=params.get(key);return value ? [`${key}=${value.toLowerCase()}`] : [];
+  });
+  return `/campaign/${campaign}${selected.length ? "?"+selected.join("&") : ""}`;
 }

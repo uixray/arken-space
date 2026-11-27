@@ -1,6 +1,8 @@
+import {commitTokenState} from "./token-state-command.js";
+import {currentTokenController} from "./token-controller-authority.js";
 import type { FastifyInstance } from "fastify";
 import { createHash } from "node:crypto";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   resizeTokenSchema,
@@ -17,6 +19,9 @@ import {
   actionIdSchema,
   tokenSpriteSetSchema,
   tokenSpriteAssetIds,
+  map3dBlocked,
+  isometricFloorId,
+  isRectFullyRevealed,
 } from "@arken/contracts";
 import {
   assets,
@@ -24,6 +29,7 @@ import {
   campaigns,
   characters,
   gameEvents,
+  fogReveals,
   memberships,
   scenes,
   tokens,
@@ -32,6 +38,7 @@ import {
   worldInstanceBindings,
 } from "@arken/db";
 import { requireAuth } from "./auth.js";
+import { canvasLayerLevel } from "./isometric-layers.js";
 import { findAction } from "./action-lookup.js";
 import { canAccessCharacter } from "./character-access.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
@@ -43,36 +50,6 @@ type CanvasDatabase = ReturnType<
 type CanvasTransaction =
   import("./campaign-pause-guard.js").CampaignCanvasTransaction;
 
-async function currentTokenController(
-  tx: CanvasTransaction,
-  campaignId: string,
-  definitionId: string,
-  membershipId: string,
-) {
-  const [definition] = await tx
-    .select({ id: tokenDefinitions.id })
-    .from(tokenDefinitions)
-    .where(
-      and(
-        eq(tokenDefinitions.id, definitionId),
-        eq(tokenDefinitions.campaignId, campaignId),
-      ),
-    )
-    .limit(1)
-    .for("share");
-  if (!definition) return false;
-  const [controller] = await tx
-    .select({ id: tokenControllers.membershipId })
-    .from(tokenControllers)
-    .where(
-      and(
-        eq(tokenControllers.tokenDefinitionId, definitionId),
-        eq(tokenControllers.membershipId, membershipId),
-      ),
-    )
-    .limit(1);
-  return Boolean(controller);
-}
 
 async function isCurrentPlayerScene(
   tx: CanvasTransaction,
@@ -251,6 +228,7 @@ export function registerTokenRoutes(
     }
     const guardedDb = canvasTx(auth.campaignId);
     const placement = await guardedDb.transaction(async (tx) => {
+      const levelId = await canvasLayerLevel(tx, auth.campaignId, scene.id, body.levelId, auth.role);
       await tx.execute(
         sql`select id from scenes where id = ${scene.id} and campaign_id = ${auth.campaignId} for update`,
       );
@@ -282,6 +260,7 @@ export function registerTokenRoutes(
               eq(tokenDefinitions.characterId, body.characterId),
               eq(tokens.x, body.x),
               eq(tokens.y, body.y),
+              levelId === null ? isNull(tokens.levelId) : eq(tokens.levelId, levelId),
             ),
           )
           .limit(1);
@@ -314,6 +293,7 @@ export function registerTokenRoutes(
         .insert(tokens)
         .values({
           ...tokenInput,
+          levelId,
           ...(placementId ? { id: placementId } : {}),
           // UIX-400: `tokens.name` только пишется и никогда не читается —
           // подпись всегда берётся из определения. Колонка `notNull`, поэтому
@@ -491,7 +471,10 @@ export function registerTokenRoutes(
             ),
           )
           .limit(1);
-        if (priorPlacement) return reply.code(200).send(priorPlacement.token);
+        if (priorPlacement) {
+          await canvasLayerLevel(db, auth.campaignId, priorPlacement.token.sceneId, priorPlacement.token.levelId, auth.role);
+          return reply.code(200).send(priorPlacement.token);
+        }
       }
       const [definition] = await db
         .select({ id: tokenDefinitions.id })
@@ -560,6 +543,7 @@ export function registerTokenRoutes(
     await testHooks?.beforeControlledMutation?.("place");
     const guardedDb = canvasTx(auth.campaignId);
     const placement = await guardedDb.transaction(async (tx) => {
+      const levelId = await canvasLayerLevel(tx, auth.campaignId, scene.id, body.levelId, auth.role);
       if (
         auth.role !== "GM" &&
         !(await isCurrentPlayerScene(tx, auth.campaignId, scene.id))
@@ -616,12 +600,22 @@ export function registerTokenRoutes(
               lockedScene.grid.size +
             lockedScene.grid.offsetY
           : value;
-      const x = snapX(
+      let x = snapX(
         body.x ?? lockedScene.width / 2 - lockedDefinition.defaultWidth / 2,
       );
-      const y = snapY(
+      let y = snapY(
         body.y ?? lockedScene.height / 2 - lockedDefinition.defaultHeight / 2,
       );
+      // Automatic placement uses a walkable foot cell; explicit coordinates
+      // remain subject to the common movement trigger, never silently moved.
+      if (body.x === undefined && body.y === undefined && lockedScene.projection === "THREE_D" && lockedScene.grid.threeD && lockedScene.grid.isometric) {
+        const floorId = isometricFloorId(lockedScene.grid.isometric, levelId);
+        const fog = auth.role === "GM" ? [] : await tx.select().from(fogReveals).where(eq(fogReveals.sceneId,lockedScene.id));
+        const cell = lockedScene.grid.threeD.cells.find(c=>c.floorId===floorId&&!map3dBlocked(c)&&(auth.role==="GM"||isRectFullyRevealed({x:lockedScene.grid.offsetX+c.x*lockedScene.grid.size,y:lockedScene.grid.offsetY+c.y*lockedScene.grid.size,width:lockedScene.grid.size,height:lockedScene.grid.size},fog.filter(f=>isometricFloorId(lockedScene.grid.isometric!,f.levelId)===floorId))));
+        if (!cell) throw Object.assign(new Error("NO_WALKABLE_PLACEMENT"), {statusCode:422});
+        x = lockedScene.grid.offsetX+(cell.x+.5)*lockedScene.grid.size-lockedDefinition.defaultWidth/2;
+        y = lockedScene.grid.offsetY+(cell.y+.5)*lockedScene.grid.size-lockedDefinition.defaultHeight;
+      }
       if (lockedDefinition.characterId) {
         const [existing] = await tx
           .select()
@@ -632,6 +626,7 @@ export function registerTokenRoutes(
               eq(tokens.sceneId, scene.id),
               eq(tokens.x, x),
               eq(tokens.y, y),
+              levelId === null ? isNull(tokens.levelId) : eq(tokens.levelId, levelId),
             ),
           )
           .limit(1);
@@ -642,6 +637,7 @@ export function registerTokenRoutes(
         .insert(tokens)
         .values({
           definitionId: lockedDefinition.id,
+          levelId,
           ...(body.placementId ? { id: body.placementId } : {}),
           sceneId: scene.id,
           characterId: lockedDefinition.characterId,
@@ -712,63 +708,11 @@ export function registerTokenRoutes(
     if (!row) return reply.code(404).send({ error: "TOKEN_NOT_FOUND" });
     if (row.token.revision !== body.revision)
       return reply.code(409).send({ error: "STALE_REVISION" });
-    // The client only exposes a proportional handle, but the server remains
-    // authoritative so an older or malicious client cannot distort a token.
-    const widthScale = body.width / row.token.width;
-    const heightScale = body.height / row.token.height;
-    const scale =
-      Math.abs(widthScale - 1) >= Math.abs(heightScale - 1)
-        ? widthScale
-        : heightScale;
-    const boundedScale = Math.min(
-      Math.min(1024 / row.token.width, 1024 / row.token.height),
-      Math.max(Math.max(16 / row.token.width, 16 / row.token.height), scale),
-    );
-    const width = Math.round(row.token.width * boundedScale);
-    const height = Math.round(row.token.height * boundedScale);
-    const updated = await canvasTx(auth.campaignId).transaction(async (tx) => {
-      await invalidateRedoBranch(tx, auth, row.token.sceneId);
-      const [saved] = await tx
-        .update(tokens)
-        .set({
-          width,
-          height,
-          revision: row.token.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(tokens.id, id), eq(tokens.revision, body.revision)))
-        .returning();
-      if (!saved) return null;
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        membershipId: auth.membershipId,
-        type: "TOKEN_RESIZED",
-        entityType: "TOKEN",
-        entityId: id,
-        entityRevision: saved.revision,
-        payload: { width: saved.width, height: saved.height },
-      });
-      await tx.insert(actionJournal).values({
-        campaignId: auth.campaignId,
-        sceneId: saved.sceneId,
-        actorMembershipId: auth.membershipId,
-        actionId: body.actionId,
-        scope: saved.layer === "GM" ? "GM" : "PUBLIC",
-        type: "TOKEN_RESIZE",
-        targetType: "TOKEN",
-        targetId: id,
-        before: { width: row.token.width, height: row.token.height },
-        after: { width: saved.width, height: saved.height },
-        beforeRevision: row.token.revision,
-        afterRevision: saved.revision,
-        currentRevision: saved.revision,
-      });
-      return saved;
-    });
+    const updated = await canvasTx(auth.campaignId).transaction(tx=>commitTokenState(tx,auth,{kind:"RESIZE",tokenId:id,...body}));
+    if(updated==="forbidden")return reply.code(403).send({error:"GM_REQUIRED"});
     if (!updated) return reply.code(409).send({ error: "TOKEN_CONFLICT" });
     await broadcast(auth.campaignId);
-    return updated;
+    return updated.saved;
   });
 
   app.patch("/api/tokens/:id/appearance", async (request, reply) => {
@@ -789,53 +733,8 @@ export function registerTokenRoutes(
     if (!row) return reply.code(404).send({ error: "TOKEN_NOT_FOUND" });
     if (row.token.revision !== body.revision)
       return reply.code(409).send({ error: "STALE_REVISION" });
-    const updated = await canvasTx(auth.campaignId).transaction(async (tx) => {
-      await invalidateRedoBranch(tx, auth, row.token.sceneId);
-      const [saved] = await tx
-        .update(tokens)
-        .set({
-          baseColor: body.baseColor,
-          frameColor: body.frameColor,
-          revision: row.token.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(tokens.id, id), eq(tokens.revision, body.revision)))
-        .returning();
-      if (!saved) return null;
-      const [event] = await tx
-        .insert(gameEvents)
-        .values({
-          campaignId: auth.campaignId,
-          actionId: body.actionId,
-          membershipId: auth.membershipId,
-          type: "TOKEN_APPEARANCE_UPDATED",
-          entityType: "TOKEN",
-          entityId: id,
-          entityRevision: saved.revision,
-          payload: { baseColor: saved.baseColor, frameColor: saved.frameColor },
-        })
-        .returning();
-      if (!event) throw new Error("EVENT_RECORD_FAILED");
-      await tx.insert(actionJournal).values({
-        campaignId: auth.campaignId,
-        sceneId: saved.sceneId,
-        actorMembershipId: auth.membershipId,
-        actionId: body.actionId,
-        scope: saved.layer === "GM" ? "GM" : "PUBLIC",
-        type: "TOKEN_APPEARANCE",
-        targetType: "TOKEN",
-        targetId: id,
-        before: {
-          baseColor: row.token.baseColor,
-          frameColor: row.token.frameColor,
-        },
-        after: { baseColor: saved.baseColor, frameColor: saved.frameColor },
-        beforeRevision: row.token.revision,
-        afterRevision: saved.revision,
-        currentRevision: saved.revision,
-      });
-      return { saved, event };
-    });
+    const updated = await canvasTx(auth.campaignId).transaction(tx=>commitTokenState(tx,auth,{kind:"APPEARANCE",tokenId:id,...body}));
+    if(updated==="forbidden")return reply.code(403).send({error:"GM_REQUIRED"});
     if (!updated) return reply.code(409).send({ error: "TOKEN_CONFLICT" });
     await publishToken(auth.campaignId, id, {
       sequence: Number(updated.event.sequence),
@@ -893,59 +792,7 @@ export function registerTokenRoutes(
     if (row.token.revision !== body.revision)
       return reply.code(409).send({ error: "STALE_REVISION" });
     await testHooks?.beforeControlledMutation?.("conditions");
-    const updated = await canvasTx(auth.campaignId).transaction(async (tx) => {
-      if (
-        auth.role !== "GM" &&
-        !(await currentTokenController(
-          tx,
-          auth.campaignId,
-          row.definitionId,
-          auth.membershipId,
-        ))
-      )
-        return "forbidden" as const;
-      await invalidateRedoBranch(tx, auth, row.token.sceneId);
-      const [saved] = await tx
-        .update(tokens)
-        .set({
-          conditions: body.conditions,
-          revision: row.token.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(tokens.id, id), eq(tokens.revision, body.revision)))
-        .returning();
-      if (!saved) return null;
-      const [event] = await tx
-        .insert(gameEvents)
-        .values({
-          campaignId: auth.campaignId,
-          actionId: body.actionId,
-          membershipId: auth.membershipId,
-          type: "TOKEN_CONDITIONS_UPDATED",
-          entityType: "TOKEN",
-          entityId: id,
-          entityRevision: saved.revision,
-          payload: { conditions: saved.conditions },
-        })
-        .returning();
-      if (!event) throw new Error("EVENT_RECORD_FAILED");
-      await tx.insert(actionJournal).values({
-        campaignId: auth.campaignId,
-        sceneId: saved.sceneId,
-        actorMembershipId: auth.membershipId,
-        actionId: body.actionId,
-        scope: saved.layer === "GM" ? "GM" : "PUBLIC",
-        type: "TOKEN_CONDITIONS",
-        targetType: "TOKEN",
-        targetId: id,
-        before: { conditions: row.token.conditions },
-        after: { conditions: saved.conditions },
-        beforeRevision: row.token.revision,
-        afterRevision: saved.revision,
-        currentRevision: saved.revision,
-      });
-      return { saved, event };
-    });
+    const updated = await canvasTx(auth.campaignId).transaction(tx=>commitTokenState(tx,auth,{kind:"CONDITIONS",tokenId:id,...body}));
     if (updated === "forbidden")
       return reply.code(403).send({ error: "TOKEN_FORBIDDEN" });
     if (!updated) return reply.code(409).send({ error: "TOKEN_CONFLICT" });
@@ -1003,6 +850,7 @@ export function registerTokenRoutes(
     }
     await testHooks?.beforeControlledMutation?.("delete");
     const deleted = await canvasTx(auth.campaignId).transaction(async (tx) => {
+      await canvasLayerLevel(tx, auth.campaignId, row.token.sceneId, row.token.levelId, auth.role);
       if (
         auth.role !== "GM" &&
         !(await isCurrentPlayerScene(tx, auth.campaignId, row.token.sceneId))

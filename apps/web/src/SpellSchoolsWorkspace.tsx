@@ -93,9 +93,9 @@ export function SpellSchoolsWorkspace({
   const graphIsDirty = Boolean(
     graph && !isNew && savedFingerprintSnapshot !== JSON.stringify(graph),
   );
-  const editorLocked =
-    retryPending || versionConflict || pendingActivation !== null;
   const hasRecoveryCopy = conflictedDraft !== null;
+  const editorLocked =
+    retryPending || versionConflict || hasRecoveryCopy || pendingActivation !== null;
 
   useEffect(() => {
     onPendingChange?.(
@@ -134,7 +134,7 @@ export function SpellSchoolsWorkspace({
   const updateGraph = (
     update: (current: SpellProgressionGraph) => SpellProgressionGraph,
   ) => {
-    if (editorLocked || busy || hasRecoveryCopy) return;
+    if (editorLocked || busy) return;
     setGraph((current) =>
       current?.lifecycle === "DRAFT" ? update(current) : current,
     );
@@ -298,7 +298,7 @@ export function SpellSchoolsWorkspace({
       !["DRAFT", "ACTIVE", "REFERENCE"].includes(graph.lifecycle) ||
       busy ||
       (editorLocked && !retryPending) ||
-      hasRecoveryCopy
+      (hasRecoveryCopy && !graphIsDirty)
     )
       return;
     setBusy(true);
@@ -760,12 +760,7 @@ export function SpellSchoolsWorkspace({
             <>
               <fieldset
                 className="spell-editor-fields"
-                disabled={
-                  busy ||
-                  editorLocked ||
-                  hasRecoveryCopy ||
-                  graph.lifecycle !== "DRAFT"
-                }
+                disabled={busy || editorLocked || graph.lifecycle !== "DRAFT"}
                 aria-label="Поля черновика школы и веток"
               >
                 <div className="spell-schools-title-row">
@@ -1343,7 +1338,7 @@ export function SpellSchoolsWorkspace({
                   disabled={
                     busy ||
                     (editorLocked && !retryPending) ||
-                    hasRecoveryCopy ||
+                    (hasRecoveryCopy && !graphIsDirty) ||
                     versionConflict ||
                     (!isNew && graph.lifecycle !== "DRAFT")
                   }

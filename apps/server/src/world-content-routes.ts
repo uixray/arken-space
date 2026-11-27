@@ -15,6 +15,7 @@ import {
   worldContent,
   worldContentActions,
   worldContentMedia,
+  worldContentImages,
   worldContentRelations,
   assets,
 } from "@arken/db";
@@ -36,6 +37,7 @@ import {
   type WorldContentRelationEdgeDto,
 } from "@arken/contracts";
 import { requireAuth } from "./auth.js";
+import { registerWorldContentImageRoutes } from "./world-content-images.js";
 import {
   toGmDto,
   toPlayerDto,
@@ -279,6 +281,11 @@ async function findImageAssetForCampaign(
   assetId: string,
   campaignId: string,
 ) {
+  // Existing canonical images may outlive their original campaign asset.
+  // This helper is called only after the GM mutation gate.
+  const [retained] = await db.select({ id: worldContentImages.id })
+    .from(worldContentImages).where(eq(worldContentImages.id, assetId)).limit(1);
+  if (retained) return retained;
   const [asset] = await db
     .select()
     .from(assets)
@@ -316,6 +323,7 @@ export function registerWorldContentRoutes(
     beforeImporterMediaTransaction?: () => Promise<void> | void;
   } = {},
 ) {
+  registerWorldContentImageRoutes(app, db);
   app.get("/api/world-content-regions", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;

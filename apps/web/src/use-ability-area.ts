@@ -236,6 +236,8 @@ export function useAbilityArea(context: Context) {
         characterId,
         entryId,
         entryRevision,
+        consumesItem:
+          entry.data.creationConsumption === "BOUND_ITEM_ON_APPLICATION",
         sceneId: current.scene.id,
         name: entry.name,
         radiusMeters: entry.data.areaEffect.radiusMeters,

@@ -1,5 +1,11 @@
+import { GameReadOnlyProvider } from "./game-read-only";
+import { createStoryPageLoadFence } from "./story-page-load-fence";
 import { StoryImagePresentation } from "./StoryImagePresentation";
+import { ConnectionNotice } from "./ConnectionNotice";
+import {useEntryApplication} from "./use-entry-application";
+import {EntryApplicationRecovery} from "./EntryApplicationRecovery";
 import { DiceTrayPanel } from "./sidebar/DiceTrayPanel";
+import { setCampaignArticle, useCampaignArticle } from "./world-article-route";
 import { RollVisibilityContext } from "./roll-visibility-context";
 import {
   lazy,
@@ -28,6 +34,7 @@ import { api, ApiError } from "./api";
 import { EditorPilot } from "./EditorPilot";
 import { mergeTokenPlacementUpdate } from "./token-projection";
 import { AuthGate } from "./AuthGate";
+import { Brand } from "./Brand";
 import { useGameSocketSubscriptions } from "./use-game-socket-subscriptions";
 import { Sidebar } from "./Sidebar";
 import { AppHeader } from "./AppHeader";
@@ -118,9 +125,9 @@ import { usePlayerThemePreference } from "./design-system/usePlayerThemePreferen
 import { patchPersonalThemePreference } from "./design-system/personal-theme-api";
 import { useCharacterActions } from "./use-character-actions";
 const NO_ENCOUNTERS: never[] = [];
-const Orthographic2DRenderer = lazy(() =>
-  import("./renderers/Orthographic2DRenderer").then((module) => ({
-    default: module.Orthographic2DRenderer,
+const SceneMapRenderer = lazy(() =>
+  import("./renderers/IsometricSceneRenderer").then((module) => ({
+    default: module.SceneMapRenderer,
   })),
 );
 
@@ -147,7 +154,16 @@ function replacePersonalTheme(
   return { ...snapshot, personalTheme };
 }
 
-export function App() {
+export function App(props: { localCopyMode?: boolean } = {}) {
+  return (
+    <GameReadOnlyProvider value={Boolean(props.localCopyMode)}>
+      <AppContent {...props} />
+    </GameReadOnlyProvider>
+  );
+}
+function AppContent({
+  localCopyMode = false,
+}: { localCopyMode?: boolean } = {}) {
   const { setThemeId: setRootThemeId } = usePlayerThemeRuntime();
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
   const personalTheme = snapshot?.personalTheme;
@@ -282,6 +298,12 @@ export function App() {
     Array<{ membershipId: string; online: boolean }>
   >([]);
   const [tool, setTool] = useState<MapTool>("PAN");
+  const selectMapTool = useCallback(
+    (next: MapTool) => {
+      if (!localCopyMode || next === "PAN") setTool(next);
+    },
+    [localCopyMode],
+  );
   const [stampSettings, setStampSettings] = useState<TerrainStampSettings>(
     DEFAULT_TERRAIN_STAMP_SETTINGS,
   );
@@ -354,6 +376,11 @@ export function App() {
   const compactIdentity = snapshot
     ? `${snapshot.campaign.id}:${snapshot.me.id}:${snapshot.me.role}:${previewSnapshot?.me.id ?? ""}`
     : null;
+  const articleCampaign = !previewSnapshot ? snapshot?.campaign.id : undefined;
+  const requestedArticle = useCampaignArticle(snapshot?.campaign.id);
+  const articleRoute = articleCampaign ? requestedArticle : null;
+  const previousArticle = useRef<string | null>(null);
+  const workspaceRef = useLatestRef(workspace);
   const compactNavigation = useCompactNavigation(compactIdentity, workspace);
   const {
     compact,
@@ -387,10 +414,12 @@ export function App() {
   }, [compact]);
   const selectCompactSurface = useCallback(
     (surface: CompactSurface) => {
+      previousArticle.current = null;
+      if (articleCampaign) setCampaignArticle(articleCampaign, null);
       selectSurface(surface);
       setWorkspace(surface === "character" ? "characters" : null);
     },
-    [selectSurface],
+    [selectSurface, articleCampaign],
   );
   const [operatorFeedbackAllowed, setOperatorFeedbackAllowed] = useState(false);
   const [requestedCharacterId, setRequestedCharacterId] = useState<
@@ -419,6 +448,10 @@ export function App() {
   }, [snapshot?.me.id]);
   const handleWorkspaceChange = useCallback(
     (nextWorkspace: WorkspaceDestination | null) => {
+      if (nextWorkspace !== "world-codex" && articleCampaign) {
+        previousArticle.current = null;
+        setCampaignArticle(articleCampaign, null);
+      }
       const returnTarget =
         nextWorkspace === null ? workspaceReturnTarget() : null;
       const { compact, selectSurface, previousSurface } =
@@ -437,8 +470,28 @@ export function App() {
       if (nextWorkspace === null && !compact)
         requestAnimationFrame(() => focusWorkspaceReturnTarget(returnTarget));
     },
-    [compactNavigationRef],
+    [compactNavigationRef, articleCampaign],
   );
+  useEffect(() => {
+    // A GM preview is a different UI identity. Do not restore a stale article on exit.
+    if (requestedArticle && !articleCampaign && snapshot?.campaign.id) {
+      previousArticle.current = null;
+      setCampaignArticle(snapshot.campaign.id, null, true);
+      return;
+    }
+    if (articleRoute && articleCampaign) handleWorkspaceChange("world-codex");
+    else if (previousArticle.current && workspaceRef.current === "world-codex")
+      handleWorkspaceChange(null);
+    previousArticle.current = articleRoute;
+  }, [
+    articleRoute,
+    articleCampaign,
+    requestedArticle,
+    snapshot?.campaign.id,
+    compactIdentity,
+    handleWorkspaceChange,
+    workspaceRef,
+  ]);
   useEffect(() => {
     if (!error || !snapshot) return;
     notify({
@@ -524,14 +577,33 @@ export function App() {
       ),
     );
   }, [campaignId, snapshot?.me.id]);
+  const storyLoadFence = useRef(createStoryPageLoadFence());
+  const storyCampaignRef = useLatestRef(campaignId);
+  useEffect(() => () => storyLoadFence.current.invalidate(), []);
   const loadStoryPosts = useCallback(async (cursor?: string) => {
+    const currentScope = () =>
+      JSON.stringify([storyCampaignRef.current, storyEraFilterRef.current]);
+    const isCurrent = storyLoadFence.current.begin(currentScope());
+    // Remove potentially revoked text/labels before awaiting the current projection.
+    if (!cursor) {
+      setStoryPosts([]);
+      setStoryNextCursor(null);
+      setStoryEras([]);
+    }
     const query = new URLSearchParams({ limit: "50" });
     if (cursor) query.set("cursor", cursor);
     const era = storyEraFilterRef.current;
     if (era) query.set("era", era);
-    const page = await api<StoryPostPageDto>(
-      `/api/story/posts?${query.toString()}`,
-    );
+    let page: StoryPostPageDto;
+    try {
+      page = await api<StoryPostPageDto>(
+        `/api/story/posts?${query.toString()}`,
+      );
+    } catch (reason) {
+      if (!isCurrent(currentScope())) return;
+      throw reason;
+    }
+    if (!isCurrent(currentScope())) return;
     setStoryPosts((current) => {
       if (!cursor) return page.posts;
       const byId = new Map(current.map((post) => [post.id, post]));
@@ -617,19 +689,24 @@ export function App() {
     storyEraFilterRef.current = null;
     setStoryEraFilter(null);
     setStoryEras([]);
+    // Local copies use their saved exact page; a missing page is not a host failure.
     if (!campaignId) {
       setStoryPosts([]);
       setStoryNextCursor(null);
       return;
     }
     void loadStoryPosts().catch((reason) =>
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Не удалось загрузить сюжетный канал",
-      ),
+      localCopyMode &&
+      reason instanceof ApiError &&
+      reason.code === "LOCAL_COPY_DATA_NOT_SAVED"
+        ? undefined
+        : setError(
+            reason instanceof Error
+              ? reason.message
+              : "Не удалось загрузить сюжетный канал",
+          ),
     );
-  }, [campaignId, loadStoryPosts]);
+  }, [campaignId, loadStoryPosts, localCopyMode]);
   // UIX-397: global window.error/unhandledrejection handlers are now
   // registered at app start (main.tsx installGlobalErrorReporting), so they
   // capture startup/login/bootstrap failures too. This effect only keeps the
@@ -908,11 +985,14 @@ export function App() {
     setError,
     onOpen: openAbilityArea,
   });
+  const entryApplication = useEntryApplication(snapshot, load);
   const catalogActions = useCatalogActions({
     run,
     load,
     setError,
     prepareArea: abilityArea.prepare,
+    snapshotRef,
+    submitEntry: entryApplication.submit,
   });
   const assetActions = useAssetActions({ load });
   const statLayoutActions = useStatLayoutActions({ load });
@@ -1265,8 +1345,14 @@ export function App() {
   );
   const handleObjectListClose = useCallback(() => setMapObjectsOpen(false), []);
   const activeSceneIdForPlacement = activeSceneValue?.id;
+  const activeSceneLevelForPlacement =
+    activeSceneValue?.grid.isometric?.publishedFloorId ??
+    activeSceneValue?.grid.isometric?.floors[0]?.id;
   const handlePlaceTokenDefinition = useCallback(
-    async (definitionId: string, point?: { x: number; y: number }) => {
+    async (
+      definitionId: string,
+      point?: { x: number; y: number; levelId?: string | null },
+    ) => {
       if (!activeSceneIdForPlacement) return;
       void placeOptimistically({
         path: `/api/token-definitions/${definitionId}/placements`,
@@ -1274,11 +1360,18 @@ export function App() {
           actionId: crypto.randomUUID(),
           definitionId,
           sceneId: activeSceneIdForPlacement,
+          ...(activeSceneLevelForPlacement
+            ? { levelId: activeSceneLevelForPlacement }
+            : {}),
           ...point,
         },
       });
     },
-    [activeSceneIdForPlacement, placeOptimistically],
+    [
+      activeSceneIdForPlacement,
+      activeSceneLevelForPlacement,
+      placeOptimistically,
+    ],
   );
 
   const handleStampCreate = useCallback(
@@ -1712,11 +1805,30 @@ export function App() {
     window.location.replace("/");
   }, []);
 
+  const lastRecoveryAttemptRef = useRef(0);
   const handleResync = useCallback(() => {
     const current = snapshotRef.current;
     if (!current) return;
+    if (!socket) {
+      setError(
+        "Подключение ещё не готово. Обновите страницу, если сообщение сохраняется.",
+      );
+      return;
+    }
+    const now = performance.now();
+    if (
+      lastRecoveryAttemptRef.current &&
+      now - lastRecoveryAttemptRef.current < 1000
+    )
+      return;
+    lastRecoveryAttemptRef.current = now;
+    if (!socket.connected) {
+      setConnection("RECONNECTING");
+      socket.connect();
+      return;
+    }
     setConnection("RESYNCING");
-    socket?.emit("game:resync", current.snapshotVersion);
+    socket.emit("game:resync", current.snapshotVersion);
   }, [socket, snapshotRef]);
 
   const handleOpenThemeSettings = useCallback(() => {
@@ -1744,7 +1856,10 @@ export function App() {
   if (!snapshot || !viewSnapshot)
     return (
       <main className="loading">
-        <div className="wordmark">arken-space</div>
+        <div className="wordmark">
+          <span className="sr-only">Аркспейс</span>
+          <Brand />
+        </div>
         {error ? (
           <ErrorState description={error} onRetry={load} />
         ) : (
@@ -1762,14 +1877,17 @@ export function App() {
     <CampaignActionsContext.Provider value={campaignActions}>
       <RollVisibilityContext.Provider value={mapRollVisibility}>
         <div
-          className={`app-shell${compact ? " app-shell--compact" : ""}`}
+          className={`app-shell${compact ? " app-shell--compact" : ""}${connection !== "ONLINE" ? " app-shell--recovery" : ""}`}
           data-compact-surface={compact ? compactSurface : undefined}
         >
-          <AbilityAreaPanel
-            area={abilityArea}
-            isGm={snapshot.me.role === "GM"}
-            recoveryOnly
-          />
+          <div className="application-recovery-stack">
+            <EntryApplicationRecovery application={entryApplication} />
+            <AbilityAreaPanel
+              area={abilityArea}
+              isGm={snapshot.me.role === "GM"}
+              recoveryOnly
+            />
+          </div>
           {/* UIX-532: без этой ссылки путь с клавиатуры к карте проходит через
             всю верхнюю панель. Прячется, пока рабочая область открыта поверх
             карты: там карта помечена `aria-hidden`, и уводить фокус в
@@ -1780,6 +1898,7 @@ export function App() {
             </a>
           )}
           <AppHeader
+            localCopyMode={localCopyMode}
             compact={compact}
             activeScene={activeScene}
             broadcastScene={broadcastScene}
@@ -1813,10 +1932,9 @@ export function App() {
             onOpenPlayerHandoff={() => setPlayerHandoffOpen(true)}
             onLogout={handleLogout}
           />
+          <ConnectionNotice connection={connection} onRecover={handleResync} />
           <AppModals
-            storyEnabled={
-              snapshot?.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092"
-            }
+            storyEnabled
             personalTheme={personalTheme}
             themePreference={themePreference}
             publishedThemeIds={publishedThemeIds}
@@ -1909,6 +2027,7 @@ export function App() {
               )}
               {!snapshot.campaign.paused && (
                 <MapToolbar
+                  readOnly={localCopyMode}
                   pauseControl={
                     snapshot.me.role === "GM" && !previewSnapshot ? (
                       <GamePauseOverlay
@@ -1919,7 +2038,7 @@ export function App() {
                     ) : undefined
                   }
                   tokenTrayControl={
-                    !previewSnapshot ? (
+                    !previewSnapshot && !localCopyMode ? (
                       <TokenTray
                         tokenDefinitions={snapshot.tokenDefinitions}
                         assets={snapshot.assets}
@@ -1931,7 +2050,7 @@ export function App() {
                   objectListOpen={mapObjectsOpen}
                   onToggleObjectList={() => setMapObjectsOpen((open) => !open)}
                   tool={tool}
-                  onToolSelect={setTool}
+                  onToolSelect={selectMapTool}
                   snapshot={snapshot}
                   viewSnapshot={viewSnapshot}
                   previewSnapshot={previewSnapshot}
@@ -1983,11 +2102,9 @@ export function App() {
                 <Suspense
                   fallback={<div className="empty-map">Загружаем карту…</div>}
                 >
-                  <Orthographic2DRenderer
-                    autoFitOnSceneEntry={
-                      snapshot.campaign.id ===
-                      "eb6a55c4-a821-4739-8d4a-a1028e9d9092"
-                    }
+                  <SceneMapRenderer
+                    readOnly={localCopyMode}
+                    autoFitOnSceneEntry
                     key={`${activeScene.id}:${snapshot.campaign.paused}`}
                     abilityAreaPreview={abilityArea.preview}
                     paused={snapshot.campaign.paused}
@@ -1995,7 +2112,7 @@ export function App() {
                     onObjectListToggle={handleObjectListToggle}
                     onObjectListClose={handleObjectListClose}
                     scene={
-                      gridPreview
+                      gridPreview && !activeScene.grid.isometric
                         ? { ...activeScene, grid: gridPreview }
                         : activeScene
                     }
@@ -2011,7 +2128,7 @@ export function App() {
                     tool={
                       snapshot.campaign.paused || previewSnapshot ? "PAN" : tool
                     }
-                    onToolSelect={setTool}
+                    onToolSelect={selectMapTool}
                     pings={activePings}
                     rulers={activeRulers}
                     ownRulerColor={viewSnapshot.me.rulerColor ?? null}
@@ -2219,6 +2336,7 @@ export function App() {
           />
           {!previewSnapshot && snapshot && (
             <SoundpadWorkspace
+              localOnly={localCopyMode}
               campaignId={snapshot.campaign.id}
               membershipId={snapshot.me.id}
               role={snapshot.me.role}

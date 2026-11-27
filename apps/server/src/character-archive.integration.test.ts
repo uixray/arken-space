@@ -440,7 +440,10 @@ describe("character restore HTTP", () => {
 
 describe("GET /api/characters/archived", () => {
   it("is GM-only and lists only this campaign's archived characters", async () => {
-    await archive(secrets.gm, ids.character);
+    expect((await archive(secrets.gm, ids.character)).statusCode).toBe(200);
+    expect(
+      (await archive(secrets.foreignGm, ids.foreignCharacter)).statusCode,
+    ).toBe(200);
     const forbidden = await app.inject({
       method: "GET",
       url: "/api/characters/archived",
@@ -448,21 +451,17 @@ describe("GET /api/characters/archived", () => {
     });
     expect(forbidden.statusCode).toBe(403);
 
-    const list = await app.inject({
-      method: "GET",
-      url: "/api/characters/archived",
-      headers: headers(secrets.gm),
-    });
-    expect(list.statusCode).toBe(200);
-    const body = list.json();
-    expect(body).toHaveLength(1);
-    expect(body[0]).toMatchObject({ id: ids.character, lifecycle: "ARCHIVED" });
-
-    const foreignList = await app.inject({
-      method: "GET",
-      url: "/api/characters/archived",
-      headers: headers(secrets.foreignGm),
-    });
-    expect(foreignList.json()).toEqual([]);
+    for (const [secret, ownId] of [
+      [secrets.gm, ids.character],
+      [secrets.foreignGm, ids.foreignCharacter],
+    ] as const) {
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/characters/archived",
+        headers: headers(secret),
+      });
+      expect(list.statusCode).toBe(200);
+      expect(list.json()).toMatchObject([{ id: ownId, lifecycle: "ARCHIVED" }]);
+    }
   });
 });

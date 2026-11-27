@@ -23,6 +23,8 @@ import {
 } from "./renderers/TerrainStampControls";
 import { DEFAULT_TERRAIN_STAMP_SETTINGS } from "./renderers/terrain-stamp-settings";
 import { GridSettings } from "./renderers/GridSettings";
+import { IsometricSettings } from "./renderers/IsometricSettings";
+import { ThreeDSettings } from "./renderers/ThreeDSettings";
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import { AppIcon } from "./ui/AppIcon";
 import { ToolbarButton, ToolbarSummary } from "./ui/ToolbarTooltip";
@@ -45,6 +47,7 @@ import {
 } from "./ui/icons";
 
 export interface MapToolbarProps {
+  readOnly?: boolean;
   pauseControl?: ReactNode;
   tokenTrayControl?: ReactNode;
   objectListOpen?: boolean;
@@ -76,6 +79,7 @@ export interface MapToolbarProps {
 }
 
 export function MapToolbar({
+  readOnly=false,
   pauseControl,
   tokenTrayControl,
   objectListOpen,
@@ -290,6 +294,7 @@ export function MapToolbar({
                 title={`Открыть выбранную область тумана · ${shortcutLabel("FOG")}`}
                 className="map-tool"
                 data-tool="FOG"
+                disabled={readOnly}
                 aria-pressed={tool === "FOG"}
                 onClick={() => onToolSelect("FOG")}
               >
@@ -301,6 +306,7 @@ export function MapToolbar({
                 title={`Закрыть выбранную область туманом · ${shortcutLabel("COVER")}`}
                 className="map-tool"
                 data-tool="COVER"
+                disabled={readOnly}
                 aria-pressed={tool === "COVER"}
                 onClick={() => onToolSelect("COVER")}
               >
@@ -312,6 +318,7 @@ export function MapToolbar({
                 title={`Открыть туман круглой кистью (клик или протяжка) · ${shortcutLabel("FOG_BRUSH")}`}
                 className="map-tool"
                 data-tool="FOG_BRUSH"
+                disabled={readOnly}
                 aria-pressed={tool === "FOG_BRUSH"}
                 onClick={() => onToolSelect("FOG_BRUSH")}
               >
@@ -323,6 +330,7 @@ export function MapToolbar({
                 title={`Закрыть область круглой кистью тумана · ${shortcutLabel("COVER_BRUSH")}`}
                 className="map-tool"
                 data-tool="COVER_BRUSH"
+                disabled={readOnly}
                 aria-pressed={tool === "COVER_BRUSH"}
                 onClick={() => onToolSelect("COVER_BRUSH")}
               >
@@ -351,6 +359,7 @@ export function MapToolbar({
                 title={`Открыть туман многоугольником (клик — вершина, Enter/двойной клик — завершить, Esc — отмена) · ${shortcutLabel("FOG_POLYGON")}`}
                 className="map-tool"
                 data-tool="FOG_POLYGON"
+                disabled={readOnly}
                 aria-pressed={tool === "FOG_POLYGON"}
                 onClick={() => onToolSelect("FOG_POLYGON")}
               >
@@ -362,6 +371,7 @@ export function MapToolbar({
                 title={`Закрыть область многоугольником тумана (клик — вершина, Enter/двойной клик — завершить, Esc — отмена) · ${shortcutLabel("COVER_POLYGON")}`}
                 className="map-tool"
                 data-tool="COVER_POLYGON"
+                disabled={readOnly}
                 aria-pressed={tool === "COVER_POLYGON"}
                 onClick={() => onToolSelect("COVER_POLYGON")}
               >
@@ -375,6 +385,7 @@ export function MapToolbar({
                 title={`Измерить расстояние на карте · ${shortcutLabel("RULER")}`}
                 className="map-tool"
                 data-tool="RULER"
+                disabled={readOnly}
                 aria-pressed={tool === "RULER"}
                 onClick={() => onToolSelect("RULER")}
               >
@@ -386,6 +397,7 @@ export function MapToolbar({
                 title={`Показать точку группе · ${shortcutLabel("PING")}`}
                 className="map-tool"
                 data-tool="PING"
+                disabled={readOnly}
                 aria-pressed={tool === "PING"}
                 onClick={() => onToolSelect("PING")}
               >
@@ -400,6 +412,7 @@ export function MapToolbar({
             title={`Нарисовать линию на карте · ${shortcutLabel("DRAW")}`}
             className="map-tool"
             data-tool="DRAW"
+                disabled={readOnly}
             aria-pressed={tool === "DRAW"}
             onClick={() => onToolSelect("DRAW")}
           >
@@ -414,6 +427,7 @@ export function MapToolbar({
                 title={`Измерить расстояние на карте · ${shortcutLabel("RULER")}`}
                 className="map-tool"
                 data-tool="RULER"
+                disabled={readOnly}
                 aria-pressed={tool === "RULER"}
                 onClick={() => onToolSelect("RULER")}
               >
@@ -425,6 +439,7 @@ export function MapToolbar({
                 title={`Показать точку группе · ${shortcutLabel("PING")}`}
                 className="map-tool"
                 data-tool="PING"
+                disabled={readOnly}
                 aria-pressed={tool === "PING"}
                 onClick={() => onToolSelect("PING")}
               >
@@ -436,11 +451,13 @@ export function MapToolbar({
 
           {!previewSnapshot && snapshot.me.role === "GM" && activeScene && (
             <>
-              <GridSettings
+              {!activeScene.grid.isometric && <GridSettings
                 scene={activeScene}
                 onPreview={onGridPreview}
                 onSave={onGridSave}
-              />
+              />}
+              {activeScene.projection!=="THREE_D"&&<IsometricSettings key={activeScene.id} scene={activeScene} assets={snapshot.assets} />}
+              <ThreeDSettings key={`3d:${activeScene.id}`} scene={activeScene} assets={snapshot.assets} />
               <details ref={resizeSettingsRef} className="resize-settings">
                 <ToolbarSummary
                   aria-label="Настройки размера карты"
@@ -493,7 +510,7 @@ export function MapToolbar({
           <div className="toolbar-history">
             <CanvasHistoryControls
               sceneId={activeScene?.id}
-              disabled={!activeScene}
+              disabled={readOnly||!activeScene}
               version={activeCanvasVersion}
               snapshot={viewSnapshot}
             />
@@ -554,6 +571,7 @@ export function MapToolbar({
             title="Разместить штамп рельефа"
             className="map-tool map-tool--stamp"
             data-tool="STAMP"
+                disabled={readOnly}
             aria-pressed={stampPopoverOpen}
             aria-expanded={stampPopoverOpen}
             aria-controls="terrain-stamp-popover"

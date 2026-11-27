@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { CatalogEntryDto } from "@arken/contracts";
+import type { CatalogEntryDto, GameSnapshot } from "@arken/contracts";
 import type { RollMode } from "./RollModeControl";
 import { api, formatApiError } from "./api";
 
@@ -76,13 +76,21 @@ export function useCatalogActions(dependencies: {
   /** Stable — `useCallback` with an empty dependency list in App. */
   load: () => Promise<void>;
   setError: (message: string) => void;
+  snapshotRef?: { current: GameSnapshot | null };
+  submitEntry?: (input: {
+    characterId: string;
+    entryId: string;
+    label: string;
+    body: Record<string, unknown>;
+  }) => Promise<void>;
   prepareArea?: (
     characterId: string,
     entryId: string,
     revision: number,
   ) => boolean;
 }): CatalogActions {
-  const { run, load, setError, prepareArea } = dependencies;
+  const { run, load, setError, prepareArea, snapshotRef, submitEntry } =
+    dependencies;
 
   return useMemo<CatalogActions>(
     () => ({
@@ -176,6 +184,49 @@ export function useCatalogActions(dependencies: {
           prepareArea?.(characterId, entryId, input.entryRevision)
         )
           return;
+        const snapshot = snapshotRef?.current;
+        const character = snapshot?.characters.find(
+          (c) => c.id === characterId,
+        );
+        const entry = character?.entries.find((e) => e.id === entryId);
+        if (
+          mode === "EXECUTE" &&
+          entry?.data.creationConsumption === "BOUND_ITEM_ON_APPLICATION"
+        ) {
+          if (entry.revision !== input.entryRevision)
+            throw new Error("Предмет изменился. Откройте карточку заново.");
+          if (
+            !window.confirm(
+              `Применить «${entry.name}» (${character?.name})? Предмет будет израсходован целиком. Повторное применение и разбор станут недоступны.`,
+            )
+          )
+            return;
+          const current = snapshotRef?.current;
+          if (
+            current?.campaign.id !== snapshot?.campaign.id ||
+            current?.me.id !== snapshot?.me.id ||
+            current?.characters
+              .find((c) => c.id === characterId)
+              ?.entries.find((e) => e.id === entryId)?.revision !==
+              input.entryRevision
+          )
+            throw new Error(
+              "Контекст предмета изменился. Откройте карточку заново.",
+            );
+        }
+        if (mode === "EXECUTE" && submitEntry)
+          return run(() =>
+            submitEntry({
+              characterId,
+              entryId,
+              label:
+                `${entry?.name ?? "Применение"} · ${character?.name ?? "персонаж"}`.slice(
+                  0,
+                  300,
+                ),
+              body: { ...request, visibility: "PUBLIC" },
+            }),
+          );
         return run(
           () =>
             api(`/api/characters/${characterId}/catalog/${entryId}/roll`, {
@@ -203,6 +254,6 @@ export function useCatalogActions(dependencies: {
           true,
         ),
     }),
-    [run, load, setError, prepareArea],
+    [run, load, setError, prepareArea, snapshotRef, submitEntry],
   );
 }

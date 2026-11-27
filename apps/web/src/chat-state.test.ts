@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { ChatMessageDto, GameSnapshot } from "@arken/contracts";
 import {
   appendChatMessage,
+  applyChatCreated,
   MAX_AUTO_THREAD_MESSAGES,
   messagesForStream,
   streamForMessage,
   reconcileChatRead,
+  retainChatApplicationCancellations,
   threadForStream,
   unreadCountForStream,
 } from "./chat-state";
@@ -58,6 +60,44 @@ describe("appendChatMessage", () => {
   it("deduplicates messages by id", () => {
     const once = appendChatMessage(snapshot, message, 21);
     expect(appendChatMessage(once, message, 22)).toBe(once);
+  });
+
+  it("applies a terminal marker only to a present original in the notice's thread", () => {
+    const original = { ...message, applicationUndo: { cancelled: false } };
+    const unrelated = { ...original, id: "elsewhere", threadId: "rolls-thread" };
+    const current = { ...snapshot, messages: [original, unrelated] };
+    const notice = {
+      data: { ...messageAt("notice", 3), kind: "TEXT" as const, membershipId: "author" },
+      sequence: 18,
+      actionId: "undo",
+      emittedAt: message.createdAt,
+      cancelledApplicationMessageId: original.id,
+    };
+    const next = applyChatCreated(current, notice, {});
+    expect(next.messages.find((row) => row.id === original.id)?.applicationUndo)
+      .toEqual({ cancelled: true });
+    expect(next.messages).toContain(unrelated);
+    expect(next.snapshotVersion).toBe(snapshot.snapshotVersion);
+    expect(next.chatThreadStates[0]?.unreadCount).toBe(1);
+    expect(applyChatCreated(next, notice, {})).toBe(next);
+    const baseline = { ...notice, cancelledApplicationMessageId: undefined };
+    for (const id of ["missing", unrelated.id]) {
+      expect(applyChatCreated(current, { ...notice, cancelledApplicationMessageId: id }, {}))
+        .toEqual(applyChatCreated(current, baseline, {}));
+    }
+  });
+
+  it("preserves cancellation through a stale projection without reviving hidden rows", () => {
+    const pending = { ...message, applicationUndo: { cancelled: false } };
+    const cancelled = { ...message, applicationUndo: { cancelled: true } };
+    const incoming = [pending];
+    expect(retainChatApplicationCancellations([cancelled], incoming))
+      .toEqual([cancelled]);
+    expect(pending.applicationUndo.cancelled).toBe(false);
+    const empty: ChatMessageDto[] = [];
+    expect(retainChatApplicationCancellations([cancelled], empty)).toBe(empty);
+    const crossThread = [{ ...pending, threadId: "other" }];
+    expect(retainChatApplicationCancellations([cancelled], crossThread)).toBe(crossThread);
   });
 
   it("держит окно автоматического пополнения, не выбрасывая подгруженное", () => {

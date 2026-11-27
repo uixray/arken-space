@@ -21,6 +21,7 @@ type Rect = Point & {
   height: number;
 };
 export type FogOperation = Rect & {
+  levelId?: string | null;
   operation?: "REVEAL" | "COVER";
   geometry?: FogGeometry;
 };
@@ -178,6 +179,7 @@ export function isRectFullyHidden(
  */
 export function fogHiddenTokenIds(
   tokens: readonly (Rect & {
+    levelId?: string | null;
     id: string;
     controllerMembershipIds: readonly string[];
   })[],

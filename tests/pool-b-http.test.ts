@@ -2659,11 +2659,20 @@ describe("Pool B HTTP boundaries", () => {
       payload: {
         actionId: damageActionId,
         rollActionId: "damage",
+        rollMode: "DISADVANTAGE",
         visibility: "PUBLIC",
       },
     });
     expect(replay.statusCode).toBe(200);
     expect(replay.json()).toEqual({ duplicate: true });
+    const changedReplay = await app.inject({
+      method: "POST",
+      url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
+      headers: headers(secrets.player),
+      payload: {actionId: damageActionId, rollActionId: "damage", rollMode: "NORMAL", visibility: "PUBLIC"},
+    });
+    expect(changedReplay.statusCode).toBe(409);
+    expect(changedReplay.json()).toMatchObject({error: "ACTION_ID_CONFLICT"});
     const exhausted = await app.inject({
       method: "POST",
       url: `/api/characters/${ids.character}/catalog/${entry.id}/roll`,
@@ -4376,7 +4385,8 @@ describe("Pool B HTTP boundaries", () => {
       payload: {
         actionId: countersActionId,
         revision: 0,
-        wallet: { gold: 9, silver: 9, copper: 9, sp: 9 },
+        wallet: { gold: 1, silver: 2, copper: 3, sp: 0 },
+        resources: { mana: { current: 5, maximum: 8 } },
       },
     });
     expect(countersReplay.json()).toMatchObject({
@@ -4385,6 +4395,9 @@ describe("Pool B HTTP boundaries", () => {
       revision: 1,
       entries: expect.any(Array),
     });
+    const changedCountersReplay = await app.inject({method:"PATCH",url:`/api/characters/${ids.character}/counters`,headers:headers(secrets.player),payload:{actionId:countersActionId,revision:0,wallet:{gold:9,silver:9,copper:9,sp:9}}});
+    expect(changedCountersReplay.statusCode).toBe(409);
+    expect(changedCountersReplay.json()).toMatchObject({error:"ACTION_ID_CONFLICT"});
     const advanceActionId = crypto.randomUUID();
     const advance = await app.inject({
       method: "POST",
@@ -4618,11 +4631,14 @@ describe("Pool B HTTP boundaries", () => {
       payload: {
         actionId: actionIds[2],
         revision: 2,
-        wallet: { gold: 99, silver: 0, copper: 0, sp: 0 },
+        wallet: { gold: 3, silver: 0, copper: 0, sp: 0 },
       },
     });
     expect(replay.statusCode).toBe(200);
     expect(replay.json()).toMatchObject({ wallet: { gold: 3 }, revision: 3 });
+    const changedReplay = await app.inject({method:"PATCH",url:`/api/characters/${ids.character}/counters`,headers:headers(secrets.player),payload:{actionId:actionIds[2],revision:2,wallet:{gold:99,silver:0,copper:0,sp:0}}});
+    expect(changedReplay.statusCode).toBe(409);
+    expect(changedReplay.json()).toMatchObject({error:"ACTION_ID_CONFLICT"});
     expect(
       await db
         .select({ actionId: schema.gameEvents.actionId })
@@ -6801,4 +6817,14 @@ describe("состояния токена", () => {
     expect(await storedConditions()).toEqual(["POISONED"]);
     expect(await storedConditions(secondToken)).toEqual([]);
   });
+});
+
+it("replays TOKEN_MOVE HTTP history by stable action above safe journal sequence range",async()=>{
+ const journalActionId=crypto.randomUUID(),undoActionId=crypto.randomUUID(),redoActionId=crypto.randomUUID(),sequence="9007199254740997";
+ await db.update(schema.tokens).set({x:128,y:64,revision:1}).where(eq(schema.tokens.id,ids.token));
+ await database.query(`INSERT INTO action_journal(sequence,campaign_id,scene_id,actor_membership_id,action_id,scope,type,target_type,target_id,before,after,before_revision,after_revision,current_revision) VALUES($1::bigint,$2,$3,$4,$5,'PUBLIC','TOKEN_MOVE','TOKEN',$6,'{"x":0,"y":0,"z":0,"levelId":null}'::jsonb,'{"x":128,"y":64,"z":0,"levelId":null}'::jsonb,0,1,1)`,[sequence,ids.campaign,ids.scene,ids.player,journalActionId,ids.token]);
+ const undo=await app.inject({method:"POST",url:"/api/canvas/undo",headers:headers(secrets.player),payload:{sceneId:ids.scene,actionId:undoActionId}});expect(undo.statusCode,undo.body).toBe(200);expect((await db.select().from(schema.tokens).where(eq(schema.tokens.id,ids.token)))[0]).toMatchObject({x:0,y:0,revision:2});
+ const redo=await app.inject({method:"POST",url:"/api/canvas/redo",headers:headers(secrets.player),payload:{sceneId:ids.scene,actionId:redoActionId}});expect(redo.statusCode,redo.body).toBe(200);expect((await db.select().from(schema.tokens).where(eq(schema.tokens.id,ids.token)))[0]).toMatchObject({x:128,y:64,revision:3});
+ const events=await db.select().from(schema.gameEvents).where(inArray(schema.gameEvents.actionId,[undoActionId,redoActionId]));expect(events).toHaveLength(2);for(const event of events)expect(event.payload).toEqual({journalSequence:sequence,journalActionId});
+ const duplicate=await app.inject({method:"POST",url:"/api/canvas/redo",headers:headers(secrets.player),payload:{sceneId:ids.scene,actionId:redoActionId}});expect(duplicate.statusCode).toBe(200);expect(duplicate.json()).toMatchObject({duplicate:true});
 });

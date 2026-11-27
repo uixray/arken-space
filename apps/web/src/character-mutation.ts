@@ -1,6 +1,8 @@
+import {compareSnapshotSequence} from "@arken/contracts";
 import type { CharacterDto, GameSnapshot } from "@arken/contracts";
 import { normalizeWallet } from "./wallet";
 import { reconcilePlayerRequests } from "./player-request-realtime";
+import { retainChatApplicationCancellations } from "./chat-state";
 
 function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object"
@@ -85,13 +87,14 @@ export function reconcileGameSnapshot(
     current.me.id !== incoming.me.id
   )
     return incoming;
-  if (incoming.snapshotVersion < current.snapshotVersion) return current;
+  if (compareSnapshotSequence(incoming,current)<0) return current;
 
   const currentCharacters = new Map(
     current.characters.map((character) => [character.id, character]),
   );
   return {
     ...incoming,
+    messages: retainChatApplicationCancellations(current.messages, incoming.messages),
     playerRequests: reconcilePlayerRequests(
       current.playerRequests,
       incoming.playerRequests,

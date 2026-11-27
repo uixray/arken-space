@@ -359,7 +359,11 @@
       "status": "PASS",
       "revision": "e67bacc37a1ac4b77a2524388cc76a8ffacf5698",
       "artifact": "selection-closure-2026-09-18/ci-e67bacc-summary.json",
-      "workflowRuns": ["35412873275", "35412873288", "35412873306"],
+      "workflowRuns": [
+        "35412873275",
+        "35412873288",
+        "35412873306"
+      ],
       "scope": "Exact checks, four-shard Chrome/Firefox E2E and multiplayer SUCCESS. E2E1063 PASS/29 existing SKIP/0 FAIL/0 FLAKY; includes both real-server personal-theme persistence cases. Individual component pending/error/CAS coverage is also included in exact checks. Not full UIX-644 or production acceptance."
     },
     "uix644NativeSelectDom24": {
@@ -402,27 +406,38 @@
       "classification": "new-static-site",
       "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/AbilityAreaPanel.tsx",
       "kind": "tag:select",
       "count": 1,
       "status": "BLOCKED",
-      "classification": "reachable-static-runtime-evidence-pending",
-      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/AccountAuthWorkspace.tsx",
       "kind": "tag:details",
       "count": 6,
       "status": "BLOCKED",
-      "classification": "new-static-site",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
+    },
+    {
+      "file": "apps/web/src/AccountQuickStart.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/Achievements.tsx",
@@ -432,7 +447,8 @@
       "classification": "reachable-static-runtime-evidence-pending",
       "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/Achievements.tsx",
@@ -442,7 +458,8 @@
       "classification": "reachable-static-runtime-evidence-pending",
       "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/Achievements.tsx",
@@ -452,17 +469,18 @@
       "classification": "reachable-static-runtime-evidence-pending",
       "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/AppHeader.tsx",
       "kind": "tag:details",
       "count": 1,
-      "status": "PASS",
-      "classification": "reachable",
-      "scope": "Session menu details element in topbar.",
-      "evidence": ["remainingMenus"],
-      "next": "No blanket current-SHA/full lifecycle claim: session desktop content actions and full combined matrix remain separate."
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/CartographicLabelFields.tsx",
@@ -472,7 +490,8 @@
       "classification": "reachable-static-runtime-evidence-pending",
       "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/CatalogEntryForm.tsx",
@@ -482,7 +501,8 @@
       "classification": "current-source-static-inventory-reconciled-runtime-blocked",
       "scope": "Current TSX source inventory: 12 FormSelect occurrences. Runtime placement, keyboard, focus, lifecycle and hit-test acceptance remains unverified; no PASS copied.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/CatalogEntryForm.tsx",
@@ -492,27 +512,28 @@
       "classification": "current-source-runtime-evidence-pending",
       "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/CharacterProgression.tsx",
       "kind": "tag:details",
       "count": 1,
       "status": "BLOCKED",
-      "classification": "reachable-static-runtime-evidence-pending",
-      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/CharacterProgression.tsx",
       "kind": "tag:select",
       "count": 1,
       "status": "BLOCKED",
-      "classification": "reachable-static-runtime-evidence-pending",
-      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/CharacterSpellBranches.tsx",
@@ -522,117 +543,118 @@
       "classification": "current-source-runtime-evidence-pending",
       "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/CreationManager.tsx",
       "kind": "tag:details",
       "count": 1,
       "status": "BLOCKED",
-      "classification": "new-static-site",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/CreationManager.tsx",
       "kind": "tag:select",
       "count": 5,
       "status": "BLOCKED",
-      "classification": "new-static-site",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/CreationObjects.tsx",
       "kind": "tag:details",
       "count": 3,
       "status": "BLOCKED",
-      "classification": "new-static-site",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/CreationObjects.tsx",
       "kind": "tag:select",
       "count": 2,
       "status": "BLOCKED",
-      "classification": "new-static-site",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/CreationParts.tsx",
       "kind": "tag:details",
       "count": 2,
       "status": "BLOCKED",
-      "classification": "new-static-site",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/CreationRules.tsx",
       "kind": "tag:details",
       "count": 9,
       "status": "BLOCKED",
-      "classification": "new-static-site",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/CreationRules.tsx",
       "kind": "tag:select",
       "count": 14,
       "status": "BLOCKED",
-      "classification": "new-static-site",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/CreationStore.tsx",
       "kind": "tag:details",
       "count": 2,
       "status": "BLOCKED",
-      "classification": "new-static-site",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/CreationStore.tsx",
       "kind": "tag:select",
       "count": 4,
       "status": "BLOCKED",
-      "classification": "new-static-site",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/CreationStudio.tsx",
       "kind": "tag:details",
       "count": 4,
       "status": "BLOCKED",
-      "classification": "new-static-site",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/CreationStudio.tsx",
       "kind": "tag:select",
       "count": 2,
       "status": "BLOCKED",
-      "classification": "new-static-site",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/CreationVersionHistory.tsx",
@@ -642,57 +664,58 @@
       "classification": "new-static-site",
       "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить фактическое поведение элементов в Chromium и Firefox.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/CreationWorkspace.tsx",
       "kind": "tag:select",
       "count": 1,
       "status": "BLOCKED",
-      "classification": "new-static-site",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/EconomyManager.tsx",
       "kind": "tag:details",
       "count": 4,
       "status": "BLOCKED",
-      "classification": "reachable-static-runtime-evidence-pending",
-      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/EconomyManager.tsx",
       "kind": "tag:select",
       "count": 6,
       "status": "BLOCKED",
-      "classification": "reachable-static-runtime-evidence-pending",
-      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/EconomyWorkspace.tsx",
       "kind": "tag:details",
       "count": 2,
       "status": "BLOCKED",
-      "classification": "reachable-static-runtime-evidence-pending",
-      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/EconomyWorkspace.tsx",
       "kind": "tag:select",
       "count": 2,
       "status": "BLOCKED",
-      "classification": "reachable-static-runtime-evidence-pending",
-      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/FeedbackReporter.tsx",
@@ -701,8 +724,11 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "One feedback category selector, GM/PLAYER, 1280→390→360 short→1280; keyboard/pointer/Escape/outside and visible close focus.",
-      "evidence": ["feedback"],
-      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+      "evidence": [
+        "feedback"
+      ],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/GlobalStickerPackManager.tsx",
@@ -711,8 +737,11 @@
       "status": "BLOCKED",
       "classification": "reachable",
       "scope": "GM-only in-flow GlobalStickerPackManager disclosure mounted from MediaPanel. Partial current-source runtime evidence proves summary open/owned Escape close/focus/held repeat and next parent Escape in four browser cells, not whole lifecycle/placement acceptance.",
-      "evidence": ["globalManagerSummaryEscape"],
-      "next": "Reuse exact-source Escape slice; complete appropriate keyboard open, geometry/scroll/resize/zoom and actual pack selection. In-flow disclosure outside-click behavior must follow its contract, not a generic popup assumption. Whole bucket remains BLOCKED."
+      "evidence": [
+        "globalManagerSummaryEscape"
+      ],
+      "next": "Reuse exact-source Escape slice; complete appropriate keyboard open, geometry/scroll/resize/zoom and actual pack selection. In-flow disclosure outside-click behavior must follow its contract, not a generic popup assumption. Whole bucket remains BLOCKED.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/GlobalStickerPackManager.tsx",
@@ -722,17 +751,18 @@
       "classification": "reachable",
       "scope": "GM-only native select for choosing an owned global pack, conditional on packs being present. No runtime render, keyboard, focus, popup or selection evidence is recorded.",
       "evidence": [],
-      "next": "With an authorized GM fixture containing packs, verify actual open/select/close, focus and placement in desktop/compact browsers; do not infer runtime PASS from static discovery."
+      "next": "With an authorized GM fixture containing packs, verify actual open/select/close, focus and placement in desktop/compact browsers; do not infer runtime PASS from static discovery.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/GmHealthCounter.tsx",
       "kind": "tag:details",
       "count": 1,
       "status": "BLOCKED",
-      "classification": "new-static-site",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/InstanceBindings.tsx",
@@ -742,7 +772,8 @@
       "classification": "reachable-static-runtime-evidence-pending",
       "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/LandingGuide.tsx",
@@ -752,17 +783,18 @@
       "classification": "current-source-runtime-evidence-pending",
       "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/MapToolbar.tsx",
       "kind": "tag:details",
       "count": 2,
-      "status": "PASS",
-      "classification": "reachable",
-      "scope": "Size mode selection/Done and overflow display toggles: keyboard/focus on1280 and360x480. No resize dragging/persistence claim.",
-      "evidence": ["toolbar"],
-      "next": "Reuse this scoped gate; retain full connected matrix, actual persistence/device and broader pending-session races as separate requirements."
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/MusicBar.tsx",
@@ -771,8 +803,13 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Both details callers: volume lifecycle and GM overflow→empty library→visible return target. Track SELECT now also returns visible focus; conflict ACK notifications verified by four existing cases.",
-      "evidence": ["musicOwner", "musicCommand", "menuFollowup"],
-      "next": "Successful playback/synchronization and compact music entry remain separate; library/volume evidence at earlier exact revision unchanged by this track-handler-only patch."
+      "evidence": [
+        "musicOwner",
+        "musicCommand",
+        "menuFollowup"
+      ],
+      "next": "Successful playback/synchronization and compact music entry remain separate; library/volume evidence at earlier exact revision unchanged by this track-handler-only patch.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/MusicBar.tsx",
@@ -782,7 +819,8 @@
       "classification": "current-source-runtime-evidence-pending",
       "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/OperatorFeedbackFilters.tsx",
@@ -796,7 +834,8 @@
         "menuFollowup",
         "exactMainCceMenuRegression"
       ],
-      "next": "Verify native popup open/cancel in a supported Firefox environment; do not patch App from headless UA behavior or convert the selector to silence tests. Independent host authorization remains separate."
+      "next": "Verify native popup open/cancel in a supported Firefox environment; do not patch App from headless UA behavior or convert the selector to silence tests. Independent host authorization remains separate.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/PlayerRequestsWorkspace.tsx",
@@ -810,7 +849,8 @@
         "requestsBuilt",
         "ownedCharacterSelect20261009"
       ],
-      "next": "Run current-revision keyboard, dismissal, focus return and narrow viewport FormSelect lifecycle before marking PASS."
+      "next": "Run current-revision keyboard, dismissal, focus return and narrow viewport FormSelect lifecycle before marking PASS.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/ScenePicker.tsx",
@@ -819,8 +859,12 @@
       "status": "BLOCKED",
       "classification": "reachable",
       "scope": "UIX-674 changed the inner scene list from listbox/options to menu/menuitemradio with a separate menuitem edit action. Earlier listbox evidence is historical and does not prove the new role contract.",
-      "evidence": ["scenePicker", "sceneSelection20261009"],
-      "next": "Retain historical role evidence separately; actual current desktop pointer/keyboard scene selection is now scoped evidence. Complete focus-return/dismissal/edit action and Firefox compact's distinct manager restore before full acceptance."
+      "evidence": [
+        "scenePicker",
+        "sceneSelection20261009"
+      ],
+      "next": "Retain historical role evidence separately; actual current desktop pointer/keyboard scene selection is now scoped evidence. Complete focus-return/dismissal/edit action and Firefox compact's distinct manager restore before full acceptance.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/ScenePicker.tsx",
@@ -829,18 +873,21 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Scene picker dropdown details element in topbar.",
-      "evidence": ["scenePicker"],
-      "next": "Real multiplayer persistence and physical devices remain separate gates."
+      "evidence": [
+        "scenePicker"
+      ],
+      "next": "Real multiplayer persistence and physical devices remain separate gates.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/Sidebar.tsx",
       "kind": "tag:details",
       "count": 1,
       "status": "BLOCKED",
-      "classification": "new-static-site",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/SoundClipEditor.tsx",
@@ -850,27 +897,28 @@
       "classification": "current-source-runtime-evidence-pending",
       "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/SoundpadWorkspace.tsx",
       "kind": "tag:details",
       "count": 1,
       "status": "BLOCKED",
-      "classification": "current-source-runtime-evidence-pending",
-      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/SoundpadWorkspace.tsx",
       "kind": "tag:select",
       "count": 5,
       "status": "BLOCKED",
-      "classification": "current-source-runtime-evidence-pending",
-      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/SpellNodeActivationEditor.tsx",
@@ -880,17 +928,18 @@
       "classification": "current-source-runtime-evidence-pending",
       "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/SpellSchoolsWorkspace.tsx",
       "kind": "tag:select",
       "count": 8,
       "status": "BLOCKED",
-      "classification": "current-source-runtime-evidence-pending",
-      "scope": "Eight static selects reviewed; added occurrence has no current browser acceptance.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Verify all reachable selects on a frozen candidate and attach scoped evidence."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/StickerPackManager.tsx",
@@ -900,7 +949,8 @@
       "classification": "reachable",
       "scope": "GM sticker manager: subject, character, player, audience, send policy, per-file provenance. Conditional branches remain separately testable.",
       "evidence": [],
-      "next": "Verify real pointer/keyboard open/select/close, Escape/focus and desktop/compact in Chrome/Firefox; no runtime PASS from inventory."
+      "next": "Verify real pointer/keyboard open/select/close, Escape/focus and desktop/compact in Chrome/Firefox; no runtime PASS from inventory.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/StickerPicker.tsx",
@@ -909,8 +959,11 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Activity caller Popup and its nested listbox, same eight tests: search focus, arrows, Escape/outside,36 stickers scroll,360x480resize, owner hide/reopen.",
-      "evidence": ["remainingMenus"],
-      "next": "Direct/other inactive callers not activated or accepted; actual send/server permissions/image aesthetics outside scope."
+      "evidence": [
+        "remainingMenus"
+      ],
+      "next": "Direct/other inactive callers not activated or accepted; actual send/server permissions/image aesthetics outside scope.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/StickerPicker.tsx",
@@ -919,8 +972,21 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Activity caller Popup and its nested listbox, same eight tests: search focus, arrows, Escape/outside,36 stickers scroll,360x480resize, owner hide/reopen.",
-      "evidence": ["remainingMenus"],
-      "next": "Direct/other inactive callers not activated or accepted; actual send/server permissions/image aesthetics outside scope."
+      "evidence": [
+        "remainingMenus"
+      ],
+      "next": "Direct/other inactive callers not activated or accepted; actual send/server permissions/image aesthetics outside scope.",
+      "historicalOnly": true
+    },
+    {
+      "file": "apps/web/src/TelegramCampaignPanel.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/TokenImageGenerator.tsx",
@@ -929,8 +995,12 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "One native source selector; desktop/narrow four cases. OS picker UI not inspected.",
-      "evidence": ["built", "exactMainCceMenuRegression"],
-      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+      "evidence": [
+        "built",
+        "exactMainCceMenuRegression"
+      ],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/TokenTray.tsx",
@@ -939,8 +1009,11 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Token tray details element.",
-      "evidence": ["tokenTray"],
-      "next": "No blanket current-SHA/full lifecycle claim: session desktop content actions and full combined matrix remain separate."
+      "evidence": [
+        "tokenTray"
+      ],
+      "next": "No blanket current-SHA/full lifecycle claim: session desktop content actions and full combined matrix remain separate.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/WorkspaceNav.tsx",
@@ -949,8 +1022,11 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "GM1024 More destination opening/closing and visible return focus, twice, Chrome/Firefox.",
-      "evidence": ["navigation"],
-      "next": "Other destinations and responsive owner changes remain outside this scoped result."
+      "evidence": [
+        "navigation"
+      ],
+      "next": "Other destinations and responsive owner changes remain outside this scoped result.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/WorldContentInstancesPanel.tsx",
@@ -960,7 +1036,8 @@
       "classification": "current-source-runtime-evidence-pending",
       "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/WorldContentInstancesPanel.tsx",
@@ -970,37 +1047,48 @@
       "classification": "current-source-runtime-evidence-pending",
       "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/WorldContentWorkspace.tsx",
       "kind": "tag:AssetPicker",
       "count": 2,
-      "status": "PASS",
-      "classification": "reachable",
-      "scope": "Both inline callers: entity cover and gallery attachment, independent selected assets and exact request payloads.",
-      "evidence": ["worldImages", "menuFollowup"],
-      "next": "Real persistence/authorization, request-failure recovery and physical-device checks remain outside this scoped acceptance."
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/WorldContentWorkspace.tsx",
       "kind": "tag:FormSelect",
       "count": 4,
-      "status": "PASS",
-      "classification": "reachable",
-      "scope": "Four filters/link/create controls in world dropdown tests; 4 combined editor/reader cases.",
-      "evidence": ["built"],
-      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/WorldEncyclopediaWorkspace.tsx",
       "kind": "tag:FormSelect",
       "count": 1,
-      "status": "PASS",
-      "classification": "reachable",
-      "scope": "Reader filter in world dropdown tests; current navigation GM-only, no invented PLAYER route.",
-      "evidence": ["built"],
-      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
+    },
+    {
+      "file": "apps/web/src/WorldImageLibrary.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/WorldMapCanonicalLocationPicker.tsx",
@@ -1010,7 +1098,8 @@
       "classification": "current-source-runtime-evidence-pending",
       "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/WorldMapsWorkspace.tsx",
@@ -1019,18 +1108,21 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Seven native map/draft selectors; 8 world-map cases incl PLAYER navigation exclusion. Not OS popup visuals.",
-      "evidence": ["built"],
-      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+      "evidence": [
+        "built"
+      ],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/WorldRegionPicker.tsx",
       "kind": "tag:FormSelect",
       "count": 1,
       "status": "BLOCKED",
-      "classification": "reachable-static-runtime-evidence-pending",
-      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/design-system/Dialog.tsx",
@@ -1040,7 +1132,8 @@
       "classification": "design-system-isolated",
       "scope": "Design System isolated primitive",
       "evidence": [],
-      "next": "Covered via Storybook and unit tests, not product overlay flow"
+      "next": "Covered via Storybook and unit tests, not product overlay flow",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/design-system/MemberDefaultThemeField.tsx",
@@ -1058,7 +1151,8 @@
         "designCandidateE67ThemeSurface",
         "e67ExactCI"
       ],
-      "next": "Scoped menu acceptance complete. Preserve historical registry gaps; no further work until the owner resumes."
+      "next": "Scoped menu acceptance complete. Preserve historical registry gaps; no further work until the owner resumes.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/design-system/MemberRulerColorField.tsx",
@@ -1068,7 +1162,8 @@
       "classification": "current-source-runtime-evidence-pending",
       "scope": "UIX-509 GM ruler-colour Select per member in Setup overview. DOM-level select/reset/error coverage only (MemberRulerColorField.test.tsx); no browser placement, keyboard or hit-test acceptance claimed.",
       "evidence": [],
-      "next": "Verify open/select/Escape/outside/focus for the ruler-colour Select in a connected browser gate and attach revision-bound evidence."
+      "next": "Verify open/select/Escape/outside/focus for the ruler-colour Select in a connected browser gate and attach revision-bound evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/design-system/Popup.tsx",
@@ -1078,7 +1173,8 @@
       "classification": "design-system-isolated",
       "scope": "Design System isolated primitive",
       "evidence": [],
-      "next": "Covered via Storybook and unit tests, not product overlay flow"
+      "next": "Covered via Storybook and unit tests, not product overlay flow",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/design-system/Select.tsx",
@@ -1088,57 +1184,168 @@
       "classification": "design-system-isolated",
       "scope": "Design System isolated primitive",
       "evidence": [],
-      "next": "Covered via Storybook and unit tests, not product overlay flow"
+      "next": "Covered via Storybook and unit tests, not product overlay flow",
+      "historicalOnly": true
+    },
+    {
+      "file": "apps/web/src/local-first/CampaignImportPanel.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
+    },
+    {
+      "file": "apps/web/src/local-first/CampaignTransferPanel.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
+    },
+    {
+      "file": "apps/web/src/local-first/CloudSourceConnectionPanel.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
+    },
+    {
+      "file": "apps/web/src/local-first/LocalCloudSessionSelector.tsx",
+      "kind": "tag:FormSelect",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
+    },
+    {
+      "file": "apps/web/src/local-first/LocalSessionPanel.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/renderers/GridSettings.tsx",
       "kind": "tag:details",
       "count": 1,
-      "status": "PASS",
-      "classification": "reachable",
-      "scope": "Cancel draft reset/no save, explicit save/reopen value/focus, rejected draft retained, outside delayed-save focus. Mocked backend; preview pixels and full in-flight session races not accepted.",
-      "evidence": ["toolbar"],
-      "next": "Reuse this scoped gate; retain full connected matrix, actual persistence/device and broader pending-session races as separate requirements."
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
+    },
+    {
+      "file": "apps/web/src/renderers/IsometricSceneRenderer.tsx",
+      "kind": "tag:select",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
+    },
+    {
+      "file": "apps/web/src/renderers/IsometricSettings.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
+    },
+    {
+      "file": "apps/web/src/renderers/IsometricSettings.tsx",
+      "kind": "tag:select",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
       "kind": "role:menu",
       "count": 1,
-      "status": "PASS",
-      "classification": "reachable",
-      "scope": "Token menu live permissions/focus lifecycle; previous geometry/actions in inventory checkpoints. Not object-list/drawing-color controls.",
-      "evidence": ["token"],
-      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
       "kind": "tag:select",
       "count": 2,
       "status": "BLOCKED",
-      "classification": "current-source-runtime-evidence-pending",
-      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; UIX-706 pool 3 adds the texture layer select in the same panel; no current browser acceptance claimed.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/renderers/TerrainStampControls.tsx",
       "kind": "tag:select",
       "count": 1,
       "status": "BLOCKED",
-      "classification": "current-source-runtime-evidence-pending",
-      "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
+    },
+    {
+      "file": "apps/web/src/renderers/ThreeDSceneRenderer.tsx",
+      "kind": "tag:select",
+      "count": 2,
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
+    },
+    {
+      "file": "apps/web/src/renderers/ThreeDSettings.tsx",
+      "kind": "tag:details",
+      "count": 1,
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
+    },
+    {
+      "file": "apps/web/src/renderers/ThreeDSettings.tsx",
+      "kind": "tag:select",
+      "count": 5,
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/sidebar/CharacterInventory.tsx",
       "kind": "tag:select",
       "count": 1,
       "status": "BLOCKED",
-      "classification": "reachable-static-runtime-evidence-pending",
-      "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/sidebar/CharacterMediaGallery.tsx",
@@ -1147,137 +1354,81 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Four attach/edit controls GM/PLAYER; ten gallery cases including sheet Escape.",
-      "evidence": ["built"],
-      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+      "evidence": [
+        "built"
+      ],
+      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
       "kind": "tag:AssetPicker",
       "count": 2,
-      "status": "PASS",
-      "classification": "reachable",
-      "scope": "Both actual character-sheet callers: portrait and additional resource image; GM and PLAYER owner on desktop/compact.",
-      "evidence": ["characterImages", "menuFollowup"],
-      "next": "Non-owner/controller restrictions, live payload persistence and rejection/realtime recovery remain outside this scoped evidence."
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
       "kind": "tag:FormSelect",
       "count": 2,
       "status": "BLOCKED",
-      "classification": "reachable",
-      "scope": "Template modal PASS four current cases; second showCharacterPicker source occurrence inactive, not silently counted as runtime PASS.",
-      "evidence": ["built", "workspaceCurrent"],
-      "next": "Retain explicit inactive exclusion; no new UI route for coverage.",
-      "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
-      "applicability": {
-        "resolution": "MIXED_REACHABILITY",
-        "occurrences": [
-          {
-            "label": "template creation FormSelect",
-            "count": 1,
-            "applicability": "SUPPORTED_REACHABLE",
-            "runtimeStatus": "PASS",
-            "evidence": ["built", "workspaceCurrent"]
-          },
-          {
-            "label": "showCharacterPicker FormSelect",
-            "count": 1,
-            "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
-            "runtimeStatus": "NOT_RUN",
-            "sourceCallerEvidence": "Only production CharacterPanel caller passes showCharacterPicker=false."
-          }
-        ],
-        "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#смешанные-строки-активный-и-неактивный-код",
-        "reactivationCriterion": "Re-open the inactive occurrence if a production caller can set showCharacterPicker=true."
-      }
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
       "kind": "tag:details",
       "count": 2,
       "status": "BLOCKED",
-      "classification": "in-flow",
-      "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/sidebar/ChatPanels.tsx",
       "kind": "role:listbox",
       "count": 2,
       "status": "BLOCKED",
-      "classification": "reachable",
-      "scope": "Activity list current8 cases passed. Second ChatPanel list excluded from current production navigation: allowed feeds only ACTIVITY/STORY, handled by ActivityPanel/StoryChannel. Source applicability audit records chain.",
-      "evidence": ["remainingMenus"],
-      "next": "Retain two static occurrences; revisit second only if feed policy changes. Do not activate dead route for coverage; full shared lifecycle gate still separate.",
-      "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
-      "applicability": {
-        "resolution": "MIXED_REACHABILITY",
-        "occurrences": [
-          {
-            "label": "activity-slash-suggestions",
-            "count": 1,
-            "applicability": "SUPPORTED_REACHABLE",
-            "runtimeStatus": "PASS",
-            "evidence": ["remainingMenus"]
-          },
-          {
-            "label": "chat-slash-suggestions",
-            "count": 1,
-            "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
-            "runtimeStatus": "NOT_RUN",
-            "sourceCallerEvidence": "Current feed policy routes ACTIVITY/STORY to ActivityPanel/StoryChannel; ChatPanel fallback is unreachable."
-          }
-        ],
-        "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#смешанные-строки-активный-и-неактивный-код",
-        "reactivationCriterion": "Re-open if production feed policy adds a route rendered by ChatPanel."
-      }
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/sidebar/ChatPanels.tsx",
       "kind": "tag:FormSelect",
       "count": 1,
-      "status": "PASS",
-      "classification": "reachable",
-      "scope": "GM selection changes available skill buttons, pointer hit/bounds, keyboard reset/Escape/focus; PLAYER selector absent, own skill only. Actual dice request target not tested.",
-      "evidence": ["activity"],
-      "next": "Reuse scoped8cases; full connected matrix, zoom/resize while open, other event types and live permissions remain separate requirements."
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/sidebar/ChatPanels.tsx",
       "kind": "tag:details",
       "count": 1,
-      "status": "PASS",
-      "classification": "reachable",
-      "scope": "All3 filter checkboxes keyboard off/pointer on, accessible hidden-summary, Escape/outside focus and unsent draft preserved. REFERENCE event disappearance/restoration verified; ROLLS/STORY timeline fixtures absent.",
-      "evidence": ["activity"],
-      "next": "Reuse scoped8cases; full connected matrix, zoom/resize while open, other event types and live permissions remain separate requirements."
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/sidebar/ChatPanels.tsx",
       "kind": "tag:select",
       "count": 1,
       "status": "BLOCKED",
-      "classification": "inactive",
-      "scope": "Direct-chat recipient select; production Direct entry hidden.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Do not enable hidden Direct to satisfy inventory.",
-      "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
-      "applicability": {
-        "resolution": "NOT_APPLICABLE_CURRENT_PRODUCT",
-        "occurrences": [
-          {
-            "label": "Direct-chat recipient select",
-            "count": 1,
-            "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
-            "runtimeStatus": "NOT_RUN",
-            "sourceCallerEvidence": "Direct mode is initialized false and all current transitions keep it hidden."
-          }
-        ],
-        "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#отдельно-исключённые-из-игровых-popup-сценариев",
-        "reactivationCriterion": "Re-open if the Direct entry becomes reachable in production navigation."
-      }
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/sidebar/InitiativePanel.tsx",
@@ -1302,7 +1453,8 @@
         ],
         "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#уточнение-достижимости--2026-09-17",
         "reactivationCriterion": "Re-open if InitiativePanel gains a production import or caller."
-      }
+      },
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/sidebar/MediaPanel.tsx",
@@ -1312,27 +1464,28 @@
       "classification": "current-source-runtime-evidence-pending",
       "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
       "evidence": [],
-      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+      "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/sidebar/QuickRollPanel.tsx",
       "kind": "tag:Popup",
       "count": 1,
       "status": "BLOCKED",
-      "classification": "reachable",
-      "scope": "Quick-roll tooltip migrated to a portal popup in UIX-674; local visual check confirms opacity and layering, not full interaction and viewport lifecycle.",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
       "evidence": [],
-      "next": "Verify hover/focus, escape and clipping on current built revision across compact and desktop widths."
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/sidebar/ResourceCounters.tsx",
       "kind": "tag:details",
       "count": 1,
-      "status": "PASS",
-      "classification": "in-flow",
-      "scope": "PLAYER desktop resources native Enter/Space/pointer toggles preserve pending value and do not create additional writes; ordinary in-flow disclosure.",
-      "evidence": ["disclosureCurrent"],
-      "next": "GM/non-owner and compact full matrix not claimed. Keep ordinary disclosure criteria separate from popup layering."
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/sidebar/SetupPanel.tsx",
@@ -1341,7 +1494,10 @@
       "status": "BLOCKED",
       "classification": "reachable",
       "scope": "Three live controls PASS four current cases; three legacy hidden occurrences explicitly excluded, never reactivate for tests.",
-      "evidence": ["built", "workspaceCurrent"],
+      "evidence": [
+        "built",
+        "workspaceCurrent"
+      ],
       "next": "Keep active/hidden split explicit at next combined gate.",
       "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
       "applicability": {
@@ -1352,7 +1508,10 @@
             "count": 3,
             "applicability": "SUPPORTED_REACHABLE",
             "runtimeStatus": "PASS",
-            "evidence": ["built", "workspaceCurrent"]
+            "evidence": [
+              "built",
+              "workspaceCurrent"
+            ]
           },
           {
             "label": "catalogKind plus two legacy scene selects",
@@ -1364,7 +1523,8 @@
         ],
         "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#смешанные-строки-активный-и-неактивный-код",
         "reactivationCriterion": "Re-open each hidden occurrence if its section becomes production-reachable."
-      }
+      },
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/sidebar/StatLayoutCard.tsx",
@@ -1374,32 +1534,28 @@
       "classification": "reachable",
       "scope": "UIX-674 row-actions disclosure in editable stat layout, used from character sheet and campaign setup. This is a new static site, not covered by the historical UIX-644 runtime ledger.",
       "evidence": [],
-      "next": "Check Escape/outside dismissal, focus return and edge placement at desktop and compact widths with both reachable owners."
+      "next": "Check Escape/outside dismissal, focus return and edge placement at desktop and compact widths with both reachable owners.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/sidebar/TokenPalette.tsx",
       "kind": "tag:AssetPicker",
       "count": 1,
-      "status": "PASS",
-      "classification": "reachable",
-      "scope": "Inline image picker in four actual token-modal cases. Shared owner error separately remains open.",
-      "evidence": ["built"],
-      "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/sidebar/TokenPalette.tsx",
       "kind": "tag:FormSelect",
       "count": 2,
-      "status": "FAIL",
-      "classification": "reachable",
-      "scope": "Outer image and modal character controls: first-open width-transition gate now also passes on5d7d548, but original modal ResizeObserver error is unresolved.",
-      "evidence": [
-        "built",
-        "ro",
-        "tokenFirstOpenResize",
-        "exactMainCceMenuRegression"
-      ],
-      "next": "Capture offending observer at actual failure; do not repeat identical warm runs or filter client logs."
+      "status": "BLOCKED",
+      "classification": "changed-release-source",
+      "scope": "Статический индекс релизного кандидата. Исторические PASS не перенесены на изменённые исходники.",
+      "evidence": [],
+      "next": "Проверить затронутые пользовательские сценарии в визуальной приёмке."
     },
     {
       "file": "apps/web/src/ui/ArkenDialog.tsx",
@@ -1409,7 +1565,8 @@
       "classification": "modal-dialog-surface",
       "scope": "UIX-709: the ArkenDialog modal branch now renders Base UI Dialog.Popup instead of Gravity Dialog. A blocking modal surface, not a dropdown overlay.",
       "evidence": [],
-      "next": "Modal ownership stays covered by modal-owner-contract, modal-focus and dialog-focus e2e; no UIX-644 runtime evidence row yet."
+      "next": "Modal ownership stays covered by modal-owner-contract, modal-focus and dialog-focus e2e; no UIX-644 runtime evidence row yet.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/ui/CursorPresenceMenu.tsx",
@@ -1418,8 +1575,13 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Named-dialog/keyboard-owner gate repaired by stable WorkspaceNav subscription; all8 cursor cases now PASS within connected16. Historical red evidence retained. PLAYER remains a direct toggle, not another popup.",
-      "evidence": ["cursor", "cursorOwnerNaming", "cursorStableObserver"],
-      "next": "Retain scoped cursor/owner acceptance; original TokenPalette observer failure, full registry and physical-device acceptance remain separate."
+      "evidence": [
+        "cursor",
+        "cursorOwnerNaming",
+        "cursorStableObserver"
+      ],
+      "next": "Retain scoped cursor/owner acceptance; original TokenPalette observer failure, full registry and physical-device acceptance remain separate.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/ui/GravityFormControls.tsx",
@@ -1428,8 +1590,13 @@
       "status": "FAIL",
       "classification": "shared-implementation",
       "scope": "Shared implementation, not another caller. Built tests and true zoom passed, unresolved original RO still prevents complete acceptance.",
-      "evidence": ["built", "ro", "exactMainCceMenuRegression"],
-      "next": "Do not mark common implementation fixed from non-reproduction. Preserve failure evidence."
+      "evidence": [
+        "built",
+        "ro",
+        "exactMainCceMenuRegression"
+      ],
+      "next": "Do not mark common implementation fixed from non-reproduction. Preserve failure evidence.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/ui/SceneManagerDialog.tsx",
@@ -1438,8 +1605,11 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Scene editor map selector under workspace→modal, keyboard/pointer and draft ownership through compact short-height resize.",
-      "evidence": ["sceneEditorMap"],
-      "next": "Save/upload/rejection and actual scene persistence/publication remain separate; this does not clear the original shared Select RO defect."
+      "evidence": [
+        "sceneEditorMap"
+      ],
+      "next": "Save/upload/rejection and actual scene persistence/publication remain separate; this does not clear the original shared Select RO defect.",
+      "historicalOnly": true
     },
     {
       "file": "apps/web/src/ui/ToolbarTooltip.tsx",
@@ -1449,7 +1619,8 @@
       "classification": "reachable",
       "scope": "UIX-674 shared Base UI tooltip popup for map-toolbar buttons and summaries. Prior UIX-644 popup evidence does not cover this new portal.",
       "evidence": [],
-      "next": "Check hover/focus opening, Escape/blur closure, viewport collision and coexisting toolbar menus at short and narrow sizes."
+      "next": "Check hover/focus opening, Escape/blur closure, viewport collision and coexisting toolbar menus at short and narrow sizes.",
+      "historicalOnly": true
     }
   ],
   "supplementalSites": [
@@ -1459,7 +1630,9 @@
       "status": "PASS",
       "scope": "Supplemental custom object-list lifecycle tested for token rows and local selection, both roles/viewport modes.",
       "next": "Mixed drawing/region rows, clone/delete action flows, live permission updates and real server behavior remain separate from this scoped menu protocol.",
-      "evidence": ["objectList"]
+      "evidence": [
+        "objectList"
+      ]
     },
     {
       "id": "drawing-color-panel",
@@ -1467,7 +1640,9 @@
       "status": "PASS",
       "scope": "DOM drawing palette settings/lifecycle including short-map containment. Native color input type/value only; OS chooser excluded.",
       "next": "Actual stroke payload/pixels, editing existing strokes, OS color chooser and physical touch sizing remain separate gates.",
-      "evidence": ["drawingPalette"]
+      "evidence": [
+        "drawingPalette"
+      ]
     },
     {
       "id": "compact-navigation",
@@ -1475,7 +1650,10 @@
       "status": "PASS",
       "scope": "GM Scenes and PLAYER Tokens390: destination owns focus then Escape returns to Map. New Sections resize gate verifies all visible destination hit targets, desktop closes sheet without revival on compact return, Journal remains clickable, reopen/Escape/focus; both roles and browsers.",
       "next": "Other destination workspace internals and physical devices remain separate. This does not resolve original Select RO or whole-registry acceptance.",
-      "evidence": ["navigation", "compactSectionsBreakpoint"]
+      "evidence": [
+        "navigation",
+        "compactSectionsBreakpoint"
+      ]
     }
   ],
   "applicabilityAudit": {
@@ -1484,20 +1662,11 @@
     "scope": "Source reachability only; preserves all static buckets, not runtime acceptance."
   },
   "currentInventoryReconciliation": {
-    "revision": "5815ce59a1264391fcd15e2db76e32c6fc2c2cd2",
-    "buckets": 50,
-    "jsxOccurrences": 92,
-    "statusCounts": {
-      "PASS": 27,
-      "FAIL": 2,
-      "BLOCKED": 21
-    },
-    "historicalDenominator": {
-      "revision": "917af2deee0f80d02adcc66634ffc504b5e249e4",
-      "buckets": 48,
-      "jsxOccurrences": 90
-    },
-    "note": "Current source index now has 50/92 including two BLOCKED GlobalStickerPackManager rows. Prior 48/90 is preserved as the historical denominator; reconciliation37/76 and additions39/78 remain revision-scoped history. No historical PASS transferred to current SHA."
+    "baseRevision": "c3a17d52fbd695be86c8c5c777a8bb752b93ba07",
+    "dirtySourceManifest": ".qa-temp/release-20261127/pool173-owner-source-hashes.json",
+    "buckets": 108,
+    "jsxOccurrences": 232,
+    "note": "Статическое согласование объединённого кандидата. Runtime-приёмка учитывается отдельно; старые результаты сохранены с исходной ревизией."
   },
   "historicalInventoryRows": [
     {
@@ -1507,7 +1676,9 @@
       "status": "PASS",
       "classification": "reachable",
       "scope": "Seven conditional controls in edit/picker/setup callers; catalog tests12/58.",
-      "evidence": ["built"],
+      "evidence": [
+        "built"
+      ],
       "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
     },
     {
@@ -1519,7 +1690,1150 @@
       "scope": "GM media catalog kind filter.",
       "evidence": [],
       "next": "Verify real pointer/keyboard open/select/close, Escape/focus and desktop/compact in Chrome/Firefox; no runtime PASS from inventory."
+    },
+    {
+      "scope": "Before production refresh20261127; original statuses/evidence retained, not current acceptance",
+      "revision": "b51a18ceddc5c7c38064c191a4da608c368c9bc9",
+      "sites": [
+        {
+          "file": "apps/web/src/AbilityAccordion.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/AbilityAreaPanel.tsx",
+          "kind": "tag:select",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "reachable-static-runtime-evidence-pending",
+          "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+        },
+        {
+          "file": "apps/web/src/AccountAuthWorkspace.tsx",
+          "kind": "tag:details",
+          "count": 6,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/Achievements.tsx",
+          "kind": "tag:AssetPicker",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "reachable-static-runtime-evidence-pending",
+          "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+        },
+        {
+          "file": "apps/web/src/Achievements.tsx",
+          "kind": "tag:details",
+          "count": 2,
+          "status": "BLOCKED",
+          "classification": "reachable-static-runtime-evidence-pending",
+          "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+        },
+        {
+          "file": "apps/web/src/Achievements.tsx",
+          "kind": "tag:select",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "reachable-static-runtime-evidence-pending",
+          "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+        },
+        {
+          "file": "apps/web/src/AppHeader.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Session menu details element in topbar.",
+          "evidence": [
+            "remainingMenus"
+          ],
+          "next": "No blanket current-SHA/full lifecycle claim: session desktop content actions and full combined matrix remain separate."
+        },
+        {
+          "file": "apps/web/src/CartographicLabelFields.tsx",
+          "kind": "tag:select",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "reachable-static-runtime-evidence-pending",
+          "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+        },
+        {
+          "file": "apps/web/src/CatalogEntryForm.tsx",
+          "kind": "tag:FormSelect",
+          "count": 12,
+          "status": "BLOCKED",
+          "classification": "current-source-static-inventory-reconciled-runtime-blocked",
+          "scope": "Current TSX source inventory: 12 FormSelect occurrences. Runtime placement, keyboard, focus, lifecycle and hit-test acceptance remains unverified; no PASS copied.",
+          "evidence": [],
+          "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/CatalogEntryForm.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/CharacterProgression.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "reachable-static-runtime-evidence-pending",
+          "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+        },
+        {
+          "file": "apps/web/src/CharacterProgression.tsx",
+          "kind": "tag:select",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "reachable-static-runtime-evidence-pending",
+          "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+        },
+        {
+          "file": "apps/web/src/CharacterSpellBranches.tsx",
+          "kind": "tag:select",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/CreationManager.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/CreationManager.tsx",
+          "kind": "tag:select",
+          "count": 5,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/CreationObjects.tsx",
+          "kind": "tag:details",
+          "count": 3,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/CreationObjects.tsx",
+          "kind": "tag:select",
+          "count": 2,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/CreationParts.tsx",
+          "kind": "tag:details",
+          "count": 2,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/CreationRules.tsx",
+          "kind": "tag:details",
+          "count": 9,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/CreationRules.tsx",
+          "kind": "tag:select",
+          "count": 14,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/CreationStore.tsx",
+          "kind": "tag:details",
+          "count": 2,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/CreationStore.tsx",
+          "kind": "tag:select",
+          "count": 4,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/CreationStudio.tsx",
+          "kind": "tag:details",
+          "count": 4,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/CreationStudio.tsx",
+          "kind": "tag:select",
+          "count": 2,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/CreationVersionHistory.tsx",
+          "kind": "tag:details",
+          "count": 2,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/CreationWorkspace.tsx",
+          "kind": "tag:select",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/EconomyManager.tsx",
+          "kind": "tag:details",
+          "count": 4,
+          "status": "BLOCKED",
+          "classification": "reachable-static-runtime-evidence-pending",
+          "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+        },
+        {
+          "file": "apps/web/src/EconomyManager.tsx",
+          "kind": "tag:select",
+          "count": 6,
+          "status": "BLOCKED",
+          "classification": "reachable-static-runtime-evidence-pending",
+          "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+        },
+        {
+          "file": "apps/web/src/EconomyWorkspace.tsx",
+          "kind": "tag:details",
+          "count": 2,
+          "status": "BLOCKED",
+          "classification": "reachable-static-runtime-evidence-pending",
+          "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+        },
+        {
+          "file": "apps/web/src/EconomyWorkspace.tsx",
+          "kind": "tag:select",
+          "count": 2,
+          "status": "BLOCKED",
+          "classification": "reachable-static-runtime-evidence-pending",
+          "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+        },
+        {
+          "file": "apps/web/src/FeedbackReporter.tsx",
+          "kind": "tag:FormSelect",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "One feedback category selector, GM/PLAYER, 1280→390→360 short→1280; keyboard/pointer/Escape/outside and visible close focus.",
+          "evidence": [
+            "feedback"
+          ],
+          "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+        },
+        {
+          "file": "apps/web/src/GlobalStickerPackManager.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "reachable",
+          "scope": "GM-only in-flow GlobalStickerPackManager disclosure mounted from MediaPanel. Partial current-source runtime evidence proves summary open/owned Escape close/focus/held repeat and next parent Escape in four browser cells, not whole lifecycle/placement acceptance.",
+          "evidence": [
+            "globalManagerSummaryEscape"
+          ],
+          "next": "Reuse exact-source Escape slice; complete appropriate keyboard open, geometry/scroll/resize/zoom and actual pack selection. In-flow disclosure outside-click behavior must follow its contract, not a generic popup assumption. Whole bucket remains BLOCKED."
+        },
+        {
+          "file": "apps/web/src/GlobalStickerPackManager.tsx",
+          "kind": "tag:select",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "reachable",
+          "scope": "GM-only native select for choosing an owned global pack, conditional on packs being present. No runtime render, keyboard, focus, popup or selection evidence is recorded.",
+          "evidence": [],
+          "next": "With an authorized GM fixture containing packs, verify actual open/select/close, focus and placement in desktop/compact browsers; do not infer runtime PASS from static discovery."
+        },
+        {
+          "file": "apps/web/src/GmHealthCounter.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/InstanceBindings.tsx",
+          "kind": "tag:FormSelect",
+          "count": 2,
+          "status": "BLOCKED",
+          "classification": "reachable-static-runtime-evidence-pending",
+          "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+        },
+        {
+          "file": "apps/web/src/LandingGuide.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/MapToolbar.tsx",
+          "kind": "tag:details",
+          "count": 2,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Size mode selection/Done and overflow display toggles: keyboard/focus on1280 and360x480. No resize dragging/persistence claim.",
+          "evidence": [
+            "toolbar"
+          ],
+          "next": "Reuse this scoped gate; retain full connected matrix, actual persistence/device and broader pending-session races as separate requirements."
+        },
+        {
+          "file": "apps/web/src/MusicBar.tsx",
+          "kind": "tag:details",
+          "count": 2,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Both details callers: volume lifecycle and GM overflow→empty library→visible return target. Track SELECT now also returns visible focus; conflict ACK notifications verified by four existing cases.",
+          "evidence": [
+            "musicOwner",
+            "musicCommand",
+            "menuFollowup"
+          ],
+          "next": "Successful playback/synchronization and compact music entry remain separate; library/volume evidence at earlier exact revision unchanged by this track-handler-only patch."
+        },
+        {
+          "file": "apps/web/src/MusicBar.tsx",
+          "kind": "tag:select",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/OperatorFeedbackFilters.tsx",
+          "kind": "tag:select",
+          "count": 2,
+          "status": "BLOCKED",
+          "classification": "reachable",
+          "scope": "Authorized operator type/status native selects. Both browsers: hit-testing, focus, Home/End/arrows/Tab, no fetch before Apply, exact payloads. Chromium: native pointer-open/Escape-close and next Escape closes workspace. Headless Firefox native popup axis unaccepted; identical behavior reproduced on plain HTML without App.",
+          "evidence": [
+            "operatorFilters",
+            "menuFollowup",
+            "exactMainCceMenuRegression"
+          ],
+          "next": "Verify native popup open/cancel in a supported Firefox environment; do not patch App from headless UA behavior or convert the selector to silence tests. Independent host authorization remains separate."
+        },
+        {
+          "file": "apps/web/src/PlayerRequestsWorkspace.tsx",
+          "kind": "tag:FormSelect",
+          "count": 6,
+          "status": "BLOCKED",
+          "classification": "reachable",
+          "scope": "Six controls migrated from native select to FormSelect in UIX-674. Retained PLAYER owned-character caller has exact-source partial four-cell pointer/final keyboard selection and dismissal evidence; no whole six-control PASS. Prior native evidence does not prove new popup lifecycle.",
+          "evidence": [
+            "requestsCurrent",
+            "requestsBuilt",
+            "ownedCharacterSelect20261009"
+          ],
+          "next": "Run current-revision keyboard, dismissal, focus return and narrow viewport FormSelect lifecycle before marking PASS."
+        },
+        {
+          "file": "apps/web/src/ScenePicker.tsx",
+          "kind": "role:menu",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "reachable",
+          "scope": "UIX-674 changed the inner scene list from listbox/options to menu/menuitemradio with a separate menuitem edit action. Earlier listbox evidence is historical and does not prove the new role contract.",
+          "evidence": [
+            "scenePicker",
+            "sceneSelection20261009"
+          ],
+          "next": "Retain historical role evidence separately; actual current desktop pointer/keyboard scene selection is now scoped evidence. Complete focus-return/dismissal/edit action and Firefox compact's distinct manager restore before full acceptance."
+        },
+        {
+          "file": "apps/web/src/ScenePicker.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Scene picker dropdown details element in topbar.",
+          "evidence": [
+            "scenePicker"
+          ],
+          "next": "Real multiplayer persistence and physical devices remain separate gates."
+        },
+        {
+          "file": "apps/web/src/Sidebar.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "new-static-site",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/SoundClipEditor.tsx",
+          "kind": "tag:select",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/SoundpadWorkspace.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/SoundpadWorkspace.tsx",
+          "kind": "tag:select",
+          "count": 5,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/SpellNodeActivationEditor.tsx",
+          "kind": "tag:select",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/SpellSchoolsWorkspace.tsx",
+          "kind": "tag:select",
+          "count": 8,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "Eight static selects reviewed; added occurrence has no current browser acceptance.",
+          "evidence": [],
+          "next": "Verify all reachable selects on a frozen candidate and attach scoped evidence."
+        },
+        {
+          "file": "apps/web/src/StickerPackManager.tsx",
+          "kind": "tag:select",
+          "count": 6,
+          "status": "BLOCKED",
+          "classification": "reachable",
+          "scope": "GM sticker manager: subject, character, player, audience, send policy, per-file provenance. Conditional branches remain separately testable.",
+          "evidence": [],
+          "next": "Verify real pointer/keyboard open/select/close, Escape/focus and desktop/compact in Chrome/Firefox; no runtime PASS from inventory."
+        },
+        {
+          "file": "apps/web/src/StickerPicker.tsx",
+          "kind": "role:listbox",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Activity caller Popup and its nested listbox, same eight tests: search focus, arrows, Escape/outside,36 stickers scroll,360x480resize, owner hide/reopen.",
+          "evidence": [
+            "remainingMenus"
+          ],
+          "next": "Direct/other inactive callers not activated or accepted; actual send/server permissions/image aesthetics outside scope."
+        },
+        {
+          "file": "apps/web/src/StickerPicker.tsx",
+          "kind": "tag:Popup",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Activity caller Popup and its nested listbox, same eight tests: search focus, arrows, Escape/outside,36 stickers scroll,360x480resize, owner hide/reopen.",
+          "evidence": [
+            "remainingMenus"
+          ],
+          "next": "Direct/other inactive callers not activated or accepted; actual send/server permissions/image aesthetics outside scope."
+        },
+        {
+          "file": "apps/web/src/TokenImageGenerator.tsx",
+          "kind": "tag:select",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "One native source selector; desktop/narrow four cases. OS picker UI not inspected.",
+          "evidence": [
+            "built",
+            "exactMainCceMenuRegression"
+          ],
+          "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+        },
+        {
+          "file": "apps/web/src/TokenTray.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Token tray details element.",
+          "evidence": [
+            "tokenTray"
+          ],
+          "next": "No blanket current-SHA/full lifecycle claim: session desktop content actions and full combined matrix remain separate."
+        },
+        {
+          "file": "apps/web/src/WorkspaceNav.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "GM1024 More destination opening/closing and visible return focus, twice, Chrome/Firefox.",
+          "evidence": [
+            "navigation"
+          ],
+          "next": "Other destinations and responsive owner changes remain outside this scoped result."
+        },
+        {
+          "file": "apps/web/src/WorldContentInstancesPanel.tsx",
+          "kind": "tag:AssetPicker",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/WorldContentInstancesPanel.tsx",
+          "kind": "tag:FormSelect",
+          "count": 2,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/WorldContentWorkspace.tsx",
+          "kind": "tag:AssetPicker",
+          "count": 2,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Both inline callers: entity cover and gallery attachment, independent selected assets and exact request payloads.",
+          "evidence": [
+            "worldImages",
+            "menuFollowup"
+          ],
+          "next": "Real persistence/authorization, request-failure recovery and physical-device checks remain outside this scoped acceptance."
+        },
+        {
+          "file": "apps/web/src/WorldContentWorkspace.tsx",
+          "kind": "tag:FormSelect",
+          "count": 4,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Four filters/link/create controls in world dropdown tests; 4 combined editor/reader cases.",
+          "evidence": [
+            "built"
+          ],
+          "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+        },
+        {
+          "file": "apps/web/src/WorldEncyclopediaWorkspace.tsx",
+          "kind": "tag:FormSelect",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Reader filter in world dropdown tests; current navigation GM-only, no invented PLAYER route.",
+          "evidence": [
+            "built"
+          ],
+          "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+        },
+        {
+          "file": "apps/web/src/WorldMapCanonicalLocationPicker.tsx",
+          "kind": "tag:select",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/WorldMapsWorkspace.tsx",
+          "kind": "tag:select",
+          "count": 7,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Seven native map/draft selectors; 8 world-map cases incl PLAYER navigation exclusion. Not OS popup visuals.",
+          "evidence": [
+            "built"
+          ],
+          "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+        },
+        {
+          "file": "apps/web/src/WorldRegionPicker.tsx",
+          "kind": "tag:FormSelect",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "reachable-static-runtime-evidence-pending",
+          "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+        },
+        {
+          "file": "apps/web/src/design-system/Dialog.tsx",
+          "kind": "tag:Popup",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "design-system-isolated",
+          "scope": "Design System isolated primitive",
+          "evidence": [],
+          "next": "Covered via Storybook and unit tests, not product overlay flow"
+        },
+        {
+          "file": "apps/web/src/design-system/MemberDefaultThemeField.tsx",
+          "kind": "tag:FormSelect",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable-scoped-evidence",
+          "baseRevision": "e67bacc37a1ac4b77a2524388cc76a8ffacf5698",
+          "freezeRevision": "e67bacc37a1ac4b77a2524388cc76a8ffacf5698",
+          "scope": "Reachable GM member default-theme Select in Setup membership controls. Scoped evidence covers desktop/compact lifecycle, keyboard/focus, pending, generic error, 409 CAS adoption and real-server persistence; it is not a blanket menu-registry acceptance.",
+          "evidence": [
+            "designMemberDefaultFinal",
+            "themeV5Lifecycle",
+            "themePersistence4f3",
+            "designCandidateE67ThemeSurface",
+            "e67ExactCI"
+          ],
+          "next": "Scoped menu acceptance complete. Preserve historical registry gaps; no further work until the owner resumes."
+        },
+        {
+          "file": "apps/web/src/design-system/MemberRulerColorField.tsx",
+          "kind": "tag:FormSelect",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "UIX-509 GM ruler-colour Select per member in Setup overview. DOM-level select/reset/error coverage only (MemberRulerColorField.test.tsx); no browser placement, keyboard or hit-test acceptance claimed.",
+          "evidence": [],
+          "next": "Verify open/select/Escape/outside/focus for the ruler-colour Select in a connected browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/design-system/Popup.tsx",
+          "kind": "tag:Popup",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "design-system-isolated",
+          "scope": "Design System isolated primitive",
+          "evidence": [],
+          "next": "Covered via Storybook and unit tests, not product overlay flow"
+        },
+        {
+          "file": "apps/web/src/design-system/Select.tsx",
+          "kind": "tag:Popup",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "design-system-isolated",
+          "scope": "Design System isolated primitive",
+          "evidence": [],
+          "next": "Covered via Storybook and unit tests, not product overlay flow"
+        },
+        {
+          "file": "apps/web/src/renderers/GridSettings.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Cancel draft reset/no save, explicit save/reopen value/focus, rejected draft retained, outside delayed-save focus. Mocked backend; preview pixels and full in-flight session races not accepted.",
+          "evidence": [
+            "toolbar"
+          ],
+          "next": "Reuse this scoped gate; retain full connected matrix, actual persistence/device and broader pending-session races as separate requirements."
+        },
+        {
+          "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
+          "kind": "role:menu",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Token menu live permissions/focus lifecycle; previous geometry/actions in inventory checkpoints. Not object-list/drawing-color controls.",
+          "evidence": [
+            "token"
+          ],
+          "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+        },
+        {
+          "file": "apps/web/src/renderers/Orthographic2DRenderer.tsx",
+          "kind": "tag:select",
+          "count": 2,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; UIX-706 pool 3 adds the texture layer select in the same panel; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/renderers/TerrainStampControls.tsx",
+          "kind": "tag:select",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/sidebar/CharacterInventory.tsx",
+          "kind": "tag:select",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "reachable-static-runtime-evidence-pending",
+          "scope": "Source reviewed on candidate: native selection/disclosure or asset picker; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify ownership, focus, keyboard, placement and dismissal on a frozen candidate and attach scoped evidence."
+        },
+        {
+          "file": "apps/web/src/sidebar/CharacterMediaGallery.tsx",
+          "kind": "tag:FormSelect",
+          "count": 4,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Four attach/edit controls GM/PLAYER; ten gallery cases including sheet Escape.",
+          "evidence": [
+            "built"
+          ],
+          "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+        },
+        {
+          "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
+          "kind": "tag:AssetPicker",
+          "count": 2,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Both actual character-sheet callers: portrait and additional resource image; GM and PLAYER owner on desktop/compact.",
+          "evidence": [
+            "characterImages",
+            "menuFollowup"
+          ],
+          "next": "Non-owner/controller restrictions, live payload persistence and rejection/realtime recovery remain outside this scoped evidence."
+        },
+        {
+          "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
+          "kind": "tag:FormSelect",
+          "count": 2,
+          "status": "BLOCKED",
+          "classification": "reachable",
+          "scope": "Template modal PASS four current cases; second showCharacterPicker source occurrence inactive, not silently counted as runtime PASS.",
+          "evidence": [
+            "built",
+            "workspaceCurrent"
+          ],
+          "next": "Retain explicit inactive exclusion; no new UI route for coverage.",
+          "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
+          "applicability": {
+            "resolution": "MIXED_REACHABILITY",
+            "occurrences": [
+              {
+                "label": "template creation FormSelect",
+                "count": 1,
+                "applicability": "SUPPORTED_REACHABLE",
+                "runtimeStatus": "PASS",
+                "evidence": [
+                  "built",
+                  "workspaceCurrent"
+                ]
+              },
+              {
+                "label": "showCharacterPicker FormSelect",
+                "count": 1,
+                "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
+                "runtimeStatus": "NOT_RUN",
+                "sourceCallerEvidence": "Only production CharacterPanel caller passes showCharacterPicker=false."
+              }
+            ],
+            "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#смешанные-строки-активный-и-неактивный-код",
+            "reactivationCriterion": "Re-open the inactive occurrence if a production caller can set showCharacterPicker=true."
+          }
+        },
+        {
+          "file": "apps/web/src/sidebar/CharacterWorkspace.tsx",
+          "kind": "tag:details",
+          "count": 2,
+          "status": "BLOCKED",
+          "classification": "in-flow",
+          "scope": "Сверено по исходному TSX. Приёмка в браузере для этого набора элементов открыта.",
+          "evidence": [],
+          "next": "Проверить фактическое поведение элементов в Chromium и Firefox."
+        },
+        {
+          "file": "apps/web/src/sidebar/ChatPanels.tsx",
+          "kind": "role:listbox",
+          "count": 2,
+          "status": "BLOCKED",
+          "classification": "reachable",
+          "scope": "Activity list current8 cases passed. Second ChatPanel list excluded from current production navigation: allowed feeds only ACTIVITY/STORY, handled by ActivityPanel/StoryChannel. Source applicability audit records chain.",
+          "evidence": [
+            "remainingMenus"
+          ],
+          "next": "Retain two static occurrences; revisit second only if feed policy changes. Do not activate dead route for coverage; full shared lifecycle gate still separate.",
+          "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
+          "applicability": {
+            "resolution": "MIXED_REACHABILITY",
+            "occurrences": [
+              {
+                "label": "activity-slash-suggestions",
+                "count": 1,
+                "applicability": "SUPPORTED_REACHABLE",
+                "runtimeStatus": "PASS",
+                "evidence": [
+                  "remainingMenus"
+                ]
+              },
+              {
+                "label": "chat-slash-suggestions",
+                "count": 1,
+                "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
+                "runtimeStatus": "NOT_RUN",
+                "sourceCallerEvidence": "Current feed policy routes ACTIVITY/STORY to ActivityPanel/StoryChannel; ChatPanel fallback is unreachable."
+              }
+            ],
+            "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#смешанные-строки-активный-и-неактивный-код",
+            "reactivationCriterion": "Re-open if production feed policy adds a route rendered by ChatPanel."
+          }
+        },
+        {
+          "file": "apps/web/src/sidebar/ChatPanels.tsx",
+          "kind": "tag:FormSelect",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "GM selection changes available skill buttons, pointer hit/bounds, keyboard reset/Escape/focus; PLAYER selector absent, own skill only. Actual dice request target not tested.",
+          "evidence": [
+            "activity"
+          ],
+          "next": "Reuse scoped8cases; full connected matrix, zoom/resize while open, other event types and live permissions remain separate requirements."
+        },
+        {
+          "file": "apps/web/src/sidebar/ChatPanels.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "All3 filter checkboxes keyboard off/pointer on, accessible hidden-summary, Escape/outside focus and unsent draft preserved. REFERENCE event disappearance/restoration verified; ROLLS/STORY timeline fixtures absent.",
+          "evidence": [
+            "activity"
+          ],
+          "next": "Reuse scoped8cases; full connected matrix, zoom/resize while open, other event types and live permissions remain separate requirements."
+        },
+        {
+          "file": "apps/web/src/sidebar/ChatPanels.tsx",
+          "kind": "tag:select",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "inactive",
+          "scope": "Direct-chat recipient select; production Direct entry hidden.",
+          "evidence": [],
+          "next": "Do not enable hidden Direct to satisfy inventory.",
+          "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
+          "applicability": {
+            "resolution": "NOT_APPLICABLE_CURRENT_PRODUCT",
+            "occurrences": [
+              {
+                "label": "Direct-chat recipient select",
+                "count": 1,
+                "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
+                "runtimeStatus": "NOT_RUN",
+                "sourceCallerEvidence": "Direct mode is initialized false and all current transitions keep it hidden."
+              }
+            ],
+            "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#отдельно-исключённые-из-игровых-popup-сценариев",
+            "reactivationCriterion": "Re-open if the Direct entry becomes reachable in production navigation."
+          }
+        },
+        {
+          "file": "apps/web/src/sidebar/InitiativePanel.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "in-flow",
+          "scope": "Legacy in-flow disclosure: no production import/JSX caller found in apps/web/src at bc3dde8fd170b6c062ceb6e887f616f4861d6de9; only component tests. Not the active encounter queue.",
+          "evidence": [],
+          "next": "Explicit source-only inactive exclusion; retain the static bucket. Do not enable legacy UI for coverage or claim current encounter acceptance.",
+          "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
+          "applicability": {
+            "resolution": "NOT_APPLICABLE_CURRENT_PRODUCT",
+            "occurrences": [
+              {
+                "label": "legacy initiative disclosure",
+                "count": 1,
+                "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
+                "runtimeStatus": "NOT_RUN",
+                "sourceCallerEvidence": "No production import or JSX caller; only component tests. This is not the active encounter queue."
+              }
+            ],
+            "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#уточнение-достижимости--2026-09-17",
+            "reactivationCriterion": "Re-open if InitiativePanel gains a production import or caller."
+          }
+        },
+        {
+          "file": "apps/web/src/sidebar/MediaPanel.tsx",
+          "kind": "tag:select",
+          "count": 4,
+          "status": "BLOCKED",
+          "classification": "current-source-runtime-evidence-pending",
+          "scope": "Reviewed static bucket at recovered 19002d1 plus release diff; no current browser acceptance claimed.",
+          "evidence": [],
+          "next": "Verify reachable controls in connected current-candidate browser gate and attach revision-bound evidence."
+        },
+        {
+          "file": "apps/web/src/sidebar/QuickRollPanel.tsx",
+          "kind": "tag:Popup",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "reachable",
+          "scope": "Quick-roll tooltip migrated to a portal popup in UIX-674; local visual check confirms opacity and layering, not full interaction and viewport lifecycle.",
+          "evidence": [],
+          "next": "Verify hover/focus, escape and clipping on current built revision across compact and desktop widths."
+        },
+        {
+          "file": "apps/web/src/sidebar/ResourceCounters.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "PASS",
+          "classification": "in-flow",
+          "scope": "PLAYER desktop resources native Enter/Space/pointer toggles preserve pending value and do not create additional writes; ordinary in-flow disclosure.",
+          "evidence": [
+            "disclosureCurrent"
+          ],
+          "next": "GM/non-owner and compact full matrix not claimed. Keep ordinary disclosure criteria separate from popup layering."
+        },
+        {
+          "file": "apps/web/src/sidebar/SetupPanel.tsx",
+          "kind": "tag:FormSelect",
+          "count": 6,
+          "status": "BLOCKED",
+          "classification": "reachable",
+          "scope": "Three live controls PASS four current cases; three legacy hidden occurrences explicitly excluded, never reactivate for tests.",
+          "evidence": [
+            "built",
+            "workspaceCurrent"
+          ],
+          "next": "Keep active/hidden split explicit at next combined gate.",
+          "inventoryResolution": "RESOLVED_AT_OCCURRENCE_LEVEL",
+          "applicability": {
+            "resolution": "MIXED_REACHABILITY",
+            "occurrences": [
+              {
+                "label": "previewMembership, tokenCharacter, inviteCharacter",
+                "count": 3,
+                "applicability": "SUPPORTED_REACHABLE",
+                "runtimeStatus": "PASS",
+                "evidence": [
+                  "built",
+                  "workspaceCurrent"
+                ]
+              },
+              {
+                "label": "catalogKind plus two legacy scene selects",
+                "count": 3,
+                "applicability": "NOT_APPLICABLE_CURRENT_PRODUCT",
+                "runtimeStatus": "NOT_RUN",
+                "sourceCallerEvidence": "catalogKind is in an unconditional hidden block; both legacy scene selects are in an unconditional hidden section."
+              }
+            ],
+            "sourceCallerEvidence": "docs/plans/uix-644-applicability.md#смешанные-строки-активный-и-неактивный-код",
+            "reactivationCriterion": "Re-open each hidden occurrence if its section becomes production-reachable."
+          }
+        },
+        {
+          "file": "apps/web/src/sidebar/StatLayoutCard.tsx",
+          "kind": "tag:details",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "reachable",
+          "scope": "UIX-674 row-actions disclosure in editable stat layout, used from character sheet and campaign setup. This is a new static site, not covered by the historical UIX-644 runtime ledger.",
+          "evidence": [],
+          "next": "Check Escape/outside dismissal, focus return and edge placement at desktop and compact widths with both reachable owners."
+        },
+        {
+          "file": "apps/web/src/sidebar/TokenPalette.tsx",
+          "kind": "tag:AssetPicker",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Inline image picker in four actual token-modal cases. Shared owner error separately remains open.",
+          "evidence": [
+            "built"
+          ],
+          "next": "Include in the next connected exact-candidate gate; physical devices and full-app matrix remain unaccepted."
+        },
+        {
+          "file": "apps/web/src/sidebar/TokenPalette.tsx",
+          "kind": "tag:FormSelect",
+          "count": 2,
+          "status": "FAIL",
+          "classification": "reachable",
+          "scope": "Outer image and modal character controls: first-open width-transition gate now also passes on5d7d548, but original modal ResizeObserver error is unresolved.",
+          "evidence": [
+            "built",
+            "ro",
+            "tokenFirstOpenResize",
+            "exactMainCceMenuRegression"
+          ],
+          "next": "Capture offending observer at actual failure; do not repeat identical warm runs or filter client logs."
+        },
+        {
+          "file": "apps/web/src/ui/ArkenDialog.tsx",
+          "kind": "tag:Popup",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "modal-dialog-surface",
+          "scope": "UIX-709: the ArkenDialog modal branch now renders Base UI Dialog.Popup instead of Gravity Dialog. A blocking modal surface, not a dropdown overlay.",
+          "evidence": [],
+          "next": "Modal ownership stays covered by modal-owner-contract, modal-focus and dialog-focus e2e; no UIX-644 runtime evidence row yet."
+        },
+        {
+          "file": "apps/web/src/ui/CursorPresenceMenu.tsx",
+          "kind": "tag:Popup",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Named-dialog/keyboard-owner gate repaired by stable WorkspaceNav subscription; all8 cursor cases now PASS within connected16. Historical red evidence retained. PLAYER remains a direct toggle, not another popup.",
+          "evidence": [
+            "cursor",
+            "cursorOwnerNaming",
+            "cursorStableObserver"
+          ],
+          "next": "Retain scoped cursor/owner acceptance; original TokenPalette observer failure, full registry and physical-device acceptance remain separate."
+        },
+        {
+          "file": "apps/web/src/ui/GravityFormControls.tsx",
+          "kind": "tag:Select",
+          "count": 1,
+          "status": "FAIL",
+          "classification": "shared-implementation",
+          "scope": "Shared implementation, not another caller. Built tests and true zoom passed, unresolved original RO still prevents complete acceptance.",
+          "evidence": [
+            "built",
+            "ro",
+            "exactMainCceMenuRegression"
+          ],
+          "next": "Do not mark common implementation fixed from non-reproduction. Preserve failure evidence."
+        },
+        {
+          "file": "apps/web/src/ui/SceneManagerDialog.tsx",
+          "kind": "tag:FormSelect",
+          "count": 1,
+          "status": "PASS",
+          "classification": "reachable",
+          "scope": "Scene editor map selector under workspace→modal, keyboard/pointer and draft ownership through compact short-height resize.",
+          "evidence": [
+            "sceneEditorMap"
+          ],
+          "next": "Save/upload/rejection and actual scene persistence/publication remain separate; this does not clear the original shared Select RO defect."
+        },
+        {
+          "file": "apps/web/src/ui/ToolbarTooltip.tsx",
+          "kind": "tag:Popup",
+          "count": 1,
+          "status": "BLOCKED",
+          "classification": "reachable",
+          "scope": "UIX-674 shared Base UI tooltip popup for map-toolbar buttons and summaries. Prior UIX-644 popup evidence does not cover this new portal.",
+          "evidence": [],
+          "next": "Check hover/focus opening, Escape/blur closure, viewport collision and coexisting toolbar menus at short and narrow sizes."
+        }
+      ]
     }
   ],
-  "currentInventoryNote": "2026-10-11 current static inventory reconciled; original evidence remains historical, new or changed buckets BLOCKED pending runtime evidence."
+  "currentInventoryNote": "При изменении кода статическая сверка не переносит runtime PASS. Исходные FAIL сохранены в historicalInventoryRows и требуют проверки затронутых сценариев."
 }

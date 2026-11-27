@@ -118,6 +118,13 @@
 .account-invite-link {
   overflow-wrap: anywhere;
 }
+.account-invite-link input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  font-size: 16px;
+}
 
 /* Account is a destination rather than a long stack of forms. */
 .account-auth-card.account-home {
@@ -256,5 +263,30 @@
   }
   .account-auth-card {
     margin-top: 6vh;
+  }
+}
+
+/* Account entry is outside .app-shell--compact: it needs its own touch rules. */
+@media (max-width: 1023px) {
+  .account-auth-shell .arken-button,
+  .account-auth-shell summary {
+    box-sizing: border-box;
+    min-width: 44px;
+    min-height: 44px;
+    height: auto;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .account-auth-shell .arken-text-input {
+    min-width: 0;
+    min-height: 44px;
+    height: auto;
+  }
+
+  .account-auth-shell input.arken-text-input__control {
+    min-width: 0;
+    min-height: 42px;
+    font-size: 16px;
   }
 }

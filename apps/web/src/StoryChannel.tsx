@@ -1,3 +1,4 @@
+import { useStoryMediaUrl } from "./story-media-url";
 import "./StoryGallery.css";
 import { openStoryImage } from "./StoryImagePresentation";
 import { useRef, useState, type FormEvent } from "react";
@@ -45,10 +46,6 @@ import {
   storyWorldTimeLabel,
 } from "./story-channel-helpers";
 
-function imageUrl(contentId: string) {
-  return `/api/story/media/${contentId}`;
-}
-
 export function StoryPost({
   post,
   compact = false,
@@ -57,7 +54,7 @@ export function StoryPost({
   onArchive,
   onUpdate,
   onUploadImage,
-  mediaUrl = imageUrl,
+  mediaUrl: customMediaUrl,
   onSearchLinkTargets,
 }: {
   compact?: boolean;
@@ -71,6 +68,8 @@ export function StoryPost({
   /** UIX-245: GM-only поиск целей для связей записи. */
   onSearchLinkTargets?: (q: string) => Promise<StoryLinkTargetDto[]>;
 }) {
+  const projectedMediaUrl = useStoryMediaUrl();
+  const mediaUrl = customMediaUrl ?? projectedMediaUrl;
   const [pending, setPending] = useState<
     "publish" | "archive" | "update" | null
   >(null);
@@ -421,7 +420,7 @@ export function StoryPost({
           failedMedia.has(media.contentId) ? (
             <a
               className="story-post__media-fallback"
-              href={mediaUrl(media.contentId)}
+              href={mediaUrl(media.contentId) || undefined}
               key={media.contentId}
               target="_blank"
               rel="noreferrer"
@@ -431,7 +430,7 @@ export function StoryPost({
           ) : (
             <figure className="story-post__media" key={media.contentId}>
               <img
-                src={mediaUrl(media.contentId)}
+                src={mediaUrl(media.contentId) || undefined}
                 alt={media.altText}
                 width={media.width ?? undefined}
                 height={media.height ?? undefined}
@@ -445,7 +444,7 @@ export function StoryPost({
               {media.caption && post.era !== "Бал Амбериона — иллюстрации" && (
                 <figcaption>{media.caption}</figcaption>
               )}
-              {post.era === "Бал Амбериона — иллюстрации" && (
+              {(post.lifecycle === "PUBLISHED" || post.lifecycle === "CORRECTED") && (
                 <button
                   type="button"
                   onClick={() =>

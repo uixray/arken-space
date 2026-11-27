@@ -1,3 +1,4 @@
+import {sql} from "drizzle-orm";
 import { campaignAssetLabel } from "./campaign-asset-labels.js";
 import { visibleAchievementIconIds } from "./awards-bindings-routes.js";
 import { assetDto } from "./asset-lifecycle.js";
@@ -22,6 +23,8 @@ import {
   type StatLayout,
 } from "@arken/contracts";
 import { drawingSnapshotDto } from "./drawing-events.js";
+import { isometricRowIsPublished, isometricDrawingIsVisible, isometricFogFootprint, playerMap3dSpec } from "./isometric-layers.js";
+import { isometricPlayerGeometry } from "@arken/contracts";
 import { rulerColorKey } from "./member-ruler-color-routes.js";
 import {
   assets,
@@ -47,7 +50,6 @@ import {
   tokenDefinitions,
   worldContent,
   worldContentInstances,
-  worldContentMedia,
 } from "@arken/db";
 import type { AuthContext } from "./auth.js";
 import { nonShopInstance } from "./economy-stock-visibility.js";
@@ -331,54 +333,20 @@ const loadCharacterMedia = (db: Database, campaignId: string) =>
       ),
     );
 
-// UIX-245: pictures of canon a player can read in this campaign — PUBLISHED,
-// or discovered here — plus portraits of discovered campaign instances.
-const loadPublishedWorldAssets = async (db: Database, campaignId: string) => {
-  const [coverRows, mediaRows, portraitRows] = await Promise.all([
-    db
-      .select({ assetId: worldContent.coverAssetId })
-      .from(worldContent)
-      .innerJoin(assets, eq(worldContent.coverAssetId, assets.id))
-      .where(
-        and(
-          worldContentPlayerVisibleIn(campaignId),
-          eq(assets.campaignId, campaignId),
-        ),
-      ),
-    db
-      .select({ assetId: worldContentMedia.assetId })
-      .from(worldContentMedia)
-      .innerJoin(
-        worldContent,
-        eq(worldContentMedia.worldContentId, worldContent.id),
-      )
-      .innerJoin(assets, eq(worldContentMedia.assetId, assets.id))
-      .where(
-        and(
-          worldContentPlayerVisibleIn(campaignId),
-          eq(assets.campaignId, campaignId),
-        ),
-      ),
-    db
-      .select({ assetId: worldContentInstances.portraitAssetId })
-      .from(worldContentInstances)
-      .innerJoin(
-        worldContent,
-        eq(worldContentInstances.worldContentId, worldContent.id),
-      )
-      .innerJoin(assets, eq(worldContentInstances.portraitAssetId, assets.id))
-      .where(
-        and(
-          eq(worldContentInstances.campaignId, campaignId),
-          eq(worldContentInstances.discovered, true),
-          nonShopInstance(),
-          worldContentPlayerVisibleIn(campaignId),
-          eq(assets.campaignId, campaignId),
-        ),
-      ),
-  ]);
-  return [...coverRows, ...mediaRows, ...portraitRows];
-};
+// Canonical images use their own authorized image route and are NOT campaign
+// assets. Only discovered campaign-instance portraits remain in this projection.
+const loadPublishedWorldAssets = (db: Database, campaignId: string) => db
+  .select({ assetId: worldContentInstances.portraitAssetId })
+  .from(worldContentInstances)
+  .innerJoin(worldContent, eq(worldContentInstances.worldContentId, worldContent.id))
+  .innerJoin(assets, eq(worldContentInstances.portraitAssetId, assets.id))
+  .where(and(
+    eq(worldContentInstances.campaignId, campaignId),
+    eq(worldContentInstances.discovered, true),
+    nonShopInstance(),
+    worldContentPlayerVisibleIn(campaignId),
+    eq(assets.campaignId, campaignId),
+  ));
 
 const loadAssets = (db: Database, campaignId: string) =>
   db
@@ -455,7 +423,7 @@ const loadPublishedSoundpadAssets = (db: Database, campaignId: string) =>
 
 const loadSequence = (db: Database, campaignId: string) =>
   db
-    .select({ value: max(gameEvents.sequence) })
+    .select({ value: sql<string>`coalesce(max(${gameEvents.sequence}),0)::text` })
     .from(gameEvents)
     .where(eq(gameEvents.campaignId, campaignId));
 
@@ -735,12 +703,15 @@ export async function buildSnapshot(
         (id) => id.trim().toLowerCase() === me.userId!.toLowerCase(),
       ));
   const audio = normalizedAudioTracks[0];
-  const snapshotVersion = Number(sequenceRows[0]?.value ?? 0);
+  const snapshotSequence = String(sequenceRows[0]?.value ?? "0");
+  const snapshotVersion = Number(snapshotSequence);
   const visibleScenes =
     auth.role === "GM"
       ? sceneRows
       : sceneRows.filter((scene) => scene.id === campaign.activeSceneId);
   const visibleSceneIds = new Set(visibleScenes.map((scene) => scene.id));
+  const layerSceneById = new Map(sceneRows.map(scene => [scene.id, scene]));
+  const layerVisible = (sceneId: string, levelId?: string | null) => auth.role === "GM" || isometricRowIsPublished(layerSceneById.get(sceneId), levelId);
   const controllersByCharacter = new Map<string, string[]>();
   for (const { controller } of characterControllerRows) {
     const list = controllersByCharacter.get(controller.characterId) ?? [];
@@ -760,6 +731,7 @@ export async function buildSnapshot(
   const allowedTokens = tokenRows.filter(
     ({ token, definition }) =>
       visibleSceneIds.has(token.sceneId) &&
+      layerVisible(token.sceneId, token.levelId) &&
       (auth.role === "GM" || (token.visible && token.layer !== "GM")) &&
       definition.campaignId === auth.campaignId,
   );
@@ -788,6 +760,8 @@ export async function buildSnapshot(
    * группировка идёт по уже отсортированным строкам.
    */
   const revealsByScene = new Map<string, (typeof fogRows)[number]["fog"][]>();
+  const drawingLayerVisible = (drawing: (typeof drawingRows)[number]["drawing"]) => auth.role === "GM" ||
+    isometricDrawingIsVisible(layerSceneById.get(drawing.sceneId), drawing, revealsByScene.get(drawing.sceneId) ?? []);
   for (const { fog } of fogRows) {
     const list = revealsByScene.get(fog.sceneId) ?? [];
     list.push(fog);
@@ -810,8 +784,8 @@ export async function buildSnapshot(
             controllersByDefinition.get(definition.id) ?? [],
         }));
       for (const id of fogHiddenTokenIds(
-        sceneTokens,
-        revealsByScene.get(sceneId) ?? [],
+        sceneTokens.map(token => isometricFogFootprint(layerSceneById.get(sceneId), token)),
+        (revealsByScene.get(sceneId) ?? []).filter(fog => isometricRowIsPublished(layerSceneById.get(sceneId), fog.levelId)),
         { role: auth.role, membershipId: auth.membershipId },
       ))
         hiddenByFog.add(id);
@@ -952,6 +926,7 @@ export async function buildSnapshot(
       drawing.stampPackId === "campaign-image" &&
       drawing.stampAssetKey &&
       visibleSceneIds.has(drawing.sceneId) &&
+      drawingLayerVisible(drawing) &&
       (auth.role === "GM" || drawing.stampLayer === "PUBLIC")
     )
       visibleAssetIds.add(drawing.stampAssetKey);
@@ -1109,7 +1084,11 @@ export async function buildSnapshot(
         width: scene.backgroundWidth,
         height: scene.backgroundHeight,
       },
-      grid: scene.grid,
+      grid: auth.role === "PLAYER" && scene.grid.isometric ? {
+        ...scene.grid,
+        isometric: isometricPlayerGeometry(scene.grid.isometric),
+        threeD: playerMap3dSpec(scene, revealsByScene.get(scene.id) ?? []),
+      } : scene.grid,
       mapScale: scene.mapScale,
       revision: scene.revision,
       active: campaign.activeSceneId === scene.id,
@@ -1149,10 +1128,11 @@ export async function buildSnapshot(
       revision: definition.revision,
     })),
     fogReveals: fogRows
-      .filter(({ fog }) => visibleSceneIds.has(fog.sceneId))
+      .filter(({ fog }) => visibleSceneIds.has(fog.sceneId) && layerVisible(fog.sceneId, fog.levelId))
       .map(({ fog }) => ({
         id: fog.id,
         sceneId: fog.sceneId,
+        levelId: fog.levelId,
         x: fog.x,
         y: fog.y,
         width: fog.width,
@@ -1167,6 +1147,7 @@ export async function buildSnapshot(
       .filter(
         ({ drawing }) =>
           visibleSceneIds.has(drawing.sceneId) &&
+          drawingLayerVisible(drawing) &&
           (auth.role === "GM" ||
             drawing.kind === "FREEHAND" ||
             drawing.stampLayer === "PUBLIC"),
@@ -1262,8 +1243,10 @@ export async function buildSnapshot(
       updatedAt: track.updatedAt.toISOString(),
     })),
     snapshotVersion,
+    snapshotSequence,
     schemaVersion: env.SCHEMA_VERSION,
     buildVersion: env.APP_VERSION,
+    localSessionBridge: auth.role === "GM" && env.DEPLOYMENT_MODE === "LOCAL_HOST" && env.LOCAL_SESSION_BRIDGE_ENABLED,
     buildRevision: env.BUILD_REVISION,
     serverTime: new Date().toISOString(),
   };

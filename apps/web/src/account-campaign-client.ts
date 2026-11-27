@@ -9,6 +9,25 @@ export type AccountCampaign = {
   archive?: { archivedAt: string | null; revision: number };
 };
 export type AccountCampaignList = { campaigns: AccountCampaign[] };
+export type LocalCampaignPlayer = {
+  membershipId: string;
+  displayName: string;
+  accessRevokedAt: string | null;
+};
+export const listLocalCampaignPlayers = (campaignId: string) =>
+  api<{ players: LocalCampaignPlayer[] }>(
+    `/api/account/campaigns/${encodeURIComponent(campaignId)}/players`,
+  );
+export const revokeLocalCampaignPlayer = (
+  campaignId: string,
+  membershipId: string,
+  csrfToken: string,
+) =>
+  api<{ ok: true }>("/api/account/campaigns/players/revoke", {
+    method: "POST",
+    headers: { "x-csrf-token": csrfToken },
+    body: JSON.stringify({ campaignId, membershipId }),
+  });
 export type AccountCampaignCreateResult = {
   campaignId: string;
   membershipId: string;

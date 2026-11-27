@@ -6,10 +6,14 @@ import type {
 } from "@arken/contracts";
 import { tokenPreviewEpochs } from "./token-preview-epochs.js";
 import { campaignRoom } from "./rooms.js";
+import { emitSnapshotDelivery } from "./snapshot-delta.js";
+import type { SnapshotDelta } from "@arken/contracts";
 
 type SnapshotSocket = {
   id: string;
-  emit(event: "game:snapshot", snapshot: GameSnapshot): unknown;
+  data?: { snapshotDeltaV1?: boolean };
+  emit(event: "game:snapshot", snapshot: GameSnapshot, deliveryId?: string): unknown;
+  emit(event: "game:delta", delta: SnapshotDelta): unknown;
   emit(event: "token:preview-epoch", epoch: string): unknown;
 };
 export function emitPreviewSnapshot(
@@ -17,6 +21,7 @@ export function emitPreviewSnapshot(
   socket: SnapshotSocket,
   campaignId: string,
   snapshot: GameSnapshot,
+  allowDelta = false,
 ): void {
   const { epoch, changed } = tokenPreviewEpochs.snapshot(
     socket.id,
@@ -26,5 +31,5 @@ export function emitPreviewSnapshot(
   if (changed)
     io.to(campaignRoom(campaignId)).emit("token:preview-epoch", epoch);
   else socket.emit("token:preview-epoch", epoch);
-  socket.emit("game:snapshot", snapshot);
+  emitSnapshotDelivery(io, socket, snapshot, allowDelta);
 }

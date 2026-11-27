@@ -243,6 +243,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@arken/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@electric-sql/pglite':
         specifier: 0.5.4
         version: 0.5.4

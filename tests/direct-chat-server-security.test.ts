@@ -25,9 +25,15 @@ describe("direct chat server security invariants", () => {
       upload.indexOf("toBuffer()"),
     );
     expect(upload).toContain("file.file.truncated");
-    expect(upload).toContain("sum(assets.sizeBytes)");
-    expect(upload).toContain("sum(feedbackAttachments.sizeBytes)");
-    expect(upload).toContain("sum(chatAttachmentUploads.sizeBytes)");
+    const staging=await readFile(new URL("../apps/server/src/chat-attachment-upload.ts",import.meta.url),"utf8");
+    expect(upload).toContain("stageChatAttachment(db,auth,buffer,file.filename)");
+    expect(staging).toContain("sum(assets.sizeBytes)");
+    expect(staging).toContain("sum(feedbackAttachments.sizeBytes)");
+    expect(staging).toContain("sum(chatAttachmentUploads.sizeBytes)");
+    expect(staging).toContain("buffer.length > env.MAX_IMAGE_BYTES");
+    expect(staging).toContain("reconcileChatUploadFile(db, auth.campaignId, stored.storageKey)");
+    const cleanup=await readFile(new URL("../apps/server/src/chat-upload-reconcile.ts",import.meta.url),"utf8");
+    expect(cleanup).toContain("FOR UPDATE");expect(cleanup).toContain('isolationLevel: "read committed"');expect(cleanup).toContain('if (reference) return "REFERENCED"');
     expect(upload).toContain(".limit(25)");
     expect(upload).toContain("removeStoredUpload(item.storageKey)");
   });
@@ -50,13 +56,16 @@ describe("direct chat server security invariants", () => {
       source.indexOf('app.post("/api/chat/direct/messages"'),
       source.indexOf('app.post("/api/chat"'),
     );
-    expect(direct).toContain("duplicate.membershipId === auth.membershipId");
-    expect(direct).toContain('duplicate.type === "chat.created"');
-    expect(direct).toContain("duplicate.payload.threadId === thread.id");
-    expect(direct).toContain('error: "ACTION_ID_CONFLICT"');
-    expect(direct).toContain("replay?.membershipId === auth.membershipId");
-    expect(direct).toContain("send(duplicate.payload)");
-    expect(direct).toContain("send(replay.payload)");
+    const command=await readFile(new URL("../apps/server/src/direct-chat-command.ts",import.meta.url),"utf8");
+    expect(command).toContain("event.membershipId === auth.membershipId");
+    expect(command).toContain('event.type === "chat.created"');
+    expect(command).toContain("dto?.threadId === body.threadId");
+    expect(command).toContain("dto.body === body.body");
+    expect(command).toContain("body.attachmentContentIds");
+    expect(command).toContain('new DirectChatError(409, "ACTION_ID_CONFLICT")');
+    expect(command).toContain("FOR UPDATE");
+    expect(direct).toContain("submitDirectChat(db,auth,body)");
+    expect(direct).toContain("if(saved.duplicate)return reply.code(200).send(saved.dto)");
     expect(direct).not.toContain("send({ duplicate: true })");
   });
 

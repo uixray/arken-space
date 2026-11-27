@@ -1,0 +1,38 @@
+.app-shell.app-shell--recovery {
+  grid-template-rows: var(--size-topbar-height) auto minmax(0, 1fr);
+}
+.connection-notice {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-block-end: 1px solid var(--line, #8b7959);
+  background: var(--surface, #28251f);
+  color: var(--text, #f1e8d8);
+  min-height: 0;
+  max-height: 40dvh;
+  overflow: auto;
+}
+.connection-notice p { flex: 1 1 240px; min-width: 0; display: grid; gap: 3px; margin: 0; overflow-wrap: anywhere; }
+.connection-notice button { flex-shrink: 0; min-height: 44px; }
+.connection-notice a { display: inline-flex; align-items: center; min-height: 44px; color: inherit; }
+@media (max-width: 600px) {
+  .connection-notice { align-items: stretch; flex-direction: column; flex-wrap: nowrap; padding: 8px 12px; }
+  .connection-notice p { flex: 0 0 auto; }
+}
+@media (max-width: 1023px) {
+  body .character-workspace[data-compact="true"] {
+    top: calc(var(--compact-viewport-top, 0px) + var(--compact-header-height) + var(--connection-notice-height, 0px));
+    height: max(0px, calc(var(--compact-viewport-height, 100dvh) - var(--compact-header-height) - var(--compact-nav-height) - var(--connection-notice-height, 0px)));
+  }
+  .app-shell.app-shell--compact.app-shell--recovery {
+    grid-template-rows: var(--compact-header-height) auto minmax(0, 1fr) var(--compact-nav-height);
+  }
+  .app-shell.app-shell--compact.app-shell--recovery[data-compact-surface="map"],
+  .app-shell.app-shell--compact.app-shell--recovery[data-compact-surface="menu"] {
+    grid-template-rows: auto minmax(0, 1fr) var(--compact-nav-height);
+  }
+}

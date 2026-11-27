@@ -1,3 +1,4 @@
+import {GameReadOnlyProvider} from "../game-read-only";
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -586,4 +587,11 @@ describe("счётчики ресурсов", () => {
     });
     expect(screen.getByText("Дыхание")).toBeInTheDocument();
   });
+});
+
+it("disables resource mutations inside a read-only game provider",()=>{
+ const onSpend=vi.fn();renderComponent(<GameReadOnlyProvider value={true}><ResourceCounters scopeKey="copy-character" rows={rows} resources={{physicalPower:{current:4,maximum:10},magicPower:{current:1,maximum:6}}} stats={stats} editable onSpend={onSpend}/></GameReadOnlyProvider>);
+ for(const input of screen.getAllByRole('spinbutton'))expect(input).toBeDisabled();
+ for(const button of document.querySelectorAll('.resource-counters__controls button'))expect(button).toBeDisabled();
+ expect(onSpend).not.toHaveBeenCalled();
 });

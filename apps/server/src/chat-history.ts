@@ -61,6 +61,12 @@ export function fullChatVisibilityFilter(
         )
       : isNull(chatMessages.playerRequestId);
 
+  return fullChatVisibilityFilterWithRequests(auth,playerRequestFilter!);
+}
+
+/** Same visibility predicate for a trusted campaign-scoped SQL request selector.
+ * Used by bulk transfer without materializing every request ID in memory. */
+export function fullChatVisibilityFilterWithRequests(auth:AuthContext,playerRequestFilter:SQL):SQL{
   return and(
     chatVisibilityFilter(auth),
     or(

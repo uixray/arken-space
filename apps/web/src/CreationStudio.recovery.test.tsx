@@ -128,3 +128,105 @@ it("uses the confirmed version on the next save after recovery", async () => {
     expect.any(String),
   );
 });
+it("opens the matching fork after the missing response is recovered", async () => {
+  fixtures.items = [];
+  const design = {
+    name: "Основа",
+    lore: "",
+    appearance: "",
+    selections: [{ componentId: "test", parameters: {} }],
+    adjustments: { power: 0, priceCopper: 0, craftSp: 0, usageCost: 0 },
+    adjustmentReason: "",
+  };
+  fixtures.licences = [
+    {
+      id: "licence",
+      ownerMembershipId: "member",
+      author: { displayName: "Автор" },
+      rulesEnabled: true,
+      version: {
+        id: "old",
+        kind: "SKILL",
+        design,
+        evaluation: { valid: true },
+      },
+    },
+  ];
+  const ranges = Object.fromEntries(
+    ["power", "priceCopper", "craftSp", "usageCost"].map((k) => [
+      k,
+      { min: 0, max: 0 },
+    ]),
+  );
+  const packs = [
+    {
+      id: "pack",
+      kind: "SKILL",
+      enabled: true,
+      name: "Rules",
+      activeVersion: {
+        id: "rule",
+        number: 1,
+        source: {
+          components: [],
+          slots: CREATION_SLOTS.SKILL.map((slot) => ({ slot, min: 0, max: 1 })),
+          manualAdjustment: ranges,
+        },
+      },
+    },
+  ];
+  const submit = vi.fn().mockResolvedValue(undefined);
+  const session = {
+    context: { campaignId: "c", membershipId: "member" },
+    busy: false,
+    locked: false,
+    submit,
+    completed: null,
+  };
+  const props = {
+    packs: packs as never,
+    gm: false,
+    characterId: "",
+    active: true,
+  };
+  const view = renderComponent(
+    <CreationStudio session={session as never} {...props} />,
+  );
+  const user = userEvent.setup();
+  await user.click(
+    screen.getByRole("button", { name: "Новый черновик на основе" }),
+  );
+  await user.selectOptions(screen.getByLabelText("Текущие правила"), "rule");
+  await user.click(screen.getByRole("button", { name: "Создать черновик" }));
+  const body = submit.mock.calls[0]![1];
+  const receipt = {
+    revision: 0,
+    versionId: "new",
+    number: 1,
+    versionHash: "hash",
+    evaluation: { valid: true },
+  };
+  view.rerender(
+    <CreationStudio
+      session={
+        {
+          ...session,
+          completed: { path: "templates/fork", body, receipt },
+        } as never
+      }
+      {...props}
+    />,
+  );
+  expect(
+    screen.queryByText(/Новый черновик из шаблона/),
+  ).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Название", { exact: true })).toHaveValue(
+    "Основа — вариант",
+  );
+  await user.click(
+    screen.getByRole("button", { name: "Новый черновик на основе" }),
+  );
+  await user.selectOptions(screen.getByLabelText("Текущие правила"), "rule");
+  expect(screen.getByText(/Новый черновик из шаблона/)).toBeInTheDocument();
+  expect(submit).toHaveBeenCalledTimes(1);
+});

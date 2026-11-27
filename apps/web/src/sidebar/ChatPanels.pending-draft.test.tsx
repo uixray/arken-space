@@ -230,6 +230,12 @@ describe("UIX624 DirectChatPanel pending draft ownership", () => {
         "Вернуть после ошибки",
       ),
     );
+    expect(
+      screen.getByText(/сообщение могло сохраниться/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/не перезагружая страницу и не выходя из игры/i),
+    ).toBeInTheDocument();
     expect(preview, "UIX624_DIRECT_RESTORED_PREVIEW").toHaveAttribute(
       "src",
       "blob:preview-1",

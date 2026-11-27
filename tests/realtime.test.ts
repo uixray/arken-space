@@ -1,3 +1,4 @@
+import {validateTransferMediaEvent} from "../apps/server/src/campaign-transfer-media-events.js";
 import { createServer, type Server as HttpServer } from "node:http";
 import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
@@ -461,7 +462,10 @@ afterEach(async () => {
   await new Promise<void>((resolve, reject) =>
     httpServer.close((error) => (error ? reject(error) : resolve())),
   ).catch(() => undefined);
-  await database.close();
+  try {
+    const events=await database.query<{row_json:string}>(`SELECT to_jsonb(e)::text AS row_json FROM game_events e WHERE type IN ('AUDIO_COMMAND','AUDIO_TRACK_COMMAND')`);
+    for(const event of events.rows)validateTransferMediaEvent(JSON.parse(event.row_json));
+  } finally { await database.close(); }
 });
 
 describe("stat layout projection", () => {
@@ -2094,6 +2098,68 @@ describe("durable realtime token commands", () => {
       status: "INVALID",
       reason: "TRACK_NOT_FOUND",
     });
+  });
+
+  it("delivers audio broadcasts only to the matching campaign in both directions", async () => {
+    const foreignSession = "realtime-second-campaign-gm-session";
+    await database.exec(`
+      insert into campaigns (id, name) values ('${ids.foreignCampaign}', 'Second table');
+      insert into memberships (id, campaign_id, role, display_name)
+      values ('${ids.foreignGm}', '${ids.foreignCampaign}', 'GM', 'Second GM');
+      insert into sessions (membership_id, token_hash, expires_at)
+      values ('${ids.foreignGm}', '${hashToken(foreignSession)}', now() + interval '1 day');
+    `);
+    const address = httpServer.address();
+    if (!address || typeof address === "string")
+      throw new Error("TEST_SERVER_ADDRESS");
+    const secondGm: typeof gmClient = createClient(
+      `http://127.0.0.1:${address.port}`,
+      {
+        autoConnect: false,
+        transports: ["websocket"],
+        extraHeaders: { Cookie: `arken_session=${foreignSession}` },
+      },
+    );
+    const firstActions: Array<string | undefined> = [];
+    const secondActions: Array<string | undefined> = [];
+    const recordFirst: ServerToClientEvents["audio:track:state"] = (event) => {
+      firstActions.push(event.actionId);
+    };
+    const recordSecond: ServerToClientEvents["audio:track:state"] = (event) => {
+      secondActions.push(event.actionId);
+    };
+    gmClient.on("audio:track:state", recordFirst);
+    secondGm.on("audio:track:state", recordSecond);
+    try {
+      const ready = Promise.all([
+        waitForConnection(secondGm),
+        waitForSnapshot(secondGm),
+      ]);
+      secondGm.connect();
+      await ready;
+      const addTrack = async (socket: typeof gmClient, actionId: string) => {
+        expect(
+          await audioTrackCommand(socket, {
+            actionId,
+            command: "ADD_TRACK",
+            assetId: null,
+          }),
+        ).toMatchObject({ ok: true, status: "ACCEPTED" });
+      };
+      const [firstId, secondId, firstBarrier] = Array.from({ length: 3 }, () =>
+        crypto.randomUUID(),
+      );
+      // Each socket receives its own broadcast before the ACK on that socket.
+      // The final A broadcast therefore also drains any earlier B event sent to A.
+      await addTrack(gmClient, firstId!);
+      await addTrack(secondGm, secondId!);
+      await addTrack(gmClient, firstBarrier!);
+      expect(firstActions).toEqual([firstId, firstBarrier]);
+      expect(secondActions).toEqual([secondId]);
+    } finally {
+      gmClient.off("audio:track:state", recordFirst);
+      secondGm.disconnect();
+    }
   });
 
   it("broadcasts ruler updates and clear events across clients (single-segment back-compat)", async () => {

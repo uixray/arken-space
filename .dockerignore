@@ -12,6 +12,7 @@
 .kimi
 .workspace
 .worktrees
+.qa-temp
 .tmp_*
 node_modules
 **/node_modules

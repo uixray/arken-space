@@ -397,7 +397,6 @@ export function MusicBar({
             (asset.audioPurpose ?? "MUSIC") !== "SOUND_EFFECT",
         )
         .sort((a, b) => {
-          if (campaignId !== "eb6a55c4-a821-4739-8d4a-a1028e9d9092") return 0;
           const group = (name: string) =>
             /^\d/.test(name)
               ? 0

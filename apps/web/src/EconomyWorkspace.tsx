@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type {
-  EconomyHistoryDto,
-  EconomyQuoteDto,
-  EconomyReceiptDto,
-  ShopCatalogDto,
+import {
+  economyReceiptSchema,
+  type EconomyHistoryDto,
+  type EconomyQuoteDto,
+  type EconomyReceiptDto,
+  type ShopCatalogDto,
 } from "@arken/contracts";
 import { ApiError, formatApiError } from "./api";
 import { ArkenDialog } from "./ui/ArkenDialog";
-import { EconomyManager } from "./EconomyManager";
+import { EconomyManager, type EconomyManagerHandle } from "./EconomyManager";
 import { copperLabel, economyApi, economyRequest } from "./economy-client";
 import "./economy.css";
 
@@ -15,9 +16,23 @@ type PendingPurchase = { actionId: string; quoteId: string };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function readPending(key: string): PendingPurchase | null {
   const raw = window.localStorage.getItem(key);
-  if (!raw) return null;
-  const value = JSON.parse(raw) as PendingPurchase;
-  if (!uuid.test(value.actionId) || !uuid.test(value.quoteId))
+  if (raw === null) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    value = null;
+  }
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("actionId" in value) ||
+    !("quoteId" in value) ||
+    typeof value.actionId !== "string" ||
+    typeof value.quoteId !== "string" ||
+    !uuid.test(value.actionId) ||
+    !uuid.test(value.quoteId)
+  )
     throw new Error(
       "Повреждена сохранённая квитанция запроса. Не создавайте новую покупку до проверки истории.",
     );
@@ -55,10 +70,12 @@ export function EconomyWorkspace({
   });
   const [pending, setPending] = useState<PendingPurchase | null>(null);
   const [storageBlocked, setStorageBlocked] = useState(false);
+  const [storageError, setStorageError] = useState("");
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [manager, setManager] = useState(false);
+  const managerRef = useRef<EconomyManagerHandle>(null);
   const mounted = useRef(false);
   const inFlight = useRef(false);
   const uncertain = useRef<PendingPurchase | null>(null);
@@ -73,7 +90,7 @@ export function EconomyWorkspace({
       setPending(saved);
     } catch (e) {
       setStorageBlocked(true);
-      setError(formatApiError(e));
+      setStorageError(formatApiError(e));
     }
     setReady(true);
     const abort = new AbortController();
@@ -162,14 +179,21 @@ export function EconomyWorkspace({
         setReceipt(null);
       }
     });
-  const clearPending = (actionId: string) => {
-    // A failed remove leaves only a safe duplicate replay after reopening.
-    try {
-      if (readPending(key)?.actionId === actionId)
-        window.localStorage.removeItem(key);
-    } catch {
-      /* receipt is authoritative */
-    }
+  const clearPending = (command: PendingPurchase) => {
+    const current = readPending(key);
+    if (
+      !current ||
+      current.actionId !== command.actionId ||
+      current.quoteId !== command.quoteId
+    )
+      throw new Error(
+        "Сохранённая покупка изменилась. Данные оставлены; проверьте историю с мастером.",
+      );
+    window.localStorage.removeItem(key);
+    if (window.localStorage.getItem(key) !== null)
+      throw new Error(
+        "Не удалось очистить подтверждённую покупку. Повторите проверку с тем же кодом действия.",
+      );
     uncertain.current = null;
     if (mounted.current) setPending(null);
   };
@@ -211,12 +235,31 @@ export function EconomyWorkspace({
             setPending(command);
           }
           try {
-            const saved = await economyRequest<EconomyReceiptDto>(
+            const stored = readPending(key);
+            if (
+              !stored ||
+              stored.actionId !== command.actionId ||
+              stored.quoteId !== command.quoteId
+            )
+              throw new Error(
+                "Сохранённая покупка изменилась или недоступна. Запрос не отправлен; проверьте историю с мастером.",
+              );
+            const response = await economyRequest<unknown>(
               context,
               "/api/economy/purchases",
               command,
             );
-            clearPending(command.actionId);
+            const parsed = economyReceiptSchema.safeParse(response);
+            if (
+              !parsed.success ||
+              parsed.data.actionId !== command.actionId ||
+              parsed.data.quoteId !== command.quoteId
+            )
+              throw new Error(
+                "Ответ не подтверждает сохранённую покупку. Повторите проверку с тем же кодом действия.",
+              );
+            const saved = parsed.data;
+            clearPending(command);
             if (mounted.current) {
               setReceipt(saved);
               setQuote(null);
@@ -224,7 +267,7 @@ export function EconomyWorkspace({
           } catch (e) {
             // Only an explicit transactional rejection allows a new quote/action.
             if (e instanceof ApiError && e.details?.notApplied === true) {
-              clearPending(command.actionId);
+              clearPending(command);
               if (mounted.current) setQuote(null);
             }
             throw e;
@@ -238,13 +281,17 @@ export function EconomyWorkspace({
     });
   const locked = busy || !ready || Boolean(pending) || storageBlocked;
   const expired = quote !== null && Date.parse(quote.expiresAt) <= now;
+  const canLeaveManager = () =>
+    !manager || !gm || (managerRef.current?.allowExit() ?? false);
   return (
     <ArkenDialog
       open
       title="Магазины"
       footer={false}
       variant="workspace"
-      onClose={onClose}
+      onClose={() => {
+        if (canLeaveManager()) onClose();
+      }}
     >
       <div className="economy-workspace">
         <div className="economy-actions">
@@ -259,12 +306,15 @@ export function EconomyWorkspace({
             <button
               type="button"
               disabled={busy || Boolean(pending)}
-              onClick={() => setManager((v) => !v)}
+              onClick={() => {
+                if (canLeaveManager()) setManager((v) => !v);
+              }}
             >
               {manager ? "К покупкам" : "Настройки мастера"}
             </button>
           )}
         </div>
+        {storageError && <p role="alert">{storageError}</p>}
         {error && <p role="alert">{error}</p>}
         {pending && (
           <section aria-label="Неподтверждённая покупка">
@@ -289,7 +339,11 @@ export function EconomyWorkspace({
           </p>
         )}
         {manager && gm ? (
-          <EconomyManager context={context} onSaved={() => void run(refresh)} />
+          <EconomyManager
+            ref={managerRef}
+            context={context}
+            onSaved={() => void run(refresh)}
+          />
         ) : (
           <>
             {catalog?.date && (

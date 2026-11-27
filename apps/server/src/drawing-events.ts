@@ -41,6 +41,7 @@ export function drawingSnapshotDto(drawing: DrawingRow): DrawingDto {
   return {
     id: drawing.id,
     sceneId: drawing.sceneId,
+    levelId: drawing.levelId,
     authorMembershipId: drawing.authorMembershipId,
     points: drawing.points,
     color: drawing.color,

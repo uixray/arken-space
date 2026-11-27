@@ -167,4 +167,18 @@ describe("drizzle migration metadata integrity", () => {
 
     expect(missingSinceRepair).toEqual([]);
   });
+  it("keeps the generated baseline identical to current descriptors, including peer upload receipts", async()=>{
+    const {createRequire}=await import("node:module");
+    const {generateDrizzleJson,generateMigration}=createRequire(new URL("../packages/db/package.json",import.meta.url))("drizzle-kit/api");
+    const schema=await import("../packages/db/src/schema.js");
+    const index=readJournal().at(-1)!.idx;
+    const latest=JSON.parse(readFileSync(path.join(metaDirectory,`${String(index).padStart(4,"0")}_snapshot.json`),"utf8"));
+    const current=generateDrizzleJson(schema,latest.id);
+    expect(await generateMigration(latest,current)).toEqual([]);
+    const receipt=current.tables["public.local_chat_upload_receipts"];
+    expect(Object.keys(receipt.columns).sort()).toEqual(["campaign_id","upload_id","membership_id","device_id","session_id","epoch","request_hash","content_id","created_at"].sort());
+    expect(Object.keys(receipt.foreignKeys)).toHaveLength(3);
+    expect(receipt.compositePrimaryKeys.local_chat_upload_receipts_pkey.columns).toEqual(["campaign_id","upload_id"]);
+  });
+
 });

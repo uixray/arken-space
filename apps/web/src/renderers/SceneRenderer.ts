@@ -21,6 +21,8 @@ import type {
 } from "./TerrainStampControls";
 
 export interface SceneRendererProps {
+  readOnly?: boolean;
+  levelView?: { id: string; onChange: (id: string) => void };
   autoFitOnSceneEntry?: boolean;
   /** Local-only preview: origin must exist in this viewer's filtered tokens. */
   abilityAreaPreview?: {
@@ -65,8 +67,14 @@ export interface SceneRendererProps {
   ownRulerColor?: RulerColorKey | null;
   onFogCreate: (
     payload:
-      | { x: number; y: number; width: number; height: number }
-      | { geometry: FogGeometry },
+      | {
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+          levelId?: string | null;
+        }
+      | { geometry: FogGeometry; levelId?: string | null },
   ) => Promise<void>;
   /**
    * UIX-311: encounter lifecycle for the active scene. SCENE_REGION cameras
@@ -121,6 +129,7 @@ export interface SceneRendererProps {
    */
   onSelectionChange?: (tokenIds: string[]) => void;
   onDrawingCreate: (drawing: {
+    levelId?: string | null;
     points: number[];
     color: string;
     strokeWidth?: number;
@@ -130,7 +139,7 @@ export interface SceneRendererProps {
   onPing: (point: { x: number; y: number }) => void;
   onPlaceTokenDefinition?: (
     definitionId: string,
-    point?: { x: number; y: number },
+    point?: { x: number; y: number; levelId?: string | null },
   ) => Promise<void>;
   onTokenLayerChange?: (
     tokenId: string,

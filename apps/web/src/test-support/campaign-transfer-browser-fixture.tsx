@@ -1,0 +1,13 @@
+import {createRoot} from 'react-dom/client';
+import {z} from 'zod';
+import {CampaignTransferPanel} from '../local-first/CampaignTransferPanel';
+import {PlayerThemeRoot} from '../design-system/player-theme-runtime';
+import '../design-system/tokens.generated.css';
+import '../ui/theme-root.css';
+import '../design-system/foundations.css';
+import '../ui/gravity-foundation.css';
+import '../styles.css';
+import '../mobile-foundation.css';
+import '../account-auth.css';
+const campaignId=z.string().uuid().parse(new URLSearchParams(location.search).get('campaignId'));
+createRoot(document.getElementById('root')!).render(<PlayerThemeRoot><main className="account-auth-shell"><section className="account-auth-card account-home"><h1>Синтетическая кампания</h1><CampaignTransferPanel campaignId={campaignId} csrfToken="synthetic-csrf-127"/></section></main></PlayerThemeRoot>);

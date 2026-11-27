@@ -70,3 +70,15 @@ export function installMatchMediaMock(matches = false) {
     })),
   );
 }
+
+/** Opt-in Popover API model for jsdom: visibility/open state only, no fake
+ * browser top-layer geometry. Geometry remains under each test's own fixtures. */
+export function installPopoverMock(){
+ if(typeof HTMLElement.prototype.showPopover==="function")return ()=>{};
+ const show=Object.getOwnPropertyDescriptor(HTMLElement.prototype,"showPopover"),hide=Object.getOwnPropertyDescriptor(HTMLElement.prototype,"hidePopover"),matches=Element.prototype.matches;
+ const opened=new WeakSet<Element>();
+ Object.defineProperty(HTMLElement.prototype,"showPopover",{configurable:true,value:function(this:HTMLElement){opened.add(this);this.style.display="block";}});
+ Object.defineProperty(HTMLElement.prototype,"hidePopover",{configurable:true,value:function(this:HTMLElement){opened.delete(this);this.style.display="none";}});
+ Element.prototype.matches=function(selector:string){return selector===":popover-open"?opened.has(this):matches.call(this,selector);};
+ return ()=>{Element.prototype.matches=matches;if(show)Object.defineProperty(HTMLElement.prototype,"showPopover",show);else Reflect.deleteProperty(HTMLElement.prototype,"showPopover");if(hide)Object.defineProperty(HTMLElement.prototype,"hidePopover",hide);else Reflect.deleteProperty(HTMLElement.prototype,"hidePopover");};
+}

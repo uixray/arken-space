@@ -249,6 +249,21 @@ describe("SpellSchoolsWorkspace", () => {
         ":disabled",
       ),
     ).toBe(false);
+    fireEvent.change(screen.getAllByLabelText("Описание")[0]!, {
+      target: { value: "Перенесённая правка" },
+    });
+    // Explicitly deleting the recovery copy removes its download control; new
+    // edits must not resurrect the discarded draft or keep the editor locked.
+    expect(screen.queryByRole("button", {
+      name: "Скачать копию конфликтного черновика",
+    })).toBeNull();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Проверить и сохранить новую версию",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
   });
 
   it("activates only after explicit confirmation and displays validation warnings", async () => {

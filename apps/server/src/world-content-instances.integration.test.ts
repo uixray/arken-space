@@ -745,12 +745,43 @@ describe("world content instances HTTP: delete", () => {
 });
 
 describe("world content instances: campaign cascade delete", () => {
-  it("removes instances when their campaign is deleted", async () => {
+  it("removes campaign instances without rewriting shared canon or another campaign's instance", async () => {
+    const canonicalRows = () =>
+      db
+        .select()
+        .from(schema.worldContent)
+        .where(eq(schema.worldContent.id, ids.entity));
+    const before = await canonicalRows();
+    expect(before).toHaveLength(1);
+    const [relation] = await db
+      .insert(schema.worldContentRelations)
+      .values({
+        fromWorldContentId: ids.entity,
+        toWorldContentId: ids.draftEntity,
+        relationType: "QA_RELATED",
+      })
+      .returning();
+    const survivor = await app.inject({
+      method: "POST",
+      url: "/api/world-content-instances",
+      headers: headers(secrets.foreignGm),
+      payload: createBody({
+        actionId: id(),
+        displayNameOverride: "Local survivor",
+        discovered: true,
+      }),
+    });
+    expect(survivor.statusCode).toBe(201);
+    const survivingInstance = survivor.json();
     const res = await app.inject({
       method: "POST",
       url: "/api/world-content-instances",
       headers: headers(secrets.cascadeGm),
-      payload: createBody({ actionId: id() }),
+      payload: createBody({
+        actionId: id(),
+        displayNameOverride: "Local removed",
+        discovered: true,
+      }),
     });
     expect(res.statusCode).toBe(201);
     const created = res.json();
@@ -764,5 +795,101 @@ describe("world content instances: campaign cascade delete", () => {
       .from(schema.worldContentInstances)
       .where(eq(schema.worldContentInstances.id, created.id));
     expect(row).toBeUndefined();
+    expect(await canonicalRows()).toEqual(before);
+    expect(
+      await db
+        .select()
+        .from(schema.worldContentRelations)
+        .where(eq(schema.worldContentRelations.id, relation!.id)),
+    ).toEqual([relation]);
+
+    const stillReadable = await app.inject({
+      method: "GET",
+      url: `/api/world-content-instances/${survivingInstance.id}`,
+      headers: headers(secrets.foreignGm),
+    });
+    expect(stillReadable.statusCode).toBe(200);
+    expect(stillReadable.json()).toMatchObject({
+      id: survivingInstance.id,
+      worldContentId: ids.entity,
+      displayNameOverride: "Local survivor",
+      discovered: true,
+    });
+  });
+
+  it("retains independent library cover and gallery after deleting their original campaign", async () => {
+    const removedCampaign = id();
+    const uploader = id();
+    const canonical = id();
+    const removedAsset = id();
+    await db
+      .insert(schema.campaigns)
+      .values({ id: removedCampaign, name: "Disposable media owner" });
+    await db.insert(schema.memberships).values({
+      id: uploader,
+      campaignId: removedCampaign,
+      role: "GM",
+      displayName: "Disposable uploader",
+    });
+    await db.insert(schema.assets).values({
+      id: removedAsset,
+      campaignId: removedCampaign,
+      uploadedByMembershipId: uploader,
+      kind: "IMAGE",
+      name: "Disposable cover",
+      storageKey: `test/${removedAsset}`,
+      mimeType: "image/png",
+      sizeBytes: 1,
+    });
+    const [before] = await db
+      .insert(schema.worldContent)
+      .values({
+        id: canonical,
+        slug: `media-lifetime-${canonical}`,
+        name: "Canonical media lifetime fixture",
+        type: "ARTICLE",
+        lifecycle: "PUBLISHED",
+        coverAssetId: removedAsset,
+      })
+      .returning();
+    const gallery = await db
+      .insert(schema.worldContentMedia)
+      .values([
+        {
+          worldContentId: canonical,
+          assetId: removedAsset,
+          caption: "Removed campaign media",
+          ordering: 0,
+        },
+        {
+          worldContentId: canonical,
+          assetId: ids.portrait,
+          caption: "Retained campaign media",
+          ordering: 1,
+        },
+      ])
+      .returning();
+    expect(gallery).toHaveLength(2);
+    await db
+      .delete(schema.campaigns)
+      .where(eq(schema.campaigns.id, removedCampaign));
+
+    const [after] = await db
+      .select()
+      .from(schema.worldContent)
+      .where(eq(schema.worldContent.id, canonical));
+    expect(after).toEqual(before);
+    const retainedGallery = await db.select().from(schema.worldContentMedia).where(eq(schema.worldContentMedia.worldContentId, canonical));
+    expect(retainedGallery).toHaveLength(gallery.length);
+    expect(retainedGallery).toEqual(expect.arrayContaining(gallery));
+    const retainedLibrary = await db.select().from(schema.worldContentImages).where(eq(schema.worldContentImages.id, removedAsset));
+    expect(retainedLibrary).toHaveLength(1);
+    expect(retainedLibrary[0]).toMatchObject({id:removedAsset,storageKey:`test/${removedAsset}`,mimeType:"image/png",sizeBytes:1});
+    expect(
+      await db
+        .select({ id: schema.assets.id })
+        .from(schema.assets)
+        .where(eq(schema.assets.id, removedAsset)),
+    ).toEqual([]);
   });
 });

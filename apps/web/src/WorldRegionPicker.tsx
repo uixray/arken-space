@@ -5,6 +5,20 @@ import { FormInput, FormSelect } from "./ui/GravityFormControls";
 type Option = { id: string; name: string };
 type Page = { items: Option[]; hasMore: boolean };
 
+function isRegionPage(value: unknown): value is Page {
+  if (!value || typeof value !== "object") return false;
+  const page = value as { items?: unknown; hasMore?: unknown };
+  return (
+    typeof page.hasMore === "boolean" &&
+    Array.isArray(page.items) &&
+    page.items.every((item: unknown) => {
+      if (!item || typeof item !== "object") return false;
+      const option = item as { id?: unknown; name?: unknown };
+      return typeof option.id === "string" && typeof option.name === "string";
+    })
+  );
+}
+
 /** Uses a bounded, role-filtered endpoint; never downloads the GM entity bodies. */
 export function WorldRegionPicker({
   value,
@@ -42,6 +56,11 @@ export function WorldRegionPicker({
       ])
         .then(([result, chosen]) => {
           if (abort.signal.aborted) return;
+          if (!isRegionPage(result) || !isRegionPage(chosen)) {
+            throw new Error(
+              "Не удалось загрузить список регионов: неверный ответ сервера.",
+            );
+          }
           setPage(result);
           setSelected(chosen.items[0] ?? null);
         })

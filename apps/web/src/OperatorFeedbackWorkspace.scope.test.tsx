@@ -136,6 +136,29 @@ it("does not write a late export to the clipboard after close", async () => {
   expect(write).not.toHaveBeenCalled();
 });
 
+it("requires a fresh review after editing either field of the copy", async () => {
+  const view = await setup();
+  await view.user.click(
+    screen.getByRole("button", { name: "Подготовить копию" }),
+  );
+  const checkbox = screen.getByRole("checkbox", { name: /Я просмотрел текст/ });
+  const copy = screen.getByRole("button", {
+    name: "Копировать проверенный текст",
+  });
+  expect(copy).toBeDisabled();
+  await view.user.click(checkbox);
+  expect(copy).toBeEnabled();
+  await view.user.type(screen.getByLabelText("Заголовок копии"), "!");
+  expect(checkbox).not.toBeChecked();
+  expect(copy).toBeDisabled();
+  await view.user.click(checkbox);
+  expect(copy).toBeEnabled();
+  await view.user.type(screen.getByLabelText("Текст копии"), "!");
+  expect(checkbox).not.toBeChecked();
+  expect(copy).toBeDisabled();
+  expect(feedback.fetchRedactedExport).not.toHaveBeenCalled();
+});
+
 it.each(
   [401, 403].flatMap((status) =>
     ["export", "attachment", "reveal", "transition"].map((action) => ({

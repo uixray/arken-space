@@ -111,7 +111,7 @@ export async function purchaseEconomy(
       .where(eq(economyPurchases.quoteId, quote.id))
       .limit(1);
     if (used) throw new Error("ECONOMY_QUOTE_USED");
-    if (quote.expiresAt.getTime() <= Date.now())
+    if (quote.transferInvalidated || quote.expiresAt.getTime() <= Date.now())
       throw new Error("ECONOMY_QUOTE_EXPIRED");
     const view = quote.view as EconomyQuoteDto;
     const request = economyQuoteCommandSchema.parse({
@@ -122,7 +122,7 @@ export async function purchaseEconomy(
     const state = await loadPriceState(tx, auth, locked, request);
     if (quote.inputHash !== state.inputHash)
       throw new Error("ECONOMY_QUOTE_STALE");
-    if (quote.expiresAt.getTime() <= Date.now())
+    if (quote.transferInvalidated || quote.expiresAt.getTime() <= Date.now())
       throw new Error("ECONOMY_QUOTE_EXPIRED");
     const wallet = debitCoins(state.character.wallet, state.totalCopper);
     await tx

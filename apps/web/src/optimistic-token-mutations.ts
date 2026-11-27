@@ -40,6 +40,11 @@ export function optimisticPlacementToken(
       ? Math.round((value - offset) / scene.grid.size) * scene.grid.size +
         offset
       : value;
+  const geometry = scene.grid.isometric;
+  const requestedLevel = typeof body.levelId === "string" ? body.levelId : body.levelId === null ? null : undefined;
+  const level = requestedLevel === undefined ? (geometry ? snapshot.me.role === "GM" ? geometry.floors[0]!.id : geometry.publishedFloorId ?? geometry.floors[0]!.id : null) : requestedLevel;
+  const isBaseLevel = geometry && (snapshot.me.role === "GM" ? level === geometry.floors[0]!.id
+    : geometry.floors.find(f => f.id === level)?.legacyNullLevel === true);
   return {
     id: `pending:${String(body.actionId)}`,
     definitionId: definition?.id ?? `pending:${String(body.actionId)}`,
@@ -70,7 +75,7 @@ export function optimisticPlacementToken(
     width,
     height,
     z: 0,
-    levelId: null,
+    levelId: isBaseLevel ? null : level,
     rotation: 0,
     visible: true,
     locked: true,

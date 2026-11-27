@@ -10,6 +10,67 @@ import {
 } from "../test-support/render";
 import { DiceTrayPanel } from "./DiceTrayPanel";
 
+it("показывает персональные названия только выбранному участнику и сохраняет формулы", async () => {
+  const onRoll = vi.fn().mockResolvedValue(undefined);
+  const props = {
+    characterId: "hero",
+    visibility: "PUBLIC" as const,
+    onVisibilityChange: vi.fn(),
+    onRoll,
+  };
+  const view = renderComponent(
+    <DiceTrayPanel {...props} personalDiceNames="GEOMETRIC" />,
+  );
+  for (const [sides, name] of [
+    [2, "диэдрон"],
+    [4, "тетраэдр"],
+    [6, "гексаэдр"],
+    [8, "октаэдр"],
+    [10, "декаэдр"],
+    [12, "додекаэдр"],
+    [20, "икосаэдр"],
+  ] as const)
+    expect(
+      screen.getByRole("button", { name: `${name} (d${sides})` }),
+    ).toHaveTextContent(`d${sides}`);
+  expect(screen.getByRole("button", { name: "d100" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "гексаэдр (d6)" }));
+  await waitFor(() =>
+    expect(onRoll).toHaveBeenCalledWith(
+      "1d6",
+      "Чистый бросок гексаэдра",
+      "PUBLIC",
+      "hero",
+      "NORMAL",
+    ),
+  );
+  await userEvent.click(screen.getByRole("button", { name: "d100" }));
+  await waitFor(() =>
+    expect(onRoll).toHaveBeenCalledWith(
+      "1d100",
+      "Чистый бросок стогранника",
+      "PUBLIC",
+      "hero",
+      "NORMAL",
+    ),
+  );
+  view.rerender(<DiceTrayPanel {...props} />);
+  expect(
+    screen.queryByRole("button", { name: "гексаэдр (d6)" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "d6" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "d6" }));
+  await waitFor(() =>
+    expect(onRoll).toHaveBeenLastCalledWith(
+      "1d6",
+      "Чистый бросок куба",
+      "PUBLIC",
+      "hero",
+      "NORMAL",
+    ),
+  );
+});
+
 it("объявляет busy без видимой строки и принимает второй бросок до ответа первого (UIX-621)", async () => {
   let finish!: () => void;
   const onRoll = vi.fn(

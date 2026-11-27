@@ -24,3 +24,10 @@ describe("campaign return after login", () => {
       expect(campaignReturnPath(candidate)).toBeNull();
   });
 });
+
+it("keeps encyclopedia and Bionic selection together without forwarding arbitrary queries",()=>{
+ const article="10000000-0000-4000-8000-000000000001";
+ expect(campaignReturnPath(`${campaign}?article=${article}`)).toBe(`${campaign}?article=${article}`);
+ expect(campaignReturnPath(`${campaign}?editor-pilot=${draftId}&article=${article}`)).toBe(`${campaign}?article=${article}&editor-pilot=${draftId}`);
+ for(const query of [`article=${article}&article=${article}`,`article=${article}&token=secret`,`article=bad`,`editor-pilot=${draftId}&gm=secret`])expect(campaignReturnPath(`${campaign}?${query}`)).toBeNull();
+});

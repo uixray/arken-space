@@ -69,6 +69,11 @@ for (const role of ["GM", "PLAYER"] as const)
             json: { error: "READ_ONLY_FIXTURE" },
           });
         }
+        if (
+          role === "GM" &&
+          path === `/api/characters/${character.id}/private-notebook`
+        )
+          return route.fulfill({ json: { text: "", revision: 0 } });
         if (path === `/api/characters/${character.id}/media`)
           return route.fulfill({ json: media });
         if (/^\/api\/assets\/[^/]+\/content$/.test(path))

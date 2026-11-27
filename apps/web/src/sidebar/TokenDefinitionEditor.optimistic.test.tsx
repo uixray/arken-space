@@ -219,13 +219,26 @@ function Harness({
   sessionId = "campaign-under-test",
   initialError = "",
   palette = false,
+  initial,
+  onSpriteUploadRiskChange,
+  exposeSnapshotSetter,
 }: {
   onClose: () => void;
   sessionId?: string;
   initialError?: string;
   palette?: boolean;
+  initial?: GameSnapshot;
+  onSpriteUploadRiskChange?: (risky: boolean) => void;
+  exposeSnapshotSetter?: (
+    setter: React.Dispatch<React.SetStateAction<GameSnapshot>>,
+  ) => void;
 }) {
-  const [storedSnapshot, setSnapshot] = useState(initialSnapshot);
+  const [storedSnapshot, setSnapshot] = useState(
+    () => initial ?? initialSnapshot(),
+  );
+  useEffect(() => {
+    exposeSnapshotSetter?.(setSnapshot);
+  }, [exposeSnapshotSetter]);
   const snapshot = useMemo(
     () => ({
       ...storedSnapshot,
@@ -309,6 +322,7 @@ function Harness({
         <CampaignActionsContext.Provider value={campaignActions}>
           <PalettePanel
             snapshot={snapshot}
+            onSpriteUploadRiskChange={onSpriteUploadRiskChange}
             socket={null}
             presence={[]}
             storyPosts={[]}
@@ -399,6 +413,175 @@ function networkBoundary() {
     },
   };
 }
+
+it("keeps the sprite editor when an uncertain upload is followed by another token selection", async () => {
+  const snapshot = initialSnapshot();
+  snapshot.tokenDefinitions = ["Один", "Два"].map((name, i) => ({
+    id: `00000000-0000-4000-8000-00000000000${i + 1}`,
+    name,
+    ownName: name,
+    characterId: null,
+    defaultAssetId: null,
+    defaultWidth: 64,
+    defaultHeight: 64,
+    controllerMembershipIds: [],
+    revision: 0,
+  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string) => {
+      if (path === "/api/assets/sprite-frame") throw new Error("lost response");
+      if (path === "/api/client-logs")
+        return new Response(null, { status: 202 });
+      throw new Error(`Unexpected ${path}`);
+    }),
+  );
+  const risk = vi.fn();
+  renderComponent(
+    <Harness
+      onClose={unusedAction}
+      palette
+      initial={snapshot}
+      onSpriteUploadRiskChange={risk}
+    />,
+  );
+  const user = userEvent.setup();
+  await user.click(screen.getAllByRole("button", { name: "Фигурка" })[0]!);
+  await user.upload(
+    screen.getAllByLabelText("Спереди — резервный кадр")[0]!,
+    new File(["frame"], "frame.png", { type: "image/png" }),
+  );
+  await screen.findByRole("button", { name: "Повторить загрузку кадра" });
+  await waitFor(() => expect(risk).toHaveBeenLastCalledWith(true));
+  for (const button of screen.getAllByRole("button", { name: "Фигурка" }))
+    expect(button).toBeDisabled();
+  for (const button of screen.getAllByRole("button", {
+    name: "Удалить определение и все размещения",
+  }))
+    expect(button).toBeDisabled();
+  expect(screen.getByLabelText("Изображение токена Один")).toBeDisabled();
+  expect(
+    screen.getByRole("region", { name: "Фигурка Один" }),
+  ).toBeInTheDocument();
+  await user.click(
+    screen.getByRole("button", { name: "Отказаться от повтора" }),
+  );
+  await waitFor(() => expect(risk).toHaveBeenLastCalledWith(false));
+  expect(screen.getAllByRole("button", { name: "Фигурка" })[1]).toBeEnabled();
+});
+
+it("retains the unconfirmed upload if another master removes its definition", async () => {
+  const snapshot = initialSnapshot(),
+    definitionId = "00000000-0000-4000-8000-000000000001";
+  snapshot.tokenDefinitions = [
+    {
+      id: definitionId,
+      name: "Один",
+      ownName: "Один",
+      characterId: null,
+      defaultAssetId: null,
+      defaultWidth: 64,
+      defaultHeight: 64,
+      controllerMembershipIds: [],
+      revision: 0,
+    },
+  ];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string) => {
+      if (path === "/api/assets/sprite-frame") throw new Error("lost response");
+      if (path === "/api/client-logs")
+        return new Response(null, { status: 202 });
+      throw new Error(`Unexpected ${path}`);
+    }),
+  );
+  let update!: React.Dispatch<React.SetStateAction<GameSnapshot>>;
+  renderComponent(
+    <Harness
+      onClose={unusedAction}
+      palette
+      initial={snapshot}
+      exposeSnapshotSetter={(setter) => {
+        update = setter;
+      }}
+    />,
+  );
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Фигурка" }));
+  await user.upload(
+    screen.getAllByLabelText("Спереди — резервный кадр")[0]!,
+    new File(["frame"], "frame.png", { type: "image/png" }),
+  );
+  await screen.findByRole("button", { name: "Повторить загрузку кадра" });
+  act(() => update((old) => ({ ...old, tokenDefinitions: [] })));
+  expect(
+    screen.getByRole("region", { name: "Фигурка Один" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/Определение токена больше недоступно/),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Сохранить набор" }),
+  ).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "Повторить загрузку кадра" }),
+  ).toBeEnabled();
+  await user.click(
+    screen.getByRole("button", { name: "Отказаться от повтора" }),
+  );
+  expect(
+    screen.queryByRole("region", { name: "Фигурка Один" }),
+  ).not.toBeInTheDocument();
+});
+it("asks before discarding uploaded but unsaved sprite frames when switching tokens", async () => {
+  const snapshot = initialSnapshot();
+  snapshot.tokenDefinitions = ["Один", "Два"].map((name, i) => ({
+    id: `00000000-0000-4000-8000-00000000000${i + 1}`,
+    name,
+    ownName: name,
+    characterId: null,
+    defaultAssetId: null,
+    defaultWidth: 64,
+    defaultHeight: 64,
+    controllerMembershipIds: [],
+    revision: 0,
+  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string) => {
+      if (path === "/api/assets/sprite-frame")
+        return new Response(
+          JSON.stringify({ id: "00000000-0000-4000-8000-000000000005" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      if (path === "/api/client-logs")
+        return new Response(null, { status: 202 });
+      throw new Error(`Unexpected ${path}`);
+    }),
+  );
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  renderComponent(
+    <Harness onClose={unusedAction} palette initial={snapshot} />,
+  );
+  const user = userEvent.setup();
+  await user.click(screen.getAllByRole("button", { name: "Фигурка" })[0]!);
+  await user.upload(
+    screen.getAllByLabelText("Спереди — резервный кадр")[0]!,
+    new File(["frame"], "frame.png", { type: "image/png" }),
+  );
+  await screen.findByAltText("Стоит — Спереди");
+  await user.click(screen.getAllByRole("button", { name: "Фигурка" })[1]!);
+  expect(confirm).toHaveBeenCalledOnce();
+  expect(
+    screen.getByRole("region", { name: "Фигурка Один" }),
+  ).toBeInTheDocument();
+  confirm.mockReturnValue(true);
+  await user.click(screen.getAllByRole("button", { name: "Фигурка" })[1]!);
+  expect(
+    screen.getByRole("region", { name: "Фигурка Два" }),
+  ).toBeInTheDocument();
+  confirm.mockRestore();
+});
 
 it("keeps the real editor and all input after delayed optimistic create-and-place rejection", async () => {
   const network = networkBoundary();

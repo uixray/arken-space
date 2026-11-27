@@ -1,3 +1,4 @@
+import {registerPlayerOfflineShell} from "./local-first/offline-shell";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 // Before App: the Gravity button layer used to precede every app stylesheet.
@@ -38,3 +39,5 @@ createRoot(document.getElementById("root")!).render(
     </PlayerThemeRoot>
   </StrictMode>,
 );
+
+void registerPlayerOfflineShell();

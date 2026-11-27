@@ -1,4 +1,4 @@
-import { Component, type ReactNode } from "react";
+import { Component, createRef, type ReactNode } from "react";
 import { Button } from "./design-system/Button";
 import { reportRenderFailure } from "./app-error-report";
 
@@ -9,6 +9,7 @@ export class AppErrorBoundary extends Component<
   State
 > {
   state: State = { error: null, code: "" };
+  private heading = createRef<HTMLHeadingElement>();
 
   static getDerivedStateFromError(error: Error): State {
     return {
@@ -18,6 +19,7 @@ export class AppErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error) {
+    this.heading.current?.focus();
     console.error("app.render_failed", { code: this.state.code });
     reportRenderFailure(this.state.code, error);
   }
@@ -26,7 +28,7 @@ export class AppErrorBoundary extends Component<
     if (!this.state.error) return this.props.children;
     return (
       <main className="app-fatal-error" role="alert">
-        <h1>Интерфейс временно остановлен</h1>
+        <h1 ref={this.heading} tabIndex={-1}>Интерфейс временно остановлен</h1>
         <p>
           Код ошибки для баг-репорта: <code>{this.state.code}</code>
         </p>
@@ -40,6 +42,7 @@ export class AppErrorBoundary extends Component<
           <Button onClick={() => window.location.reload()}>
             Перезагрузить страницу
           </Button>
+          <a href="/account">Вернуться к моим кампаниям</a>
         </div>
       </main>
     );

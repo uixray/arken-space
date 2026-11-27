@@ -18,6 +18,7 @@ import {
   CharacterSurfaceIcon,
 } from "./icons";
 import { workspaceNavItems, type WorkspaceId } from "../workspace-nav";
+import { TelegramCampaignPanel } from "../TelegramCampaignPanel";
 import type { CompactSurface } from "./useCompactNavigation";
 
 export interface CompactMenuSurfaceProps {
@@ -57,8 +58,7 @@ export const CompactMenuSurface = memo(function CompactMenuSurface({
   const navItems = workspaceNavItems({
     isGm,
     operatorFeedbackAllowed,
-    storyEnabled:
-      viewSnapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092",
+    storyEnabled: true,
   });
   const preparationIds: readonly WorkspaceId[] = [
     "setup",
@@ -312,6 +312,12 @@ export const CompactMenuSurface = memo(function CompactMenuSurface({
             <span>Сменить персонажа / игрока</span>
           </button>
 
+          {viewSnapshot === snapshot && (
+            <TelegramCampaignPanel
+              membershipId={snapshot.me.id}
+              key={`${snapshot.campaign.id}:${snapshot.me.id}:${snapshot.me.role}`}
+            />
+          )}
           <a className="compact-menu-action-btn" href="/account">
             ← Мои кампании
           </a>

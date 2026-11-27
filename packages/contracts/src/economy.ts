@@ -206,3 +206,10 @@ export interface EconomyHistoryDto {
   items: Array<{ id: string; receipt: EconomyReceiptDto; inputs?: unknown }>;
   nextCursor: string | null;
 }
+
+export const economyReceiptSchema: z.ZodType<EconomyReceiptDto> = z.object({
+  actionId: id, quoteId: id, characterId: id, itemName: z.string(), merchantName: z.string(),
+  quantity: z.number().int().positive(), totalCopper: z.number().int().nonnegative(), inventoryInstanceId: id,
+  purchasedAt: z.string().refine(value => Number.isFinite(Date.parse(value))),
+  date: z.object({ year: z.number().int(), month: z.string(), day: z.number().int(), season: z.string() }),
+});

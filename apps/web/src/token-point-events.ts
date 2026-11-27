@@ -1,3 +1,4 @@
+import {advanceSnapshotVersion} from "@arken/contracts";
 import type { GameSnapshot, TokenDto } from "@arken/contracts";
 
 /** Sequence at which a canonical snapshot stopped exposing a token. Retained
@@ -44,7 +45,7 @@ export function applyTokenPointEvent(
     return current;
   return {
     ...current,
-    snapshotVersion: Math.max(current.snapshotVersion, event.sequence),
+    ...advanceSnapshotVersion(current,event.sequence),
     tokens: current.tokens.map((token) =>
       token.id === event.data.id ? event.data : token,
     ),

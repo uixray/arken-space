@@ -1,3 +1,4 @@
+import {validateTransferEncounterEvent} from "./campaign-transfer-encounter-events.js";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import type { PGlite } from "@electric-sql/pglite";
@@ -300,7 +301,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await app.close();
-  await database.close();
+  try {
+    const rows=await database.query<{row:string}>("SELECT row_to_json(t)::text AS row FROM game_events t WHERE type IN ('ENCOUNTER_STARTED','ENCOUNTER_ENDED')");
+    expect(rows.rows.length).toBeGreaterThan(0);
+    expect(new Set(rows.rows.map(r=>JSON.parse(r.row).type))).toEqual(new Set(["ENCOUNTER_STARTED","ENCOUNTER_ENDED"]));
+    for(const row of rows.rows)validateTransferEncounterEvent(JSON.parse(row.row));
+  } finally {await database.close();}
 });
 
 describe("encounter start authorization and validation", () => {

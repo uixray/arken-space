@@ -11,10 +11,14 @@ import {
 import { useDismissibleDetails } from "./ui/dismissible-details";
 import { WorkspaceNav } from "./WorkspaceNav";
 import { FeedbackReporter } from "./FeedbackReporter";
+import { TelegramCampaignPanel } from "./TelegramCampaignPanel";
+import { LocalSessionPanel } from "./local-first/LocalSessionPanel";
 import { ScenePicker } from "./ScenePicker";
 import { workspaceNavItems, type WorkspaceId } from "./workspace-nav";
 
 export interface AppHeaderProps {
+  /** Presentation only; authorization remains in the selected transport. */
+  localCopyMode?: boolean;
   compact: boolean;
   activeScene: GameSnapshot["scenes"][number] | null | undefined;
   broadcastScene: GameSnapshot["scenes"][number] | null | undefined;
@@ -46,6 +50,7 @@ export interface AppHeaderProps {
 }
 
 export const AppHeader = memo(function AppHeader({
+  localCopyMode = false,
   compact,
   activeScene,
   broadcastScene,
@@ -87,11 +92,13 @@ export const AppHeader = memo(function AppHeader({
                 ? "Мастер"
                 : viewSnapshot.me.displayName}{" "}
               ·{" "}
-              {connection === "ONLINE"
-                ? "в сети"
-                : connection === "OFFLINE"
-                  ? "нет связи"
-                  : "подключаемся"}
+              {localCopyMode
+                ? "локальная копия — только просмотр"
+                : connection === "ONLINE"
+                  ? "в сети"
+                  : connection === "OFFLINE"
+                    ? "нет связи"
+                    : "подключаемся"}
             </span>
           </div>
           <button
@@ -177,8 +184,7 @@ export const AppHeader = memo(function AppHeader({
         и расчёт вместимости живут в `workspace-nav.ts`. */}
       <WorkspaceNav
         items={workspaceNavItems({
-          storyEnabled:
-            snapshot.campaign.id === "eb6a55c4-a821-4739-8d4a-a1028e9d9092",
+          storyEnabled: true,
           isGm: snapshot.me.role === "GM",
           operatorFeedbackAllowed,
         })}
@@ -193,27 +199,51 @@ export const AppHeader = memo(function AppHeader({
             <AppIcon icon={SessionMenuIcon} />
           </summary>
           <div className="account-menu__content">
+            {!localCopyMode && !previewSnapshot && (
+              <TelegramCampaignPanel
+                membershipId={snapshot.me.id}
+                key={`${snapshot.campaign.id}:${snapshot.me.id}:${snapshot.me.role}`}
+              />
+            )}
+            {!previewSnapshot &&
+              snapshot.me.role === "GM" &&
+              snapshot.localSessionBridge && (
+                <LocalSessionPanel
+                  key={`local:${snapshot.campaign.id}:${snapshot.me.id}`}
+                  campaignId={snapshot.campaign.id}
+                  membershipId={snapshot.me.id}
+                  members={snapshot.members}
+                />
+              )}
             <a href="/account">Мои кампании</a>
             <span
-              className={connection === "ONLINE" ? "status online" : "status"}
+              className={
+                !localCopyMode && connection === "ONLINE"
+                  ? "status online"
+                  : "status"
+              }
             >
-              {connection === "ONLINE"
-                ? "в сети"
-                : connection === "RESYNCING"
-                  ? "синхронизация"
-                  : connection === "OFFLINE"
-                    ? "нет связи"
-                    : "переподключение"}
+              {localCopyMode
+                ? "локальная копия — только просмотр"
+                : connection === "ONLINE"
+                  ? "в сети"
+                  : connection === "RESYNCING"
+                    ? "синхронизация"
+                    : connection === "OFFLINE"
+                      ? "нет связи"
+                      : "переподключение"}
             </span>
-            {connection !== "ONLINE" && (
+            {!localCopyMode && connection !== "ONLINE" && (
               <button onClick={onResync}>Синхронизировать</button>
             )}
             <span className="account-menu__identity">
-              {previewSnapshot
-                ? `Просмотр: ${viewSnapshot.me.displayName}`
-                : snapshot.me.role === "PLAYER"
-                  ? `Вы играете как: ${snapshot.me.displayName}`
-                  : `${snapshot.me.displayName} · Мастер`}
+              {localCopyMode
+                ? `Сохранённый просмотр: ${viewSnapshot.me.displayName}`
+                : previewSnapshot
+                  ? `Просмотр: ${viewSnapshot.me.displayName}`
+                  : snapshot.me.role === "PLAYER"
+                    ? `Вы играете как: ${snapshot.me.displayName}`
+                    : `${snapshot.me.displayName} · Мастер`}
             </span>
             <span
               className="account-menu__build"

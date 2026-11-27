@@ -265,6 +265,8 @@ async function configureGmArtbook(
         json: { error: "UNEXPECTED_MUTATION" },
       });
     }
+    if (pathname === "/api/world-content-regions")
+      return route.fulfill({ json: { items: [], hasMore: false } });
     return fulfillUnmocked(route, pathname);
   });
 

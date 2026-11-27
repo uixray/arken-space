@@ -96,6 +96,10 @@ export const accountCapabilitiesSchema = z
     campaignLinkAccessEnabled: z.boolean(),
     campaignCreationEnabled: z.boolean(),
     localAccounts: z.boolean().optional(),
+    localTransport: z.enum(["LOOPBACK", "HTTPS_LAN"]).optional(),
+    cloudSyncStagingEnabled: z.boolean().optional(),
+    campaignTransferEnabled: z.boolean().optional(),
+    campaignTransferImportEnabled: z.boolean().optional(),
   })
   .strict();
 export type AccountCapabilities = z.infer<typeof accountCapabilitiesSchema>;
@@ -149,3 +153,6 @@ export const accountCampaignInviteClaimSchema = z
     token: bearerSchema,
   })
   .strict();
+
+/** Local-only enrollment requires a one-use player invitation. */
+export const localAccountEnrollmentSchema=z.object({login:localLoginNameSchema,password:passwordSchema,token:bearerSchema}).strict();

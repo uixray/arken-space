@@ -1,10 +1,12 @@
+import {commitSceneActivation,commitSceneMetadata,commitSceneCreate,SessionStateError} from "./session-state-command.js";
+import {commitFogCreate} from "./fog-create-command.js";
 import type { FastifyInstance } from "fastify";
 import type { Server } from "socket.io";
 import type {
   ClientToServerEvents,
   ServerToClientEvents,
 } from "@arken/contracts";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, sql as importedSql } from "drizzle-orm";
 import {
   campaigns,
   scenes,
@@ -12,6 +14,8 @@ import {
   gameEvents,
   actionJournal,
   fogReveals,
+  tokens,
+  drawings,
 } from "@arken/db";
 import { z } from "zod";
 import {
@@ -19,12 +23,18 @@ import {
   createSceneSchema,
   updateSceneMetadataSchema,
   createFogRevealSchema,
+  isometricSceneGeometrySchema,
+  validateIsometricMove,
+  isometricFloorId,
+  map3dSpecSchema,
+  map3dMovementGeometry,
 } from "@arken/contracts";
 import { requireAuth } from "./auth.js";
 import { findAction } from "./action-lookup.js";
 import { canonicalizeFogGeometry, FogGeometryError } from "./fog-geometry.js";
 import { campaignRoom } from "./rooms.js";
 import { canvasSceneVisibleTo } from "./drawing-events.js";
+import { canvasLayerLevel } from "./isometric-layers.js";
 import { invalidateRedoBranch } from "./canvas-history.js";
 
 type Database = ReturnType<typeof import("@arken/db").createDatabase>["db"];
@@ -33,24 +43,7 @@ type CanvasDatabase = ReturnType<
   typeof import("./campaign-pause-guard.js").campaignCanvasDatabase
 >;
 
-export function fitFrameToWorld(
-  assetWidth: number | null | undefined,
-  assetHeight: number | null | undefined,
-  worldWidth: number,
-  worldHeight: number,
-) {
-  if (!assetWidth || !assetHeight)
-    return { x: 0, y: 0, width: worldWidth, height: worldHeight };
-  const scale = Math.min(worldWidth / assetWidth, worldHeight / assetHeight);
-  const width = assetWidth * scale;
-  const height = assetHeight * scale;
-  return {
-    x: (worldWidth - width) / 2,
-    y: (worldHeight - height) / 2,
-    width,
-    height,
-  };
-}
+export {fitFrameToWorld} from "./scene-frame.js";
 
 function sceneDto(
   scene: typeof scenes.$inferSelect,
@@ -104,12 +97,105 @@ export function registerSceneRoutes(
     broadcast: (campaignId: string) => Promise<void>;
   },
 ) {
+  app.put("/api/scenes/:id/isometric", async (request, reply) => {
+    const auth = await requireAuth(request, reply, db);
+    if (!auth) return;
+    if (auth.role !== "GM") return reply.code(403).send({ error: "GM_REQUIRED" });
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = z.object({
+      actionId: z.string().uuid(), revision: z.number().int().nonnegative(),
+      geometry: isometricSceneGeometrySchema,
+      threeD: map3dSpecSchema.optional(),
+      projection: z.enum(["ISOMETRIC", "THREE_D"]).optional(),
+      mapAssetId: z.string().uuid().optional(),
+    }).strict().parse(request.body);
+    const result = await canvasTx(auth.campaignId).transaction(async tx => {
+      const [current] = await tx.select().from(scenes)
+        .where(and(eq(scenes.id, id), eq(scenes.campaignId, auth.campaignId))).limit(1).for("update");
+      if (!current) return "NOT_FOUND" as const;
+      const [duplicate] = await tx.select({ sequence: gameEvents.sequence }).from(gameEvents)
+        .where(and(eq(gameEvents.campaignId, auth.campaignId), eq(gameEvents.actionId, body.actionId))).limit(1);
+      if (duplicate) return "DUPLICATE" as const;
+      if (body.revision !== current.revision) return "CONFLICT" as const;
+      if (body.threeD) {
+        if (body.projection === "ISOMETRIC") return "INVALID_3D" as const;
+        if (!body.threeD.reviewed || body.geometry.metersPerCell < .1 || body.geometry.metersPerCell > 100)
+          return "REVIEW_REQUIRED" as const;
+        try { body.geometry = isometricSceneGeometrySchema.parse(map3dMovementGeometry(body.geometry, body.threeD)); }
+        catch { return "INVALID_3D" as const; }
+        const sourceIds = [...new Set([...(body.threeD.sources?.map(s=>s.assetId) ?? []),...(body.mapAssetId?[body.mapAssetId]:[])])];
+        if (sourceIds.length) {
+          const owned = await tx.select({id:assets.id}).from(assets).where(and(eq(assets.campaignId,auth.campaignId),eq(assets.kind,"MAP"),inArray(assets.id,sourceIds))).for("share");
+          if (owned.length !== sourceIds.length) return "INVALID_3D" as const;
+        }
+      } else if (body.projection === "THREE_D" || current.projection === "THREE_D") return "INVALID_3D" as const;
+      if (body.geometry.floors.some(f => {
+        const x = current.grid.offsetX + f.bounds.x * current.grid.size, y = current.grid.offsetY + f.bounds.y * current.grid.size;
+        return x < -32768 || y < -32768 || x + f.bounds.width * current.grid.size > 32768 || y + f.bounds.height * current.grid.size > 32768;
+      })) return "LAYER_BOUNDS" as const;
+      if (current.grid.isometric && current.grid.isometric.floors[0]!.id !== body.geometry.floors[0]!.id)
+        return "PLACEMENT_BLOCKED" as const;
+      const layerRows = [
+        ...await tx.select({ levelId: fogReveals.levelId }).from(fogReveals).where(eq(fogReveals.sceneId, id)),
+        ...await tx.select({ levelId: drawings.levelId }).from(drawings).where(eq(drawings.sceneId, id)),
+      ];
+      if (layerRows.some(row => !body.geometry.floors.some(f => f.id === isometricFloorId(body.geometry, row.levelId))))
+        return "PLACEMENT_BLOCKED" as const;
+      if (!["ISOMETRIC","THREE_D"].includes(current.projection) || !current.grid.isometric) {
+        // Never reinterpret existing pixel art/fog/placements as a new floor.
+        const occupied = await tx.execute(importedSql`select 1 from tokens where scene_id = ${id} union all select 1 from drawings where scene_id = ${id} union all select 1 from fog_reveals where scene_id = ${id} limit 1`);
+        if (occupied.length) return "NOT_EMPTY" as const;
+      }
+      const placements = await tx.select().from(tokens).where(eq(tokens.sceneId, id));
+      for (const token of placements) {
+        const point = {
+          x: (token.x + token.width / 2 - current.grid.offsetX) / current.grid.size,
+          y: (token.y + token.height - current.grid.offsetY) / current.grid.size,
+          floorId: isometricFloorId(body.geometry, token.levelId),
+        };
+        if (token.z !== 0 || !validateIsometricMove(body.geometry, point, point).allowed)
+          return "PLACEMENT_BLOCKED" as const;
+      }
+      const source = body.threeD?.sources?.find(s=>s.assetId===body.mapAssetId);
+      const [next] = await tx.update(scenes).set({ projection: body.projection ?? (body.threeD ? "THREE_D" : "ISOMETRIC"),
+        ...(body.threeD ? {width:Math.max(current.width,...body.geometry.floors.map(f=>Math.ceil(current.grid.offsetX+(f.bounds.x+f.bounds.width)*current.grid.size))),height:Math.max(current.height,...body.geometry.floors.map(f=>Math.ceil(current.grid.offsetY+(f.bounds.y+f.bounds.height)*current.grid.size)))} : {}),
+        ...(body.mapAssetId ? { mapAssetId:body.mapAssetId } : {}),
+        ...(source ? { backgroundX:0,backgroundY:0,backgroundWidth:source.width/source.pixelsPerCell*current.grid.size,backgroundHeight:source.height/source.pixelsPerCell*current.grid.size } : {}),
+        grid: { ...current.grid, ...(body.threeD?{threeD:body.threeD}:{}), isometric: body.geometry, metersPerCell: body.geometry.metersPerCell },
+        revision: current.revision + 1, updatedAt: new Date(),
+      }).where(eq(scenes.id, id)).returning();
+      if (!next) throw new Error("SCENE_UPDATE_FAILED");
+      await invalidateRedoBranch(tx, auth, id);
+      // An old SCENE_CANVAS snapshot must never remove/replace the new policy
+      // while leaving projection=ISOMETRIC (or silently resurrect old walls).
+      await tx.update(actionJournal).set({ status: "INVALIDATED", updatedAt: new Date(),
+        transitionSequence: importedSql`nextval(pg_get_serial_sequence('action_journal', 'transition_sequence'))`,
+      }).where(and(eq(actionJournal.campaignId, auth.campaignId), eq(actionJournal.sceneId, id),
+        eq(actionJournal.type, "SCENE_CANVAS"), inArray(actionJournal.status, ["APPLIED", "UNDONE"])));
+      await tx.insert(gameEvents).values({ campaignId: auth.campaignId,
+        actionId: body.actionId, membershipId: auth.membershipId, type: "scene.isometric",
+        entityType: "scene", entityId: id, entityRevision: next.revision,
+        payload: { sceneId: id },
+      });
+      return "SAVED" as const;
+    });
+    if (result === "NOT_FOUND") return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
+    if (result === "CONFLICT") return reply.code(409).send({ error: "SCENE_CONFLICT", message: "Сцена изменена. Обновите черновик перед сохранением." });
+    if (result === "NOT_EMPTY") return reply.code(409).send({ error: "ISOMETRIC_REQUIRES_EMPTY_SCENE", message: "Для включения изометрии выберите сцену без токенов, рисунков и тумана." });
+    if (result === "PLACEMENT_BLOCKED") return reply.code(409).send({ error: "ISOMETRIC_TOKEN_WOULD_BE_BLOCKED", message: "Разметка запирает токен или удаляет ярус с данными. Освободите его перед сохранением; основной ярус сохраняется." });
+    if (result === "LAYER_BOUNDS") return reply.code(422).send({ error: "ISOMETRIC_LAYER_BOUNDS", message: "Логические границы яруса должны оставаться в диапазоне от −32768 до 32768 пикселей." });
+    if (result === "REVIEW_REQUIRED") return reply.code(422).send({ error:"3D_REVIEW_REQUIRED",message:"Подтвердите планировку и задайте масштаб от 0,1 до 100 метров в клетке." });
+    if (result === "INVALID_3D") return reply.code(422).send({ error:"INVALID_3D_PLAN",message:"Проверьте полное покрытие ярусов, проходимость лестниц и источники карты." });
+    await broadcast(auth.campaignId);
+    return { ok: true, duplicate: result === "DUPLICATE" };
+  });
   app.post("/api/scenes", async (request, reply) => {
     const auth = await requireAuth(request, reply, db);
     if (!auth) return;
     if (auth.role !== "GM")
       return reply.code(403).send({ error: "GM_REQUIRED" });
     const body = createSceneSchema.parse(request.body);
+    if (body.grid.isometric || body.grid.threeD) return reply.code(422).send({ error: "USE_ISOMETRIC_SETTINGS" });
     const duplicate = await findAction(db, auth.campaignId, body.actionId);
     if (duplicate) {
       const replay = duplicate.entityId
@@ -118,63 +204,11 @@ export function registerSceneRoutes(
       if (replay) return reply.code(200).send(replay);
       return reply.code(409).send({ error: "ACTION_REPLAY_UNAVAILABLE" });
     }
-    const mapAsset = body.mapAssetId
-      ? (
-          await db
-            .select({
-              id: assets.id,
-              kind: assets.kind,
-              width: assets.width,
-              height: assets.height,
-            })
-            .from(assets)
-            .where(
-              and(
-                eq(assets.id, body.mapAssetId),
-                eq(assets.campaignId, auth.campaignId),
-              ),
-            )
-            .limit(1)
-        )[0]
-      : null;
-    if (body.mapAssetId && !mapAsset)
-      return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
-    if (mapAsset && mapAsset.kind !== "MAP")
-      return reply.code(422).send({ error: "MAP_ASSET_REQUIRED" });
-    const initialBackground =
-      body.backgroundFrame ??
-      fitFrameToWorld(
-        mapAsset?.width,
-        mapAsset?.height,
-        body.width,
-        body.height,
-      );
-    const { actionId, backgroundFrame: _backgroundFrame, ...sceneInput } = body;
-    const scene = await db.transaction(async (tx) => {
-      const [created] = await tx
-        .insert(scenes)
-        .values({
-          campaignId: auth.campaignId,
-          ...sceneInput,
-          mapAssetId: body.mapAssetId ?? null,
-          backgroundX: initialBackground.x,
-          backgroundY: initialBackground.y,
-          backgroundWidth: initialBackground.width,
-          backgroundHeight: initialBackground.height,
-        })
-        .returning();
-      if (!created) throw new Error("SCENE_CREATE_FAILED");
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId,
-        membershipId: auth.membershipId,
-        type: "scene.created",
-        entityType: "scene",
-        entityId: created.id,
-        payload: { sceneId: created.id },
-      });
-      return created;
-    });
+    let scene;
+    try{const result=await db.transaction(tx=>commitSceneCreate(tx,auth,body));
+      if(result.duplicate){const replay=result.duplicate.entityId?await findSceneDto(db,auth.campaignId,result.duplicate.entityId):null;if(replay)return reply.code(200).send(replay);return reply.code(409).send({error:"ACTION_REPLAY_UNAVAILABLE"});}
+      scene=result.created;
+    }catch(error){if(error instanceof SessionStateError)return reply.code(error.statusCode).send(error.details);throw error;}
     await broadcast(auth.campaignId);
     return reply.code(201).send(sceneDto(scene, null));
   });
@@ -200,53 +234,12 @@ export function registerSceneRoutes(
       if (replay) return reply.code(200).send(replay);
       return reply.code(409).send({ error: "ACTION_REPLAY_UNAVAILABLE" });
     }
-    const [current] = await db
-      .select()
-      .from(scenes)
-      .where(and(eq(scenes.id, id), eq(scenes.campaignId, auth.campaignId)))
-      .limit(1);
-    if (!current) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
-    if (body.revision !== current.revision)
-      return reply.code(409).send({ error: "SCENE_CONFLICT" });
-    const { actionId, revision: _revision, ...sceneUpdates } = body;
-    if (body.mapAssetId) {
-      const [mapAsset] = await db
-        .select({ kind: assets.kind })
-        .from(assets)
-        .where(
-          and(
-            eq(assets.id, body.mapAssetId),
-            eq(assets.campaignId, auth.campaignId),
-          ),
-        )
-        .limit(1);
-      if (!mapAsset) return reply.code(404).send({ error: "ASSET_NOT_FOUND" });
-      if (mapAsset.kind !== "MAP")
-        return reply.code(422).send({ error: "MAP_ASSET_REQUIRED" });
-    }
-    const scene = await canvasTx(auth.campaignId).transaction(async (tx) => {
-      const [updated] = await tx
-        .update(scenes)
-        .set({
-          ...sceneUpdates,
-          revision: current.revision + 1,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(scenes.id, id), eq(scenes.revision, current.revision)))
-        .returning();
-      if (!updated) return null;
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId,
-        membershipId: auth.membershipId,
-        type: "scene.updated",
-        entityType: "scene",
-        entityId: updated.id,
-        payload: { sceneId: updated.id },
-      });
-      return updated;
-    });
-    if (!scene) return reply.code(409).send({ error: "SCENE_CONFLICT" });
+    let scene;
+    try {
+      const result=await canvasTx(auth.campaignId).transaction(tx=>commitSceneMetadata(tx,auth,id,body));
+      if(result.duplicate){const replay=await findSceneDto(db,auth.campaignId,id);if(replay)return reply.code(200).send(replay);return reply.code(409).send({error:"ACTION_REPLAY_UNAVAILABLE"});}
+      scene=result.updated;
+    } catch(error){if(error instanceof SessionStateError)return reply.code(error.statusCode).send(error.details);throw error;}
     await broadcast(auth.campaignId);
     const [campaign] = await db
       .select({ activeSceneId: campaigns.activeSceneId })
@@ -261,35 +254,10 @@ export function registerSceneRoutes(
     if (!auth) return;
     if (auth.role !== "GM")
       return reply.code(403).send({ error: "GM_REQUIRED" });
-    const body = activateSceneSchema.parse(request.body);
-    const duplicate = await findAction(db, auth.campaignId, body.actionId);
-    if (duplicate) return { ok: true, duplicate: true };
-    const [scene] = await db
-      .select()
-      .from(scenes)
-      .where(
-        and(
-          eq(scenes.id, body.sceneId),
-          eq(scenes.campaignId, auth.campaignId),
-        ),
-      )
-      .limit(1);
-    if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
-    await canvasTx(auth.campaignId).transaction(async (tx) => {
-      await tx
-        .update(campaigns)
-        .set({ activeSceneId: scene.id, updatedAt: new Date() })
-        .where(eq(campaigns.id, auth.campaignId));
-      await tx.insert(gameEvents).values({
-        campaignId: auth.campaignId,
-        actionId: body.actionId,
-        membershipId: auth.membershipId,
-        type: "scene.activated",
-        entityType: "scene",
-        entityId: scene.id,
-        payload: { sceneId: scene.id },
-      });
-    });
+    const body=activateSceneSchema.parse(request.body);
+    if(await findAction(db,auth.campaignId,body.actionId))return {ok:true,duplicate:true};
+    try{const result=await canvasTx(auth.campaignId).transaction(tx=>commitSceneActivation(tx,auth,body));if(result.duplicate)return {ok:true,duplicate:true};}
+    catch(error){if(error instanceof SessionStateError)return reply.code(error.statusCode).send(error.details);throw error;}
     await broadcast(auth.campaignId);
     return { ok: true };
   });
@@ -313,70 +281,17 @@ export function registerSceneRoutes(
       )
       .limit(1);
     if (!scene) return reply.code(404).send({ error: "SCENE_NOT_FOUND" });
-    const legacy = !body.geometry;
-    const requestedGeometry = body.geometry ?? {
-      type: "RECT" as const,
-      x: body.x!,
-      y: body.y!,
-      width: body.width!,
-      height: body.height!,
-    };
-    let canonical;
-    try {
-      canonical = canonicalizeFogGeometry(requestedGeometry, scene, legacy);
-    } catch (error) {
-      if (error instanceof FogGeometryError)
-        return reply.code(422).send({ error: error.code });
-      throw error;
-    }
-    const { actionId } = body;
-    const revealInput = {
-      sceneId: scene.id,
-      operation: body.operation,
-      shape: canonical.geometry.type,
-      geometry: canonical.geometry,
-      bbox: canonical.bbox,
-      x: canonical.bbox.x,
-      y: canonical.bbox.y,
-      width: canonical.bbox.width,
-      height: canonical.bbox.height,
-    };
-    const result = await canvasTx(auth.campaignId).transaction(async (tx) => {
-      await invalidateRedoBranch(tx, auth, scene.id);
-      const [reveal] = await tx
-        .insert(fogReveals)
-        .values(revealInput)
-        .returning();
-      if (!reveal) throw new Error("FOG_CREATE_FAILED");
-      const [event] = await tx
-        .insert(gameEvents)
-        .values({
-          campaignId: auth.campaignId,
-          actionId,
-          membershipId: auth.membershipId,
-          type: "fog.created",
-          entityType: "fog",
-          entityId: reveal.id,
-          payload: reveal,
-        })
-        .returning();
-      if (!event) throw new Error("EVENT_RECORD_FAILED");
-      await tx.insert(actionJournal).values({
-        campaignId: auth.campaignId,
-        sceneId: scene.id,
-        actorMembershipId: auth.membershipId,
-        actionId,
-        type: "FOG_CREATE",
-        targetType: "FOG",
-        targetId: reveal.id,
-        before: null,
-        after: reveal,
-        afterRevision: 0,
-        currentRevision: 0,
-      });
-      return { reveal, event };
-    });
+    let result;
+    try{result=await canvasTx(auth.campaignId).transaction(tx=>commitFogCreate(tx,auth,body));}
+    catch(error){if(error instanceof FogGeometryError)return reply.code(422).send({error:error.code});throw error;}
     const { reveal, event } = result;
+    const actionId=body.actionId;
+    const [deliveryScene] = await db.select({ grid: scenes.grid }).from(scenes)
+      .where(and(eq(scenes.id, scene.id), eq(scenes.campaignId, auth.campaignId))).limit(1);
+    if (!deliveryScene || deliveryScene.grid.isometric) {
+      await broadcast(auth.campaignId);
+      return reply.code(201).send(reveal);
+    }
     if (reveal) {
       /**
        * UIX-408: событие уходит только тем, у кого эта сцена в снапшоте.

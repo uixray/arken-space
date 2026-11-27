@@ -2,7 +2,7 @@
 import type { ComponentProps } from "react";
 import type { GameSnapshot } from "@arken/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { renderComponent, screen } from "./test-support/render";
+import { fireEvent, renderComponent, screen } from "./test-support/render";
 import {
   gmSnapshot,
   playerSnapshot,
@@ -35,7 +35,13 @@ import { Sidebar, type Props } from "./Sidebar";
 // The editor marker only knows its real `open` prop, never a test-only role.
 // This covers client routing, not editor internals, navigation or server ACL.
 vi.mock("./ui/ArkenDialog", () => ({
-  ArkenDialog: (_props: ComponentProps<typeof ArkenDialog>) => null,
+  ArkenDialog: (props: ComponentProps<typeof ArkenDialog>) =>
+    props.title === "Токены" ? (
+      <section aria-label="Палитра">
+        <button onClick={props.onClose}>Закрыть палитру</button>
+        {props.children}
+      </section>
+    ) : null,
 }));
 vi.mock("./ui/SceneManagerDialog", () => ({
   SceneManagerDialog: (_props: ComponentProps<typeof SceneManagerDialog>) =>
@@ -79,7 +85,19 @@ vi.mock("./sidebar/ChatPanels", () => ({
   DirectChatPanel: (_props: ComponentProps<typeof DirectChatPanel>) => null,
 }));
 vi.mock("./sidebar/TokenPalette", () => ({
-  PalettePanel: (_props: ComponentProps<typeof PalettePanel>) => null,
+  PalettePanel: (props: ComponentProps<typeof PalettePanel>) => (
+    <>
+      <button onClick={() => props.onSpriteUploadRiskChange?.(true)}>
+        Загрузка не подтверждена
+      </button>
+      <button onClick={() => props.onSpriteUploadRiskChange?.(false)}>
+        Загрузка завершена
+      </button>
+      <button onClick={() => props.onSpriteDirtyChange?.(true)}>
+        Изменённая фигурка
+      </button>
+    </>
+  ),
 }));
 vi.mock("./sidebar/SetupPanel", () => ({
   SetupPanel: (_props: ComponentProps<typeof SetupPanel>) => null,
@@ -212,7 +230,10 @@ const actions: CampaignActions = {
   },
 };
 
-function renderEditorRoute(snapshot: GameSnapshot) {
+function renderEditorRoute(
+  snapshot: GameSnapshot,
+  workspace: Props["workspace"] = "world-encyclopedia",
+) {
   const props: Props = {
     snapshot,
     socket: null,
@@ -225,7 +246,7 @@ function renderEditorRoute(snapshot: GameSnapshot) {
     canRecruitFromBattleZone: false,
     requestedChatMessageId: null,
     collapsed: false,
-    workspace: "world-encyclopedia",
+    workspace,
     operatorFeedbackAllowed: false,
   };
   return renderComponent(
@@ -236,6 +257,36 @@ function renderEditorRoute(snapshot: GameSnapshot) {
 }
 
 describe("Sidebar editor role routing", () => {
+  it("does not close the palette until an uncertain sprite upload is resolved", () => {
+    const close = vi.spyOn(actions.sidebar, "onWorkspaceChange");
+    renderEditorRoute(gmSnapshot(), "tokens");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Загрузка не подтверждена" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Закрыть палитру" }));
+    expect(close).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Сначала дождитесь загрузки кадра",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Загрузка завершена" }));
+    fireEvent.click(screen.getByRole("button", { name: "Закрыть палитру" }));
+    expect(close).toHaveBeenCalledWith(null);
+    close.mockRestore();
+  });
+  it("asks before closing a palette containing unsaved sprite frames", () => {
+    const close = vi.spyOn(actions.sidebar, "onWorkspaceChange"),
+      confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderEditorRoute(gmSnapshot(), "tokens");
+    fireEvent.click(screen.getByRole("button", { name: "Изменённая фигурка" }));
+    fireEvent.click(screen.getByRole("button", { name: "Закрыть палитру" }));
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Закрыть палитру" }));
+    expect(close).toHaveBeenCalledWith(null);
+    confirm.mockRestore();
+    close.mockRestore();
+  });
   // The workspace is lazy-loaded: wait for it rather than query synchronously.
   it("opens the editor route for a GM snapshot", async () => {
     renderEditorRoute(gmSnapshot());
@@ -254,4 +305,27 @@ describe("Sidebar editor role routing", () => {
       screen.queryByRole("region", { name: "World content editor route" }),
     ).not.toBeInTheDocument();
   });
+});
+
+
+describe("Shared campaign chat tabs", () => {
+  for (const [role, snapshot] of [["GM", gmSnapshot], ["PLAYER", playerSnapshot]] as const) {
+    it(`keeps journal, character and private tabs accessible for ${role}`, () => {
+      renderEditorRoute(snapshot(), null);
+      const journal = screen.getByRole("tab", { name: /^Журнал$/ });
+      const character = screen.getByRole("tab", { name: /^Персонаж$/ });
+      const direct = screen.getByRole("tab", { name: /^Личные$/ });
+      fireEvent.click(direct);
+      expect(direct).toHaveAttribute("aria-selected", "true");
+      expect(character).toHaveAttribute("aria-selected", "false");
+      fireEvent.keyDown(direct, { key: "Home" });
+      expect(journal).toHaveAttribute("aria-selected", "true");
+      expect(direct).toHaveAttribute("aria-selected", "false");
+      fireEvent.keyDown(journal, { key: "ArrowRight" });
+      expect(character).toHaveAttribute("aria-selected", "true");
+      fireEvent.keyDown(character, { key: "End" });
+      expect(direct).toHaveAttribute("aria-selected", "true");
+      expect(character).toHaveAttribute("aria-selected", "false");
+    });
+  }
 });

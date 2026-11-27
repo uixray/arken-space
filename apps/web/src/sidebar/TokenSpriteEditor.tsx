@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { z } from "zod";
 import {
   tokenFacingSchema,
   tokenSpritePoseSchema,
@@ -16,6 +17,16 @@ const directions = {
   RIGHT: "Справа",
 };
 const poses = { IDLE: "Стоит", PRONE: "Лежит / без сознания", FLYING: "Летит" };
+const uploadReceiptSchema = z.object({ id: z.string().uuid() }).passthrough();
+const savedSpriteReceiptSchema = z.union([
+  z.object({ duplicate: z.literal(true) }).strict(),
+  z
+    .object({
+      revision: z.number().int().nonnegative(),
+      spriteSet: tokenSpriteSetSchema.nullable(),
+    })
+    .strict(),
+]);
 const messages: Record<string, string> = {
   TOKEN_DEFINITION_CONFLICT:
     "Токен изменён. Закройте и снова откройте набор, чтобы загрузить актуальную версию.",
@@ -32,10 +43,16 @@ export function TokenSpriteEditor({
   definition,
   refresh,
   onClose,
+  onUploadRiskChange,
+  onDirtyChange,
+  definitionUnavailable = false,
 }: {
   definition: TokenDefinitionDto;
   refresh: () => Promise<void>;
-  onClose: () => void;
+  onClose: (saved?: boolean) => void;
+  onUploadRiskChange?: (risky: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  definitionUnavailable?: boolean;
 }) {
   const [draft, setDraft] = useState<TokenSpriteSet>(
     () =>
@@ -46,17 +63,44 @@ export function TokenSpriteEditor({
       },
   );
   const [revision] = useState(definition.revision);
+  const baseline = useRef(JSON.stringify(draft));
+  const dirty = JSON.stringify(draft) !== baseline.current;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const pending = useRef(false);
   const alive = useRef(false);
   const attempt = useRef<{ signature: string; actionId: string } | null>(null);
+  // Keep the original File and action ID after an ambiguous response. A retry
+  // must not silently create a second asset or consume quota twice.
+  const uploadAttempt = useRef<{
+    file: File;
+    pose: TokenSpriteSet["frames"][number]["pose"];
+    direction: TokenSpriteSet["frames"][number]["direction"];
+    actionId: string;
+  } | null>(null);
+  const [retryUpload, setRetryUpload] = useState(false);
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
     };
   }, []);
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+  useEffect(() => {
+    const risky = busy || retryUpload;
+    onUploadRiskChange?.(risky);
+    if (!risky && !dirty) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [busy, retryUpload, dirty, onUploadRiskChange]);
+  useEffect(() => () => onUploadRiskChange?.(false), [onUploadRiskChange]);
   const report = (reason: unknown) =>
     setError(
       reason instanceof ApiError
@@ -68,19 +112,35 @@ export function TokenSpriteEditor({
     file: File,
     pose: TokenSpriteSet["frames"][number]["pose"],
     direction: TokenSpriteSet["frames"][number]["direction"],
+    retry = false,
   ) {
-    if (pending.current) return;
+    if (pending.current || (!retry && uploadAttempt.current)) return;
+    if (!retry)
+      uploadAttempt.current = {
+        file,
+        pose,
+        direction,
+        actionId: crypto.randomUUID(),
+      };
+    const current = uploadAttempt.current;
+    if (!current) return;
     pending.current = true;
     setBusy(true);
     setError("");
+    setRetryUpload(false);
     try {
       const form = new FormData();
-      form.append("file", file);
+      form.append("file", current.file);
       const asset = await api<AssetDto>("/api/assets/sprite-frame", {
         method: "POST",
-        headers: { "x-action-id": crypto.randomUUID() },
+        headers: { "x-action-id": current.actionId },
         body: form,
       });
+      if (!uploadReceiptSchema.safeParse(asset).success)
+        throw new Error(
+          "Ответ загрузки не подтверждает кадр. Повторите тот же запрос.",
+        );
+      uploadAttempt.current = null;
       if (alive.current)
         setDraft((current) => ({
           ...current,
@@ -92,14 +152,18 @@ export function TokenSpriteEditor({
           ],
         }));
     } catch (reason) {
-      if (alive.current) report(reason);
+      if (alive.current) {
+        report(reason);
+        setRetryUpload(true);
+      }
     } finally {
       pending.current = false;
       if (alive.current) setBusy(false);
     }
   }
   async function save(remove: boolean) {
-    if (pending.current) return;
+    if (pending.current || uploadAttempt.current || definitionUnavailable)
+      return;
     const parsed = tokenSpriteSetSchema.safeParse(draft);
     if (!remove && !parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Проверьте набор");
@@ -113,16 +177,30 @@ export function TokenSpriteEditor({
     setBusy(true);
     setError("");
     try {
-      await api(`/api/token-definitions/${definition.id}/sprite-set`, {
-        method: "PUT",
-        body: JSON.stringify({
-          actionId: attempt.current.actionId,
-          revision,
-          spriteSet,
-        }),
-      });
+      const rawReceipt = await api<unknown>(
+        `/api/token-definitions/${definition.id}/sprite-set`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            actionId: attempt.current.actionId,
+            revision,
+            spriteSet,
+          }),
+        },
+      );
+      const receipt = savedSpriteReceiptSchema.safeParse(rawReceipt);
+      if (
+        !receipt.success ||
+        (!("duplicate" in receipt.data) &&
+          (receipt.data.revision !== revision + 1 ||
+            JSON.stringify(receipt.data.spriteSet) !==
+              JSON.stringify(spriteSet)))
+      )
+        throw new Error(
+          "Ответ не подтверждает сохранение набора. Повторите тот же запрос.",
+        );
       if (alive.current) await refresh();
-      if (alive.current) onClose();
+      if (alive.current) onClose(true);
     } catch (reason) {
       if (alive.current) report(reason);
     } finally {
@@ -141,6 +219,42 @@ export function TokenSpriteEditor({
         На карту идут кадры 512×512. Обязателен «Стоит — Спереди». Пропуски
         используют резервные кадры. Полёт не меняет высоту или правила.
       </p>
+      {retryUpload && (
+        <div role="status">
+          <p>
+            Загрузка не подтверждена. Повтор использует тот же файл и код
+            действия. Чтобы выбрать другой файл или закрыть редактор, сначала
+            повторите загрузку либо явно откажитесь от повтора.
+          </p>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              const pendingUpload = uploadAttempt.current;
+              if (pendingUpload)
+                void upload(
+                  pendingUpload.file,
+                  pendingUpload.pose,
+                  pendingUpload.direction,
+                  true,
+                );
+            }}
+          >
+            Повторить загрузку кадра
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              uploadAttempt.current = null;
+              setRetryUpload(false);
+              setError("");
+            }}
+          >
+            Отказаться от повтора
+          </button>
+        </div>
+      )}
       <fieldset disabled={busy}>
         <legend>Кадры фигурки</legend>
         {tokenSpritePoseSchema.options.map((pose) => (
@@ -157,6 +271,7 @@ export function TokenSpriteEditor({
                     {frame ? "кадр задан" : "резервный кадр"}
                     <input
                       type="file"
+                      disabled={retryUpload}
                       accept="image/png,image/webp"
                       onChange={(event) => {
                         const file = event.target.files?.[0];
@@ -218,15 +333,23 @@ export function TokenSpriteEditor({
             />
           </label>
         ))}
-        <button type="button" onClick={() => void save(false)}>
+        <button
+          type="button"
+          disabled={retryUpload || definitionUnavailable}
+          onClick={() => void save(false)}
+        >
           Сохранить набор
         </button>
         {definition.spriteSet && (
-          <button type="button" onClick={() => void save(true)}>
+          <button
+            type="button"
+            disabled={retryUpload || definitionUnavailable}
+            onClick={() => void save(true)}
+          >
             Вернуть круглый токен
           </button>
         )}
-        <button type="button" onClick={onClose}>
+        <button type="button" disabled={retryUpload} onClick={() => onClose()}>
           Закрыть без сохранения
         </button>
       </fieldset>

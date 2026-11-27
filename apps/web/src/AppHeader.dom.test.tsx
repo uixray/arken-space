@@ -65,3 +65,10 @@ describe("AppHeader scene action", () => {
     expect(props.onRequestCreateScene).not.toHaveBeenCalled();
   });
 });
+
+it("labels local copies honestly in the compact caption and session menu",async()=>{
+ const props=createProps({compact:true,localCopyMode:true,connection:"ONLINE"});renderComponent(<AppHeader {...props}/>);
+ expect(screen.getAllByText(/локальная копия — только просмотр/)).toHaveLength(2);expect(screen.queryByText("в сети")).not.toBeInTheDocument();
+ await userEvent.click(screen.getByLabelText("Меню сеанса"));expect(screen.getByText("Сохранённый просмотр: GM")).toBeInTheDocument();
+ expect(document.querySelector('.status.online')).toBeNull();
+});
